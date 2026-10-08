@@ -18,6 +18,7 @@ import 'package:otzaria/plugins/services/plugin_new_tab_page_service.dart';
 import 'package:otzaria/plugins/services/plugin_network_policy.dart';
 import 'package:otzaria/plugins/services/plugin_text_reader_registry.dart';
 import 'package:otzaria/plugins/services/plugin_highlight_registry.dart';
+import 'package:otzaria/plugins/services/plugin_correction_session_service.dart';
 import 'package:otzaria/plugins/services/plugin_startup_contributions_service.dart';
 import 'package:otzaria/plugins/services/plugin_lazy_activation_service.dart';
 import 'package:otzaria/plugins/services/plugin_dev_loader_service.dart';
@@ -697,6 +698,7 @@ class PluginSystemBloc extends Bloc<PluginSystemEvent, PluginSystemState> {
     Emitter<PluginSystemState> emit,
   ) async {
     try {
+      PluginCorrectionSessionService.instance.removeOwner(event.pluginId);
       _removeDeclarative(event.pluginId);
       ContextMenuRegistry.instance.removeAll(event.pluginId);
       PluginToolbarRegistry.instance.removeAll(event.pluginId);
@@ -724,6 +726,7 @@ class PluginSystemBloc extends Bloc<PluginSystemEvent, PluginSystemState> {
     try {
       final plugin = await repository.getPlugin(event.pluginId);
       if (plugin == null) return;
+      PluginCorrectionSessionService.instance.removeOwner(event.pluginId);
       _removeDeclarative(event.pluginId);
       ContextMenuRegistry.instance.removeAll(event.pluginId);
       PluginToolbarRegistry.instance.removeAll(event.pluginId);
@@ -822,6 +825,7 @@ class PluginSystemBloc extends Bloc<PluginSystemEvent, PluginSystemState> {
   }
 
   void _clearPluginRegistrations(String pluginId) {
+    PluginCorrectionSessionService.instance.removeOwner(pluginId);
     PluginTextReaderRegistry.instance.remove(pluginId);
     _removeDeclarative(pluginId);
     ContextMenuRegistry.instance.removeAll(pluginId);
@@ -868,6 +872,9 @@ class PluginSystemBloc extends Bloc<PluginSystemEvent, PluginSystemState> {
             event.permission == pluginNewTabPagePermission) {
           PluginNewTabPageRegistry.instance.remove(event.pluginId);
           PluginNewTabPageService.broadcastChanged();
+        }
+        if (event.permission == 'reader.local_edit') {
+          PluginCorrectionSessionService.instance.removeOwner(event.pluginId);
         }
         if (event.permission == 'reader.open') {
           _removeSearchProviders(event.pluginId);

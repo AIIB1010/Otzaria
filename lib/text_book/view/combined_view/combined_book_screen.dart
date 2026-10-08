@@ -71,6 +71,8 @@ import 'package:otzaria/text_book/view/widgets/book_source_banner.dart';
 import 'package:otzaria/tools/dictionary/repository/dictionary_lookup_repository.dart';
 import 'package:otzaria/tools/dictionary/widgets/laaz_commentary_subblock.dart';
 import 'package:otzaria/plugins/services/plugin_runtime_dispatcher.dart';
+import 'package:otzaria/plugins/services/plugin_correction_session_service.dart';
+import 'package:otzaria/plugins/view/plugin_correction_paragraph.dart';
 import 'package:otzaria/plugins/services/plugin_highlight_reveal_service.dart';
 import 'package:otzaria/plugins/models/plugin_book_identity.dart';
 import 'package:otzaria/text_book/utils/commentators_context_menu.dart';
@@ -331,6 +333,7 @@ class _ParagraphStateKey extends GlobalKey {
 }
 
 class _CombinedViewState extends State<CombinedView> {
+  int _localCorrectionRevision = -1;
   bool _anchorHandledCurrentTap = false;
   final ParagraphCommentatorsCache _paragraphCommentatorsCache =
       ParagraphCommentatorsCache();
@@ -820,6 +823,13 @@ class _CombinedViewState extends State<CombinedView> {
   @override
   void initState() {
     super.initState();
+    _localCorrectionRevision = PluginCorrectionSessionService.instance
+        .revisionForTab(
+          (PluginCorrectionSessionService.knownTabIdFor(widget.tab) ?? ''),
+        );
+    PluginCorrectionSessionService.instance.addListener(
+      _onLocalCorrectionChanged,
+    );
     _focusNode = FocusNode();
     // רישום למיקוד אזור הקריאה במעבר טאב (לא ב-preview שאינו טאב פעיל).
     if (!widget.isPreviewMode) {
@@ -1045,6 +1055,9 @@ class _CombinedViewState extends State<CombinedView> {
 
   @override
   void dispose() {
+    PluginCorrectionSessionService.instance.removeListener(
+      _onLocalCorrectionChanged,
+    );
     unawaited(_textBookSubscription?.cancel());
     widget.tab.dynamicCopyRequestNotifier.removeListener(_onDynamicCopyRequest);
     PluginHighlightRevealService.instance.removeListener(
@@ -1224,7 +1237,7 @@ class _CombinedViewState extends State<CombinedView> {
     TextRange? lineRange,
   }) {
     // מצב תצוגה מקדימה — תפריט מינימלי
-    if (widget.isPreviewMode) {
+    if (widget.isPreviewMode || _hasLocalCorrections) {
       return [
         AppContextMenuEntry(
           label: 'העתק',
@@ -1422,6 +1435,7 @@ class _CombinedViewState extends State<CombinedView> {
       ...buildReaderPluginMenuEntries(
         root: context.findRenderObject(),
         state: state,
+        tabId: readerBookTabId(widget.tab, state),
         lines: widget.data,
         paragraphIndex: paragraphIndex,
         hasSelection: menuSelection.hasText,
@@ -1861,6 +1875,12 @@ class _CombinedViewState extends State<CombinedView> {
                         return;
                       }
                       _pendingSelectionClear = false;
+                      if (_hasLocalCorrections) {
+                        _savedSelectedText.value = plain;
+                        _sourceSelection = null;
+                        widget.onSelectedTextChanged?.call(null, null, null);
+                        return;
+                      }
                       widget.selectionSyncController?.activate(_selectionOwner);
                       // כניסה למצב בחירה כשיש טקסט נבחר
                       if (!_selectionManager.isInSelectionMode) {
@@ -2759,7 +2779,7 @@ class _CombinedViewState extends State<CombinedView> {
     List<PersonalNote> notesForLine,
   ) {
     final lineIndex = spec.lineIndex;
-    return SmartTextWidget(
+    final text = SmartTextWidget(
       text: spec.html,
       highlightBookId: state.book.title,
       highlightBookUid: PluginBookIdentity.uidOf(state.book),
@@ -2776,6 +2796,14 @@ class _CombinedViewState extends State<CombinedView> {
       onAnchorHover: _handleAnchorHover,
       onAnchorHoverExit: _handleAnchorHoverExit,
       onTouchPreview: _handleTouchPreview,
+    );
+    if (widget.isPreviewMode) return text;
+    return PluginCorrectionParagraph(
+      tabId: PluginCorrectionSessionService.knownTabIdFor(widget.tab) ?? '',
+      sectionIndex: lineIndex,
+      sourceText: spec.sourceText,
+      settings: spec.settings,
+      original: text,
     );
   }
 
@@ -2812,6 +2840,8 @@ class _CombinedViewState extends State<CombinedView> {
     onAnchorExit: _handleAnchorHoverExit,
     splitAfter: commentaryAfter,
     belowSplit: (line) => _buildCommentaryCard(state, line),
+    // שדה עריכה הוא לפסקת מקור אחת; פסקה ממוזגת אינה ניתנת לעריכה.
+    linesAsBlocks: _hasLocalCorrections,
   );
 
   /// בדיקה אם יש מפרשים לאינדקס מסוים
@@ -2834,13 +2864,30 @@ class _CombinedViewState extends State<CombinedView> {
     );
   }
 
-  // [EDITING DISABLED]
-  // /// Opens the text editor for a specific paragraph
-  // void _editParagraph(int paragraphIndex) {
-  //   if (paragraphIndex >= 0 && paragraphIndex < widget.data.length) {
-  //     context.read<TextBookBloc>().add(OpenEditor(index: paragraphIndex));
-  //   }
-  // }
+  bool get _hasLocalCorrections =>
+      !widget.isPreviewMode &&
+      PluginCorrectionSessionService.instance.hasSessionForTab(
+        (PluginCorrectionSessionService.knownTabIdFor(widget.tab) ?? ''),
+      );
+
+  void _onLocalCorrectionChanged() {
+    if (!mounted || _disposed || widget.isPreviewMode) return;
+    final revision = PluginCorrectionSessionService.instance.revisionForTab(
+      (PluginCorrectionSessionService.knownTabIdFor(widget.tab) ?? ''),
+    );
+    if (revision == _localCorrectionRevision) return;
+    if (revision == -1 || _localCorrectionRevision == -1) {
+      setState(() {});
+    }
+    _localCorrectionRevision = revision;
+    if (revision == -1) _focusNode.requestFocus();
+    _sourceSelection = null;
+    _savedSelectedIndex.value = null;
+    _currentSelectedIndex.value = null;
+    _clearSelectionState();
+    _selectionAreaKey.currentState?.selectableRegion.clearSelection();
+    widget.onSelectedTextChanged?.call(null, null, null);
+  }
 }
 
 // ב-Windows אובדן פוקוס החלון מעביר את הפוקוס ל-rootScope כשה-lifecycle עדיין
