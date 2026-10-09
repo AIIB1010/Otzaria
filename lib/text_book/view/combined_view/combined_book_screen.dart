@@ -333,7 +333,7 @@ class _ParagraphStateKey extends GlobalKey {
 }
 
 class _CombinedViewState extends State<CombinedView> {
-  int _localCorrectionRevision = -1;
+  bool _localCorrectionActive = false;
   bool _anchorHandledCurrentTap = false;
   final ParagraphCommentatorsCache _paragraphCommentatorsCache =
       ParagraphCommentatorsCache();
@@ -761,7 +761,7 @@ class _CombinedViewState extends State<CombinedView> {
     _isSelectionPointerDown = false;
     _selectionLineCache.clear();
     if (_pendingSelectionClear) _clearSelectionState();
-    if (takeFocus) _focusNode.requestFocus();
+    if (takeFocus && !_hasLocalCorrections) _focusNode.requestFocus();
     _flushDeferredSelectionAreaRefresh();
   }
 
@@ -823,10 +823,7 @@ class _CombinedViewState extends State<CombinedView> {
   @override
   void initState() {
     super.initState();
-    _localCorrectionRevision = PluginCorrectionSessionService.instance
-        .revisionForTab(
-          (PluginCorrectionSessionService.knownTabIdFor(widget.tab) ?? ''),
-        );
+    _localCorrectionActive = _hasLocalCorrections;
     PluginCorrectionSessionService.instance.addListener(
       _onLocalCorrectionChanged,
     );
@@ -2351,6 +2348,7 @@ class _CombinedViewState extends State<CombinedView> {
                 child: EnhancedGestureDetector(
                   behavior: HitTestBehavior.translucent,
                   onDragSelectionStart: () {
+                    if (_hasLocalCorrections) return;
                     // כניסה למצב בחירה בגלל drag
                     final line = lineAtPointer();
                     if (line != null && !_selectionManager.isInSelectionMode) {
@@ -2358,6 +2356,7 @@ class _CombinedViewState extends State<CombinedView> {
                     }
                   },
                   onSingleTap: () {
+                    if (_hasLocalCorrections) return;
                     if (_anchorHandledCurrentTap) {
                       _anchorHandledCurrentTap = false;
                       return;
@@ -2388,6 +2387,7 @@ class _CombinedViewState extends State<CombinedView> {
                     }
                   },
                   onDoubleTap: () {
+                    if (_hasLocalCorrections) return;
                     // SelectionArea בוחר את המילה; כאן רק מצב הבחירה של השורה.
                     final line = lineAtPointer();
                     if (line == null) return;
@@ -2395,6 +2395,7 @@ class _CombinedViewState extends State<CombinedView> {
                     _selectionManager.enterDoubleClickMode(line);
                   },
                   onShiftClick: () {
+                    if (_hasLocalCorrections) return;
                     // Shift+Click → בחירת טווח; SelectionArea בוחר את הטקסט.
                     final line = lineAtPointer();
                     if (line == null) return;
@@ -2404,6 +2405,7 @@ class _CombinedViewState extends State<CombinedView> {
                     }
                   },
                   onCtrlClick: () {
+                    if (_hasLocalCorrections) return;
                     // Ctrl+Click → הוספה/הסרה של השורה מבחירה מרובה
                     final line = lineAtPointer();
                     if (line == null) return;
@@ -2799,7 +2801,7 @@ class _CombinedViewState extends State<CombinedView> {
     );
     if (widget.isPreviewMode) return text;
     return PluginCorrectionParagraph(
-      tabId: PluginCorrectionSessionService.knownTabIdFor(widget.tab) ?? '',
+      tabId: _correctionTabId,
       sectionIndex: lineIndex,
       sourceText: spec.sourceText,
       settings: spec.settings,
@@ -2864,23 +2866,23 @@ class _CombinedViewState extends State<CombinedView> {
     );
   }
 
+  String get _correctionTabId =>
+      PluginCorrectionSessionService.knownTabIdFor(widget.tab) ?? '';
+
   bool get _hasLocalCorrections =>
       !widget.isPreviewMode &&
       PluginCorrectionSessionService.instance.hasSessionForTab(
-        (PluginCorrectionSessionService.knownTabIdFor(widget.tab) ?? ''),
+        _correctionTabId,
       );
 
+  /// הבחירה חסומה כל עוד הסשן פעיל, ולכן מנקים אותה רק בפתיחה ובסיום.
   void _onLocalCorrectionChanged() {
-    if (!mounted || _disposed || widget.isPreviewMode) return;
-    final revision = PluginCorrectionSessionService.instance.revisionForTab(
-      (PluginCorrectionSessionService.knownTabIdFor(widget.tab) ?? ''),
-    );
-    if (revision == _localCorrectionRevision) return;
-    if (revision == -1 || _localCorrectionRevision == -1) {
-      setState(() {});
-    }
-    _localCorrectionRevision = revision;
-    if (revision == -1) _focusNode.requestFocus();
+    if (!mounted || _disposed) return;
+    final active = _hasLocalCorrections;
+    if (active == _localCorrectionActive) return;
+    _localCorrectionActive = active;
+    setState(() {});
+    if (!active && _focusNode.hasFocus) _focusNode.requestFocus();
     _sourceSelection = null;
     _savedSelectedIndex.value = null;
     _currentSelectedIndex.value = null;

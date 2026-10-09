@@ -3047,6 +3047,12 @@ class PluginBridgeAdapter {
             'tabId': t is TextBookTab
                 ? PluginCorrectionSessionService.tabIdFor(t)
                 : null,
+            'correctionSessionId': t is TextBookTab
+                ? PluginCorrectionSessionService.instance.sessionIdForTab(
+                    plugin.pluginId,
+                    PluginCorrectionSessionService.tabIdFor(t),
+                  )
+                : null,
             'isSelf':
                 t is ToolTab &&
                 t.toolId == plugin.pluginId &&
@@ -3072,6 +3078,7 @@ class PluginBridgeAdapter {
           return {
             'currentBook': null,
             'currentTabId': null,
+            'currentCorrectionSessionId': null,
             'currentBookId': null,
             'bookUid': null,
             'currentId': null,
@@ -3090,6 +3097,12 @@ class PluginBridgeAdapter {
           'currentBook': currentPane.title,
           'currentTabId': currentPane is TextBookTab
               ? PluginCorrectionSessionService.tabIdFor(currentPane)
+              : null,
+          'currentCorrectionSessionId': currentPane is TextBookTab
+              ? PluginCorrectionSessionService.instance.sessionIdForTab(
+                  plugin.pluginId,
+                  PluginCorrectionSessionService.tabIdFor(currentPane),
+                )
               : null,
           'currentBookId': currentPane.title,
           'bookUid': currentPaneBook != null
@@ -3651,20 +3664,26 @@ class PluginBridgeAdapter {
     );
   }
 
-  void _requireCorrectionContext(TextBookTab tab) {
+  /// ה-id נפתר לעיתים רק ב-state של ה-bloc, ולכן הספר נלקח משם ולא מהלשונית.
+  TextBook _requireCorrectionContext(TextBookTab tab) {
     final state = tab.bloc.state;
-    if (state is! TextBookLoaded ||
-        state.showPageShapeView ||
-        state.showSplitView ||
-        PluginTextReaderRegistry.instance.usesPlugin(tab) ||
-        !tab.book.isOfficialLibraryBook ||
-        tab.book.id == null ||
-        tab.book.versionTitle != null) {
-      throw const PluginCorrectionException(
-        'error.unsupported_context',
-        'תיקונים מקומיים נתמכים בקורא הטקסט הרגיל של ספר רשמי בלבד.',
-      );
+    final reason = state is! TextBookLoaded
+        ? 'הספר עדיין לא נטען. נסו שוב לאחר הטעינה.'
+        : state.showPageShapeView
+        ? 'עריכה בתוך הספר אינה נתמכת בצורת הדף. עברו למפרשים בצד או מתחת.'
+        : PluginTextReaderRegistry.instance.usesPlugin(tab)
+        ? 'עריכה בתוך הספר אינה נתמכת בקורא שמופעל באמצעות תוסף.'
+        : !state.book.isOfficialLibraryBook
+        ? 'עריכה בתוך הספר נתמכת בספרים מהספרייה הרשמית בלבד.'
+        : state.book.id == null
+        ? 'לספר אין מזהה במסד הספרייה הרשמי ולכן לא ניתן לאמת תיקונים.'
+        : state.book.versionTitle != null
+        ? 'עריכה בתוך הספר אינה נתמכת במהדורה חלופית של ספריא.'
+        : null;
+    if (reason != null) {
+      throw PluginCorrectionException('error.unsupported_context', reason);
     }
+    return (state as TextBookLoaded).book;
   }
 
   Future<void> _requireCorrectionPermission() async {
@@ -3691,8 +3710,9 @@ class PluginBridgeAdapter {
     await _requireCorrectionPermission();
     final id = args['tabId'] as String;
     final tab = _correctionTab(id);
-    _requireCorrectionContext(tab);
-    final resolved = await BookDatabaseResolver.resolveBookById(tab.book.id!);
+    final resolved = await BookDatabaseResolver.resolveBookById(
+      _requireCorrectionContext(tab).id!,
+    );
     if (resolved == null ||
         !resolved.source.isOfficial ||
         resolved.book.isFileBacked) {
@@ -3715,12 +3735,12 @@ class PluginBridgeAdapter {
         'לשונית הספר נסגרה.',
       );
     }
-    _requireCorrectionContext(tab);
+    final book = _requireCorrectionContext(tab);
     return PluginCorrectionSessionService.instance.begin(
       owner: plugin.pluginId,
       tabId: id,
-      bookId: tab.book.title,
-      bookUid: PluginBookIdentity.uidOf(tab.book),
+      bookId: book.title,
+      bookUid: PluginBookIdentity.uidOf(book),
       libraryVersion: version,
       validateSource: () async {
         final currentVersion = await DataCollectionService()
@@ -3759,7 +3779,7 @@ class PluginBridgeAdapter {
                   plugin.pluginId,
                   topic,
                   payload,
-                  preferBackground: true,
+                  preferBackground: false,
                   resumeForegroundIfNeeded: true,
                 ),
         );
