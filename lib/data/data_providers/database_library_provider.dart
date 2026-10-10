@@ -487,16 +487,19 @@ List<Map<String, dynamic>> _loadInverseSourceRows(
   final rangeEndSelect = _rangeEndSelectColumns(hasLinkRanges);
   final rangeEndJoin = _rangeEndJoinClause(hasLinkRanges, panelSide: 0);
 
+  final String windowLinksArm;
+  final String coverageArm;
+  final List<Object?> params;
   if (hasRange) {
     // מסד שאינו הרשמי נשאר בדיוק עם השאילתה המקורית (ראו officialForwardWindowSql).
-    final windowLinksArm = official
+    windowLinksArm = official
         ? officialInverseWindowLinksSql
         : '''SELECT l.id, l.targetLineId FROM link l
           WHERE l.targetLineId IN (
             SELECT id FROM line WHERE bookId = ? AND lineIndex BETWEEN ? AND ?
           )
             AND l.targetBookId = ?''';
-    final coverageArm = hasLinkRanges
+    coverageArm = hasLinkRanges
         ? '''
           UNION ALL
           SELECT lc.linkId, lc.lineId FROM link_coverage lc
@@ -504,7 +507,7 @@ List<Map<String, dynamic>> _loadInverseSourceRows(
             SELECT id FROM line WHERE bookId = ? AND lineIndex BETWEEN ? AND ?
           )'''
         : '';
-    final params = <Object?>[
+    params = [
       bookId,
       startLineIndex,
       endLineIndex,
@@ -512,53 +515,20 @@ List<Map<String, dynamic>> _loadInverseSourceRows(
       if (hasLinkRanges) ...[bookId, startLineIndex, endLineIndex],
       ...types,
     ];
-    return db.select('''
-        WITH anchors(linkId, anchorLineId) AS (
-          $windowLinksArm
-          $coverageArm
-        )
-        SELECT
-          tl.lineIndex as sourceLineIndex,
-          sl.lineIndex as targetLineIndex,
-          sl.heRef as targetLineHeRef,
-          sb.title as targetBookTitle,
-          sb.categoryId as targetCategoryId,
-          sb.id as targetBookId,
-          NULL as targetFileType,
-          $rangeEndSelect
-          $anchorSelect
-          $provenanceSelect
-          $connectionTypeExpr as connectionTypeName
-        FROM anchors a
-        ${official ? 'CROSS JOIN' : 'JOIN'} link l ON l.id = a.linkId
-        JOIN line tl ON tl.id = a.anchorLineId
-        JOIN line sl ON l.sourceLineId = sl.id
-        JOIN book sb ON l.sourceBookId = sb.id
-        JOIN connection_type ct ON l.connectionTypeId = ct.id
-        $rangeEndJoin
-        $anchorJoin
-        WHERE ct.name IN ($typePlaceholders)
-          $inverseBookFilter
-          $suppressedFilter
-        ORDER BY tl.lineIndex
-      ''', params).toMapList();
-  }
-
-  final coverageArm = hasLinkRanges
-      ? '''
+  } else {
+    windowLinksArm = 'SELECT id, targetLineId FROM link WHERE targetBookId = ?';
+    coverageArm = hasLinkRanges
+        ? '''
         UNION ALL
         SELECT lc.linkId, lc.lineId FROM link_coverage lc
         JOIN link cl ON cl.id = lc.linkId
         WHERE lc.side = 1 AND cl.targetBookId = ?'''
-      : '';
-  final params = <Object?>[
-    bookId,
-    if (hasLinkRanges) bookId,
-    ...types,
-  ];
+        : '';
+    params = [bookId, if (hasLinkRanges) bookId, ...types];
+  }
   return db.select('''
       WITH anchors(linkId, anchorLineId) AS (
-        SELECT id, targetLineId FROM link WHERE targetBookId = ?
+        $windowLinksArm
         $coverageArm
       )
       SELECT
@@ -574,7 +544,7 @@ List<Map<String, dynamic>> _loadInverseSourceRows(
         $provenanceSelect
         $connectionTypeExpr as connectionTypeName
       FROM anchors a
-      JOIN link l ON l.id = a.linkId
+      ${hasRange && official ? 'CROSS JOIN' : 'JOIN'} link l ON l.id = a.linkId
       JOIN line tl ON tl.id = a.anchorLineId
       JOIN line sl ON l.sourceLineId = sl.id
       JOIN book sb ON l.sourceBookId = sb.id
