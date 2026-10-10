@@ -4327,27 +4327,19 @@ class DatabaseLibraryProvider implements LibraryProvider {
   }) async {
     // ראה הערה ב-_runAlternativeStructuresInIsolate: ה-Isolate.run עצמו
     // חייב להיווצר בתוך פונקציה ברמת קובץ, אחרת `this` עלול להיתפס.
-    final target = _isolateTargetFor(source);
-    if (target == null) return [];
-
-    try {
+    return _readTarget(source, [], 'getAllLinksForBook "$title"', (
+      target,
+    ) async {
       final result = await _runBookLinksInIsolate(
         target: target,
         title: title,
         categoryId: categoryId,
         fileType: fileType,
       );
-
-      final links = [
-        for (final row in result) _linkFromRow(row, source),
-      ];
-
+      final links = [for (final row in result) _linkFromRow(row, source)];
       debugPrint('💾 Found ${links.length} links for book "$title"');
       return links;
-    } catch (e) {
-      debugPrint('⚠️ Error in getAllLinksForBook "$title": $e');
-      return [];
-    }
+    });
   }
 
   Future<List<Link>> getLinksForBookRange(
@@ -4411,10 +4403,9 @@ class DatabaseLibraryProvider implements LibraryProvider {
     BookSource source = BookSource.official,
   }) async {
     // ראה הערה ב-_runAlternativeStructuresInIsolate.
-    final target = _isolateTargetFor(source);
-    if (target == null) return null;
-
-    try {
+    return _readTarget(source, null, 'getBookLinkTargetsSummary "$title"', (
+      target,
+    ) async {
       final result = await _runBookLinkTargetsSummaryInIsolate(
         target: target,
         official: source is OfficialBookSource,
@@ -4442,10 +4433,7 @@ class DatabaseLibraryProvider implements LibraryProvider {
             ? external.maxSourceLine
             : maxSourceLine,
       );
-    } catch (e) {
-      debugPrint('⚠️ Error in getBookLinkTargetsSummary "$title": $e');
-      return null;
-    }
+    });
   }
 
   /// טוען טווח שורות תוכן ב-isolate נפרד (כמו [getLinksForBookRange]), כדי
@@ -4462,11 +4450,11 @@ class DatabaseLibraryProvider implements LibraryProvider {
     BookSource source = BookSource.official,
   }) async {
     // ראה הערה ב-_runAlternativeStructuresInIsolate.
-    final target = _isolateTargetFor(source);
-    if (target == null) return null;
-
-    try {
-      return await _loadOnReadWorker(
+    return _readTarget(
+      source,
+      null,
+      'getBookTextRange "$title"',
+      (target) => _loadOnReadWorker(
         target,
         'textRange',
         {
@@ -4486,11 +4474,8 @@ class DatabaseLibraryProvider implements LibraryProvider {
           endLine: endLine,
           versionTitle: versionTitle,
         ),
-      );
-    } catch (e) {
-      debugPrint('⚠️ Error in getBookTextRange "$title": $e');
-      return null;
-    }
+      ),
+    );
   }
 
   /// רשימת המהדורות (book_version) של ספר, מהדורות עם טקסט מלא תחילה.
@@ -4500,19 +4485,16 @@ class DatabaseLibraryProvider implements LibraryProvider {
     int categoryId, {
     BookSource source = BookSource.official,
   }) async {
-    final target = _isolateTargetFor(source);
-    if (target == null) return const [];
-    try {
+    return _readTarget(source, const [], 'getBookVersions "$title"', (
+      target,
+    ) async {
       final rows = await _runBookVersionsInIsolate(
         target: target,
         title: title,
         categoryId: categoryId,
       );
       return rows.map(BookVersionInfo.fromDbRow).toList();
-    } catch (e) {
-      debugPrint('⚠️ Error in getBookVersions "$title": $e');
-      return const [];
-    }
+    });
   }
 
   /// האם להציג לספר תפריט 'גרסאות' — כלומר יש מהדורה לבחירה (2+ גרסאות, או
@@ -4682,8 +4664,6 @@ class DatabaseLibraryProvider implements LibraryProvider {
         'getAlternativeStructuresForBook (user) "${book.title}"',
       );
     }
-    final target = _isolateTargetFor(book.source);
-    if (target == null) return [];
     final bookTitle = book.title;
 
     // לא להעביר ל-Isolate.run closure שנוצר בתוך instance method הזה -
@@ -4691,23 +4671,23 @@ class DatabaseLibraryProvider implements LibraryProvider {
     // הלא-ניתן-לשליחה), והקריאה תיכשל עם "Illegal argument in isolate
     // message". במקום זאת אנו משתמשים ב-tear-off של פונקציה ברמת קובץ
     // ומעבירים את הפרמטרים כ-record של ערכים פרימיטיביים.
-    try {
-      final results = await _runAlternativeStructuresInIsolate(
-        target: target,
-        bookTitle: bookTitle,
-        categoryId: book.categoryId,
-      );
+    return _readTarget(
+      book.source,
+      [],
+      'getAlternativeStructuresForBook "$bookTitle"',
+      (target) async {
+        final results = await _runAlternativeStructuresInIsolate(
+          target: target,
+          bookTitle: bookTitle,
+          categoryId: book.categoryId,
+        );
 
-      return [
-        for (final json in results)
-          AltTocStructure.fromJson(json, source: book.source),
-      ];
-    } catch (e) {
-      debugPrint(
-        '⚠️ Error in getAlternativeStructuresForBook "$bookTitle": $e',
-      );
-      return [];
-    }
+        return [
+          for (final json in results)
+            AltTocStructure.fromJson(json, source: book.source),
+        ];
+      },
+    );
   }
 
   /// כמו [getInlineSectionMarksByLineIndex], לספר אישי. התוכן אינו במסד,
@@ -4752,6 +4732,23 @@ class DatabaseLibraryProvider implements LibraryProvider {
     }
   }
 
+  /// מריץ [read] על מסד [source]; מסד שאינו פתוח או כשל מחזירים את [fallback].
+  Future<T> _readTarget<T>(
+    BookSource source,
+    T fallback,
+    String errorContext,
+    Future<T> Function(ReadOnlyDbTarget target) read,
+  ) async {
+    final target = _isolateTargetFor(source);
+    if (target == null) return fallback;
+    try {
+      return await read(target);
+    } catch (e) {
+      debugPrint('⚠️ Error in $errorContext: $e');
+      return fallback;
+    }
+  }
+
   /// סמני חלוקה וכותרות נושא להצגה בגוף הטקסט, לפי `lineIndex` של שורת
   /// התוכן (issues #773, #1121). לספר בלי מבנים כאלה — מפות ריקות.
   Future<InlineSectionMarks> getInlineSectionMarksByLineIndex(
@@ -4760,12 +4757,12 @@ class DatabaseLibraryProvider implements LibraryProvider {
     BookSource source = BookSource.official,
   }) async {
     const empty = (markers: <int, String>{}, headings: <int, List<String>>{});
-    final target = _isolateTargetFor(source);
-    if (target == null) return empty;
-
     // ב-worker הקבוע: מפענח השורות נטען פעם אחת לחיבור, לא בכל פתיחת ספר.
-    try {
-      return await _loadOnReadWorker(
+    return _readTarget(
+      source,
+      empty,
+      'getInlineSectionMarksByLineIndex "$bookTitle"',
+      (target) => _loadOnReadWorker(
         target,
         'inlineSectionMarks',
         {'bookTitle': bookTitle, 'categoryId': categoryId},
@@ -4774,13 +4771,8 @@ class DatabaseLibraryProvider implements LibraryProvider {
           bookTitle: bookTitle,
           categoryId: categoryId,
         ),
-      );
-    } catch (e) {
-      debugPrint(
-        '⚠️ Error in getInlineSectionMarksByLineIndex "$bookTitle": $e',
-      );
-      return empty;
-    }
+      ),
+    );
   }
 
   /// דיבורי-המתחיל של ספר (`line_dh`, מגרסת ספרייה 25), ממופתחים לפי
@@ -4791,19 +4783,16 @@ class DatabaseLibraryProvider implements LibraryProvider {
     int? categoryId,
     BookSource source = BookSource.official,
   }) async {
-    final target = _isolateTargetFor(source);
-    if (target == null) return const {};
-
-    try {
-      return await _runDibburHamatchilInIsolate(
+    return _readTarget(
+      source,
+      const {},
+      'getDibburHamatchilByLineIndex "$bookTitle"',
+      (target) => _runDibburHamatchilInIsolate(
         target: target,
         bookTitle: bookTitle,
         categoryId: categoryId,
-      );
-    } catch (e) {
-      debugPrint('⚠️ Error in getDibburHamatchilByLineIndex "$bookTitle": $e');
-      return const {};
-    }
+      ),
+    );
   }
 
   /// Get all alternative TOC structures available in the database
