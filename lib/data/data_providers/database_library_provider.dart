@@ -688,6 +688,40 @@ List<LinkAnchorSpan> _parseAnchorSpans(String? spans) {
   return result;
 }
 
+/// שורת קישור מהשאילתה (אינדקסים 0-based) → [Link] (אינדקסים 1-based).
+Link _linkFromRow(Map<String, Object?> row, BookSource source) {
+  final targetTitle = row['targetBookTitle'] as String;
+  final targetLineHeRef = row['targetLineHeRef'] as String?;
+  final connectionType = row['connectionTypeName'] as String? ?? 'reference';
+
+  return Link(
+    heRef: targetLineHeRef?.trim().isNotEmpty == true
+        ? targetLineHeRef!.trim()
+        : targetTitle,
+    index1: (row['sourceLineIndex'] as int) + 1,
+    path2: targetTitle,
+    index2: (row['targetLineIndex'] as int) + 1,
+    connectionType: connectionType,
+    targetCategoryId: row['targetCategoryId'] as int?,
+    targetBookId: row['targetBookId'] as int?,
+    targetFileType: row['targetFileType'] as String?,
+    anchorStart: row['anchorCharStart'] as int?,
+    anchorEnd: row['anchorCharEnd'] as int?,
+    anchorLabel: row['anchorLabel'] as String?,
+    linkedAnchorStart: row['anchorLinkedCharStart'] as int?,
+    linkedAnchorEnd: row['anchorLinkedCharEnd'] as int?,
+    anchorSpans: _parseAnchorSpans(row['anchorSpans'] as String?),
+    heRefEnd: (row['targetRangeEndHeRef'] as String?)?.trim().isNotEmpty == true
+        ? (row['targetRangeEndHeRef'] as String).trim()
+        : null,
+    index2End: row['targetRangeEndLineIndex'] != null
+        ? (row['targetRangeEndLineIndex'] as int) + 1
+        : null,
+    baseProvenance: row['baseProvenance'] as int? ?? 0,
+    targetSource: source,
+  );
+}
+
 List<Map<String, dynamic>> _loadBookLinksRowsInIsolate({
   required ReadOnlyDbTarget target,
   required String title,
@@ -4334,40 +4368,9 @@ class DatabaseLibraryProvider implements LibraryProvider {
         fileType: fileType,
       );
 
-      final links = result.map((row) {
-        final targetTitle = row['targetBookTitle'] as String;
-        final targetLineHeRef = row['targetLineHeRef'] as String?;
-        final connectionType =
-            row['connectionTypeName'] as String? ?? 'reference';
-
-        return Link(
-          heRef: targetLineHeRef?.trim().isNotEmpty == true
-              ? targetLineHeRef!.trim()
-              : targetTitle,
-          index1: (row['sourceLineIndex'] as int) + 1,
-          path2: targetTitle,
-          index2: (row['targetLineIndex'] as int) + 1,
-          connectionType: connectionType,
-          targetCategoryId: row['targetCategoryId'] as int?,
-          targetBookId: row['targetBookId'] as int?,
-          targetFileType: row['targetFileType'] as String?,
-          anchorStart: row['anchorCharStart'] as int?,
-          anchorEnd: row['anchorCharEnd'] as int?,
-          anchorLabel: row['anchorLabel'] as String?,
-          linkedAnchorStart: row['anchorLinkedCharStart'] as int?,
-          linkedAnchorEnd: row['anchorLinkedCharEnd'] as int?,
-          anchorSpans: _parseAnchorSpans(row['anchorSpans'] as String?),
-          heRefEnd:
-              (row['targetRangeEndHeRef'] as String?)?.trim().isNotEmpty == true
-              ? (row['targetRangeEndHeRef'] as String).trim()
-              : null,
-          index2End: row['targetRangeEndLineIndex'] != null
-              ? (row['targetRangeEndLineIndex'] as int) + 1
-              : null,
-          baseProvenance: row['baseProvenance'] as int? ?? 0,
-          targetSource: source,
-        );
-      }).toList();
+      final links = [
+        for (final row in result) _linkFromRow(row, source),
+      ];
 
       debugPrint('💾 Found ${links.length} links for book "$title"');
       return links;
@@ -4424,41 +4427,7 @@ class DatabaseLibraryProvider implements LibraryProvider {
       ),
     );
 
-    final links = result.map((row) {
-      final targetTitle = row['targetBookTitle'] as String;
-      final targetLineHeRef = row['targetLineHeRef'] as String?;
-      final connectionType =
-          row['connectionTypeName'] as String? ?? 'reference';
-
-      return Link(
-        heRef: targetLineHeRef?.trim().isNotEmpty == true
-            ? targetLineHeRef!.trim()
-            : targetTitle,
-        index1: (row['sourceLineIndex'] as int) + 1,
-        path2: targetTitle,
-        index2: (row['targetLineIndex'] as int) + 1,
-        connectionType: connectionType,
-        targetCategoryId: row['targetCategoryId'] as int?,
-        targetBookId: row['targetBookId'] as int?,
-        targetFileType: row['targetFileType'] as String?,
-        anchorStart: row['anchorCharStart'] as int?,
-        anchorEnd: row['anchorCharEnd'] as int?,
-        anchorLabel: row['anchorLabel'] as String?,
-        linkedAnchorStart: row['anchorLinkedCharStart'] as int?,
-        linkedAnchorEnd: row['anchorLinkedCharEnd'] as int?,
-        anchorSpans: _parseAnchorSpans(row['anchorSpans'] as String?),
-        heRefEnd:
-            (row['targetRangeEndHeRef'] as String?)?.trim().isNotEmpty == true
-            ? (row['targetRangeEndHeRef'] as String).trim()
-            : null,
-        index2End: row['targetRangeEndLineIndex'] != null
-            ? (row['targetRangeEndLineIndex'] as int) + 1
-            : null,
-        baseProvenance: row['baseProvenance'] as int? ?? 0,
-        targetSource: source,
-      );
-    }).toList();
-    return links;
+    return [for (final row in result) _linkFromRow(row, source)];
   }
 
   /// סיכום קישורי הספר לפי (ספר-יעד, סוג חיבור), בתוספת השורה הגבוהה ביותר
