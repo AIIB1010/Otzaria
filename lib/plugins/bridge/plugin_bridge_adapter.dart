@@ -3192,7 +3192,11 @@ class PluginBridgeAdapter {
         }
       case 'getSelection':
         final currentPane = _dependencies.tabsBloc.state.readingPane;
+        final paneState = currentPane is TextBookTab
+            ? currentPane.bloc.state
+            : null;
         if (currentPane is TextBookTab &&
+            !(paneState is TextBookLoaded && paneState.showPageShapeView) &&
             PluginCorrectionSessionService.instance.hasSessionForTab(
               PluginCorrectionSessionService.tabIdFor(currentPane),
             )) {
@@ -3707,6 +3711,9 @@ class PluginBridgeAdapter {
         'נדרש tabId של לשונית ספר.',
       );
     }
+    final ownerEpoch = PluginCorrectionSessionService.instance.ownerEpoch(
+      plugin.pluginId,
+    );
     await _requireCorrectionPermission();
     final id = args['tabId'] as String;
     final tab = _correctionTab(id);
@@ -3742,6 +3749,7 @@ class PluginBridgeAdapter {
       bookId: book.title,
       bookUid: PluginBookIdentity.uidOf(book),
       libraryVersion: version,
+      ownerEpoch: ownerEpoch,
       validateSource: () async {
         final currentVersion = await DataCollectionService()
             .readLibraryVersion();
