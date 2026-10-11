@@ -1178,6 +1178,14 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
       final updatedState = currentState.copyWith(
         showLeftPane: event.show,
         selectedIndex: currentState.selectedIndex,
+        visibleLinks: event.show
+            ? computeVisibleLinks(
+                links: currentState.links,
+                visibleIndices: currentState.visibleIndices,
+                selectedIndices: currentState.selectedIndices,
+                linksByLine: currentState.linksByLine,
+              )
+            : currentState.visibleLinks,
       );
       emit(updatedState);
 
