@@ -1224,23 +1224,22 @@ class SeforimRepository {
         (await _database.bookDao.getBookById(bookId))?.title ?? '';
     final refs = await _database.lineDao.selectRefsByBookId(bookId);
     final db = await _database.database;
-    final entries = <(int, int)>[];
-    for (final ref in refs) {
-      final key = buildLineRefKey(ref.heRef, [bookTitle]);
-      if (key == null) continue;
-      entries.add((refKeyHash(key), ref.lineIndex));
-      for (final partial in partialLineRefKeys(ref.heRef, [bookTitle])) {
-        entries.add((refKeyHash(partial), ref.lineIndex));
-      }
-    }
+    final entries = lineRefIndexEntries(
+      refs,
+      (heRef) => lineRefKeyHashes(heRef, bookTitle),
+    );
     await runInTransaction(() {
       db.execute('DELETE FROM line_ref WHERE bookId = ?', [bookId]);
-      for (final (hash, lineIndex) in entries) {
-        db.execute(
-          'INSERT OR IGNORE INTO line_ref (bookId, refKeyHash, lineIndex) '
-          'VALUES (?, ?, ?)',
-          [bookId, hash, lineIndex],
-        );
+      final insert = db.prepare(
+        'INSERT OR IGNORE INTO line_ref (bookId, refKeyHash, lineIndex) '
+        'VALUES (?, ?, ?)',
+      );
+      try {
+        for (final (hash, lineIndex) in entries) {
+          insert.execute([bookId, hash, lineIndex]);
+        }
+      } finally {
+        insert.close();
       }
     });
   }
