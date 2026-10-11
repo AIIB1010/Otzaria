@@ -95,8 +95,19 @@ class CustomEvent extends Equatable {
 
   static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
+  static int _dayNumber(DateTime d) =>
+      DateTime.utc(d.year, d.month, d.day).millisecondsSinceEpoch ~/
+      Duration.millisecondsPerDay;
+
   /// האם האירוע חל בתאריך הנתון — כולל טווח רב-יומי, חזרתיות וסוף חזרה.
   bool occursOn(DateTime date) {
+    // סינון זול בלי DateTime מקומי; יום אחד אחרי הסוף נשאר להשוואה המלאה.
+    if (recurrenceType == RecurrenceType.none) {
+      final day = _dayNumber(date);
+      final startDay = _dayNumber(baseGregorianDate);
+      final endDay = _dayNumber(endGregorianDate ?? baseGregorianDate);
+      if (day < startDay || day > max(startDay, endDay) + 1) return false;
+    }
     final current = _dateOnly(date);
     final start = _dateOnly(baseGregorianDate);
     final durationDays = endGregorianDate == null
