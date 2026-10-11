@@ -7,8 +7,6 @@ import 'package:otzaria/search/models/search_configuration.dart';
 import 'package:otzaria/search/search_defaults.dart';
 import 'package:otzaria/search/search_query_builder.dart';
 import 'package:otzaria/tabs/models/tab.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
-import 'package:otzaria/models/books.dart';
 import 'package:otzaria_search_engine/otzaria_search_engine.dart';
 
 class SearchingTab extends OpenedTab {
@@ -37,9 +35,6 @@ class SearchingTab extends OpenedTab {
   /// התוצאה שמוצגת כרגע בתצוגה המקדימה (לחיצה אחת על תוצאה); null = סגורה.
   /// מצב זמני של המסך — לא נשמר ב-JSON של הטאב.
   final ValueNotifier<SearchPreviewTarget?> previewTarget = ValueNotifier(null);
-
-  final ItemScrollController scrollController = ItemScrollController();
-  List<Book> allBooks = [];
 
   // אפשרויות חיפוש לכל מילה (מילה_אינדקס -> אפשרויות)
   final Map<String, Map<String, bool>> searchOptions = {};
@@ -213,9 +208,6 @@ class SearchingTab extends OpenedTab {
     titleNotifier.value = newTitle;
   }
 
-  String _normalizeFacet(String s) =>
-      s.trim().replaceAll(RegExp(r'/+'), '/'); // אחידות סלאשים + רווחים
-
   /// מחזיר את אפשרויות החיפוש האפקטיביות לפי המצב הנוכחי (גלובלי/פר-מילה).
   /// במצב גלובלי - מרחיב את ההגדרות הגלובליות לכל מילה בשאילתה.
   /// במצב פר-מילה - מחזיר את ההגדרות הפר-מיליות הקיימות.
@@ -237,40 +229,6 @@ class SearchingTab extends OpenedTab {
       globalOptions: negativeGlobalSearchOptions,
       perWordOptions: negativeSearchOptions,
     );
-  }
-
-  /// ספירה מקבצת של תוצאות עבור מספר facets בבת אחת - לשיפור ביצועים
-  Future<Map<String, int>> countForMultipleFacets(List<String> facets) {
-    final normalizedParameters = SearchQueryBuilder.normalizeParametersForMode(
-      searchBloc.state.configuration.searchMode,
-      customSpacing: spacingValues,
-      alternativeWords: alternativeWords,
-      searchOptions: effectiveSearchOptions(
-        query: searchBloc.state.searchQuery,
-      ),
-    );
-    final negativeParameters = SearchQueryBuilder.normalizeParametersForMode(
-      searchBloc.state.configuration.searchMode,
-      customSpacing: negativeSpacingValues,
-      alternativeWords: negativeAlternativeWords,
-      searchOptions: effectiveNegativeSearchOptions(
-        query: searchBloc.state.negativeQuery,
-      ),
-    );
-    return searchBloc.countForMultipleFacets(
-      facets,
-      customSpacing: normalizedParameters.customSpacing,
-      alternativeWords: normalizedParameters.alternativeWords,
-      searchOptions: normalizedParameters.searchOptions,
-      negativeCustomSpacing: negativeParameters.customSpacing,
-      negativeAlternativeWords: negativeParameters.alternativeWords,
-      negativeSearchOptions: negativeParameters.searchOptions,
-    );
-  }
-
-  /// מחזיר ספירה סינכרונית מה-state (אם קיימת)
-  int getFacetCountFromState(String facet) {
-    return searchBloc.getFacetCountFromState(_normalizeFacet(facet));
   }
 
   /// מעתיק הגדרות פר-מילה לעריכה בטאב הזה. המקור עשוי להיות פלט מנורמל
