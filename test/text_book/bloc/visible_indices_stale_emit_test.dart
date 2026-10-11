@@ -75,6 +75,33 @@ void main() {
 
     await bloc.close();
   });
+
+  test(
+    'בלי בחירה וחלונית הניווט סגורה, הקישורים עוקבים אחרי הגלילה (issue #2036)',
+    () async {
+      final bloc = await _loadedBloc(showLeftPane: false);
+      await _waitFor(
+        () => (bloc.state as TextBookLoaded).links.isNotEmpty,
+        description: 'טעינת קישורים',
+      );
+
+      bloc.add(const UpdateVisibleIndecies([12, 13, 14]));
+      await _waitFor(
+        () => (bloc.state as TextBookLoaded).visibleIndices.first == 12,
+        description: 'visibleIndices התעדכנו ל-12',
+      );
+
+      final state = bloc.state as TextBookLoaded;
+      expect(
+        state.visibleLinks.map((link) => link.index1).toSet(),
+        {13, 14, 15},
+        reason:
+            'הרשימה חייבת להציג את קישורי השורות שעל המסך, לא של מיקום קודם',
+      );
+
+      await bloc.close();
+    },
+  );
 }
 
 Future<TextBookBloc> _loadedBloc({required bool showLeftPane}) async {
@@ -162,7 +189,17 @@ class _TwoSectionRepository extends TextBookRepository {
     required int startIndex,
     required int endIndex,
     Iterable<String>? targetBookTitles,
-  }) async => const [];
+  }) async => [
+    // קישור "reference" לכל שורה (index1 הוא 1-based).
+    for (var i = startIndex; i <= endIndex; i++)
+      Link(
+        heRef: 'מקור $i',
+        index1: i + 1,
+        path2: 'ספר $i.txt',
+        index2: 1,
+        connectionType: 'reference',
+      ),
+  ];
 
   @override
   Future<List<String>> getAvailableCommentators(TextBook book) async =>
