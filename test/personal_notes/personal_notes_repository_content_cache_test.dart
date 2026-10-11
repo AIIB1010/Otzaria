@@ -289,10 +289,12 @@ void main() {
       final insert = db.prepare(
         'INSERT INTO line (bookId, lineIndex, content) VALUES (1, ?, ?)',
       );
+      db.execute('BEGIN');
       for (var i = 3; i < 4097; i++) {
         insert.execute([i, 'שורה $i']);
       }
       insert.close();
+      db.execute('COMMIT');
       db.close();
     } finally {
       await provider.reopenAfterExternalWrite();
