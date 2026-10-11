@@ -775,4 +775,37 @@ void main() {
       }
     });
   });
+
+  test('עוגני טווח רבים בשורה ארוכה אינם סורקים אותה מחדש לכל טווח', () {
+    // כמו בשורות של "הזהר המתורגם": מאות ציטוטי לינקר בשורה של מאות אלפי תווים.
+    final line = List.filled(20000, 'מילה <b>ו</b>עוד ').join();
+    Link range(int i) => Link(
+      heRef: 'ספר א, ב',
+      index1: 1,
+      path2: 'ספר $i',
+      index2: 1,
+      connectionType: 'linker',
+      anchorStart: 1000 + i * 700,
+      anchorEnd: 1004 + i * 700,
+    );
+    int microsFor(int count) {
+      final links = [for (var i = 0; i < count; i++) range(i)];
+      var best = 1 << 62;
+      for (var r = 0; r < 5; r++) {
+        final sw = Stopwatch()..start();
+        injectLinkAnchorMarkers(
+          rawLine: line,
+          anchorLinks: links,
+          styleIndexByCommentator: const {},
+        );
+        if (sw.elapsedMicroseconds < best) best = sw.elapsedMicroseconds;
+      }
+      return best;
+    }
+
+    final one = microsFor(1);
+    final many = microsFor(300);
+    // סריקה לכל טווח: פי ~300. מעבר אחד: עלות כמעט קבועה.
+    expect(many, lessThan(one * 30), reason: 'one=$one many=$many');
+  });
 }
