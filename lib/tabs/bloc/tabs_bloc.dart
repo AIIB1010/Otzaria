@@ -71,6 +71,25 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
   bool get _sessionReplaced =>
       TabsRepository.sessionGeneration != _sessionGeneration;
 
+  /// משדר את [newTabs] עם בחירה מנורמלת ושומר אותם; [currentTabIndex] null
+  /// משאיר את הטאב הנוכחי.
+  void _emitAndSaveTabs(
+    Emitter<TabsState> emit,
+    List<OpenedTab> newTabs, {
+    int? currentTabIndex,
+    ActivePaneUpdate activePane = const ActivePaneUpdate.unchanged(),
+  }) {
+    emit(
+      state.copyWith(
+        tabs: newTabs,
+        currentTabIndex: currentTabIndex,
+        selectedTabs: _normalizedSelection(newTabs),
+        activePane: activePane,
+      ),
+    );
+    _scheduleSave(newTabs, currentTabIndex ?? state.currentTabIndex);
+  }
+
   void _scheduleSave(List<OpenedTab> tabs, int currentTabIndex) {
     if (_sessionReplaced) return;
     _pendingSaveTabs = tabs;
@@ -502,13 +521,7 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
     final newTabs = List<OpenedTab>.from(state.tabs);
     newTabs[index] = event.newTab;
 
-    emit(
-      state.copyWith(
-        tabs: newTabs,
-        selectedTabs: _normalizedSelection(newTabs),
-      ),
-    );
-    _scheduleSave(newTabs, state.currentTabIndex);
+    _emitAndSaveTabs(emit, newTabs);
     _disposeTabLater(event.oldTab);
   }
 
@@ -1133,14 +1146,7 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
             );
     }
 
-    emit(
-      state.copyWith(
-        tabs: newTabs,
-        currentTabIndex: newIndex,
-        selectedTabs: _normalizedSelection(newTabs),
-      ),
-    );
-    _scheduleSave(newTabs, newIndex);
+    _emitAndSaveTabs(emit, newTabs, currentTabIndex: newIndex);
 
     for (final tab in toRemove) {
       _disposeTabLater(tab);
@@ -1493,14 +1499,7 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
 
     final newCurrentIndex = insertIndex;
 
-    emit(
-      state.copyWith(
-        tabs: newTabs,
-        currentTabIndex: newCurrentIndex,
-        selectedTabs: _normalizedSelection(newTabs),
-      ),
-    );
-    _scheduleSave(newTabs, newCurrentIndex);
+    _emitAndSaveTabs(emit, newTabs, currentTabIndex: newCurrentIndex);
   }
 
   Future<void> _onOpenTabInSidePane(
@@ -1529,16 +1528,13 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
     );
     final newTabs = List<OpenedTab>.from(state.tabs)..[index] = combinedTab;
 
-    emit(
-      state.copyWith(
-        tabs: newTabs,
-        currentTabIndex: index,
-        selectedTabs: _normalizedSelection(newTabs),
-        // החלונית החדשה היא זו שהמשתמש ביקש לקרוא בה.
-        activePane: ActivePaneUpdate.set(event.tab),
-      ),
+    // החלונית החדשה היא זו שהמשתמש ביקש לקרוא בה.
+    _emitAndSaveTabs(
+      emit,
+      newTabs,
+      currentTabIndex: index,
+      activePane: ActivePaneUpdate.set(event.tab),
     );
-    _scheduleSave(newTabs, index);
   }
 
   Future<void> _onExpandCombinedTab(
@@ -1569,14 +1565,7 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
       final newCurrentIndex =
           combinedIndex + (activePaneIndex < 0 ? 0 : activePaneIndex);
 
-      emit(
-        state.copyWith(
-          tabs: newTabs,
-          currentTabIndex: newCurrentIndex,
-          selectedTabs: _normalizedSelection(newTabs),
-        ),
-      );
-      _scheduleSave(newTabs, newCurrentIndex);
+      _emitAndSaveTabs(emit, newTabs, currentTabIndex: newCurrentIndex);
       // אין לשחרר את העוטף, כי החלוניות ממשיכות להיות מוצגות.
     }
   }
@@ -1616,13 +1605,7 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
       splitRatio: 1.0 - current.splitRatio,
     );
 
-    emit(
-      state.copyWith(
-        tabs: newTabs,
-        selectedTabs: _normalizedSelection(newTabs),
-      ),
-    );
-    _scheduleSave(newTabs, state.currentTabIndex);
+    _emitAndSaveTabs(emit, newTabs);
   }
 
   void _onSetActivePane(SetActivePane event, Emitter<TabsState> emit) {
@@ -1648,13 +1631,7 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
     final newTabs = List<OpenedTab>.from(state.tabs);
     newTabs[index] = survivor;
 
-    emit(
-      state.copyWith(
-        tabs: newTabs,
-        selectedTabs: _normalizedSelection(newTabs),
-      ),
-    );
-    _scheduleSave(newTabs, state.currentTabIndex);
+    _emitAndSaveTabs(emit, newTabs);
 
     // אין לשחרר את הטאב המפוצל כי האחות ממשיכה להיות מוצגת.
     _disposeTabLater(event.pane);
@@ -1679,15 +1656,8 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
     final insertIndex = event.insertIndex.clamp(0, newTabs.length);
     newTabs.insert(insertIndex, event.pane);
 
-    emit(
-      state.copyWith(
-        tabs: newTabs,
-        // החלונית שנגררה החוצה נשארת מול העיניים, כמו גרירת כרטיסיה בדפדפן.
-        currentTabIndex: insertIndex,
-        selectedTabs: _normalizedSelection(newTabs),
-      ),
-    );
-    _scheduleSave(newTabs, insertIndex);
+    // החלונית שנגררה החוצה נשארת מול העיניים, כמו גרירת כרטיסיה בדפדפן.
+    _emitAndSaveTabs(emit, newTabs, currentTabIndex: insertIndex);
     // אין לשחרר דבר: שתי החלוניות ממשיכות להיות מוצגות ככרטיסיות.
   }
 }
