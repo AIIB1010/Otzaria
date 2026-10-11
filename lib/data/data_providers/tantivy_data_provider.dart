@@ -42,14 +42,6 @@ class TantivyDataProvider {
   static final TantivyDataProvider _singleton = TantivyDataProvider._internal();
   static TantivyDataProvider instance = _singleton;
 
-  // Global cache for facet counts
-  static final Map<String, int> _globalFacetCache = {};
-  static String _lastCachedQuery = '';
-
-  // ספירות שכבר רצות: קריאה חוזרת לאותו מפתח ממתינה על אותו Future במקום
-  // לרוץ שוב (מחליף את לולאת ה-polling הישנה של 50ms).
-  static final Map<String, Future<int>> _inflightCounts = {};
-
   /// תוצאת בדיקת התאימות של האינדקס, כפי שנקראה מהאינדקס עצמו
   /// (otzaria_index_meta.json או meta.json של Tantivy) דרך מנוע החיפוש.
   IndexCompatibility? _indexCompatibility;
@@ -60,16 +52,6 @@ class TantivyDataProvider {
 
   /// תיקיית האינדקס שחתימת הסדר הקטלוגי עליה נכשלה באתחול, אם נכשלה.
   String? _pendingCatalogueOrderStampPath;
-
-  /// Clear global cache when starting new search
-  static void clearGlobalCache() {
-    debugPrint(
-      '🧹 Clearing global facet cache (${_globalFacetCache.length} entries)',
-    );
-    _globalFacetCache.clear();
-    _inflightCounts.clear();
-    _lastCachedQuery = '';
-  }
 
   /// Indicates whether the indexing process is currently running
   ValueNotifier<bool> isIndexing = ValueNotifier(false);
@@ -263,10 +245,6 @@ class TantivyDataProvider {
       await _attachMagicDictionary(searchEngine);
     }
   }
-
-  /// האם החיפוש המקורב משתמש כרגע בהרחבה מורפולוגית (מילון טעון).
-  Future<bool> get hasMagicDictionary async =>
-      (await engine).hasMagicDictionary();
 
   /// טוען אל המנוע את מילוני ההרחבה של החיפוש המתקדם — מילון התרגום
   /// הארמי-עברי (אפשרות "תרגום ארמי") ומילון ראשי-התיבות (אפשרות
@@ -534,88 +512,6 @@ class TantivyDataProvider {
           "PanicException(Failed to create index: SchemaError(\"An index exists but the schema does not match.\"))") {
         unawaited(_handleSchemaError());
       }
-    }
-  }
-
-  Future<int> countTexts(
-    String query,
-    List<String> books,
-    List<String> facets, {
-    bool fuzzy = false,
-    int distance = 0,
-    String negativeQuery = '',
-    int? negativeDistance,
-    SearchScope scope = SearchScope.wordDistance,
-    SearchScope? negativeScope,
-    SearchMode searchMode = SearchMode.exact,
-    Map<String, String>? customSpacing,
-    Map<String, String>? negativeCustomSpacing,
-    Map<int, List<String>>? alternativeWords,
-    Map<int, List<String>>? negativeAlternativeWords,
-    Map<String, Map<String, bool>>? searchOptions,
-    Map<String, Map<String, bool>>? negativeSearchOptions,
-    bool matchNikud = false,
-    bool matchTaamim = false,
-    WordMatchMode wordMatchMode = WordMatchMode.all,
-    int? wordMatchCount,
-  }) async {
-    // Global cache check
-    final cacheKey =
-        '$query|not=$negativeQuery|${facets.join(',')}|$fuzzy|$searchMode|$distance|${negativeDistance ?? distance}|$scope|${negativeScope ?? scope}|${customSpacing.toString()}|${negativeCustomSpacing.toString()}|${alternativeWords.toString()}|${negativeAlternativeWords.toString()}|${searchOptions.toString()}|${negativeSearchOptions.toString()}|$matchNikud|$matchTaamim|$wordMatchMode|$wordMatchCount';
-
-    if (_lastCachedQuery == query && _globalFacetCache.containsKey(cacheKey)) {
-      debugPrint(
-        '🎯 GLOBAL CACHE HIT for $facets: ${_globalFacetCache[cacheKey]}',
-      );
-      return _globalFacetCache[cacheKey]!;
-    }
-
-    // ספירה זהה שכבר רצה: ממתינים על אותו Future במקום להריץ שוב
-    // (ובלי לולאת ה-polling של 50ms שהייתה כאן).
-    final inflight = _inflightCounts[cacheKey];
-    if (inflight != null) {
-      debugPrint('⏳ Count already in progress for $facets, awaiting...');
-      return inflight;
-    }
-
-    final future = () async {
-      final count = await _searchGateway.count(
-        RustSearchEngineOperations(await engine),
-        SearchEngineRequest(
-          query: query,
-          facets: facets,
-          searchMode: fuzzy ? SearchMode.fuzzy : searchMode,
-          distance: distance,
-          negativeQuery: negativeQuery,
-          negativeDistance: negativeDistance ?? distance,
-          scope: scope,
-          negativeScope: negativeScope ?? scope,
-          customSpacing: customSpacing ?? const {},
-          negativeCustomSpacing: negativeCustomSpacing ?? const {},
-          alternativeWords: alternativeWords ?? const {},
-          negativeAlternativeWords: negativeAlternativeWords ?? const {},
-          searchOptions: searchOptions ?? const {},
-          negativeSearchOptions: negativeSearchOptions ?? const {},
-          matchNikud: matchNikud,
-          matchTaamim: matchTaamim,
-          wordMatchMode: wordMatchMode,
-          wordMatchCount: wordMatchCount,
-        ),
-      );
-
-      // Save to global cache
-      _lastCachedQuery = query;
-      _globalFacetCache[cacheKey] = count;
-      debugPrint('💾 GLOBAL CACHE SAVE for $facets: $count');
-
-      return count;
-    }();
-
-    _inflightCounts[cacheKey] = future;
-    try {
-      return await future;
-    } finally {
-      _inflightCounts.remove(cacheKey);
     }
   }
 

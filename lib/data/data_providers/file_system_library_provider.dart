@@ -70,8 +70,6 @@ class FileSystemLibraryProvider implements LibraryProvider {
     debugPrint('📁 FileSystemLibraryProvider initialized');
   }
 
-  String get libraryPath => _libraryPath;
-
   Future<Map<String, String>> get keyToPath => _keyToPath ??= _buildKeyToPath();
 
   @override
@@ -418,11 +416,6 @@ class FileSystemLibraryProvider implements LibraryProvider {
       }
       return results;
     });
-  }
-
-  /// Refreshes the title to path mapping
-  void refresh() {
-    _keyToPath = null;
   }
 
   /// Resets runtime state so the provider re-reads the active library path.

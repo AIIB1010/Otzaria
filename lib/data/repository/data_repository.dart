@@ -151,25 +151,6 @@ class DataRepository {
     );
   }
 
-  /// Retrieves the table of contents for a specific book
-  ///
-  /// Parameters:
-  ///   - [title]: The title of the book whose TOC should be retrieved
-  ///
-  /// Returns a [Future] that completes with a list of [TocEntry] objects
-  /// representing the book's table of contents structure
-  Future<List<TocEntry>> getBookToc(
-    String title, {
-    int? categoryId,
-    String? fileType,
-  }) async {
-    return _fileSystemData.getBookToc(
-      title,
-      categoryId: categoryId,
-      fileType: fileType,
-    );
-  }
-
   /// Searches for references by relevance to a given reference string
   ///
   /// Parameters:

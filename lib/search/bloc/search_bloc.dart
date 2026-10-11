@@ -190,9 +190,6 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
         state.facetCounts.isNotEmpty &&
         recountSignature == _facetCountsSignature;
 
-    // Clear global cache for new search
-    TantivyDataProvider.clearGlobalCache();
-
     emit(
       state.copyWith(
         searchQuery: query,
