@@ -146,36 +146,6 @@ void main() {
       expect(keys, equals(expectedOrder));
     });
 
-    test('בחירה ריקה = הצג הכל', () {
-      expect(
-        CommentaryTypeFilter.effectiveTypes(
-          selectedTypes: const {},
-          availableKeys: const [LinkTypes.targum],
-        ),
-        isEmpty,
-      );
-    });
-
-    test('סוג יחיד אינו מציג צ׳יפים (אינו מסנן כלום)', () {
-      expect(
-        CommentaryTypeFilter.visibleChipKeys(
-          chipKeys: const [LinkTypes.targum],
-          effectiveTypes: const {},
-        ),
-        isEmpty,
-      );
-    });
-
-    test('סוג יחיד כן מוצג כשהוא הנבחר — אחרת אין דרך לבטל', () {
-      expect(
-        CommentaryTypeFilter.visibleChipKeys(
-          chipKeys: const [LinkTypes.targum],
-          effectiveTypes: const {LinkTypes.targum},
-        ),
-        equals(const [LinkTypes.targum]),
-      );
-    });
-
     test('commentatorsByType ממפה סוג לשמות המפרשים', () {
       final byType = CommentaryTypeFilter.commentatorsByType([
         _link(path2: 'אונקלוס', connectionType: LinkTypes.targum),

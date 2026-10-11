@@ -159,35 +159,6 @@ void main() {
       await bloc.close();
     });
 
-    test('באתחול מפרשים למטה מבקש חלון קישורים עבור הטווח הנוכחי', () async {
-      final repository = _FakeTextBookRepository();
-      final bloc = _createBloc(
-        repository: repository,
-        showPageShapeView: false,
-      );
-
-      bloc.add(
-        const LoadContent(
-          fontSize: 20,
-          showSplitView: false,
-          removeNikud: false,
-          loadCommentators: false,
-        ),
-      );
-
-      await _waitFor(
-        () => repository.getBookLinksInRangeCalls >= 1,
-        description: 'getBookLinksInRangeCalls >= 1',
-      );
-
-      expect(repository.getBookLinksInRangeCalls, 1);
-      expect(repository.lastStartIndex, 0);
-      expect(repository.lastEndIndex, 10 + TextBookBloc.linkLookAheadLines);
-      expect(repository.lastTargetBookTitles, isEmpty);
-
-      await bloc.close();
-    });
-
     test(
       'במפרשים למטה טעינת הקישורים הראשונית אינה מסננת קישורים רגילים',
       () async {

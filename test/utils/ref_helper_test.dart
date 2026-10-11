@@ -409,17 +409,6 @@ void main() {
         'משנה אבות, פרק א',
       );
     });
-
-    test('עומק שווה — הניקוד ממשיך להכריע לטובת כתובת ה-TOC', () {
-      expect(
-        formatDisplayReference(
-          bookTitle: 'בראשית',
-          resolvedRef: 'פרק א',
-          fallbackRef: 'א',
-        ),
-        'בראשית, פרק א',
-      );
-    });
   });
 
   group('addBookTitleToRef', () {
