@@ -1542,7 +1542,8 @@ await Otzaria.call('search.setFieldText', { sessionId, text: 'ברכות דף ב
   ומרכיבה `before + text + after`. כשאין רווח בגבול, נוסף רווח מפריד. הסמן
   ממוקם בסוף הטקסט של התוסף.
 - עד 1000 תווים בקריאה. תווי בקרה (כמו שבירת שורה) מוחלפים ברווח. טקסט
-  שמכיל `://` נדחה (`error.invalid_params`): Enter בחלק מהשדות פותח קישורי
+  שהשדה המורכב ממנו מכיל `://` נדחה (`error.invalid_params`), כולל טקסט שנשמר
+  מחוץ לבחירה: Enter בחלק מהשדות פותח קישורי
   `otzaria://`, ותוסף אינו רשאי להפעיל אותם בדרך זו.
 - השדה מגיב כמו להקלדה: חיפוש תוך כדי הקלדה (בספרייה, בתוך ספר, באיתור מקור)
   מתעדכן. החיפוש בטקסט המלא רץ רק ב-`submit`.
@@ -1573,7 +1574,9 @@ await Otzaria.call('search.endFieldSession', { sessionId, submit: true });
 ```
 
 מסיים את הסשן. `submit: true` מריץ את החיפוש כאילו המשתמש לחץ Enter. גם כאן
-התוסף מקבל `search.fieldAction.ended` עם `reason: 'plugin'`.
+התוסף מקבל `search.fieldAction.ended` עם `reason: 'plugin'`. אם השדה מכיל
+`://`, הגשה נדחית ב-`error.invalid_params` גם אם התוסף לא כתב טקסט; אפשר לסיים
+את הסשן ללא הגשה. Enter של המשתמש ממשיך לעבוד כרגיל.
 
 ---
 

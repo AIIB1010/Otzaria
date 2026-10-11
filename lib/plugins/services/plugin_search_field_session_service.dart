@@ -199,17 +199,10 @@ class PluginSearchFieldSessionService extends ChangeNotifier {
         'text is longer than $maxTextLength characters',
       );
     }
-    // שדות הספרייה ואיתור המקור מנתבים קישור otzaria:// ב-Enter; קישור מתוסף
-    // היה עוקף את הרשאותיו (למשל פתיחת תוסף אחר או התקנה).
-    if (text.contains('://')) {
-      throw const PluginSearchFieldSessionException(
-        'error.invalid_params',
-        'text must not contain links',
-      );
-    }
     final session = _ownedSession(pluginId, sessionId, instanceId);
     final clean = text.replaceAll(RegExp(r'[\u0000-\u001F\u007F]'), ' ');
     final value = compose(session.before, clean, session.after);
+    _rejectLinks(value.text);
     session.expectedText = value.text;
     session.binding.applyPluginText(value);
   }
@@ -256,6 +249,7 @@ class PluginSearchFieldSessionService extends ChangeNotifier {
     String? instanceId,
   }) {
     final session = _ownedSession(pluginId, sessionId, instanceId);
+    if (submit) _rejectLinks(session.binding.currentValue.text);
     _end(session, endReasonPlugin);
     if (submit) session.binding.submit();
   }
@@ -327,6 +321,16 @@ class PluginSearchFieldSessionService extends ChangeNotifier {
       text: '$head$trail$after',
       selection: TextSelection.collapsed(offset: head.length),
     );
+  }
+
+  // גם הטקסט ששמור מחוץ לבחירה יכול להרכיב קישור שעוקף הרשאות ב-Enter.
+  static void _rejectLinks(String text) {
+    if (text.contains('://')) {
+      throw const PluginSearchFieldSessionException(
+        'error.invalid_params',
+        'text must not contain links',
+      );
+    }
   }
 
   static bool _isSpace(String char) => char.trim().isEmpty;

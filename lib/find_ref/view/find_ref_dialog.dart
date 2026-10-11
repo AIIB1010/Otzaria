@@ -1141,7 +1141,12 @@ class _FindRefDialogState extends State<FindRefDialog> {
             _sectionLabel(context.settingsText('מה לאתר')),
             const SizedBox(height: 8),
           ],
-          _buildQueryField(isLoading ? const <DbReferenceResult>[] : refs),
+          ListenableBuilder(
+            listenable: PluginSearchFieldActionsRegistry.instance,
+            builder: (context, _) => _buildQueryField(
+              isLoading ? const <DbReferenceResult>[] : refs,
+            ),
+          ),
           TypingLayoutFixSuggestion(
             controller: context.read<FocusRepository>().findRefSearchController,
             fieldFocusNode: context

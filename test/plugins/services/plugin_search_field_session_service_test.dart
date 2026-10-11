@@ -226,6 +226,36 @@ void main() {
     expect(field.controller.text, 'שורה שנייה');
   });
 
+  test('קישור שנשמר מחוץ לבחירה אינו ניתן להשלמה על ידי התוסף', () async {
+    for (final text in [
+      'otzaria://open/plugin/',
+      'otzaria://open/plugin/victim',
+    ]) {
+      final field = _FakeField(service, text: text);
+      final id = await invoke(field);
+      expect(
+        () => service.setFieldText('voice', id, 'victim'),
+        throwsA(isA<PluginSearchFieldSessionException>()),
+      );
+      expect(field.controller.text, text);
+      expect(field.changes, isEmpty);
+      service.endSession('voice', id);
+    }
+  });
+
+  test('submit של קישור קיים נדחה גם בלי כתיבה בסשן', () async {
+    final field = _FakeField(service, text: 'otzaria://open/plugin/victim');
+    final id = await invoke(field);
+    expect(
+      () => service.endSession('voice', id, submit: true),
+      throwsA(isA<PluginSearchFieldSessionException>()),
+    );
+    expect(field.submits, 0);
+    expect(service.hasSessionsFor(field), isTrue);
+    service.endSession('voice', id);
+    expect(service.hasSessionsFor(field), isFalse);
+  });
+
   test('לחיצה שנייה שולחת stopRequested ואינה סוגרת', () async {
     final field = _FakeField(service);
     final id = await invoke(field);
