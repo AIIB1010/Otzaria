@@ -1328,4 +1328,27 @@ void main() {
       );
     },
   );
+
+  testWidgets('dev plugins are marked DEV in the plugins list (issue #2062)', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      _wrap(
+        settingsBloc: _FakeSettingsBloc(),
+        pluginBloc: _FakePluginSystemBloc([
+          _plugin(id: 'p1', name: 'רגיל'),
+          _plugin(
+            id: 'p2',
+            name: 'פיתוח',
+          ).copyWith(sourceType: 'localhost_dev'),
+        ]),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('DEV'), findsOneWidget);
+  });
 }
