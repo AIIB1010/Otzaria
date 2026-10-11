@@ -399,10 +399,7 @@ class GimatriaSearch {
             // Remove curly braces with content
             cleanLine = cleanLine.replaceAll(_curlyBracesRe, '');
 
-            // Clean HTML tags
-            final lineWithoutHtml = _cleanHtml(cleanLine);
-
-            final words = _splitWords(lineWithoutHtml);
+            final words = lineWords(cleanLine);
             if (words.isEmpty) continue;
 
             // Search for whole verse only
@@ -621,10 +618,7 @@ class GimatriaSearch {
           // הסרת סוגריים מסולסלות עם תוכן
           cleanLine = cleanLine.replaceAll(_curlyBracesRe, '');
 
-          // ניקוי תגיות HTML מהשורה
-          final lineWithoutHtml = _cleanHtml(cleanLine);
-
-          final words = _splitWords(lineWithoutHtml);
+          final words = lineWords(cleanLine);
           if (words.isEmpty) continue;
 
           // אם מחפשים פסוק שלם, בדוק את כל השורה
@@ -771,11 +765,22 @@ class GimatriaSearch {
     return parts.join(', ');
   }
 
+  /// מילות השורה לסריקה, אחרי הסרת HTML. הפיצול מדלג על רווחים כפולים, ולכן
+  /// אין צורך לכווץ אותם קודם.
+  @visibleForTesting
+  static List<String> lineWords(String line) =>
+      _splitWords(_stripHtml(line).trim());
+
   static List<String> _splitWords(String line) =>
       line.split(_wordSeparatorRe).where((w) => w.trim().isNotEmpty).toList();
 
+  static String _cleanHtml(String s) =>
+      _stripHtml(s).replaceAll(_whitespaceRe, ' ').trim();
+
   /// ניקוי תגיות HTML ו-HTML entities
-  static String _cleanHtml(String s) {
+  static String _stripHtml(String s) {
+    // בלי '<' ו-'&' (רוב השורות) אף החלפה כאן אינה משנה דבר.
+    if (!s.contains('<') && !s.contains('&')) return s;
     // הסרת תגיות HTML
     var cleaned = s.replaceAll(_htmlTagRe, '');
 
@@ -793,9 +798,6 @@ class GimatriaSearch {
     // הסרת כל HTML entities שנשארו (פורמט &#xxxx; או &name;)
     cleaned = cleaned.replaceAll(_namedEntityRe, '');
     cleaned = cleaned.replaceAll(_decimalEntityRe, '');
-    cleaned = cleaned.replaceAll(_hexEntityRe, '');
-
-    // ניקוי רווחים מיותרים
-    return cleaned.replaceAll(_whitespaceRe, ' ').trim();
+    return cleaned.replaceAll(_hexEntityRe, '');
   }
 }
