@@ -89,8 +89,6 @@ final class AltTocFlatIndex {
 
   int segmentOf(int i) => _segments[i];
 
-  int levelOf(int i) => _levels[i];
-
   /// [altTocTokenMask] של [refTokensOf] לכל ערך — לקריאה בלבד; סריקה ישירה
   /// של המערך זולה מקריאה לכל ערך.
   Int64List get refMasks => _refMasks;

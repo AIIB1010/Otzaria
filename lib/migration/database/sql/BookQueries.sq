@@ -34,11 +34,6 @@ INSERT INTO book (categoryId, sourceId, title, heShortDesc, orderIndex, totalLin
     hasAltStructures, hasTeamim, hasNekudot, isPersonal, filePath, fileType, fileSize, lastModified, pages, volume)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
--- Insert external content book (content stored externally, metadata in DB)
-insertExternalContent:
-INSERT INTO book (categoryId, sourceId, title, heShortDesc, orderIndex, isPersonal, filePath, fileType, fileSize, lastModified)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-
 -- Update external book metadata
 updateExternalMetadata:
 UPDATE book SET fileSize = ?, lastModified = ? WHERE id = ?;
@@ -49,9 +44,6 @@ SELECT * FROM book WHERE filePath = ? LIMIT 1;
 
 updateTotalLines:
 UPDATE book SET totalLines = ? WHERE id = ?;
-
-delete:
-DELETE FROM book WHERE id = ?;
 
 countAll:
 SELECT COUNT(*) FROM book;
@@ -68,15 +60,3 @@ UPDATE book SET
     hasCommentaryConnection = ?,
     hasOtherConnection = ?
 WHERE id = ?;
-
--- Update alt structures flag
-updateAltStructuresFlag:
-UPDATE book SET hasAltStructures = ? WHERE id = ?;
-
--- Update teamim flag
-updateTeamimFlag:
-UPDATE book SET hasTeamim = ? WHERE id = ?;
-
--- Update nekudot flag
-updateNekudotFlag:
-UPDATE book SET hasNekudot = ? WHERE id = ?;

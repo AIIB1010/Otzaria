@@ -1,8 +1,0 @@
--- Queries for the canonical line-reference index
-
-insert:
-INSERT OR IGNORE INTO line_ref (bookId, refKeyHash, lineIndex)
-VALUES (?, ?, ?);
-
-deleteByBookId:
-DELETE FROM line_ref WHERE bookId = ?;
