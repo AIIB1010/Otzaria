@@ -1178,14 +1178,6 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
       final updatedState = currentState.copyWith(
         showLeftPane: event.show,
         selectedIndex: currentState.selectedIndex,
-        visibleLinks: event.show
-            ? computeVisibleLinks(
-                links: currentState.links,
-                visibleIndices: currentState.visibleIndices,
-                selectedIndices: currentState.selectedIndices,
-                linksByLine: currentState.linksByLine,
-              )
-            : currentState.visibleLinks,
       );
       emit(updatedState);
 
@@ -1533,17 +1525,12 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
           ? const <int>{}
           : currentState.selectedIndices;
 
-      final List<Link> visibleLinks;
-      if (currentState.showLeftPane || index != null) {
-        visibleLinks = computeVisibleLinks(
-          links: currentState.links,
-          visibleIndices: event.visibleIndecies,
-          selectedIndices: newIndices,
-          linksByLine: currentState.linksByLine,
-        );
-      } else {
-        visibleLinks = currentState.visibleLinks;
-      }
+      final visibleLinks = computeVisibleLinks(
+        links: currentState.links,
+        visibleIndices: event.visibleIndecies,
+        selectedIndices: newIndices,
+        linksByLine: currentState.linksByLine,
+      );
 
       emit(
         currentState.copyWith(
