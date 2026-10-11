@@ -393,6 +393,72 @@ void main() {
       expect(exported, isNot(contains(',')), reason: 'הפיסוק לא הוסר');
     });
 
+    testWidgets(
+      'שינוי ערוץ ההעתקה בהגדרות מגיע לספר שכבר פתוח (issue #2377)',
+      (tester) async {
+        final book = TextBook(title: 'ספר בדיקה');
+        final bloc = _TestTextBookBloc(_loadedState(book));
+        final tab = TextBookTab(book: book, index: 0, blocOverride: bloc);
+        final tabsBloc = _TestTabsBloc(
+          TabsState(tabs: [tab], currentTabIndex: 0),
+        );
+        final settingsBloc = _TestSettingsBloc(SettingsState.initial());
+        addTearDown(() async {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await bloc.close();
+          await tabsBloc.close();
+          await settingsBloc.close();
+          tab.dispose();
+        });
+        await _setSurfaceSize(tester, const Size(1600, 900));
+        await _pumpTextBookScreen(
+          tester,
+          tab: tab,
+          textBookBloc: bloc,
+          tabsBloc: tabsBloc,
+          settingsBloc: settingsBloc,
+          focusRepository: focusRepository,
+          shamorZachorDataProvider: shamorZachorDataProvider,
+          shamorZachorProgressProvider: shamorZachorProgressProvider,
+          bookmarkBloc: bookmarkBloc,
+          personalNotesBloc: personalNotesBloc,
+          tourCubit: tourCubit,
+          isInCombinedView: false,
+        );
+        bloc.receivedEvents.clear();
+
+        // הגדרה אחרת ומדיניות שווה-ערך (מופע חדש) — בלי טעינה מחדש
+        final settings = settingsBloc.state;
+        settingsBloc.emitStateForTest(
+          settings.copyWith(
+            sidebarWidth: 350,
+            textDisplayPolicy: TextDisplayPolicy.fromJson(
+              settings.textDisplayPolicy.toJson(),
+            ),
+          ),
+        );
+        await tester.pump();
+        expect(bloc.receivedEvents.whereType<LoadContent>(), isEmpty);
+
+        settingsBloc.emitStateForTest(
+          settings.copyWith(
+            textDisplayPolicy: settings.textDisplayPolicy.merged(
+              TextDisplayBookClass.general,
+              const TextDisplaySlot(
+                target: TextTarget.body,
+                view: TextView.regular,
+                channel: TextChannel.copy,
+              ),
+              const TextDisplayPatch(anchorMarkers: MarkVisibility.hide),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        expect(bloc.receivedEvents.whereType<LoadContent>(), hasLength(1));
+      },
+    );
+
     testWidgets('הלחצן למהדורה המובנית כתוב "פתח בתצוגת PDF"', (
       tester,
     ) async {
@@ -1667,8 +1733,10 @@ TextBookLoaded _loadedState(
 class _TestTextBookBloc extends Bloc<TextBookEvent, TextBookState>
     implements TextBookBloc {
   _TestTextBookBloc(super.initialState) {
-    on<TextBookEvent>((event, emit) {});
+    on<TextBookEvent>((event, emit) => receivedEvents.add(event));
   }
+
+  final List<TextBookEvent> receivedEvents = [];
 
   void emitStateForTest(TextBookState state) => emit(state);
 
@@ -1726,6 +1794,8 @@ class _TestSettingsBloc extends Bloc<SettingsEvent, SettingsState>
   _TestSettingsBloc(super.initialState) {
     on<SettingsEvent>((event, emit) {});
   }
+
+  void emitStateForTest(SettingsState state) => emit(state);
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
