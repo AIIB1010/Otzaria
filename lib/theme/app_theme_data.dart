@@ -104,10 +104,18 @@ class AppThemeData {
         bodyMedium: TextStyle(fontSize: 18.0),
       ),
       cardTheme: const CardThemeData(shape: AppTokens.roundedShape),
-      iconButtonTheme: _iconButtonTheme(cs),
-      filledButtonTheme: _filledButtonTheme(cs),
-      textButtonTheme: _textButtonTheme(cs),
-      outlinedButtonTheme: _outlinedButtonTheme(cs),
+      iconButtonTheme: IconButtonThemeData(
+        style: _hoverButtonStyle(cs.primary),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: _hoverButtonStyle(cs.onPrimary),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: _hoverButtonStyle(cs.primary),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: _hoverButtonStyle(cs.primary),
+      ),
       tabBarTheme: _tabBarTheme(cs),
       tooltipTheme: _tooltipTheme(cs),
       dropdownMenuTheme: _dropdownMenuTheme(cs, menuMetrics),
@@ -177,13 +185,8 @@ class AppThemeData {
     );
   }
 
-  static MenuThemeData _menuTheme(
-    ColorScheme cs, {
-    required Color backgroundColor,
-    required AppMenuMetrics metrics,
-  }) {
-    return MenuThemeData(
-      style: MenuStyle(
+  static MenuStyle _menuStyle(Color backgroundColor, AppMenuMetrics metrics) =>
+      MenuStyle(
         backgroundColor: WidgetStatePropertyAll(backgroundColor),
         surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
         shadowColor: WidgetStatePropertyAll(
@@ -193,7 +196,15 @@ class AppThemeData {
         shape: const WidgetStatePropertyAll(AppTokens.roundedShape),
         padding: WidgetStatePropertyAll(metrics.menuPadding),
         visualDensity: metrics.visualDensity,
-      ),
+      );
+
+  static MenuThemeData _menuTheme(
+    ColorScheme cs, {
+    required Color backgroundColor,
+    required AppMenuMetrics metrics,
+  }) {
+    return MenuThemeData(
+      style: _menuStyle(backgroundColor, metrics),
     );
   }
 
@@ -212,17 +223,7 @@ class AppThemeData {
         border: OutlineInputBorder(),
         isDense: true,
       ),
-      menuStyle: MenuStyle(
-        backgroundColor: WidgetStatePropertyAll(_menuBackground(cs)),
-        surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
-        shadowColor: WidgetStatePropertyAll(
-          Colors.black.withValues(alpha: 0.22),
-        ),
-        elevation: const WidgetStatePropertyAll(AppTokens.elevation2),
-        shape: const WidgetStatePropertyAll(AppTokens.roundedShape),
-        padding: WidgetStatePropertyAll(metrics.menuPadding),
-        visualDensity: metrics.visualDensity,
-      ),
+      menuStyle: _menuStyle(_menuBackground(cs), metrics),
     );
   }
 
@@ -266,74 +267,16 @@ class AppThemeData {
   //  צבע: primary (לא אפור) — מתאים לפלטת הצבעים החמה של האפליקציה
   // ──────────────────────────────────────────────────────────────────────────
 
-  static IconButtonThemeData _iconButtonTheme(ColorScheme cs) =>
-      IconButtonThemeData(
-        style: ButtonStyle(
-          shape: const WidgetStatePropertyAll(AppTokens.roundedShape),
-          // primary (לא אפור) — hover תואם את צבעי האפליקציה
-          overlayColor: WidgetStateProperty.resolveWith((s) {
-            if (s.contains(WidgetState.hovered)) {
-              return cs.primary.withValues(alpha: 0.08);
-            }
-            if (s.contains(WidgetState.pressed) ||
-                s.contains(WidgetState.focused)) {
-              return cs.primary.withValues(alpha: 0.12);
-            }
-            return null;
-          }),
-        ),
-      );
-
-  static FilledButtonThemeData _filledButtonTheme(ColorScheme cs) =>
-      FilledButtonThemeData(
-        style: ButtonStyle(
-          shape: const WidgetStatePropertyAll(AppTokens.roundedShape),
-          overlayColor: WidgetStateProperty.resolveWith((s) {
-            if (s.contains(WidgetState.hovered)) {
-              return cs.onPrimary.withValues(alpha: 0.08);
-            }
-            if (s.contains(WidgetState.pressed) ||
-                s.contains(WidgetState.focused)) {
-              return cs.onPrimary.withValues(alpha: 0.12);
-            }
-            return null;
-          }),
-        ),
-      );
-
-  static TextButtonThemeData _textButtonTheme(ColorScheme cs) =>
-      TextButtonThemeData(
-        style: ButtonStyle(
-          shape: const WidgetStatePropertyAll(AppTokens.roundedShape),
-          overlayColor: WidgetStateProperty.resolveWith((s) {
-            if (s.contains(WidgetState.hovered)) {
-              return cs.primary.withValues(alpha: 0.08);
-            }
-            if (s.contains(WidgetState.pressed) ||
-                s.contains(WidgetState.focused)) {
-              return cs.primary.withValues(alpha: 0.12);
-            }
-            return null;
-          }),
-        ),
-      );
-
-  static OutlinedButtonThemeData _outlinedButtonTheme(ColorScheme cs) =>
-      OutlinedButtonThemeData(
-        style: ButtonStyle(
-          shape: const WidgetStatePropertyAll(AppTokens.roundedShape),
-          overlayColor: WidgetStateProperty.resolveWith((s) {
-            if (s.contains(WidgetState.hovered)) {
-              return cs.primary.withValues(alpha: 0.08);
-            }
-            if (s.contains(WidgetState.pressed) ||
-                s.contains(WidgetState.focused)) {
-              return cs.primary.withValues(alpha: 0.12);
-            }
-            return null;
-          }),
-        ),
-      );
+  static ButtonStyle _hoverButtonStyle(Color color) => ButtonStyle(
+    shape: const WidgetStatePropertyAll(AppTokens.roundedShape),
+    overlayColor: WidgetStateProperty.resolveWith((s) {
+      if (s.contains(WidgetState.hovered)) return color.withValues(alpha: 0.08);
+      if (s.contains(WidgetState.pressed) || s.contains(WidgetState.focused)) {
+        return color.withValues(alpha: 0.12);
+      }
+      return null;
+    }),
+  );
 
   // ══════════════════════════════════════════════════════════════════════════
   //  TabBar Theme — secondaryContainer indicator + primary hover
