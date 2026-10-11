@@ -7,6 +7,7 @@ import 'package:otzaria/tools/tikkun_korim/repository/tikkun_contracts.dart';
 import 'package:otzaria/tools/tikkun_korim/repository/tikkun_korim_repository.dart';
 import 'package:otzaria/tools/tikkun_korim/settings/tikkun_settings.dart';
 
+import '../../../test_helpers/dst_days.dart';
 import '../support/tikkun_fakes.dart';
 
 void main() {
@@ -49,6 +50,23 @@ void main() {
       'נשא',
     );
   });
+
+  test(
+    'פרשת השבוע אינה תלויה בשעה ביום שהשעון חוזר בו',
+    skip: noDstSkipReason,
+    () {
+      final day = localDayLasting(25)!;
+      final atNoon = defaultUpcomingParashaName(
+        atHour(day, 12),
+        inIsrael: true,
+      );
+      expect(atNoon, isNotEmpty);
+      expect(
+        defaultUpcomingParashaName(atHour(day, 0, 30), inIsrael: true),
+        atNoon,
+      );
+    },
+  );
 
   group('טעינה ראשונה', () {
     blocTest<TikkunKorimBloc, TikkunKorimState>(
