@@ -1533,17 +1533,12 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
           ? const <int>{}
           : currentState.selectedIndices;
 
-      final List<Link> visibleLinks;
-      if (currentState.showLeftPane || index != null) {
-        visibleLinks = computeVisibleLinks(
-          links: currentState.links,
-          visibleIndices: event.visibleIndecies,
-          selectedIndices: newIndices,
-          linksByLine: currentState.linksByLine,
-        );
-      } else {
-        visibleLinks = currentState.visibleLinks;
-      }
+      final visibleLinks = computeVisibleLinks(
+        links: currentState.links,
+        visibleIndices: event.visibleIndecies,
+        selectedIndices: newIndices,
+        linksByLine: currentState.linksByLine,
+      );
 
       emit(
         currentState.copyWith(
