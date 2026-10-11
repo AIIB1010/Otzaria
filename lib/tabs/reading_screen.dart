@@ -512,7 +512,12 @@ class _ReadingScreenState extends State<ReadingScreen>
                                         enabled:
                                             i == validIndex &&
                                             state.tabs[i] is! CombinedTab,
-                                        child: _cachedTabView(state.tabs[i]),
+                                        child: _BackgroundTabMediaQuery(
+                                          frozen: i != validIndex,
+                                          controller: _pageController!,
+                                          index: i,
+                                          child: _cachedTabView(state.tabs[i]),
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -658,6 +663,52 @@ class _ReadingScreenState extends State<ReadingScreen>
       return ToolTabScreen(key: ValueKey(tab), tab: tab);
     }
     return const SizedBox.shrink();
+  }
+}
+
+/// מקפיא את מדדי החלון רק בטאבים מוסתרים לגמרי; בזמן החלקה שני הטאבים
+/// הנראים חייבים לקבל מדדים עדכניים גם לפני שהטאב הנבחר מתחלף.
+class _BackgroundTabMediaQuery extends StatefulWidget {
+  final bool frozen;
+  final PageController controller;
+  final int index;
+  final Widget child;
+
+  const _BackgroundTabMediaQuery({
+    required this.frozen,
+    required this.controller,
+    required this.index,
+    required this.child,
+  });
+
+  @override
+  State<_BackgroundTabMediaQuery> createState() =>
+      _BackgroundTabMediaQueryState();
+}
+
+class _BackgroundTabMediaQueryState extends State<_BackgroundTabMediaQuery> {
+  MediaQueryData? _data;
+
+  @override
+  Widget build(BuildContext context) {
+    final live = MediaQuery.of(context);
+    return AnimatedBuilder(
+      animation: widget.controller,
+      child: widget.child,
+      builder: (context, child) {
+        final controller = widget.controller;
+        final page =
+            controller.hasClients && controller.position.hasContentDimensions
+            ? controller.page ?? controller.initialPage.toDouble()
+            : controller.initialPage.toDouble();
+        if (!widget.frozen ||
+            (page - widget.index).abs() < 1 ||
+            _data == null) {
+          _data = live;
+        }
+        return MediaQuery(data: _data!, child: child!);
+      },
+    );
   }
 }
 
