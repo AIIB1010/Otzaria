@@ -479,4 +479,34 @@ void main() {
       expect(computations, 1);
     });
   });
+
+  group('linesInRange', () {
+    test('זהה ל-split(newline).sublist', () {
+      for (final text in ['', 'א', 'א\nב', '\n', 'א\n\nב\n', '\r\nא\nב']) {
+        final all = text.split('\n');
+        for (var start = 0; start <= all.length; start++) {
+          for (var end = start; end <= all.length; end++) {
+            expect(
+              linesInRange(text, start, end),
+              all.sublist(start, end),
+              reason: '$text [$start, $end)',
+            );
+          }
+        }
+      }
+    });
+
+    test('טווח בתחילת ספר גדול אינו מפצל את כל הספר', () {
+      final text = List.filled(200000, 'בראשית ברא אלהים את השמים').join('\n');
+      final split = Stopwatch()..start();
+      final expected = text.split('\n').sublist(10, 70);
+      split.stop();
+      final range = Stopwatch()..start();
+      for (var i = 0; i < 20; i++) {
+        expect(linesInRange(text, 10, 70), expected);
+      }
+      range.stop();
+      expect(range.elapsedMicroseconds, lessThan(split.elapsedMicroseconds));
+    });
+  });
 }
