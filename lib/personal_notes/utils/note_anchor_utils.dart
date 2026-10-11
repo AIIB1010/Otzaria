@@ -32,7 +32,12 @@ bool _isDiacritic(int code) =>
 // פיסוק שעשוי להיות מוסתר בתצוגה (כמו _isIgnored ב-html_slice): הבחירה מגיעה
 // בלעדיו, ולכן מתעלמים ממנו בשני צידי ההשוואה.
 final _punctuation = RegExp('[!"\',\\-.:;?\u05F3\u05F4\u2013\u2014]');
-bool _isPunctuation(String ch) => _punctuation.hasMatch(ch);
+bool _isPunctuation(int code) => switch (code) {
+  0x21 || 0x22 || 0x27 || 0x2C || 0x2D || 0x2E || 0x3A || 0x3B || 0x3F => true,
+  0x05F3 || 0x05F4 || 0x2013 || 0x2014 => true,
+  _ => false,
+};
+
 String _withoutPunctuation(String? s) =>
     s == null ? '' : s.replaceAll(_punctuation, '');
 
@@ -78,10 +83,9 @@ LineProjection projectLine(
   }
 
   for (int i = 0; i < rawLine.length; i++) {
-    final ch = rawLine[i];
     final code = rawLine.codeUnitAt(i);
 
-    if (omitInjectedAnchorMarkers && !inTag && ch == '<') {
+    if (omitInjectedAnchorMarkers && !inTag && code == 0x3C) {
       final isAnchor = rawLine.startsWith('<a class="link-anchor ', i);
       final isSpan = rawLine.startsWith('<span class="link-anchor ', i);
       if (isAnchor || isSpan) {
@@ -95,7 +99,7 @@ LineProjection projectLine(
     }
 
     if (inTag) {
-      if (ch == '>') {
+      if (code == 0x3E) {
         inTag = false;
         // <br> הוא שבירת שורה — הרינדור מציג אותו כרווח, לכן גם כאן, אחרת
         // בחירה שחוצה <br> לא תאותר בעיגון ותיפול לסימון כל השורה.
@@ -103,19 +107,23 @@ LineProjection projectLine(
       }
       continue;
     }
-    if (ch == '<') {
+    if (code == 0x3C) {
       inTag = true;
       tagStart = i;
       continue;
     }
 
     // ניקוד, טעמים ופיסוק — מושמטים לחלוטין.
-    if (_isDiacritic(code) || (!keepPunctuation && _isPunctuation(ch))) {
+    if (_isDiacritic(code) || (!keepPunctuation && _isPunctuation(code))) {
       continue;
     }
 
     // מקף עברי (מקף) ורווחים — מכווצים לרווח יחיד.
-    final isWhitespace = code == 0x05BE || ch.trim().isEmpty;
+    // אותיות עבריות אינן רווח — בלי להקצות להן מחרוזת.
+    final isWhitespace =
+        code == 0x05BE ||
+        ((code < 0x05D0 || code > 0x05EA) &&
+            String.fromCharCode(code).trim().isEmpty);
     if (isWhitespace) {
       markWhitespace(i);
       continue;
@@ -123,7 +131,7 @@ LineProjection projectLine(
 
     flushWhitespace();
     rawIndex.add(i);
-    buffer.write(ch);
+    buffer.writeCharCode(code);
   }
 
   // רווח בסוף נשמר במפה (כדי שאורך המפה יהיה עקבי) אך לא נכלל בטקסט —
