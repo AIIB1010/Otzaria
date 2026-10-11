@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/widgets/smart_text/simple_inline_html.dart';
@@ -167,6 +169,70 @@ void main() {
       const fallback = '<a href="x">קישור</a>';
       expect(SimpleInlineHtml.tryParse(fallback, baseStyle), isNull);
       expect(SimpleInlineHtml.tryParse(fallback, baseStyle), isNull);
+    });
+  });
+
+  group('SimpleInlineHtml.tryParse — רווחים בשורה ארוכה', () {
+    test('כיווץ וקיטום זהים לכללי הרווחים של HTML', () {
+      final collapse = RegExp(r'[\t\n\f\r ]+');
+      final random = Random(7);
+      const pieces = [
+        'א',
+        'b',
+        ' ',
+        '  ',
+        '\t',
+        '\n',
+        '\r\n',
+        '\f',
+        '\u00A0',
+        '\u2009',
+      ];
+      for (var n = 0; n < 2000; n++) {
+        final text = [
+          for (var i = random.nextInt(12); i > 0; i--)
+            pieces[random.nextInt(pieces.length)],
+        ].join();
+        final expected = text
+            .replaceAll(collapse, ' ')
+            .replaceFirst(RegExp(r'^ '), '')
+            .replaceFirst(RegExp(r' $'), '');
+        final span = SimpleInlineHtml.tryParse(
+          text,
+          const TextStyle(fontSize: 13),
+        );
+        expect(span?.toPlainText(), expected, reason: text);
+      }
+    });
+
+    test('שורה של מאות אלפי תווים מעובדת בלי מעבר RegExp על כל השורה', () {
+      // כמו בשורות הארוכות בספרייה: מאות אלפי תווים ומעט תגים.
+      final line = [
+        for (var i = 0; i < 30000; i++)
+          i % 50 == 0 ? '<b>דבר</b> <br/>' : 'מילה ועוד\n מלה  ',
+      ].join();
+      final collapse = RegExp(r'[\t\n\f\r ]+');
+      int best(void Function() run) {
+        var best = 1 << 62;
+        for (var r = 0; r < 5; r++) {
+          final sw = Stopwatch()..start();
+          run();
+          if (sw.elapsedMicroseconds < best) best = sw.elapsedMicroseconds;
+        }
+        return best;
+      }
+
+      var size = 30.0;
+      // סגנון חדש בכל ריצה, כדי שהמטמון לא יחזיר תוצאה מוכנה.
+      final parse = best(
+        () => SimpleInlineHtml.tryParse(line, TextStyle(fontSize: size++)),
+      );
+      final regexPass = best(() => line.replaceAll(collapse, ' '));
+      expect(
+        parse,
+        lessThan(regexPass),
+        reason: 'parse=$parse regex=$regexPass',
+      );
     });
   });
 }
