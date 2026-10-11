@@ -1,7 +1,6 @@
 import 'package:otzaria/plugins/services/plugin_user_folder_grants.dart';
 import 'package:otzaria/library/hidden/hidden_library_selection.dart';
 import 'package:otzaria/library/hidden/hidden_library_store.dart';
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -1621,35 +1620,19 @@ void main() {
         ..setLastModifiedSync(DateTime.now().subtract(const Duration(days: 3)));
     }
 
-    test('גיבוי גדול מפוענח בלי לחסום את ה-UI isolate', () async {
+    test('קובץ הגיבוי אינו נקרא ב-UI isolate', () async {
       writeOldBackup({
         'settings': {'key-analyze-probe': 'changed'},
-        'history': [
-          for (var i = 0; i < 120000; i++)
-            {'ref': 'בראשית ברא אלהים את השמים ואת הארץ $i', 'index': i},
-        ],
       });
+      final spy = _BackupReadSpy();
 
-      final clock = Stopwatch()..start();
-      var last = 0;
-      var maxGap = 0;
-      void recordGap() {
-        final now = clock.elapsedMilliseconds;
-        if (now - last > maxGap) maxGap = now - last;
-        last = now;
-      }
-
-      final ticker = Timer.periodic(
-        const Duration(milliseconds: 1),
-        (_) => recordGap(),
+      final status = await IOOverrides.runWithIOOverrides(
+        BackupService.analyzeBackupStatus,
+        spy,
       );
-      final status = await BackupService.analyzeBackupStatus();
-      ticker.cancel();
-      recordGap();
 
       expect(status.hasSignificantChanges, isTrue);
-      // יחסי למשך הכולל ולא סף מוחלט, כדי שעומס על המכונה לא יכשיל.
-      expect(maxGap, lessThan(clock.elapsedMilliseconds / 2));
+      expect(spy.mainIsolateReads, isEmpty);
     });
 
     test('שינוי בהגדרות מסומן, והגדרות זהות אינן מסומנות', () async {
@@ -1677,4 +1660,45 @@ void main() {
       expect(status.lastBackupDate, isNotNull);
     });
   });
+}
+
+/// IOOverrides חלים רק על ה-isolate הנוכחי, ולכן קריאה מתוך Isolate.run אינה נרשמת.
+final class _BackupReadSpy extends IOOverrides {
+  final mainIsolateReads = <String>[];
+
+  @override
+  File createFile(String path) {
+    final file = super.createFile(path);
+    return p.basename(path).startsWith('otzaria_backup_')
+        ? _SpyFile(file, mainIsolateReads)
+        : file;
+  }
+}
+
+class _SpyFile implements File {
+  _SpyFile(this._file, this._reads);
+  final File _file;
+  final List<String> _reads;
+
+  @override
+  String get path => _file.path;
+
+  @override
+  Future<FileStat> stat() => _file.stat();
+
+  @override
+  Future<String> readAsString({Encoding encoding = utf8}) {
+    _reads.add(path);
+    return _file.readAsString(encoding: encoding);
+  }
+
+  @override
+  String readAsStringSync({Encoding encoding = utf8}) {
+    _reads.add(path);
+    return _file.readAsStringSync(encoding: encoding);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnsupportedError('$invocation');
 }
