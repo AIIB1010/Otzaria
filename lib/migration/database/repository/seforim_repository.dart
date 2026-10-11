@@ -1224,7 +1224,10 @@ class SeforimRepository {
         (await _database.bookDao.getBookById(bookId))?.title ?? '';
     final refs = await _database.lineDao.selectRefsByBookId(bookId);
     final db = await _database.database;
-    final entries = lineRefIndexEntries(refs, bookTitle);
+    final entries = lineRefIndexEntries(
+      refs,
+      (heRef) => lineRefKeyHashes(heRef, bookTitle),
+    );
     await runInTransaction(() {
       db.execute('DELETE FROM line_ref WHERE bookId = ?', [bookId]);
       final insert = db.prepare(
