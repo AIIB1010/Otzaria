@@ -646,8 +646,12 @@ class _CalendarEventDialogState extends State<CalendarEventDialog> {
         return;
       }
       if (isRecurring &&
-          end.difference(start).inDays >=
-              minRecurrencePeriodDays(_selectedRecurrenceType)) {
+          !end.isBefore(
+            addCalendarDays(
+              start,
+              minRecurrencePeriodDays(_selectedRecurrenceType),
+            ),
+          )) {
         UiSnack.showError(ToolsMessages.eventRangeLongerThanRecurrence);
         return;
       }
