@@ -1486,7 +1486,7 @@ class ToolTile extends StatelessWidget {
               PositionedDirectional(
                 bottom: 2,
                 start: 4,
-                child: _Badge(label: 'DEV', color: cs.tertiary),
+                child: const PluginDevBadge(),
               ),
             if (isOpen)
               PositionedDirectional(
@@ -1646,32 +1646,6 @@ class _MovePulseState extends State<_MovePulse>
         );
       },
       child: widget.child,
-    );
-  }
-}
-
-class _Badge extends StatelessWidget {
-  final String label;
-  final Color color;
-
-  const _Badge({required this.label, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: AppTokens.borderRadiusAll,
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 8,
-          fontWeight: FontWeight.bold,
-          color: Theme.of(context).colorScheme.onTertiary,
-        ),
-      ),
     );
   }
 }

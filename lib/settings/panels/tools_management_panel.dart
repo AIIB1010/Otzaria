@@ -938,6 +938,7 @@ class _PluginRowState extends State<_PluginRow> {
   }) {
     return _StatusBadges(
       version: plugin.version,
+      development: plugin.isDevelopment,
       disabled: disabled,
       hidden: plugin.hasToolPage && !plugin.showInTools,
       pinnedToNavRail: plugin.hasToolPage && plugin.pinnedToNavRail,
@@ -1281,6 +1282,7 @@ class _RowAction {
 /// למעט "מושבת" ו"מנותק מהרשת" שמודגשות ב-cs.errorContainer.
 class _StatusBadges extends StatelessWidget {
   final String? version;
+  final bool development;
   final bool disabled;
   final bool hidden;
   final bool pinnedToNavRail;
@@ -1290,6 +1292,7 @@ class _StatusBadges extends StatelessWidget {
 
   const _StatusBadges({
     this.version,
+    this.development = false,
     this.disabled = false,
     this.hidden = false,
     this.pinnedToNavRail = false,
@@ -1305,6 +1308,7 @@ class _StatusBadges extends StatelessWidget {
     if (version != null) {
       chips.add(Text('v$version', style: AppTextStyles.settingSubtitle));
     }
+    if (development) chips.add(const PluginDevBadge());
     if (disabled) {
       chips.add(
         _badge(
@@ -1376,12 +1380,8 @@ class _StatusBadges extends StatelessWidget {
       padding: const EdgeInsets.only(top: 4),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: [
-          for (int i = 0; i < chips.length; i++) ...[
-            chips[i],
-            if (i < chips.length - 1) const SizedBox(width: 6),
-          ],
-        ],
+        spacing: 6,
+        children: chips,
       ),
     );
   }

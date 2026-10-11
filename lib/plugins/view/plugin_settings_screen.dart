@@ -17,6 +17,7 @@ import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/settings/l10n/settings_l10n_exports.dart';
 import 'package:otzaria/widgets/dialogs/dialogs_exports.dart';
 import 'package:otzaria/settings/widgets/settings_card.dart';
+import 'package:otzaria/theme/theme_exports.dart';
 import 'package:path/path.dart' as p;
 
 /// פונקציה משותפת לדיאלוג אישור מחיקת תוסף — קוראת מ-tools_management_panel
@@ -86,6 +87,31 @@ Future<bool?> showPluginSettingsDialog(
       ),
     ),
   );
+}
+
+/// סימון "DEV" לתוסף פיתוח — משותף ל-tools_launcher_panel ול-tools_management_panel.
+class PluginDevBadge extends StatelessWidget {
+  const PluginDevBadge({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      decoration: BoxDecoration(
+        color: cs.tertiary,
+        borderRadius: AppTokens.borderRadiusAll,
+      ),
+      child: Text(
+        'DEV',
+        style: TextStyle(
+          fontSize: 8,
+          fontWeight: FontWeight.bold,
+          color: cs.onTertiary,
+        ),
+      ),
+    );
+  }
 }
 
 class PluginSettingsScreen extends StatefulWidget {
