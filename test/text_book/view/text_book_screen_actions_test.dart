@@ -24,6 +24,7 @@ import 'package:otzaria/history/bloc/history_bloc.dart';
 import 'package:otzaria/history/bloc/history_event.dart';
 import 'package:otzaria/history/bloc/history_state.dart';
 import 'package:otzaria/library/models/library.dart';
+import 'package:otzaria/library/services/parallel_editions_service.dart';
 import 'package:otzaria/library/view/book_versions_dialog.dart';
 import 'package:otzaria/models/book_version.dart';
 import 'package:otzaria/models/books.dart';
@@ -734,6 +735,76 @@ void main() {
       expect(event.single.insertAdjacent, isTrue);
       // הנוסח כבר פתוח בכרטיסייה אחרת — עליה להיגלל לשורה המבוקשת, לא רק לקבל מיקוד.
       expect(event.single.navigateToPositionIfReused, isTrue);
+    });
+
+    testWidgets('מהדורה מקבילה שהיא ספר טקסט נפתחת בשורה 0', (
+      tester,
+    ) async {
+      final edition = TextBook(
+        title: 'מהדורה מקבילה',
+        id: 55,
+        externalLibraryId: 'hb:5',
+      );
+      final previousIds = ParallelEditionsService.builtInExternalIdsFor;
+      final previousLoader = ParallelEditionsService.externalBooksLoader;
+      addTearDown(() {
+        ParallelEditionsService.builtInExternalIdsFor = previousIds;
+        ParallelEditionsService.externalBooksLoader = previousLoader;
+      });
+      ParallelEditionsService.builtInExternalIdsFor = (_) async => [5];
+      ParallelEditionsService.externalBooksLoader = (_, _) async => [edition];
+
+      final book = TextBook(title: 'ספר בדיקה', id: 7, categoryId: 7);
+      final bloc = _TestTextBookBloc(_loadedState(book));
+      final tab = TextBookTab(book: book, index: 0, blocOverride: bloc);
+      final tabsBloc = _TestTabsBloc(
+        TabsState(tabs: [tab], currentTabIndex: 0),
+      );
+      final settingsBloc = _TestSettingsBloc(SettingsState.initial());
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+        await bloc.close();
+        await tabsBloc.close();
+        await settingsBloc.close();
+        tab.dispose();
+      });
+
+      await _setSurfaceSize(tester, const Size(1600, 900));
+      await _pumpTextBookScreen(
+        tester,
+        tab: tab,
+        textBookBloc: bloc,
+        tabsBloc: tabsBloc,
+        settingsBloc: settingsBloc,
+        focusRepository: focusRepository,
+        shamorZachorDataProvider: shamorZachorDataProvider,
+        shamorZachorProgressProvider: shamorZachorProgressProvider,
+        bookmarkBloc: bookmarkBloc,
+        personalNotesBloc: personalNotesBloc,
+        tourCubit: tourCubit,
+        isInCombinedView: false,
+      );
+      // המהדורות נפתרות במאזין ה-bloc — שינוי מצב כמו בטעינה אמיתית.
+      bloc.emitStateForTest(
+        (bloc.state as TextBookLoaded).copyWith(showLeftPane: true),
+      );
+      final editionButton = find.byTooltip('פתח מהדורה מקבילה');
+      for (var i = 0; i < 300 && editionButton.evaluate().isEmpty; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+      await tester.tap(editionButton.first);
+      await tester.pumpAndSettle();
+
+      final event = tabsBloc.receivedEvents.whereType<OpenOrFocusTab>().single;
+      final opened = event.tab as TextBookTab;
+      addTearDown(opened.dispose);
+      expect(opened.book.title, 'מהדורה מקבילה');
+      expect(opened.index, 0);
     });
 
     testWidgets('גם בכרטיסייה מפוצלת הפעולה מוצעת — היעד הוא כרטיסייה חדשה', (
