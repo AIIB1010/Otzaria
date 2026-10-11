@@ -316,12 +316,8 @@ class CustomEvent extends Equatable {
       final base = DateTime.fromMillisecondsSinceEpoch(
         json['baseGregorianDate'] as int,
       );
-      final span = DateTime(
-        endGregorianDate.year,
-        endGregorianDate.month,
-        endGregorianDate.day,
-      ).difference(DateTime(base.year, base.month, base.day)).inDays;
-      if (span >= minRecurrencePeriodDays(type)) {
+      final periodEnd = addCalendarDays(base, minRecurrencePeriodDays(type));
+      if (!_dateOnly(endGregorianDate).isBefore(periodEnd)) {
         recurrenceEndDate = endGregorianDate;
         endGregorianDate = null;
       }
