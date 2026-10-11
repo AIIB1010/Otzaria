@@ -82,6 +82,10 @@ class LibraryBloc extends Bloc<LibraryEvent, LibraryState> {
     on<LoadLibrary>(_onLoadLibrary, transformer: droppable());
     on<RefreshLibrary>(_onRefreshLibrary);
     on<HiddenBooksChanged>(_onHiddenBooksChanged);
+    on<ExternalBooksChanged>((event, emit) {
+      _repository.invalidateHebrewBooksCache();
+      _repeatSearch(_showsSearch);
+    });
     on<UpdateLibraryPath>(_onUpdateLibraryPath);
     on<UpdateHebrewBooksPath>(_onUpdateHebrewBooksPath);
     on<RemoveHebrewBooksPath>(_onRemoveHebrewBooksPath);
