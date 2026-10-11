@@ -329,12 +329,11 @@ class AramaicDictionaryEntryPresentation {
 /// Repository משותף לטעינה וחיפוש במילוני הכלים.
 class DictionaryLookupRepository {
   DictionaryLookupRepository({
-    Future<Map<String, List<String>>> Function()? loadAcronyms,
+    this._loadAcronyms,
     Future<List<AramaicDictionaryEntry>> Function()? loadAramaicEntries,
     Future<List<LaazDictionaryEntry>> Function()? loadLaazEntries,
     Future<List<Link>> Function()? loadLaazLinks,
-  }) : _loadAcronyms = loadAcronyms ?? _defaultLoadAcronyms,
-       _loadAramaicEntries = loadAramaicEntries ?? _defaultLoadAramaicEntries,
+  }) : _loadAramaicEntries = loadAramaicEntries ?? _defaultLoadAramaicEntries,
        _loadLaazEntries = loadLaazEntries ?? _defaultLoadLaazEntries,
        _loadLaazLinks = loadLaazLinks ?? _defaultLoadLaazLinks;
 
@@ -344,7 +343,7 @@ class DictionaryLookupRepository {
   /// כותרת ספר לעזי רש"י ב-DB; הזיהוי תמיד לפי כותרת, לא לפי id.
   static const String laazBookTitle = 'אוצר לעזי רש"י';
 
-  final Future<Map<String, List<String>>> Function() _loadAcronyms;
+  final Future<Map<String, List<String>>> Function()? _loadAcronyms;
   final Future<List<AramaicDictionaryEntry>> Function() _loadAramaicEntries;
   final Future<List<LaazDictionaryEntry>> Function() _loadLaazEntries;
   final Future<List<Link>> Function() _loadLaazLinks;
@@ -619,8 +618,16 @@ class DictionaryLookupRepository {
   }
 
   Future<void> _loadAcronymsInternal() async {
-    final acronyms = await _loadAcronyms();
+    final loadAcronyms = _loadAcronyms;
+    final index = loadAcronyms == null
+        ? await _defaultLoadAcronymIndex()
+        : _buildAcronymIndex(await loadAcronyms());
+    _acronymsByKey = index.byKey;
+    _originalAcronymByKey = index.originalByKey;
+  }
 
+  static ({Map<String, List<String>> byKey, Map<String, String> originalByKey})
+  _buildAcronymIndex(Map<String, List<String>> acronyms) {
     final normalizedAcronyms = <String, List<String>>{};
     final originalAcronyms = <String, String>{};
 
@@ -639,13 +646,15 @@ class DictionaryLookupRepository {
       originalAcronyms.putIfAbsent(normalized, () => acronym);
     });
 
-    _acronymsByKey = normalizedAcronyms.map(
-      (key, meanings) => MapEntry(
-        key,
-        List<String>.unmodifiable(meanings.toSet().toList()),
+    return (
+      byKey: normalizedAcronyms.map(
+        (key, meanings) => MapEntry(
+          key,
+          List<String>.unmodifiable(meanings.toSet().toList()),
+        ),
       ),
+      originalByKey: originalAcronyms,
     );
-    _originalAcronymByKey = originalAcronyms;
   }
 
   Future<void> _loadAramaicInternal() async {
@@ -705,19 +714,31 @@ class DictionaryLookupRepository {
     _laazByRashiLine = byRashiLine;
   }
 
-  static Future<Map<String, List<String>>> _defaultLoadAcronyms() async {
+  static Future<
+    ({Map<String, List<String>> byKey, Map<String, String> originalByKey})
+  >
+  _defaultLoadAcronymIndex() async {
     final String jsonString = await rootBundle.loadString(
       'assets/Acronyms.json',
     );
-    final jsonData = await compute(_decodeJsonObject, jsonString);
+    // נרמול 13 אלף המפתחות תוקע פריימים על ה-UI isolate, ולכן רץ יחד עם הפענוח.
+    return compute(decodeAcronymIndex, jsonString);
+  }
 
-    return jsonData.map((key, value) {
-      if (value is List) {
-        return MapEntry(key, value.cast<String>());
-      }
+  @visibleForTesting
+  static ({Map<String, List<String>> byKey, Map<String, String> originalByKey})
+  decodeAcronymIndex(String jsonString) {
+    final jsonData = _decodeJsonObject(jsonString);
 
-      return MapEntry(key, <String>[]);
-    });
+    return _buildAcronymIndex(
+      jsonData.map((key, value) {
+        if (value is List) {
+          return MapEntry(key, value.cast<String>());
+        }
+
+        return MapEntry(key, <String>[]);
+      }),
+    );
   }
 
   static Future<List<AramaicDictionaryEntry>>
