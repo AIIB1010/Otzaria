@@ -344,6 +344,8 @@ class _AppPopupMenuButtonState<T> extends State<AppPopupMenuButton<T>> {
     }
   }
 
+  Future<void> showMenu() => _showAdaptiveMenu();
+
   @override
   Widget build(BuildContext context) {
     assert(widget.entries != null || widget.itemBuilder != null);
