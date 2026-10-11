@@ -25,6 +25,23 @@ void main() {
     ];
   }
 
+  test('loader מוזרק דרך פרמטר הבנאי הציבורי', () async {
+    var loadCount = 0;
+    final repository = DictionaryLookupRepository(
+      loadAcronyms: () async {
+        loadCount++;
+        return const {
+          'רש"י': ['רבי שלמה יצחקי'],
+        };
+      },
+    );
+
+    await repository.ensureAcronymsLoaded();
+
+    expect(loadCount, 1);
+    expect(repository.findAcronym('רש״י')?.meanings, ['רבי שלמה יצחקי']);
+  });
+
   test('פענוח ונרמול המילון כולו רצים ב-isolate נפרד', () async {
     final index = await Isolate.run(
       () => DictionaryLookupRepository.decodeAcronymIndex(jsonString),
