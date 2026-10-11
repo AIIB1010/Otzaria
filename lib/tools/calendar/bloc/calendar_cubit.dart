@@ -80,9 +80,6 @@ class CalendarCubit extends Cubit<CalendarState> {
   List<CustomEvent>? _eventCacheSource;
   final _eventsByDate = <DateTime, List<CustomEvent>>{};
 
-  // Getter for accessing notification service from outside
-  NotificationService get notificationService => _notificationService;
-
   /// מסתיים לאחר שטעינת ההגדרות קבעה את היום הלוחי.
   Future<void> get initialized => _initializationCompleter.future;
 
@@ -861,16 +858,6 @@ class CalendarCubit extends Cubit<CalendarState> {
   Future<List<GoogleCalendarInfo>> getAvailableCalendars() =>
       _googleCalendar.listCalendars();
 
-  Future<void> updateGoogleCalendarSyncPastDays(int days) async {
-    emit(state.copyWith(googleCalendarSyncPastDays: days));
-    await _settingsRepository.updateGoogleCalendarSyncPastDays(days);
-  }
-
-  Future<void> updateGoogleCalendarSyncFutureDays(int days) async {
-    emit(state.copyWith(googleCalendarSyncFutureDays: days));
-    await _settingsRepository.updateGoogleCalendarSyncFutureDays(days);
-  }
-
   Future<bool> connectGoogleCalendar() async {
     emit(state.copyWith(googleCalendarSyncInProgress: true));
 
@@ -1451,12 +1438,6 @@ JewishDate _computePreviousJewishMonth(JewishDate current) {
   }
   return prev;
 }
-
-// Public wrappers (for testing)
-JewishDate computeNextJewishMonth(JewishDate current) =>
-    _computeNextJewishMonth(current);
-JewishDate computePreviousJewishMonth(JewishDate current) =>
-    _computePreviousJewishMonth(current);
 
 bool _isCityInIsrael(String cityName) {
   return calendar_location.isCityInIsrael(cityName);
