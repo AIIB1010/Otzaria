@@ -212,22 +212,27 @@ void main() {
           i % 50 == 0 ? '<b>דבר</b> <br/>' : 'מילה ועוד\n מלה  ',
       ].join();
       final collapse = RegExp(r'[\t\n\f\r ]+');
-      int best(void Function() run) {
-        var best = 1 << 62;
-        for (var r = 0; r < 5; r++) {
-          final sw = Stopwatch()..start();
-          run();
-          if (sw.elapsedMicroseconds < best) best = sw.elapsedMicroseconds;
-        }
-        return best;
+      int micros(void Function() run) {
+        final sw = Stopwatch()..start();
+        run();
+        return sw.elapsedMicroseconds;
       }
 
+      // מדידות שזורות, כדי שעומס רגעי במכונה ייפול על שני הצדדים.
+      var parse = 1 << 62, regexPass = 1 << 62;
       var size = 30.0;
-      // סגנון חדש בכל ריצה, כדי שהמטמון לא יחזיר תוצאה מוכנה.
-      final parse = best(
-        () => SimpleInlineHtml.tryParse(line, TextStyle(fontSize: size++)),
-      );
-      final regexPass = best(() => line.replaceAll(collapse, ' '));
+      for (var r = 0; r < 7; r++) {
+        // סגנון חדש בכל ריצה, כדי שהמטמון לא יחזיר תוצאה מוכנה.
+        final style = TextStyle(fontSize: size++);
+        parse = min(
+          parse,
+          micros(() => SimpleInlineHtml.tryParse(line, style)),
+        );
+        regexPass = min(
+          regexPass,
+          micros(() => line.replaceAll(collapse, ' ')),
+        );
+      }
       expect(
         parse,
         lessThan(regexPass),
