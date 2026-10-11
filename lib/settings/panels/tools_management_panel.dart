@@ -935,9 +935,12 @@ class _PluginRowState extends State<_PluginRow> {
   _StatusBadges _statusBadges(
     InstalledPlugin plugin, {
     required bool disabled,
+    bool compact = false,
   }) {
     return _StatusBadges(
       version: plugin.version,
+      development: plugin.isDevelopment,
+      compact: compact,
       disabled: disabled,
       hidden: plugin.hasToolPage && !plugin.showInTools,
       pinnedToNavRail: plugin.hasToolPage && plugin.pinnedToNavRail,
@@ -1183,7 +1186,7 @@ class _PluginRowState extends State<_PluginRow> {
         subtitle: widget.isSelectionMode
             ? _statusBadges(plugin, disabled: !plugin.savedEnabled)
             : disabled || _isHovering
-            ? Text('v${plugin.version}', style: AppTextStyles.settingSubtitle)
+            ? _statusBadges(plugin, disabled: false, compact: true)
             : _statusBadges(plugin, disabled: false),
         trailing: widget.isSelectionMode
             ? Row(
@@ -1281,6 +1284,8 @@ class _RowAction {
 /// למעט "מושבת" ו"מנותק מהרשת" שמודגשות ב-cs.errorContainer.
 class _StatusBadges extends StatelessWidget {
   final String? version;
+  final bool development;
+  final bool compact;
   final bool disabled;
   final bool hidden;
   final bool pinnedToNavRail;
@@ -1290,6 +1295,8 @@ class _StatusBadges extends StatelessWidget {
 
   const _StatusBadges({
     this.version,
+    this.development = false,
+    this.compact = false,
     this.disabled = false,
     this.hidden = false,
     this.pinnedToNavRail = false,
@@ -1305,7 +1312,8 @@ class _StatusBadges extends StatelessWidget {
     if (version != null) {
       chips.add(Text('v$version', style: AppTextStyles.settingSubtitle));
     }
-    if (disabled) {
+    if (development) chips.add(const PluginDevBadge());
+    if (!compact && disabled) {
       chips.add(
         _badge(
           context,
@@ -1316,7 +1324,7 @@ class _StatusBadges extends StatelessWidget {
         ),
       );
     }
-    if (hidden) {
+    if (!compact && hidden) {
       chips.add(
         _badge(
           context,
@@ -1327,7 +1335,7 @@ class _StatusBadges extends StatelessWidget {
         ),
       );
     }
-    if (backgroundOnly) {
+    if (!compact && backgroundOnly) {
       chips.add(
         _badge(
           context,
@@ -1338,7 +1346,7 @@ class _StatusBadges extends StatelessWidget {
         ),
       );
     }
-    if (pinnedToNavRail) {
+    if (!compact && pinnedToNavRail) {
       chips.add(
         _badge(
           context,
@@ -1349,7 +1357,7 @@ class _StatusBadges extends StatelessWidget {
         ),
       );
     }
-    if (networkDeclared) {
+    if (!compact && networkDeclared) {
       chips.add(
         _badge(
           context,
@@ -1360,7 +1368,7 @@ class _StatusBadges extends StatelessWidget {
         ),
       );
     }
-    if (networkRevoked) {
+    if (!compact && networkRevoked) {
       chips.add(
         _badge(
           context,
@@ -1373,15 +1381,11 @@ class _StatusBadges extends StatelessWidget {
     }
     if (chips.isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.only(top: 4),
+      padding: EdgeInsets.only(top: compact ? 0 : 4),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: [
-          for (int i = 0; i < chips.length; i++) ...[
-            chips[i],
-            if (i < chips.length - 1) const SizedBox(width: 6),
-          ],
-        ],
+        spacing: 6,
+        children: chips,
       ),
     );
   }
