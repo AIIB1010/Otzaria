@@ -1329,7 +1329,7 @@ void main() {
     },
   );
 
-  testWidgets('dev plugins are marked DEV in the plugins list (issue #2062)', (
+  testWidgets('dev plugins keep the DEV badge in each row state (issue #2062)', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1200, 1400));
@@ -1342,13 +1342,26 @@ void main() {
           _plugin(id: 'p1', name: 'רגיל'),
           _plugin(
             id: 'p2',
-            name: 'פיתוח',
+            name: 'פיתוח פעיל',
+          ).copyWith(sourceType: 'localhost_dev'),
+          _plugin(
+            id: 'p3',
+            name: 'פיתוח מושבת',
+            enabled: false,
           ).copyWith(sourceType: 'localhost_dev'),
         ]),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('DEV'), findsOneWidget);
+    expect(find.text('DEV'), findsNWidgets(2));
+
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(() => gesture.removePointer());
+    await gesture.addPointer(location: Offset.zero);
+    await gesture.moveTo(tester.getCenter(find.text('פיתוח פעיל')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('DEV'), findsNWidgets(2));
   });
 }
