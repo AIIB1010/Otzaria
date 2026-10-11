@@ -112,11 +112,14 @@ class CustomEvent extends Equatable {
     final start = _dateOnly(baseGregorianDate);
     final durationDays = endGregorianDate == null
         ? 0
-        : _dateOnly(endGregorianDate!).difference(start).inDays.clamp(0, 366);
+        : _calendarDaysBetween(
+            start,
+            _dateOnly(endGregorianDate!),
+          ).clamp(0, 366);
 
     if (recurrenceType == RecurrenceType.none) {
       return !current.isBefore(start) &&
-          current.difference(start).inDays <= durationDays;
+          _calendarDaysBetween(start, current) <= durationDays;
     }
 
     if (current.isBefore(start)) return false;
@@ -128,6 +131,10 @@ class CustomEvent extends Equatable {
     }
     return false;
   }
+
+  // משך האירוע נמדד בימי לוח, גם כשהאזור המקומי מדלג על יום או חוזר אחורה.
+  static int _calendarDaysBetween(DateTime from, DateTime to) =>
+      _dayNumber(to) - _dayNumber(from);
 
   /// האם מופע של האירוע החוזר מתחיל בתאריך הנתון.
   bool startsOccurrenceOn(DateTime date) {
