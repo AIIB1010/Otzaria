@@ -512,7 +512,10 @@ class _ReadingScreenState extends State<ReadingScreen>
                                         enabled:
                                             i == validIndex &&
                                             state.tabs[i] is! CombinedTab,
-                                        child: _cachedTabView(state.tabs[i]),
+                                        child: _BackgroundTabMediaQuery(
+                                          frozen: i != validIndex,
+                                          child: _cachedTabView(state.tabs[i]),
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -658,6 +661,30 @@ class _ReadingScreenState extends State<ReadingScreen>
       return ToolTabScreen(key: ValueKey(tab), tab: tab);
     }
     return const SizedBox.shrink();
+  }
+}
+
+/// טאב רקע נשאר עם ה-MediaQuery מרגע הסתרתו: שינוי גודל החלון אחרת בונה
+/// ופורס מחדש בכל פריים את כל הטאבים החיים, אף שאינם מוצגים.
+class _BackgroundTabMediaQuery extends StatefulWidget {
+  final bool frozen;
+  final Widget child;
+
+  const _BackgroundTabMediaQuery({required this.frozen, required this.child});
+
+  @override
+  State<_BackgroundTabMediaQuery> createState() =>
+      _BackgroundTabMediaQueryState();
+}
+
+class _BackgroundTabMediaQueryState extends State<_BackgroundTabMediaQuery> {
+  MediaQueryData? _data;
+
+  @override
+  Widget build(BuildContext context) {
+    final live = MediaQuery.of(context);
+    if (!widget.frozen || _data == null) _data = live;
+    return MediaQuery(data: _data!, child: widget.child);
   }
 }
 
