@@ -263,21 +263,20 @@ class IndexingBloc extends Bloc<IndexingEvent, IndexingState> {
             ),
           );
         },
-        onActualIndexingStarted: () {
-          add(ActualIndexingStarted(workId));
-        },
-        onProgress: (processed, total) {
-          add(
-            UpdateIndexingProgress(
-              workId: workId,
-              processed: processed,
-              total: total,
-            ),
-          );
-        },
+        onActualIndexingStarted: () => add(ActualIndexingStarted(workId)),
+        onProgress: _progressOf(workId),
       ),
     );
   }
+
+  void Function(int processed, int total) _progressOf(int workId) =>
+      (processed, total) => add(
+        UpdateIndexingProgress(
+          workId: workId,
+          processed: processed,
+          total: total,
+        ),
+      );
 
   /// Handles the StartIndexing event
   Future<void> _onStartIndexing(
@@ -297,49 +296,17 @@ class IndexingBloc extends Bloc<IndexingEvent, IndexingState> {
     }
     emit(_inProgress(booksProcessed: 0, totalBooks: totalBooks));
 
-    try {
-      final result = await _repository.indexAllBooks(
+    await _runIndexing(
+      emit,
+      workId,
+      runClock,
+      () => _repository.indexAllBooks(
         event.library,
-        onActualIndexingStarted: () {
-          add(ActualIndexingStarted(workId));
-        },
-        onFinalizing: () {
-          add(IndexingFinalizing(workId));
-        },
-        onProgress: (processed, total) {
-          // Update progress through event
-          add(
-            UpdateIndexingProgress(
-              workId: workId,
-              processed: processed,
-              total: total,
-            ),
-          );
-        },
-      );
-      if (_activeWorkId != workId) {
-        return;
-      }
-      _activeWorkId = null;
-      _reportRunFailures(result, runClock.elapsed);
-      if (result.completed && totalBooks > 0) {
-        emit(IndexingComplete(failures: result.failures));
-      } else {
-        emit(IndexingInitial());
-      }
-    } catch (e) {
-      if (_activeWorkId != workId) {
-        return;
-      }
-      _activeWorkId = null;
-      emit(
-        IndexingError(
-          e.toString(),
-          booksProcessed: state.booksProcessed,
-          totalBooks: state.totalBooks,
-        ),
-      );
-    }
+        onActualIndexingStarted: () => add(ActualIndexingStarted(workId)),
+        onFinalizing: () => add(IndexingFinalizing(workId)),
+        onProgress: _progressOf(workId),
+      ),
+    );
   }
 
   void _onActualIndexingStarted(
@@ -399,13 +366,7 @@ class IndexingBloc extends Bloc<IndexingEvent, IndexingState> {
     emit(_inProgress(booksProcessed: 0, totalBooks: totalBooks));
 
     onActualIndexingStarted() => add(ActualIndexingStarted(workId));
-    onProgress(int processed, int total) => add(
-      UpdateIndexingProgress(
-        workId: workId,
-        processed: processed,
-        total: total,
-      ),
-    );
+    final onProgress = _progressOf(workId);
     await _runIndexing(
       emit,
       workId,
