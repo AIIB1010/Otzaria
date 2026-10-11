@@ -1052,6 +1052,7 @@ class MyGridView extends StatelessWidget {
 
   /// גולל בעצמו ובונה רק את הכרטיסים שבתצוגה; אחרת נבנים כולם בתוך גלילה חיצונית.
   final bool scrollable;
+  final ScrollController? controller;
 
   const MyGridView({
     super.key,
@@ -1059,6 +1060,7 @@ class MyGridView extends StatelessWidget {
     this.onExitTop,
     this.minItemHeight = 0,
     this.scrollable = false,
+    this.controller,
   });
 
   @override
@@ -1100,6 +1102,7 @@ class MyGridView extends StatelessWidget {
           child: FocusTraversalGroup(
             policy: ReadingOrderTraversalPolicy(),
             child: GridView.builder(
+              controller: controller,
               padding: const EdgeInsets.fromLTRB(
                 _kGridPadding,
                 _kGridTopPadding,

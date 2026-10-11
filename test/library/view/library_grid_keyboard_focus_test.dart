@@ -57,92 +57,154 @@ void main() {
     final books = [
       for (var i = 0; i < 6; i++) TextBook(title: 'ספר $i', author: 'מחבר'),
     ];
-
-    final libraryBloc = _MockLibraryBloc();
-    final settingsBloc = _MockSettingsBloc();
-    final navigationBloc = _MockNavigationBloc();
-    final libraryUpdateBloc = _MockLibraryUpdateBloc();
-    final calendarCubit = _StubCalendarCubit(CalendarState.initial());
-
-    whenListen(
-      libraryBloc,
-      const Stream<LibraryState>.empty(),
-      initialState: LibraryState(
+    final libraryBloc = await _pumpBrowser(
+      tester,
+      LibraryState(
         library: library,
         currentCategory: library,
         searchResults: books,
         searchQuery: 'ספר',
       ),
     );
-    whenListen(
-      settingsBloc,
-      const Stream<SettingsState>.empty(),
-      initialState: SettingsState.initial(),
-    );
-    whenListen(
-      navigationBloc,
-      const Stream<NavigationState>.empty(),
-      initialState: const NavigationState(currentScreen: Screen.library),
-    );
-    whenListen(
-      libraryUpdateBloc,
-      const Stream<LibraryUpdateState>.empty(),
-      initialState: const LibraryUpdateState(),
-    );
-
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(1400, 900);
-    addTearDown(() async {
-      await tester.pumpWidget(const SizedBox.shrink());
-      tester.view.reset();
-      await libraryBloc.close();
-      await settingsBloc.close();
-      await navigationBloc.close();
-      await libraryUpdateBloc.close();
-      await calendarCubit.close();
-    });
-
-    await tester.pumpWidget(
-      MaterialApp(
-        locale: const Locale('he', 'IL'),
-        // כמו באפליקציה — בלי GlobalWidgetsLocalizations הכיוון היה LTR.
-        builder: (context, child) =>
-            Directionality(textDirection: TextDirection.rtl, child: child!),
-        home: MultiProvider(
-          providers: [
-            Provider<FocusRepository>.value(value: FocusRepository()),
-            BlocProvider<LibraryBloc>.value(value: libraryBloc),
-            BlocProvider<SettingsBloc>.value(value: settingsBloc),
-            BlocProvider<NavigationBloc>.value(value: navigationBloc),
-            BlocProvider<LibraryUpdateBloc>.value(value: libraryUpdateBloc),
-            BlocProvider<CalendarCubit>.value(value: calendarCubit),
-          ],
-          child: const LibraryBrowser(),
-        ),
-      ),
-    );
-    await tester.pump();
-    // כפתור הדף היומי גולש עם CalendarState מדומה — לא נושא הבדיקה.
-    tester.takeException();
-
-    String? focusedBook() => FocusManager.instance.primaryFocus?.context
-        ?.findAncestorWidgetOfExactType<BookGridItem>()
-        ?.book
-        .title;
 
     await tester.tap(find.text('ספר 1'));
     await tester.pump(const Duration(milliseconds: 400));
-    expect(focusedBook(), 'ספר 1', reason: 'החיצים ממשיכים מהספר שנלחץ');
+    expect(_focusedBook(), 'ספר 1', reason: 'החיצים ממשיכים מהספר שנלחץ');
 
     // RTL: חץ שמאלה = הספר הבא בסדר הקריאה.
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pump();
-    expect(focusedBook(), 'ספר 2');
+    expect(_focusedBook(), 'ספר 2');
     verify(() => libraryBloc.add(SelectBookForPreview(books[2]))).called(1);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.pump();
-    expect(focusedBook(), 'ספר 3');
+    expect(_focusedBook(), 'ספר 3');
     verify(() => libraryBloc.add(SelectBookForPreview(books[3]))).called(1);
   });
+
+  testWidgets('קטגוריה ארוכה בונה רק את הכרטיסים שבתצוגה, וחץ-מטה מהחיפוש '
+      'אחרי גלילה עמוקה חוזר לספר הראשון', (tester) async {
+    const count = 300;
+    final library = Library(categories: []);
+    final category = Category(
+      title: 'קטגוריה',
+      description: '',
+      shortDescription: '',
+      order: 1,
+      subCategories: [],
+      books: [
+        for (var i = 0; i < count; i++)
+          TextBook(title: 'ספר $i', author: 'מחבר', order: i),
+      ],
+      parent: library,
+    );
+    final focusRepository = FocusRepository();
+    await _pumpBrowser(
+      tester,
+      LibraryState(library: library, currentCategory: category),
+      focusRepository: focusRepository,
+    );
+
+    final built = find.byType(BookGridItem).evaluate().length;
+    expect(built, greaterThan(0));
+    expect(built, lessThan(count ~/ 5));
+
+    final position = tester
+        .state<ScrollableState>(
+          find.descendant(
+            of: find.byType(MyGridView),
+            matching: find.byType(Scrollable),
+          ),
+        )
+        .position;
+    position.jumpTo(position.maxScrollExtent);
+    await tester.pump();
+    expect(find.text('ספר 0'), findsNothing);
+
+    focusRepository.requestLibrarySearchFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    await tester.pump();
+    expect(position.pixels, 0);
+    expect(_focusedBook(), 'ספר 0');
+  });
+}
+
+String? _focusedBook() => FocusManager.instance.primaryFocus?.context
+    ?.findAncestorWidgetOfExactType<BookGridItem>()
+    ?.book
+    .title;
+
+/// בונה LibraryBrowser מלא עם blocs מדומים במצב [initialState].
+Future<LibraryBloc> _pumpBrowser(
+  WidgetTester tester,
+  LibraryState initialState, {
+  FocusRepository? focusRepository,
+}) async {
+  final libraryBloc = _MockLibraryBloc();
+  final settingsBloc = _MockSettingsBloc();
+  final navigationBloc = _MockNavigationBloc();
+  final libraryUpdateBloc = _MockLibraryUpdateBloc();
+  final calendarCubit = _StubCalendarCubit(CalendarState.initial());
+
+  whenListen(
+    libraryBloc,
+    const Stream<LibraryState>.empty(),
+    initialState: initialState,
+  );
+  whenListen(
+    settingsBloc,
+    const Stream<SettingsState>.empty(),
+    initialState: SettingsState.initial(),
+  );
+  whenListen(
+    navigationBloc,
+    const Stream<NavigationState>.empty(),
+    initialState: const NavigationState(currentScreen: Screen.library),
+  );
+  whenListen(
+    libraryUpdateBloc,
+    const Stream<LibraryUpdateState>.empty(),
+    initialState: const LibraryUpdateState(),
+  );
+
+  tester.view.devicePixelRatio = 1;
+  tester.view.physicalSize = const Size(1400, 900);
+  addTearDown(() async {
+    await tester.pumpWidget(const SizedBox.shrink());
+    tester.view.reset();
+    await libraryBloc.close();
+    await settingsBloc.close();
+    await navigationBloc.close();
+    await libraryUpdateBloc.close();
+    await calendarCubit.close();
+  });
+
+  await tester.pumpWidget(
+    MaterialApp(
+      locale: const Locale('he', 'IL'),
+      // כמו באפליקציה — בלי GlobalWidgetsLocalizations הכיוון היה LTR.
+      builder: (context, child) =>
+          Directionality(textDirection: TextDirection.rtl, child: child!),
+      home: MultiProvider(
+        providers: [
+          Provider<FocusRepository>.value(
+            value: focusRepository ?? FocusRepository(),
+          ),
+          BlocProvider<LibraryBloc>.value(value: libraryBloc),
+          BlocProvider<SettingsBloc>.value(value: settingsBloc),
+          BlocProvider<NavigationBloc>.value(value: navigationBloc),
+          BlocProvider<LibraryUpdateBloc>.value(value: libraryUpdateBloc),
+          BlocProvider<CalendarCubit>.value(value: calendarCubit),
+        ],
+        child: const LibraryBrowser(),
+      ),
+    ),
+  );
+  await tester.pump();
+  // כפתור הדף היומי גולש עם CalendarState מדומה — לא נושא הבדיקה.
+  tester.takeException();
+  return libraryBloc;
 }

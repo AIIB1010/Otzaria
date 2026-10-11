@@ -331,6 +331,7 @@ class _LibraryBrowserState extends State<LibraryBrowser>
   bool get wantKeepAlive => true;
 
   final FocusNode _firstGridItemFocusNode = FocusNode();
+  final ScrollController _categoryGridController = ScrollController();
   final GlobalKey _tourLibraryKey = GlobalKey();
   final GlobalKey _tourLibrarySearchKey = GlobalKey();
   final GlobalKey _tourBookCardKey = GlobalKey();
@@ -424,6 +425,7 @@ class _LibraryBrowserState extends State<LibraryBrowser>
   void dispose() {
     PluginLibraryBooksRegistry.instance.removeListener(_onPluginBooksChanged);
     _firstGridItemFocusNode.dispose();
+    _categoryGridController.dispose();
     _scrollDebounce?.cancel();
     _searchDebounce?.cancel();
     _secondaryRowVisible.dispose();
@@ -1582,6 +1584,7 @@ class _LibraryBrowserState extends State<LibraryBrowser>
       items: allItems,
       onExitTop: () => _refocusSearchBar(selectAll: true),
       scrollable: true,
+      controller: _categoryGridController,
     );
   }
 
@@ -2818,14 +2821,17 @@ class _LibraryBrowserState extends State<LibraryBrowser>
 
   bool _focusFirstGridItem(LibraryState state) {
     // הצומת מחובר לפריט הראשון גם בעיון בקטגוריות, לא רק בתוצאות חיפוש.
-    if (_firstGridItemFocusNode.context != null &&
+    if ((_firstGridItemFocusNode.context?.mounted ?? false) &&
         _firstGridItemFocusNode.canRequestFocus) {
       LibraryGridKeyNavigator.focusCard(_firstGridItemFocusNode);
       return true;
     }
 
-    final results = state.searchResults;
-    if (results == null || results.isEmpty) {
+    // ברשת קטגוריה שנגללה עמוק הכרטיס הראשון אינו בנוי; גוללים לראש וממקדים אחרי הבנייה.
+    if (_categoryGridController.hasClients &&
+        _categoryGridController.offset > 0) {
+      _categoryGridController.jumpTo(0);
+    } else if (state.searchResults?.isNotEmpty != true) {
       return false;
     }
 
