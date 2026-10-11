@@ -212,4 +212,34 @@ void main() {
       expect(await shownWeek(tester, day), weekOf(day));
     });
   });
+
+  group('Event on the 23-hour day', skip: noDst, () {
+    CustomEvent event(DateTime start, [DateTime? end]) => CustomEvent(
+      id: 'e',
+      title: 'e',
+      description: '',
+      createdAt: start,
+      baseGregorianDate: start,
+      baseJewishYear: 5786,
+      baseJewishMonth: 1,
+      baseJewishDay: 1,
+      recurrenceType: RecurrenceType.none,
+      endGregorianDate: end,
+    );
+
+    test('single-day event is not shown the next day', () {
+      final e = event(shortDay!);
+      expect(e.occursOn(shortDay), isTrue);
+      expect(e.occursOn(_plusDays(shortDay, 1)), isFalse);
+    });
+
+    test('multi-day event across it keeps exactly its days', () {
+      final start = _plusDays(shortDay!, -1);
+      final e = event(start, _plusDays(shortDay, 1));
+      expect(
+        [for (var i = -1; i < 4; i++) e.occursOn(_plusDays(start, i))],
+        [false, true, true, true, false],
+      );
+    });
+  });
 }
