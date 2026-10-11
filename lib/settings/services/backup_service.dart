@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:isolate';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:hive_ce/hive.dart';
 import 'package:path/path.dart' as p;
@@ -1586,8 +1587,13 @@ class BackupService {
 
       Map<String, dynamic> backupData;
       try {
-        final content = await latestFile.readAsString();
-        backupData = json.decode(content) as Map<String, dynamic>;
+        // גיבוי של כמה MB חוסם את ה-UI עשרות ms בפתיחת לשונית "מערכת".
+        final path = latestFile.path;
+        backupData = await Isolate.run(
+          () =>
+              json.decode(File(path).readAsStringSync())
+                  as Map<String, dynamic>,
+        );
       } catch (_) {
         return BackupStatus(
           lastBackupDate: backupDate,
