@@ -66,7 +66,6 @@ void main() {
               onToggleEventsPanel: () {},
               onToggleSettingsPanel: () {},
               onPrint: () {},
-              onToggleSidebar: () {},
               isJumpToDateSearchOpen: false,
               onToggleJumpToDateSearch: () {},
               onCloseJumpToDateSearch: () {},

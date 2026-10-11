@@ -117,11 +117,6 @@ class _MeasurementConverterScreenState
     }
   }
 
-  void requestKeyboardFocus() {
-    if (!_screenFocusNode.canRequestFocus) return;
-    _screenFocusNode.requestFocus();
-  }
-
   @override
   void dispose() {
     _inputController.dispose();

@@ -151,12 +151,6 @@ class ToolTabScreenState extends State<ToolTabScreen>
     });
   }
 
-  void closeTransientPanels() {
-    if (widget.tab.toolId == 'builtin.calendar') {
-      _calendarKey.currentState?.closeTransientPanels();
-    }
-  }
-
   void _markActivated() {
     if (_activated) return;
     // עדכון מצב מתוך build נדחה לסוף הפריים.

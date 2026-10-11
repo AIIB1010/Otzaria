@@ -65,64 +65,6 @@ int findParashaStart(
   return -1;
 }
 
-/// אינדקס האסימון שממנו מתחיל רצף [words], או ‎-1. מילת חיפוש יכולה
-/// להתפרס על כמה אסימונים שהיו מחוברים במקף במקור.
-int findWordSequence(
-  List<TikkunToken> tokens,
-  List<String> words,
-  int fromIdx,
-) {
-  final normWords = words.map(normalizeForMatch).toList(growable: false);
-  for (var i = fromIdx; i < tokens.length - words.length; i++) {
-    if (tokens[i].type != TikkunTokenType.word) continue;
-    var wIdx = 0;
-    var tIdx = i;
-    var ok = true;
-    while (wIdx < normWords.length && tIdx < tokens.length) {
-      final tok = tokens[tIdx];
-      if (tok.type != TikkunTokenType.word) {
-        tIdx++;
-        continue;
-      }
-      final searchWord = normWords[wIdx];
-      final tokenWord = normalizeForMatch(tok.value!);
-      if (tokenWord.isEmpty) {
-        tIdx++;
-        continue;
-      }
-      if (tokenWord == searchWord) {
-        wIdx++;
-        tIdx++;
-      } else if (searchWord.startsWith(tokenWord)) {
-        var built = tokenWord;
-        tIdx++;
-        while (built.length < searchWord.length && tIdx < tokens.length) {
-          final next = tokens[tIdx];
-          if (next.type != TikkunTokenType.word) {
-            tIdx++;
-            continue;
-          }
-          built += normalizeForMatch(next.value!);
-          tIdx++;
-          if (built == searchWord) break;
-          if (!searchWord.startsWith(built)) break;
-        }
-        if (built == searchWord) {
-          wIdx++;
-        } else {
-          ok = false;
-          break;
-        }
-      } else {
-        ok = false;
-        break;
-      }
-    }
-    if (ok && wIdx == normWords.length) return i;
-  }
-  return -1;
-}
-
 /// אינדקס פסוקים בטווח אסימונים של חומש אחד: (פרק, פסוק) → אינדקס
 /// המילה הראשונה של הפסוק.
 class BookVerseIndex {
