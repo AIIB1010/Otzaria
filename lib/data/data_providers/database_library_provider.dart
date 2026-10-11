@@ -2929,8 +2929,7 @@ class DatabaseLibraryProvider implements LibraryProvider {
           await _bundledTalmudBavliDirectoryExists();
       // Only base fields are needed; loading every relation again doubles the
       // catalog cost.
-      final books = await repository.getAllBooksLean();
-      final categories = await repository.getAllCategories();
+      final (:books, :categories) = await _bookCatalog(repository);
 
       _cachedKeys.clear();
       _categoriesById
@@ -2970,6 +2969,28 @@ class DatabaseLibraryProvider implements LibraryProvider {
       debugPrint('⚠️ Error building DB key cache: $e');
       return {};
     }
+  }
+
+  /// כל ספרי seforim.db וקטגוריותיו: על ה-UI isolate זו חסימה של כ-90ms,
+  /// ולכן הם נקראים ב-worker.
+  Future<({List<db_models.Book> books, List<db_models.Category> categories})>
+  _bookCatalog(SeforimRepository repository) async {
+    final dbPath = _sqliteProvider.dbPath;
+    if (dbPath.isNotEmpty) {
+      try {
+        return await DbReadWorker.request('bookCatalog', {'dbPath': dbPath})
+            as ({
+              List<db_models.Book> books,
+              List<db_models.Category> categories,
+            });
+      } on DbReadWorkerUnavailable {
+        // נופלים לשאילתה הישירה, כמו שאר הקריאות כשה-worker אינו זמין.
+      }
+    }
+    return (
+      books: await repository.getAllBooksLean(),
+      categories: await repository.getAllCategories(),
+    );
   }
 
   /// Clears the cached titles (call when database changes)

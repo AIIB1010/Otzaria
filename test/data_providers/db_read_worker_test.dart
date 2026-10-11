@@ -17,6 +17,8 @@ import 'package:otzaria/migration/database/db_capabilities.dart';
 import 'package:otzaria/migration/database/journal_mode.dart';
 import 'package:otzaria/migration/database/repository/seforim_repository.dart';
 import 'package:otzaria/migration/database/untrusted_database.dart';
+import 'package:otzaria/migration/models/book.dart' as db_models;
+import 'package:otzaria/migration/models/category.dart' as db_models;
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/models/links.dart';
 import 'package:otzaria/search/library_line_source.dart';
@@ -254,6 +256,27 @@ void main() {
       }),
       direct,
     );
+  });
+
+  test('קטלוג הספרים מה-worker זהה לשאילתה הישירה', () async {
+    final dbPath = await seedDb('seforim');
+    final direct = await onDirectConnection(
+      dbPath,
+      (repo) async => (
+        books: await repo.getAllBooksLean(),
+        categories: await repo.getAllCategories(),
+      ),
+    );
+    expect(direct.books.map((b) => b.title), ['בראשית', 'מפרש', 'ספר גדול']);
+
+    final viaWorker =
+        await DbReadWorker.request('bookCatalog', {'dbPath': dbPath})
+            as ({
+              List<db_models.Book> books,
+              List<db_models.Category> categories,
+            });
+    expect(viaWorker.books, direct.books);
+    expect(viaWorker.categories, direct.categories);
   });
 
   test('ספר שאינו ברשמי מוחזר למסלול הישיר ולא כשגיאה', () async {
@@ -894,6 +917,15 @@ void main() {
       );
       expect([for (final c in detailed.commentators) c.title], ['מפרש']);
       expect(detailed.commentators.single.linkCount, 1);
+      expect(DbReadWorker.sentMessageCount - before, 1);
+    });
+
+    test('כותרות ספרי המסד נטענות ב-worker', () async {
+      final provider = DatabaseLibraryProvider.instance..clearCache();
+      final before = DbReadWorker.sentMessageCount;
+      final keys = await provider.getDatabaseOnlyBookTitles();
+      expect(keys, hasLength(3));
+      expect(keys.any((key) => key.contains('בראשית')), isTrue);
       expect(DbReadWorker.sentMessageCount - before, 1);
     });
 
