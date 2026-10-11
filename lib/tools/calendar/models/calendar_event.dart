@@ -132,9 +132,9 @@ class CustomEvent extends Equatable {
     return false;
   }
 
-  // בין חצות לחצות ביום מעבר שעון עוברות 23 או 25 שעות, ולא 24.
+  // משך האירוע נמדד בימי לוח, גם כשהאזור המקומי מדלג על יום או חוזר אחורה.
   static int _calendarDaysBetween(DateTime from, DateTime to) =>
-      (to.difference(from).inHours / 24).round();
+      _dayNumber(to) - _dayNumber(from);
 
   /// האם מופע של האירוע החוזר מתחיל בתאריך הנתון.
   bool startsOccurrenceOn(DateTime date) {

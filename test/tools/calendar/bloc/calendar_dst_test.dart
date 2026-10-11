@@ -242,4 +242,42 @@ void main() {
       );
     });
   });
+
+  group('Calendar event day count after Kwajalein rollback', () {
+    final start = DateTime(1969, 9, 30);
+    final end = DateTime(1969, 10, 1);
+    final has47HourDateStep = end.difference(start).inHours == 47;
+
+    CustomEvent event(RecurrenceType recurrenceType) => CustomEvent(
+      id: 'kwajalein',
+      title: 'kwajalein',
+      description: '',
+      createdAt: start,
+      baseGregorianDate: start,
+      baseJewishYear: 5730,
+      baseJewishMonth: 1,
+      baseJewishDay: 1,
+      recurrenceType: recurrenceType,
+      endGregorianDate: end,
+    );
+
+    test(
+      'a one-calendar-day weekly range does not include its third day',
+      skip: has47HourDateStep ? null : 'requires TZ=Pacific/Kwajalein',
+      () {
+        expect(end.difference(start).inHours, 47);
+
+        final weekly = event(RecurrenceType.weekly);
+        final occurrence = _plusDays(start, 7);
+        expect(weekly.occursOn(occurrence), isTrue);
+        expect(weekly.occursOn(_plusDays(occurrence, 1)), isTrue);
+        expect(weekly.occursOn(_plusDays(occurrence, 2)), isFalse);
+
+        final singleEvent = event(RecurrenceType.none);
+        expect(singleEvent.occursOn(start), isTrue);
+        expect(singleEvent.occursOn(end), isTrue);
+        expect(singleEvent.occursOn(_plusDays(start, 2)), isFalse);
+      },
+    );
+  });
 }
