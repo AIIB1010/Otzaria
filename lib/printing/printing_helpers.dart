@@ -219,3 +219,19 @@ class LineCountCache {
     return _count;
   }
 }
+
+/// השורות [start, end) של [text], כמו `split('\n').sublist(start, end)`, בלי
+/// לפצל את כל הספר: מסך ההדפסה צריך רק את הטווח, וספר גדול עולה עשרות ms.
+List<String> linesInRange(String text, int start, int end) {
+  final lines = <String>[];
+  var lineStart = 0;
+  for (var line = 0; line < end; line++) {
+    final newline = text.indexOf('\n', lineStart);
+    if (line >= start) {
+      lines.add(text.substring(lineStart, newline < 0 ? text.length : newline));
+    }
+    if (newline < 0) break;
+    lineStart = newline + 1;
+  }
+  return lines;
+}
