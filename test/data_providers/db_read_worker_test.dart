@@ -8,13 +8,16 @@ import 'package:otzaria/core/app_paths.dart';
 import 'package:otzaria/data/data_providers/book_text_reader.dart';
 import 'package:otzaria/data/data_providers/database_library_provider.dart';
 import 'package:otzaria/data/data_providers/db_read_worker.dart';
+import 'package:otzaria/data/data_providers/file_system_data_provider.dart';
 import 'package:otzaria/data/data_providers/sqlite_data_provider.dart';
 import 'package:otzaria/data/data_providers/user_books_database_holder.dart';
+import 'package:otzaria/data/repository/text_book_repository.dart';
 import 'package:otzaria/migration/database/daos/database.dart';
 import 'package:otzaria/migration/database/db_capabilities.dart';
 import 'package:otzaria/migration/database/journal_mode.dart';
 import 'package:otzaria/migration/database/repository/seforim_repository.dart';
 import 'package:otzaria/migration/database/untrusted_database.dart';
+import 'package:otzaria/models/books.dart';
 import 'package:otzaria/models/links.dart';
 import 'package:otzaria/search/library_line_source.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
@@ -112,6 +115,23 @@ void main() {
     // להתנגש ב-recovery (SQLITE_BUSY_RECOVERY).
     await normalizeJournalModeForReadOnly(dbPath);
     return dbPath;
+  }
+
+  void addCommentaryLink(String dbPath) {
+    final db = sqlite3.sqlite3.open(dbPath);
+    try {
+      db.execute(
+        "INSERT INTO connection_type (name) SELECT 'COMMENTARY' WHERE NOT "
+        "EXISTS (SELECT 1 FROM connection_type WHERE name = 'COMMENTARY')",
+      );
+      db.execute(
+        'INSERT INTO link (sourceBookId, sourceLineId, targetLineId, '
+        'targetBookId, connectionTypeId) SELECT 1, 101, 201, 2, id '
+        "FROM connection_type WHERE name = 'COMMENTARY'",
+      );
+    } finally {
+      db.close();
+    }
   }
 
   Future<T> onDirectConnection<T>(
@@ -216,6 +236,24 @@ void main() {
       for (final r in viaWorker.take(3)) (r! as Map)['content'],
       ...viaWorker.skip(3),
     ], direct);
+  });
+
+  test('מפרשי ספר מה-worker זהים לשאילתה הישירה', () async {
+    final dbPath = await seedDb('seforim');
+    addCommentaryLink(dbPath);
+    final direct = await onDirectConnection(
+      dbPath,
+      (repo) => repo.database.linkDao.selectCommentatorsByBook(1),
+    );
+    expect([for (final row in direct) row['targetBookTitle']], ['מפרש']);
+
+    expect(
+      await DbReadWorker.request('commentatorsByBook', {
+        'dbPath': dbPath,
+        'bookId': 1,
+      }),
+      direct,
+    );
   });
 
   test('ספר שאינו ברשמי מוחזר למסלול הישיר ולא כשגיאה', () async {
@@ -843,6 +881,20 @@ void main() {
       DbReadWorker.stallTimeout = Duration.zero;
       final provider = DatabaseLibraryProvider.instance;
       expect(await provider.getLinkContent(link('מפרש', 2)), 'פירוש 1');
+    });
+
+    test('רשימת המפרשים בפתיחת ספר נשלפת ב-worker', () async {
+      addCommentaryLink(dbPath);
+      final repository = TextBookRepository(
+        fileSystem: FileSystemData.instance,
+      );
+      final before = DbReadWorker.sentMessageCount;
+      final detailed = await repository.getCommentatorsDetailed(
+        TextBook(id: 1, title: 'בראשית', categoryId: 7),
+      );
+      expect([for (final c in detailed.commentators) c.title], ['מפרש']);
+      expect(detailed.commentators.single.linkCount, 1);
+      expect(DbReadWorker.sentMessageCount - before, 1);
     });
 
     test('טווחי טקסט וקישורים נטענים דרך ה-worker', () async {

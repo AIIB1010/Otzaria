@@ -806,6 +806,11 @@ void _workerMain(_Bootstrap bootstrap) {
       case 'lineContents' || 'lines':
         final repo = await ensureRepo(args['dbPath'] as String);
         return _readBookLines(repo, method, args);
+      case 'commentatorsByBook':
+        final repo = await ensureRepo(args['dbPath'] as String);
+        return repo.database.linkDao.selectCommentatorsByBook(
+          args['bookId'] as int,
+        );
       case 'bookText':
         final repo = await ensureRepo(args['dbPath'] as String);
         return readBookContentText(
