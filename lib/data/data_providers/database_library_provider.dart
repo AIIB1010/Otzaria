@@ -937,7 +937,7 @@ bool _hasManySourceLinks(sqlite3.Database db, int bookId) => db.select(
 ).isNotEmpty;
 
 /// Top-level wrapper עבור סיכום קישורי ספר ב-isolate.
-/// ראה ההסבר ב-[_runAlternativeStructuresInIsolate].
+/// ראה ההסבר ב-[_runBookLoadInIsolate].
 Future<({List<Map<String, dynamic>> rows, int? maxSourceLineIndex})>
 _runBookLinkTargetsSummaryInIsolate({
   required ReadOnlyDbTarget target,
@@ -1101,25 +1101,25 @@ List<Map<String, dynamic>> _loadAlternativeStructuresRowsInIsolate({
   }
 }
 
-/// Top-level wrapper שמרכז את כל הלוגיקה של קריאת alt-structures בתוך
+/// Top-level wrapper שמריץ את [load] (טעינת נתוני ספר לפי שם וקטגוריה) בתוך
 /// `Isolate.run`. חיוני שהקריאה ל-`Isolate.run` תיווצר *כאן* (בפונקציה
 /// ברמת קובץ), ולא בתוך instance method של `DatabaseLibraryProvider` -
 /// אחרת ה-closure של Dart עלול לתפוס את `this` (כולל ה-`FfiDatabase`
 /// שאינו ניתן לשליחה ל-isolate) ולגרום לכשל
 /// "Illegal argument in isolate message".
-Future<List<Map<String, dynamic>>> _runAlternativeStructuresInIsolate({
+Future<T> _runBookLoadInIsolate<T>(
+  T Function({
+    required ReadOnlyDbTarget target,
+    required String bookTitle,
+    int? categoryId,
+  })
+  load, {
   required ReadOnlyDbTarget target,
   required String bookTitle,
   int? categoryId,
-}) {
-  return Isolate.run(
-    () => _loadAlternativeStructuresRowsInIsolate(
-      target: target,
-      bookTitle: bookTitle,
-      categoryId: categoryId,
-    ),
-  );
-}
+}) => Isolate.run(
+  () => load(target: target, bookTitle: bookTitle, categoryId: categoryId),
+);
 
 /// סמני חלוקה וכותרות נושא בגוף הטקסט של ספר, ממופתחים לפי `lineIndex`.
 /// [markers] — עלי `Simanim` (אותיות פסקה במדרש רבה, "א") ו-`Seifim`
@@ -1248,22 +1248,6 @@ typedef InlineSectionMarks = ({
   Map<int, List<String>> headings,
 });
 
-/// Top-level wrapper עבור טעינת סמני החלוקה ב-isolate.
-/// ראה ההסבר ב-[_runAlternativeStructuresInIsolate].
-Future<InlineSectionMarks> _runInlineSectionMarksInIsolate({
-  required ReadOnlyDbTarget target,
-  required String bookTitle,
-  int? categoryId,
-}) {
-  return Isolate.run(
-    () => _loadInlineSectionMarksInIsolate(
-      target: target,
-      bookTitle: bookTitle,
-      categoryId: categoryId,
-    ),
-  );
-}
-
 /// דיבורי-המתחיל של ספר, ממופתחים לפי `lineIndex` — הצורה המודפסת
 /// (`dhDisplay`) מטבלת `line_dh`. מסד ישן, בלי הטבלה או בלי העמודה, נותן
 /// מפה ריקה.
@@ -1305,24 +1289,8 @@ Map<int, String> _loadDibburHamatchilInIsolate({
   }
 }
 
-/// Top-level wrapper עבור טעינת דיבורי-המתחיל ב-isolate.
-/// ראה ההסבר ב-[_runAlternativeStructuresInIsolate].
-Future<Map<int, String>> _runDibburHamatchilInIsolate({
-  required ReadOnlyDbTarget target,
-  required String bookTitle,
-  int? categoryId,
-}) {
-  return Isolate.run(
-    () => _loadDibburHamatchilInIsolate(
-      target: target,
-      bookTitle: bookTitle,
-      categoryId: categoryId,
-    ),
-  );
-}
-
 /// Top-level wrapper עבור טעינת קישורי ספר ב-isolate.
-/// ראה ההסבר ב-[_runAlternativeStructuresInIsolate].
+/// ראה ההסבר ב-[_runBookLoadInIsolate].
 Future<List<Map<String, Object?>>> _runBookLinksInIsolate({
   required ReadOnlyDbTarget target,
   required String title,
@@ -1340,7 +1308,7 @@ Future<List<Map<String, Object?>>> _runBookLinksInIsolate({
 }
 
 /// Top-level wrapper עבור טעינת קישורי טווח ב-isolate.
-/// ראה ההסבר ב-[_runAlternativeStructuresInIsolate].
+/// ראה ההסבר ב-[_runBookLoadInIsolate].
 Future<List<Map<String, Object?>>> _runBookLinksInRangeInIsolate({
   required ReadOnlyDbTarget target,
   required bool official,
@@ -1366,7 +1334,7 @@ Future<List<Map<String, Object?>>> _runBookLinksInRangeInIsolate({
 }
 
 /// Top-level worker לטעינת טווח שורות על חיבור RO חדש ב-isolate; ה-join+split
-/// מתבצע כאן כדי לא לחסום את ה-UI thread. ראה [_runAlternativeStructuresInIsolate].
+/// מתבצע כאן כדי לא לחסום את ה-UI thread. ראה [_runBookLoadInIsolate].
 ({int startLine, int endLine, int totalLines, List<String> lines})?
 _loadBookTextRangeRowsInIsolate({
   required ReadOnlyDbTarget target,
@@ -1466,7 +1434,7 @@ _loadBookTextRangeRowsInIsolate({
 }
 
 /// Top-level wrapper עבור טעינת טווח תוכן ב-isolate.
-/// ראה ההסבר ב-[_runAlternativeStructuresInIsolate].
+/// ראה ההסבר ב-[_runBookLoadInIsolate].
 Future<({int startLine, int endLine, int totalLines, List<String> lines})?>
 _runBookTextRangeInIsolate({
   required ReadOnlyDbTarget target,
@@ -1589,7 +1557,7 @@ List<Map<String, dynamic>> _loadBookVersionsRowsInIsolate({
 }
 
 /// Top-level wrapper עבור רשימת מהדורות ב-isolate.
-/// ראה ההסבר ב-[_runAlternativeStructuresInIsolate].
+/// ראה ההסבר ב-[_runBookLoadInIsolate].
 Future<List<Map<String, dynamic>>> _runBookVersionsInIsolate({
   required ReadOnlyDbTarget target,
   required String title,
@@ -4325,7 +4293,7 @@ class DatabaseLibraryProvider implements LibraryProvider {
     String fileType, {
     BookSource source = BookSource.official,
   }) async {
-    // ראה הערה ב-_runAlternativeStructuresInIsolate: ה-Isolate.run עצמו
+    // ראה הערה ב-_runBookLoadInIsolate: ה-Isolate.run עצמו
     // חייב להיווצר בתוך פונקציה ברמת קובץ, אחרת `this` עלול להיתפס.
     return _readTarget(source, [], 'getAllLinksForBook "$title"', (
       target,
@@ -4365,7 +4333,7 @@ class DatabaseLibraryProvider implements LibraryProvider {
       throw StateError('המסד של "$title" אינו פתוח — הקישורים לא נטענו');
     }
 
-    // ראה הערה ב-_runAlternativeStructuresInIsolate.
+    // ראה הערה ב-_runBookLoadInIsolate.
     final result = await _loadOnReadWorker(
       target,
       'linksRange',
@@ -4402,7 +4370,7 @@ class DatabaseLibraryProvider implements LibraryProvider {
     int categoryId, {
     BookSource source = BookSource.official,
   }) async {
-    // ראה הערה ב-_runAlternativeStructuresInIsolate.
+    // ראה הערה ב-_runBookLoadInIsolate.
     return _readTarget(source, null, 'getBookLinkTargetsSummary "$title"', (
       target,
     ) async {
@@ -4449,7 +4417,7 @@ class DatabaseLibraryProvider implements LibraryProvider {
     String? versionTitle,
     BookSource source = BookSource.official,
   }) async {
-    // ראה הערה ב-_runAlternativeStructuresInIsolate.
+    // ראה הערה ב-_runBookLoadInIsolate.
     return _readTarget(
       source,
       null,
@@ -4676,7 +4644,8 @@ class DatabaseLibraryProvider implements LibraryProvider {
       [],
       'getAlternativeStructuresForBook "$bookTitle"',
       (target) async {
-        final results = await _runAlternativeStructuresInIsolate(
+        final results = await _runBookLoadInIsolate(
+          _loadAlternativeStructuresRowsInIsolate,
           target: target,
           bookTitle: bookTitle,
           categoryId: book.categoryId,
@@ -4766,7 +4735,8 @@ class DatabaseLibraryProvider implements LibraryProvider {
         target,
         'inlineSectionMarks',
         {'bookTitle': bookTitle, 'categoryId': categoryId},
-        () => _runInlineSectionMarksInIsolate(
+        () => _runBookLoadInIsolate(
+          _loadInlineSectionMarksInIsolate,
           target: target,
           bookTitle: bookTitle,
           categoryId: categoryId,
@@ -4787,7 +4757,8 @@ class DatabaseLibraryProvider implements LibraryProvider {
       source,
       const {},
       'getDibburHamatchilByLineIndex "$bookTitle"',
-      (target) => _runDibburHamatchilInIsolate(
+      (target) => _runBookLoadInIsolate(
+        _loadDibburHamatchilInIsolate,
         target: target,
         bookTitle: bookTitle,
         categoryId: categoryId,
