@@ -4,6 +4,7 @@ import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:otzaria/core/app_paths.dart';
+import 'package:otzaria/core/directory_writability.dart';
 import 'package:otzaria/core/error_log_file.dart';
 import 'package:otzaria/data/constants/database_constants.dart';
 import 'package:otzaria/data/data_providers/database_library_provider.dart';
@@ -75,6 +76,18 @@ class LibraryUpdateDiskSpaceException implements Exception {
 
   @override
   String toString() => message;
+}
+
+/// ה-DB או תיקייתו חסומים לכתיבה — נבדק לפני ההורדה (issue #2346).
+class LibraryUpdateReadOnlyException implements Exception {
+  final String dir;
+  const LibraryUpdateReadOnlyException(this.dir);
+
+  @override
+  String toString() =>
+      'אין לתוכנה הרשאת כתיבה לתיקיית הספרייה, ולכן אי אפשר לעדכן אותה.'
+      '\n\nהתיקייה: $dir\n\nהעבר את הספרייה למיקום שניתן לכתוב אליו, '
+      'או בטל את סימון "קריאה בלבד" של התיקייה ושל קובצי הספרייה.';
 }
 
 /// תוצאת מסלול דלתא ברמת האפליקציה.
@@ -280,6 +293,7 @@ class LibraryUpdateRepository implements LibraryUpdateService {
     bool Function()? isCancelled,
   }) async {
     final dbPath = dbPathProvider();
+    await _ensureDbWritable(dbPath);
     final cacheDir = Directory(
       p.join(await dataRootProvider(), 'library_update_cache'),
     );
@@ -581,6 +595,14 @@ class LibraryUpdateRepository implements LibraryUpdateService {
     } catch (_) {}
   }
 
+  /// "קריאה בלבד" ב-DB (ב-Windows ה-mode משקף זאת; 0 = אין קובץ) או בתיקייה.
+  Future<void> _ensureDbWritable(String dbPath) async {
+    final dir = p.dirname(dbPath), mode = FileStat.statSync(dbPath).mode;
+    if (mode != 0 && mode & 0x80 == 0 || !await isDirectoryWritable(dir)) {
+      throw LibraryUpdateReadOnlyException(dir);
+    }
+  }
+
   /// זורק [LibraryUpdateDiskSpaceException] אם אין מקום ל-patch של הצעד:
   /// בקאש — הדחוס והמחולץ; ליד ה-DB — ה-WAL של טרנזקציית ההחלה היחידה.
   Future<void> _ensureDiskSpaceForDeltaStep({
@@ -664,6 +686,7 @@ class LibraryUpdateRepository implements LibraryUpdateService {
       throw StateError('אין DB מלא בתוכנית');
     }
     final dbPath = dbPathProvider();
+    await _ensureDbWritable(dbPath);
     final cacheDir = Directory(
       p.join(await dataRootProvider(), 'library_update_cache'),
     );
