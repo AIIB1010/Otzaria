@@ -901,7 +901,7 @@ class _PrintingScreenState extends State<PrintingScreen> {
     final shouldReplaceHolyNames = _shouldReplaceHolyNames;
 
     // הטרנספורמציות היקרות מוחלות פר-שורה רק על הטווח הנבחר ב-_buildPrintBlocks.
-    final totalLines = await _totalLineCount();
+    final totalLines = _lineCounts.of(dataString);
     final pageMargin = this.pageMargin;
     final fontSize = this.fontSize;
 
@@ -1331,7 +1331,7 @@ class _PrintingScreenState extends State<PrintingScreen> {
     final shouldReplaceHolyNames = _shouldReplaceHolyNames;
 
     // שומרים את תגיות ה-HTML — WordExportService ממיר אותן לעיצוב במסמך
-    final totalLines = await _totalLineCount();
+    final totalLines = _lineCounts.of(dataString);
     var bookName = stripHtmlIfNeeded(
       _applyTextTransforms(linesInRange(dataString, 0, 1).first),
     );
