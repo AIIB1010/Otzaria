@@ -1004,7 +1004,14 @@ class LibraryGridKeyNavigator extends StatelessWidget {
     };
     if (delta == null) return KeyEventResult.ignored;
 
-    final cards = node.traversalDescendants.toList();
+    // ברשת עצלה כרטיס שנבנה בגלילה מעלה נרשם בסוף עץ הפוקוס; הסדר נקבע לפי המיקום.
+    final cards = node.traversalDescendants.toList()
+      ..sort((a, b) {
+        final byRow = a.rect.top.compareTo(b.rect.top);
+        if (byRow != 0) return byRow;
+        final byX = a.rect.left.compareTo(b.rect.left);
+        return isRtl ? -byX : byX;
+      });
     final primary = FocusManager.instance.primaryFocus;
     final index = primary == null ? -1 : cards.indexOf(primary);
     if (index < 0) return KeyEventResult.ignored;
@@ -1043,11 +1050,15 @@ class MyGridView extends StatelessWidget {
   final VoidCallback? onExitTop;
   final double minItemHeight;
 
+  /// גולל בעצמו ובונה רק את הכרטיסים שבתצוגה; אחרת נבנים כולם בתוך גלילה חיצונית.
+  final bool scrollable;
+
   const MyGridView({
     super.key,
     required this.items,
     this.onExitTop,
     this.minItemHeight = 0,
+    this.scrollable = false,
   });
 
   @override
@@ -1088,28 +1099,26 @@ class MyGridView extends StatelessWidget {
           onExitTop: onExitTop,
           child: FocusTraversalGroup(
             policy: ReadingOrderTraversalPolicy(),
-            child: Padding(
+            child: GridView.builder(
               padding: const EdgeInsets.fromLTRB(
                 _kGridPadding,
                 _kGridTopPadding,
                 _kGridPadding,
                 _kGridPadding,
               ),
-              child: GridView.builder(
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: crossAxisCount,
-                  childAspectRatio: childAspectRatio,
-                  mainAxisExtent: minItemHeight > 0
-                      ? max(minItemHeight, cellWidth / childAspectRatio)
-                      : null,
-                  crossAxisSpacing: kLibraryGridSpacing,
-                  mainAxisSpacing: kLibraryGridSpacing,
-                ),
-                itemCount: items.length,
-                itemBuilder: (context, index) => items[index],
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: crossAxisCount,
+                childAspectRatio: childAspectRatio,
+                mainAxisExtent: minItemHeight > 0
+                    ? max(minItemHeight, cellWidth / childAspectRatio)
+                    : null,
+                crossAxisSpacing: kLibraryGridSpacing,
+                mainAxisSpacing: kLibraryGridSpacing,
               ),
+              itemCount: items.length,
+              itemBuilder: (context, index) => items[index],
+              shrinkWrap: !scrollable,
+              physics: scrollable ? null : const NeverScrollableScrollPhysics(),
             ),
           ),
         );

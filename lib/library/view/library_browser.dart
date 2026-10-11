@@ -1495,15 +1495,7 @@ class _LibraryBrowserState extends State<LibraryBrowser>
               ),
             );
           }
-          final categoryItems = _buildCategoryContent(state.currentCategory!);
-          if (categoryItems.isEmpty) {
-            final repo = context.read<FocusRepository>();
-            return _buildEmptyState(context, state, settingsState, repo);
-          }
-          return SingleChildScrollView(
-            key: PageStorageKey(state.currentCategory),
-            child: Column(children: categoryItems),
-          );
+          return _buildCategoryContent(state.currentCategory!);
         }
         if (state.searchResults != null) {
           final visibleResults = _visibleBooks(state.searchResults!);
@@ -1544,8 +1536,7 @@ class _LibraryBrowserState extends State<LibraryBrowser>
     return (subCategories: filteredSubCategories, books: filteredBooks);
   }
 
-  List<Widget> _buildCategoryContent(Category category) {
-    final List<Widget> items = [];
+  Widget _buildCategoryContent(Category category) {
     final (subCategories: filteredSubCategories, books: filteredBooks) =
         _displayedContent(category);
 
@@ -1586,13 +1577,12 @@ class _LibraryBrowserState extends State<LibraryBrowser>
         attachedTourKey = true;
       }
     }
-    items.add(
-      MyGridView(
-        items: allItems,
-        onExitTop: () => _refocusSearchBar(selectAll: true),
-      ),
+    return MyGridView(
+      key: PageStorageKey(category),
+      items: allItems,
+      onExitTop: () => _refocusSearchBar(selectAll: true),
+      scrollable: true,
     );
-    return items;
   }
 
   Widget _buildBookItem(
