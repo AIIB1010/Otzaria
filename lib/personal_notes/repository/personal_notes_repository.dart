@@ -30,6 +30,10 @@ class PersonalNotesRepository {
   final PersonalNotesService _service;
   final PersonalNotesDatabase _database;
 
+  // הטקסט שהערות הספר יושבו מולו ב-loadNotes; עריכות באותו ספר משתמשות בו
+  // במקום לקרוא שוב את הספר כולו (עד חצי שנייה בספר גדול).
+  ({String bookId, int? categoryId, String content})? _lastContent;
+
   PersonalNotesRepository({
     FileSystemData? fileSystemData,
     PersonalNotesService? service,
@@ -43,7 +47,20 @@ class PersonalNotesRepository {
     int? categoryId,
   }) async {
     final content = await _loadBookContent(bookId, categoryId: categoryId);
+    _lastContent = content.isEmpty
+        ? null
+        : (bookId: bookId, categoryId: categoryId, content: content);
     return _service.loadNotes(bookId: bookId, bookContent: content);
+  }
+
+  Future<String> _contentForEdit(String bookId, int? categoryId) async {
+    final last = _lastContent;
+    if (last != null &&
+        last.bookId == bookId &&
+        last.categoryId == categoryId) {
+      return last.content;
+    }
+    return _loadBookContent(bookId, categoryId: categoryId);
   }
 
   /// ההערות כפי שנשמרו, בלי לקרוא את תוכן הספר ובלי ליישב מחדש את מיקומן.
@@ -61,7 +78,7 @@ class PersonalNotesRepository {
     bool punctuationHidden = false,
     int? categoryId,
   }) async {
-    final bookContent = await _loadBookContent(bookId, categoryId: categoryId);
+    final bookContent = await _contentForEdit(bookId, categoryId);
     return _service.addNote(
       bookId: bookId,
       bookContent: bookContent,
@@ -83,7 +100,7 @@ class PersonalNotesRepository {
     required PersonalNoteContentFormat contentFormat,
     int? categoryId,
   }) async {
-    final bookContent = await _loadBookContent(bookId, categoryId: categoryId);
+    final bookContent = await _contentForEdit(bookId, categoryId);
     return _service.updateNote(
       bookId: bookId,
       bookContent: bookContent,
@@ -105,7 +122,7 @@ class PersonalNotesRepository {
     required int lineNumber,
     int? categoryId,
   }) async {
-    final bookContent = await _loadBookContent(bookId, categoryId: categoryId);
+    final bookContent = await _contentForEdit(bookId, categoryId);
     return _service.repositionNote(
       bookId: bookId,
       bookContent: bookContent,
