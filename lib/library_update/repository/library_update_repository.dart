@@ -143,7 +143,6 @@ class PartiallyAppliedLibraryDeltaException implements Exception {
 
 /// ממשק שירות עדכון הספרייה — מאפשר ל-BLoC להיבדק מול מימוש מזויף.
 abstract interface class LibraryUpdateService {
-  Future<RecoveryResult> recoverIfNeeded();
   Future<LibraryUpdatePlan> checkForUpdate({required bool allowPrerelease});
 
   /// מחזיר את השינויים שהוחלו — לריענון הספרייה ואינדקס החיפוש.
@@ -248,11 +247,6 @@ class LibraryUpdateRepository implements LibraryUpdateService {
     LocalDbVersionReader reader,
     String dbPath,
   ) => Isolate.run(() => reader.read(dbPath));
-
-  /// נקרא בעליית האפליקציה, לפני פתיחת ה-DB, כדי לשחזר עדכון שנקטע.
-  @override
-  Future<RecoveryResult> recoverIfNeeded() =>
-      recovery.recoverIfNeeded(dbPathProvider());
 
   /// בודק אם יש עדכון זמין ומחזיר את התוכנית.
   @override
