@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -328,6 +329,38 @@ void main() {
     expect(repository.availability.phase, SemanticAvailabilityPhase.ready);
   });
 
+  test(
+    'נתונים מוכנים מזוהים לפני הלחיצה, והתקנתם אינה מוצגת כהורדה (issue #2298)',
+    () async {
+      stageAll();
+      final repository = buildRepository(
+        root: root,
+        backend: FakeBackend(),
+        locator: _UnreachableLocator(),
+        download: (FakeDownloads()..error = const SocketException('none')).call,
+        modelReleases: _smallModel,
+      );
+
+      final before = await repository.refresh();
+      expect(before.phase, SemanticAvailabilityPhase.needsDownload);
+      expect(before.stagedDataFound, isTrue);
+
+      final labels = <String>{};
+      final subscription = repository.availabilityChanges.listen((a) {
+        final progress = a.progress;
+        if (progress != null) {
+          labels.add(SemanticSearchMessages.progressAction(progress));
+        }
+      });
+      await repository.enableAndDownload();
+      await subscription.cancel();
+
+      expect(labels, isNot(contains(SemanticSearchMessages.downloadingData)));
+      expect(repository.availability.phase, SemanticAvailabilityPhase.ready);
+      expect(repository.availability.stagedDataFound, isFalse);
+    },
+  );
+
   test('במצב לא מקוון — מותקן מהנתונים המוכנים בלי לפנות לרשת', () async {
     stageAll();
     final backend = FakeBackend();
@@ -374,6 +407,108 @@ void main() {
       isTrue,
       reason: 'קובץ שאינו תואם אינו נוגע',
     );
+  });
+
+  for (final source in ['damaged', 'corrupted', null]) {
+    for (final cancel in [false, true]) {
+      test(
+        'מעבר ממוכן לרשת מוצג לפני הבייט הראשון ($source, ביטול: $cancel)',
+        () async {
+          stageAll(segment: source ?? 'segment');
+          if (source == null) {
+            File(
+              staged(kSemanticImportVectorsFolderName, _segmentName),
+            ).deleteSync();
+          }
+          final gate = Completer<void>();
+          final downloads = FakeDownloads()..gate = gate;
+          final backend = FakeBackend();
+          final repository = buildRepository(
+            root: root,
+            backend: backend,
+            locator: _UnreachableLocator(),
+            download: downloads.call,
+            modelReleases: _smallModel,
+          );
+          final seen = <SemanticDownloadProgress>[];
+          final subscription = repository.availabilityChanges.listen((a) {
+            if (a.progress != null) seen.add(a.progress!);
+          });
+          final job = repository.enableAndDownload();
+          await waitFor(() => downloads.urls.isNotEmpty);
+          final beforeBytes = repository.availability.progress!;
+          final published = seen.last;
+          final cancellation = cancel ? repository.cancelDownload() : null;
+          gate.complete();
+          await job;
+          await cancellation;
+          await subscription.cancel();
+
+          expect(downloads.urls, [semanticVectorsAssetUrl(_tag, _segmentName)]);
+          expect(beforeBytes.item, SemanticDownloadItem.vectors);
+          expect(
+            beforeBytes.receivedBytes,
+            _smallModel[SemanticQuantization.int8]!.downloadSize,
+          );
+          expect(beforeBytes.checking, isFalse);
+          expect(beforeBytes.staged, isFalse);
+          expect(published, beforeBytes);
+          expect(
+            SemanticSearchMessages.progressAction(beforeBytes),
+            SemanticSearchMessages.downloadingData,
+          );
+          expect(backend.installRequests, hasLength(cancel ? 0 : 1));
+          expect(repository.availability.failure, isNull);
+          expect(repository.availability.progress, isNull);
+        },
+      );
+    }
+  }
+
+  test('מעבר מרשת לקובץ מוכן מתפרסם גם מתחת לסף הבתים', () async {
+    stageAll();
+    File(
+      staged(
+        kSemanticModelFolderName,
+        _smallModel[SemanticQuantization.int8]!.graph.name,
+      ),
+    ).deleteSync();
+    final manifest = jsonDecode(_manifest()) as Map<String, dynamic>;
+    (manifest['files'] as List).first['size'] = 1800000000;
+    write(
+      staged(kSemanticImportVectorsFolderName, _manifestName),
+      jsonEncode(manifest),
+    );
+    final gate = Completer<void>();
+    final downloads = FakeDownloads()..gate = gate;
+    final repository = buildRepository(
+      root: root,
+      locator: _UnreachableLocator(),
+      download: downloads.call,
+      modelReleases: _smallModel,
+    );
+    final seen = <SemanticDownloadProgress>[];
+    final subscription = repository.availabilityChanges.listen((a) {
+      if (a.progress != null) seen.add(a.progress!);
+    });
+    final job = repository.enableAndDownload();
+    await waitFor(() => downloads.urls.isNotEmpty);
+    seen.clear();
+    gate.complete();
+    await job;
+    await subscription.cancel();
+
+    expect(
+      seen,
+      contains(
+        isA<SemanticDownloadProgress>()
+            .having((p) => p.item, 'שלב', SemanticDownloadItem.model)
+            .having((p) => p.staged, 'מקור', true)
+            .having((p) => p.checking, 'בדיקה', false)
+            .having((p) => p.receivedBytes, 'בתים מתחת לסף', 5),
+      ),
+    );
+    expect(repository.availability.phase, SemanticAvailabilityPhase.ready);
   });
 
   test('בלי הסכמה — דבר אינו מותקן והנתונים המוכנים נשארים', () async {
