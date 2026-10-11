@@ -871,7 +871,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
         context.read<TextBookBloc>().add(UpdateFontSize(state.fontSize));
       }
 
-      // אם משפחת הגופן או הסרת ניקוד השתנו, טען מחדש את התוכן
+      // משפחת הגופן או כל חריץ בתצוגת הטקסט (גם העתקה וייצוא) — טעינה מחדש
       final isNikudSettingsChange = shouldReloadForNikudSettingsChange(
         previous: previousSettingsState,
         current: state,
@@ -882,8 +882,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
             current: state,
           );
       if (state.fontFamily != previousFontFamily ||
-          isNikudSettingsChange ||
-          isPunctuationSettingsChange) {
+          state.textDisplayPolicy != previousSettingsState.textDisplayPolicy) {
         previousFontFamily = state.fontFamily;
         previousSettingsState = state;
 
