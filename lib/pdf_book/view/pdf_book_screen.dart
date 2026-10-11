@@ -5393,7 +5393,7 @@ class _PdfBookScreenState extends State<PdfBookScreen>
     openBook(
       context,
       edition.book,
-      1,
+      edition.book is PdfBook ? 1 : 0,
       '',
       ignoreHistory: true,
       requiresStableLayout: true,
