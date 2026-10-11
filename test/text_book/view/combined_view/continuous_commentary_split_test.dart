@@ -1,4 +1,10 @@
+import 'dart:io';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:otzaria/text_book/view/page_shape/simple_text_viewer.dart';
+import 'package:otzaria/theme/app_surfaces.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,6 +23,7 @@ import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:otzaria/text_book/view/combined_view/combined_book_screen.dart';
 import 'package:otzaria/text_book/view/widgets/continuous_reading_paragraph.dart';
+import 'package:otzaria/text_book/view/widgets/selection_gutter_painter.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../../../test_helpers/memory_cache_provider.dart';
 
@@ -71,13 +78,18 @@ TextBookLoaded _continuousState({
 
 Future<void> _pumpContinuousView(
   WidgetTester tester,
-  TextBookLoaded state,
-) async {
+  TextBookLoaded state, {
+  bool simple = false,
+  bool isMainText = true,
+  double textMaxWidth = -1,
+}) async {
   final textBookBloc = _TestTextBookBloc(state);
   final personalNotesBloc = _TestPersonalNotesBloc(
     const PersonalNotesState.initial(),
   );
-  final settingsBloc = _TestSettingsBloc(SettingsState.initial());
+  final settingsBloc = _TestSettingsBloc(
+    SettingsState.initial().copyWith(textMaxWidth: textMaxWidth),
+  );
   final tab = TextBookTab(book: TextBook(title: 'ספר בדיקה'), index: 0);
   addTearDown(textBookBloc.close);
   addTearDown(personalNotesBloc.close);
@@ -86,6 +98,9 @@ Future<void> _pumpContinuousView(
 
   await tester.pumpWidget(
     MaterialApp(
+      locale: const Locale('he', 'IL'),
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      supportedLocales: const [Locale('he', 'IL')],
       home: MultiBlocProvider(
         providers: [
           BlocProvider<TextBookBloc>.value(value: textBookBloc),
@@ -93,14 +108,22 @@ Future<void> _pumpContinuousView(
           BlocProvider<SettingsBloc>.value(value: settingsBloc),
         ],
         child: Scaffold(
-          body: CombinedView(
-            data: _content,
-            openBookCallback: (_) {},
-            openLeftPaneTab: (_, {searchText}) {},
-            textSize: 18,
-            showCommentaryAsExpansionTiles: true,
-            tab: tab,
-          ),
+          body: simple
+              ? SimpleTextViewer(
+                  content: _content,
+                  fontSize: 18,
+                  isMainText: isMainText,
+                  highlightedIndices: isMainText ? null : const {1},
+                  openBookCallback: (_) {},
+                )
+              : CombinedView(
+                  data: _content,
+                  openBookCallback: (_) {},
+                  openLeftPaneTab: (_, {searchText}) {},
+                  textSize: 18,
+                  showCommentaryAsExpansionTiles: true,
+                  tab: tab,
+                ),
         ),
       ),
     ),
@@ -117,11 +140,127 @@ List<List<int>> _paragraphLineIndices(WidgetTester tester) => tester
     )
     .toList();
 
+Finder _selectionMarkers() => find.byWidgetPredicate(
+  (widget) =>
+      widget is CustomPaint &&
+      (widget.painter is SelectionGutterPainter ||
+          widget.foregroundPainter is SelectionGutterPainter),
+);
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUpAll(() async {
     await Settings.init(cacheProvider: MemoryCacheProvider());
+  });
+
+  for (final continuous in [false, true]) {
+    testWidgets('צורת הדף: בחירה משאירה רקע יציב, רציף=$continuous', (
+      tester,
+    ) async {
+      await _pumpContinuousView(
+        tester,
+        _continuousState(selectedIndex: 1, linksByLine: const {}).copyWith(
+          continuousReadingMode: continuous,
+          readingSegments: buildReadingSegments(
+            _content,
+            continuous: continuous,
+          ),
+        ),
+        simple: true,
+      );
+      expect(_selectionMarkers(), findsOneWidget);
+      final selected = find.descendant(
+        of: _selectionMarkers(),
+        matching: find.byType(AnimatedContainer),
+      );
+      expect(
+        (tester.widget<AnimatedContainer>(selected).decoration as BoxDecoration)
+            .color,
+        isNull,
+      );
+    });
+  }
+
+  testWidgets('מפרש בצורת הדף שומר הדגשה מקומית בלי סמן בחירה ראשי', (
+    tester,
+  ) async {
+    await _pumpContinuousView(
+      tester,
+      _continuousState(selectedIndex: 1),
+      simple: true,
+      isMainText: false,
+    );
+    expect(_selectionMarkers(), findsNothing);
+    final theme = Theme.of(tester.element(find.byType(SimpleTextViewer)));
+    expect(
+      tester
+          .widgetList<AnimatedContainer>(find.byType(AnimatedContainer))
+          .any(
+            (container) =>
+                (container.decoration as BoxDecoration?)?.color ==
+                AppSurfaces.paragraphSelectionBackground(theme.colorScheme),
+          ),
+      isTrue,
+    );
+  });
+
+  testWidgets('קו הבחירה אינו מכסה דיו של אותיות בקצה פסקה רציפה', (
+    tester,
+  ) async {
+    final font = File('fonts/FrankRuehlCLM-Medium.ttf').readAsBytesSync();
+    final loader = FontLoader('FrankRuhlCLM')
+      ..addFont(Future.value(ByteData.sublistView(font)));
+    await loader.load();
+    Future<({int width, List<int> bytes})> pixels() async {
+      final boundary = tester.renderObject<RenderRepaintBoundary>(
+        find
+            .ancestor(
+              of: find.byType(ContinuousReadingParagraph),
+              matching: find.byType(RepaintBoundary),
+            )
+            .first,
+      );
+      return (await tester.runAsync(() async {
+        final image = await boundary.toImage();
+        final bytes = (await image.toByteData())!.buffer.asUint8List().toList();
+        final width = image.width;
+        image.dispose();
+        return (width: width, bytes: bytes);
+      }))!;
+    }
+
+    await _pumpContinuousView(
+      tester,
+      _continuousState(linksByLine: const {}),
+      textMaxWidth: 0,
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    final before = await pixels();
+    await _pumpContinuousView(
+      tester,
+      _continuousState(selectedIndex: 1, linksByLine: const {}),
+      textMaxWidth: 0,
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    final after = await pixels();
+    expect(after.width, before.width);
+    var edgeInk = 0;
+    for (var i = 0; i < before.bytes.length; i += 4) {
+      if ((i ~/ 4) % before.width < before.width - 3) continue;
+      if (before.bytes[i] < 100 &&
+          before.bytes[i + 1] < 100 &&
+          before.bytes[i + 2] < 100 &&
+          before.bytes[i + 3] == 255) {
+        edgeInk++;
+        expect(after.bytes.sublist(i, i + 4), before.bytes.sublist(i, i + 4));
+      }
+    }
+    expect(
+      edgeInk,
+      greaterThan(0),
+      reason: 'הטקסט חייב לגעת ברצועת הסמן כדי להוכיח שאין הסתרה',
+    );
   });
 
   testWidgets('בחירת שורה באמצע פסקה — הפסקה מפוצלת והכרטיס מתחת לשורה', (
@@ -136,7 +275,22 @@ void main() {
         [2],
       ],
     );
-    expect(find.byKey(const ValueKey('commentary_card_1')), findsOneWidget);
+    final card = find.byKey(const ValueKey('commentary_card_1'));
+    expect(card, findsOneWidget);
+    expect(
+      find.ancestor(of: card, matching: _selectionMarkers()),
+      findsNothing,
+    );
+    final cardRect = tester.getRect(card);
+    final markers = _selectionMarkers();
+    expect(markers, findsNWidgets(2));
+    for (final element in markers.evaluate()) {
+      final markerRect = tester.getRect(
+        find.byElementPredicate((e) => e == element),
+      );
+      expect(markerRect.overlaps(cardRect), isFalse);
+      expect((element.widget as CustomPaint).foregroundPainter, isNull);
+    }
   });
 
   testWidgets('ללא בחירה — פסקה אחת שלמה ובלי כרטיס מפרשים', (tester) async {

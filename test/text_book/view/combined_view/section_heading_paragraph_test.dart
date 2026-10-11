@@ -216,9 +216,7 @@ void main() {
       final heading = find.textContaining('פרשת נח', findRichText: true);
       expect(heading, findsOneWidget);
       final selectedIndicator = find.byWidgetPredicate(
-        (w) =>
-            w is CustomPaint &&
-            w.foregroundPainter is SelectionGutterPainter,
+        (w) => w is CustomPaint && w.painter is SelectionGutterPainter,
       );
       expect(
         find.ancestor(
