@@ -1067,7 +1067,6 @@
   "test/text_book/view/page_shape/simple_text_viewer_plugin_selection_test.dart": 1.9,
   "test/text_book/view/page_shape/simple_text_viewer_test.dart": 10.8,
   "test/text_book/view/page_shape_commentary_selection_test.dart": 3.5,
-  "test/text_book/view/page_shape_content_unfocus_test.dart": 3.2,
   "test/text_book/view/page_shape_note_listener_predicate_test.dart": 4.7,
   "test/text_book/view/page_shape_toggle_commentators_pane_test.dart": 5.2,
   "test/text_book/view/reading_scrollbar_offset_controller_test.dart": 2.7,
