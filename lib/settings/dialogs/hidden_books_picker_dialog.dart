@@ -248,92 +248,80 @@ class _HiddenBooksPickerDialogState extends State<_HiddenBooksPickerDialog> {
               : Scrollbar(
                   controller: _scroll,
                   thumbVisibility: true,
-                  child: ListView.separated(
+                  child: ListView.builder(
                     controller: _scroll,
+                    // גובה שורה קבוע: קפיצת פס הגלילה לא בונה את כל השורות בדרך
+                    prototypeItem: const CheckboxListTile(
+                      value: false,
+                      onChanged: null,
+                      title: Text(''),
+                      subtitle: Text(''),
+                    ),
                     itemCount: _showCategories
                         ? _visibleCategories.length
                         : _visible.length,
-                    separatorBuilder: (_, _) => Divider(
-                      height: 1,
-                      color: cs.surfaceContainerHighest,
-                    ),
                     itemBuilder: (_, i) {
-                      if (_showCategories) {
-                        final row = _visibleCategories[i];
-                        final inherited = _hidingCategory(
-                          row.path,
-                          includeSelf: false,
-                        );
-                        return CheckboxListTile(
-                          value:
-                              inherited != null ||
-                              _selectedCategories.contains(row.path),
-                          title: Padding(
-                            padding: EdgeInsetsDirectional.only(
-                              start: row.depth * 12.0,
-                            ),
-                            child: Text(row.title),
+                      final category = _showCategories
+                          ? _visibleCategories[i]
+                          : null;
+                      final book = category == null ? _visible[i] : null;
+                      final key = category?.path ?? book!.key;
+                      final selected = category == null
+                          ? _selectedBooks
+                          : _selectedCategories;
+                      final inherited = _hidingCategory(
+                        category?.path ?? book!.categoryPath,
+                        includeSelf: category == null,
+                      );
+                      return CheckboxListTile(
+                        shape: Border(
+                          bottom: BorderSide(color: cs.surfaceContainerHighest),
+                        ),
+                        value: inherited != null || selected.contains(key),
+                        title: Padding(
+                          padding: EdgeInsetsDirectional.only(
+                            start: (category?.depth ?? 0) * 12.0,
                           ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(row.path),
-                              if (inherited != null)
-                                Text(
+                          child: Text(
+                            category?.title ?? book!.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        subtitle: Row(
+                          spacing: 12,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                category?.path ?? book!.details,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (inherited != null)
+                              Flexible(
+                                child: Text(
                                   context.settingsText(
                                     'מוסתר דרך {category}',
                                     args: {'category': inherited},
                                   ),
-                                ),
-                            ],
-                          ),
-                          secondary: const Icon(
-                            FluentIcons.folder_24_regular,
-                          ),
-                          onChanged: inherited != null
-                              ? null
-                              : (checked) {
-                                  setState(() {
-                                    if (checked == true) {
-                                      _selectedCategories.add(row.path);
-                                    } else {
-                                      _selectedCategories.remove(
-                                        row.path,
-                                      );
-                                    }
-                                  });
-                                  if (_hiddenOnly) _applyFilter();
-                                },
-                        );
-                      }
-                      final row = _visible[i];
-                      final inherited = _hidingCategory(row.categoryPath);
-                      return CheckboxListTile(
-                        value:
-                            inherited != null ||
-                            _selectedBooks.contains(row.key),
-                        title: Text(row.title),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(row.details),
-                            if (inherited != null)
-                              Text(
-                                context.settingsText(
-                                  'מוסתר דרך {category}',
-                                  args: {'category': inherited},
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                           ],
                         ),
+                        secondary: category == null
+                            ? null
+                            : const Icon(FluentIcons.folder_24_regular),
                         onChanged: inherited != null
                             ? null
                             : (checked) {
                                 setState(() {
                                   if (checked == true) {
-                                    _selectedBooks.add(row.key);
+                                    selected.add(key);
                                   } else {
-                                    _selectedBooks.remove(row.key);
+                                    selected.remove(key);
                                   }
                                 });
                                 if (_hiddenOnly) _applyFilter();
