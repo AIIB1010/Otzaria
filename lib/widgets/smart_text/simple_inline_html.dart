@@ -20,10 +20,6 @@ class SimpleInlineHtml {
   static final RegExp _entityRegex = RegExp(
     r'&[a-zA-Z]{2,10};|&#x?[0-9a-fA-F]{1,6};',
   );
-  // רווח ASCII בלבד, כמו ב-HTML וב-fwfh: NBSP ו-U+2009 אינם מתכווצים.
-  static final RegExp _whitespaceRegex = RegExp(r'[\t\n\f\r ]+');
-  static final RegExp _leadingWhitespaceRegex = RegExp(r'^[\t\n\f\r ]+');
-  static final RegExp _trailingWhitespaceRegex = RegExp(r'[\t\n\f\r ]+$');
 
   /// עוגני המפרשים הריקים של שו"ע/טור (`<i data-commentator=…></i>`) — אין
   /// להם תוכן ואין מי שקורא אותם מהעץ המרונדר, ולכן אינם מציירים דבר.
@@ -121,7 +117,7 @@ class SimpleInlineHtml {
 
     // המקרה הנפוץ ביותר: שורה בלי שום תג.
     if (!html.contains('<')) {
-      return TextSpan(text: _trim(html.replaceAll(_whitespaceRegex, ' ')));
+      return TextSpan(text: _trim(_collapse(html)));
     }
 
     var bold = 0, italic = 0, underline = 0, big = 0, small = 0;
@@ -176,7 +172,7 @@ class SimpleInlineHtml {
       if (raw.isEmpty) return;
       // HtmlWidget מכווץ רצפי רווחים לרווח יחיד — משמרים התנהגות זהה.
       segments.add(
-        _Segment(raw.replaceAll(_whitespaceRegex, ' '), styleForCurrent()),
+        _Segment(_collapse(raw), styleForCurrent()),
       );
     }
 
@@ -328,9 +324,48 @@ class SimpleInlineHtml {
     );
   }
 
-  static String _trim(String text) => text
-      .replaceFirst(_leadingWhitespaceRegex, '')
-      .replaceFirst(_trailingWhitespaceRegex, '');
+  // רווח ASCII בלבד, כמו ב-HTML וב-fwfh: NBSP ו-U+2009 אינם מתכווצים.
+  // בלי RegExp: בשורה של מאות אלפי תווים הוא לבדו עלה עשרות מילישניות.
+  static bool _isSpace(int c) =>
+      c == 0x20 || c == 0x09 || c == 0x0A || c == 0x0C || c == 0x0D;
+
+  static String _collapse(String text) {
+    StringBuffer? out;
+    var copied = 0;
+    for (var i = 0; i < text.length; i++) {
+      if (!_isSpace(text.codeUnitAt(i))) continue;
+      var end = i + 1;
+      while (end < text.length && _isSpace(text.codeUnitAt(end))) {
+        end++;
+      }
+      if (end - i > 1 || text.codeUnitAt(i) != 0x20) {
+        (out ??= StringBuffer())
+          ..write(text.substring(copied, i))
+          ..write(' ');
+        copied = end;
+      }
+      i = end - 1;
+    }
+    return out == null ? text : (out..write(text.substring(copied))).toString();
+  }
+
+  static String _trimStart(String text) {
+    var start = 0;
+    while (start < text.length && _isSpace(text.codeUnitAt(start))) {
+      start++;
+    }
+    return text.substring(start);
+  }
+
+  static String _trimEnd(String text) {
+    var end = text.length;
+    while (end > 0 && _isSpace(text.codeUnitAt(end - 1))) {
+      end--;
+    }
+    return text.substring(0, end);
+  }
+
+  static String _trim(String text) => _trimEnd(_trimStart(text));
 
   /// מדמה את כללי הרווחים של HTML: רווחים צמודים ל-<br> ולקצוות הפסקה נבלעים.
   static void _normalizeWhitespace(List<_Segment> segments) {
@@ -349,32 +384,22 @@ class SimpleInlineHtml {
     for (var i = 0; i < segments.length; i++) {
       if (!segments[i].isBreak) continue;
       if (i > 0 && !segments[i - 1].isBreak) {
-        segments[i - 1].text = segments[i - 1].text.replaceFirst(
-          _trailingWhitespaceRegex,
-          '',
-        );
+        segments[i - 1].text = _trimEnd(segments[i - 1].text);
       }
       if (i + 1 < segments.length && !segments[i + 1].isBreak) {
-        segments[i + 1].text = segments[i + 1].text.replaceFirst(
-          _leadingWhitespaceRegex,
-          '',
-        );
+        segments[i + 1].text = _trimStart(segments[i + 1].text);
       }
     }
 
     while (segments.isNotEmpty) {
       final first = segments.first;
-      first.text = first.isBreak
-          ? ''
-          : first.text.replaceFirst(_leadingWhitespaceRegex, '');
+      first.text = first.isBreak ? '' : _trimStart(first.text);
       if (first.text.isNotEmpty) break;
       segments.removeAt(0);
     }
     while (segments.isNotEmpty) {
       final last = segments.last;
-      last.text = last.isBreak
-          ? ''
-          : last.text.replaceFirst(_trailingWhitespaceRegex, '');
+      last.text = last.isBreak ? '' : _trimEnd(last.text);
       if (last.text.isNotEmpty) break;
       segments.removeLast();
     }
