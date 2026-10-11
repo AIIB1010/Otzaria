@@ -59,10 +59,6 @@ class PersonalNotesSidebar extends StatefulWidget {
 
   @override
   State<PersonalNotesSidebar> createState() => PersonalNotesSidebarState();
-
-  static PersonalNotesSidebarState? of(BuildContext context) {
-    return context.findAncestorStateOfType<PersonalNotesSidebarState>();
-  }
 }
 
 class PersonalNotesSidebarState extends State<PersonalNotesSidebar>

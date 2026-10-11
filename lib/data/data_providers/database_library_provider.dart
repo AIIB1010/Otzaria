@@ -2618,21 +2618,6 @@ class DatabaseLibraryProvider implements LibraryProvider {
     return categoryPath;
   }
 
-  /// Checks if any book with the given title exists in the database.
-  Future<bool> hasBookWithTitle(String title) async {
-    if (!_titlesCached) {
-      await getDatabaseOnlyBookTitles();
-    }
-
-    for (final key in _cachedKeys) {
-      if (key.matchesTitle(title)) return true;
-    }
-    for (final key in _userBooksCachedKeys) {
-      if (key.matchesTitle(title)) return true;
-    }
-    return false;
-  }
-
   BookCompositeKey? _findMatchingCachedKey(
     String title, {
     int? categoryId,
@@ -4763,21 +4748,6 @@ class DatabaseLibraryProvider implements LibraryProvider {
         bookTitle: bookTitle,
         categoryId: categoryId,
       ),
-    );
-  }
-
-  /// Get all alternative TOC structures available in the database
-  Future<List<AltTocStructure>> getAlternativeStructures() async {
-    return _dbOperation<List<AltTocStructure>>(
-      (db) async {
-        final results = db
-            .select('SELECT * FROM alt_toc_structure')
-            .toMapList();
-        return results.map((json) => AltTocStructure.fromJson(json)).toList();
-      },
-      [],
-      'getAlternativeStructures',
-      requires: (c) => c.hasAltTocStructures,
     );
   }
 

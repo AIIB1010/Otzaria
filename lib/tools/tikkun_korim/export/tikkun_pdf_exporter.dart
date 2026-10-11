@@ -305,8 +305,6 @@ class TikkunLineRange {
 
   const TikkunLineRange(this.start, this.end);
 
-  int get length => end - start + 1;
-
   @override
   bool operator ==(Object other) =>
       other is TikkunLineRange && other.start == start && other.end == end;

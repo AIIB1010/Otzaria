@@ -9,7 +9,6 @@ class TextSelectionManager extends ChangeNotifier {
   /// האם נמצאים במצב בחירה זמני
   bool _isInSelectionMode = false;
 
-  int? get anchorIndex => _anchorIndex;
   bool get isInSelectionMode => _isInSelectionMode;
 
   /// קביעת anchor point (נקודת התחלה לבחירה)
@@ -36,13 +35,6 @@ class TextSelectionManager extends ChangeNotifier {
 
   /// בדיקה אם יש anchor פעיל
   bool hasAnchor() => _anchorIndex != null;
-
-  /// איפוס מלא
-  void reset() {
-    _anchorIndex = null;
-    _isInSelectionMode = false;
-    notifyListeners();
-  }
 }
 
 /// Intent לניקוי בחירה

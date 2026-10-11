@@ -16,6 +16,9 @@ import 'package:otzaria/widgets/smart_text/smart_text.dart';
 /// נטענים דרך [TargetLineLinksService], כמו בתפריט ההקשר.
 mixin PanelAnchorLinksMixin<T extends StatefulWidget> on State<T> {
   StreamSubscription<void>? _anchorSubscription;
+
+  /// הקישורים המעוגנים בשורה המוצגת, בסדר יציב. ה-href של כל סימון נושא את
+  /// המיקום ברשימה הזו, ולכן [anchorLinkFromUrl] חייב לקרוא את אותה רשימה.
   List<Link> _anchorLinks = const [];
   List<Link> _noteLinks = const [];
   int _anchorHoverGeneration = 0;
@@ -25,10 +28,6 @@ mixin PanelAnchorLinksMixin<T extends StatefulWidget> on State<T> {
 
   /// כיבוי לפי פרופיל התצוגה של הכרטיסייה.
   bool get anchorLinksEnabled;
-
-  /// הקישורים המעוגנים בשורה המוצגת, בסדר יציב. ה-href של כל סימון נושא את
-  /// המיקום ברשימה הזו, ולכן [anchorLinkFromUrl] חייב לקרוא את אותה רשימה.
-  List<Link> get anchorLinks => _anchorLinks;
 
   bool get hasPanelLinks => _anchorLinks.isNotEmpty || _noteLinks.isNotEmpty;
 

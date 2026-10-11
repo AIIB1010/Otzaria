@@ -54,7 +54,6 @@ class AppReportDeliveryResult {
   bool get isQueued => status == AppReportDeliveryStatus.queued;
 
   int? get issueNumber => report.issueNumber;
-  String? get issueUrl => report.issueUrl;
 
   /// נוסף כתגובה ל-issue פתוח עם אותה חתימה.
   bool get merged => report.merged;

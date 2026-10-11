@@ -102,30 +102,6 @@ class PageProgress {
   /// מסיר עמודה מההתקדמות (בעת מחיקת עמודה מהספר)
   void removeColumn(String columnId) => _done.remove(columnId);
 
-  /// Create a copy with modified values
-  PageProgress copyWith({
-    bool? learn,
-    bool? review1,
-    bool? review2,
-    bool? review3,
-  }) {
-    final next = Map<String, bool>.from(_done);
-    void apply(String id, bool? value) {
-      if (value == null) return;
-      if (value) {
-        next[id] = true;
-      } else {
-        next.remove(id);
-      }
-    }
-
-    apply('learn', learn);
-    apply('review1', review1);
-    apply('review2', review2);
-    apply('review3', review3);
-    return PageProgress._fromMap(next);
-  }
-
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
@@ -186,9 +162,6 @@ class BookProgressSummary {
   double get progressPercentage =>
       totalItems > 0 ? completedItems / totalItems : 0.0;
 
-  /// Check if the book is completed
-  bool get isCompleted => completedItems == totalItems && totalItems > 0;
-
   /// Get status text for display based on current cycle
   String getStatusText(int currentCycle) {
     if (totalItems <= 0) {
@@ -231,27 +204,6 @@ class BookProgressSummary {
 
   /// Get status text for display (backward compatibility)
   String get statusText => getStatusText(1);
-
-  /// Create a modified copy of this summary.
-  BookProgressSummary copyWith({
-    int? totalItems,
-    int? completedItems,
-    int? inProgressItems,
-    String? completionDate,
-    DateTime? lastAccessed,
-    bool? isActiveReview,
-  }) {
-    return BookProgressSummary(
-      categoryName: categoryName,
-      bookName: bookName,
-      totalItems: totalItems ?? this.totalItems,
-      completedItems: completedItems ?? this.completedItems,
-      inProgressItems: inProgressItems ?? this.inProgressItems,
-      completionDate: completionDate ?? this.completionDate,
-      lastAccessed: lastAccessed ?? this.lastAccessed,
-      isActiveReview: isActiveReview ?? this.isActiveReview,
-    );
-  }
 
   @override
   bool operator ==(Object other) =>

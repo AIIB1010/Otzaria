@@ -270,18 +270,31 @@ void main() {
   });
 
   group('CalendarCubit Jewish month navigation', () {
+    late CalendarCubit cubit;
+
+    setUp(() async {
+      cubit = CalendarCubit(
+        settingsRepository: _InMemorySettingsRepository(),
+        notificationService: _FakeNotificationService(),
+      );
+      await cubit.initialized;
+    });
+
+    tearDown(() => cubit.close());
+
+    void jumpToJewish(int year, int month, int day) {
+      final date = JewishDate()..setJewishDate(year, month, day);
+      cubit.jumpToDate(date.getGregorianCalendar());
+    }
+
     test(
       'next month handles Adar I -> Adar II and no year rollover to Nissan',
       () {
-        // Create a JewishDate for a known leap year at Adar I (month 12)
-        final jewish = JewishDate();
         // 5784 is a leap year in the 19-year cycle
-        jewish.setJewishDate(5784, 12, 15); // Middle of Adar I
+        jumpToJewish(5784, 12, 15); // Middle of Adar I
 
-        expect(jewish.isJewishLeapYear(), isTrue);
-        expect(jewish.getJewishMonth(), 12);
-
-        final next = computeNextJewishMonth(jewish);
+        cubit.next();
+        final next = cubit.state.currentJewishDate;
         expect(next.getJewishYear(), 5784);
         expect(
           next.getJewishMonth(),
@@ -289,7 +302,8 @@ void main() {
           reason: 'Should move to Adar II same year',
         );
 
-        final afterAdarII = computeNextJewishMonth(next);
+        cubit.next();
+        final afterAdarII = cubit.state.currentJewishDate;
         expect(
           afterAdarII.getJewishYear(),
           5784,
@@ -300,13 +314,10 @@ void main() {
     );
 
     test('previous month handles Nissan -> last Adar in same year', () {
-      // Nissan of a leap year
-      final nissan = JewishDate();
-      nissan.setJewishDate(5784, 1, 7);
-      expect(nissan.isJewishLeapYear(), isTrue);
-      expect(nissan.getJewishMonth(), 1);
+      jumpToJewish(5784, 1, 7);
 
-      final prev = computePreviousJewishMonth(nissan);
+      cubit.previous();
+      final prev = cubit.state.currentJewishDate;
       expect(
         prev.getJewishYear(),
         5784,
@@ -320,10 +331,10 @@ void main() {
     });
 
     test('previous month handles Adar II -> Adar I within leap year', () {
-      final adarII = JewishDate();
-      adarII.setJewishDate(5784, 13, 3);
-      expect(adarII.isJewishLeapYear(), isTrue);
-      final prev = computePreviousJewishMonth(adarII);
+      jumpToJewish(5784, 13, 3);
+
+      cubit.previous();
+      final prev = cubit.state.currentJewishDate;
       expect(prev.getJewishMonth(), 12);
       expect(prev.getJewishYear(), 5784);
     });

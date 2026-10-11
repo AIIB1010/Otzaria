@@ -15,7 +15,6 @@ import 'package:otzaria/utils/file/document_format.dart';
 import 'package:otzaria/utils/text/text_manipulation.dart';
 import 'package:otzaria/utils/file/toc_parser.dart';
 import 'package:otzaria/settings/settings_exports.dart';
-import 'package:otzaria/settings/services/custom_folders/custom_folder.dart';
 import 'package:otzaria/data/constants/database_constants.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
 
@@ -446,50 +445,6 @@ class FileSystemLibraryProvider implements LibraryProvider {
     _categoryIdToPath.clear();
     _isInitialized = false;
     _keyToPath = null;
-  }
-
-  /// Checks if a book is in the personal folder or a custom folder
-  Future<bool> isPersonalBook(
-    String title, {
-    String? category,
-    String? fileType,
-  }) async {
-    String? bookPath;
-    if (category != null && fileType != null) {
-      bookPath = await _getBookPath(title, category.hashCode, fileType);
-    } else {
-      // Fuzzy search
-      final map = await keyToPath;
-      for (final key in map.keys) {
-        if (key.startsWith('$title|')) {
-          bookPath = map[key];
-          break;
-        }
-      }
-    }
-
-    if (bookPath == null) return false;
-
-    // Check if in the built-in personal folder
-    if (bookPath.contains(
-      '${Platform.pathSeparator}אישי${Platform.pathSeparator}',
-    )) {
-      return true;
-    }
-
-    // Check if in any custom folder
-    final customFoldersJson = Settings.getValue<String>(
-      SettingsRepository.keyCustomFolders,
-    );
-    final customFolders = CustomFoldersManager.loadFolders(customFoldersJson);
-
-    for (final folder in customFolders) {
-      if (bookPath.startsWith(folder.path)) {
-        return true;
-      }
-    }
-
-    return false;
   }
 
   /// Gets the path to the personal books folder

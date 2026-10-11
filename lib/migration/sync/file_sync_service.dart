@@ -103,12 +103,6 @@ class FileSyncService {
     _instance = null;
   }
 
-  /// Check if sync is currently running
-  bool get isSyncing => _isSyncing;
-
-  /// Get the repository for external access
-  SeforimRepository get repository => _repository;
-
   /// Recursively delete a category and all its contents from the
   /// custom-folders DB (`user_books.db` or fallback to `_repository`).
   Future<void> _deleteCategoryRecursive(int categoryId) async {
