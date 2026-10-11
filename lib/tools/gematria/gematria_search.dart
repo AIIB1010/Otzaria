@@ -399,10 +399,7 @@ class GimatriaSearch {
             // Remove curly braces with content
             cleanLine = cleanLine.replaceAll(_curlyBracesRe, '');
 
-            // Clean HTML tags
-            final lineWithoutHtml = _cleanHtml(cleanLine);
-
-            final words = _splitWords(lineWithoutHtml);
+            final words = lineWords(cleanLine);
             if (words.isEmpty) continue;
 
             // Search for whole verse only
@@ -621,10 +618,7 @@ class GimatriaSearch {
           // הסרת סוגריים מסולסלות עם תוכן
           cleanLine = cleanLine.replaceAll(_curlyBracesRe, '');
 
-          // ניקוי תגיות HTML מהשורה
-          final lineWithoutHtml = _cleanHtml(cleanLine);
-
-          final words = _splitWords(lineWithoutHtml);
+          final words = lineWords(cleanLine);
           if (words.isEmpty) continue;
 
           // אם מחפשים פסוק שלם, בדוק את כל השורה
@@ -770,6 +764,10 @@ class GimatriaSearch {
 
     return parts.join(', ');
   }
+
+  /// מילות השורה לסריקה, אחרי הסרת HTML.
+  @visibleForTesting
+  static List<String> lineWords(String line) => _splitWords(_cleanHtml(line));
 
   static List<String> _splitWords(String line) =>
       line.split(_wordSeparatorRe).where((w) => w.trim().isNotEmpty).toList();
