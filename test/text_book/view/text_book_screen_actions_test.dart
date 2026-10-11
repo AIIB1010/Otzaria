@@ -459,6 +459,89 @@ void main() {
       },
     );
 
+    testWidgets(
+      'שינוי מדיניות בזמן טעינת ספר מרענן רק אם הספר נטען עם המדיניות הישנה',
+      (tester) async {
+        final book = TextBook(title: 'ספר בדיקה');
+        final bloc = _TestTextBookBloc(_loadedState(book));
+        final tab = TextBookTab(book: book, index: 0, blocOverride: bloc);
+        final tabsBloc = _TestTabsBloc(
+          TabsState(tabs: [tab], currentTabIndex: 0),
+        );
+        final settingsBloc = _TestSettingsBloc(SettingsState.initial());
+        addTearDown(() async {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await bloc.close();
+          await tabsBloc.close();
+          await settingsBloc.close();
+          tab.dispose();
+        });
+        await _setSurfaceSize(tester, const Size(1600, 900));
+        await _pumpTextBookScreen(
+          tester,
+          tab: tab,
+          textBookBloc: bloc,
+          tabsBloc: tabsBloc,
+          settingsBloc: settingsBloc,
+          focusRepository: focusRepository,
+          shamorZachorDataProvider: shamorZachorDataProvider,
+          shamorZachorProgressProvider: shamorZachorProgressProvider,
+          bookmarkBloc: bookmarkBloc,
+          personalNotesBloc: personalNotesBloc,
+          tourCubit: tourCubit,
+          isInCombinedView: false,
+        );
+        bloc.receivedEvents.clear();
+
+        final oldSettings = settingsBloc.state;
+        final newSettings = oldSettings.copyWith(
+          textDisplayPolicy: oldSettings.textDisplayPolicy.merged(
+            TextDisplayBookClass.general,
+            const TextDisplaySlot(
+              target: TextTarget.body,
+              view: TextView.regular,
+              channel: TextChannel.export,
+            ),
+            const TextDisplayPatch(anchorMarkers: MarkVisibility.hide),
+          ),
+        );
+        bloc.emitStateForTest(TextBookLoading(book, 0, false, const []));
+        settingsBloc.emitStateForTest(newSettings);
+        await tester.pump();
+
+        bloc.emitStateForTest(
+          _loadedState(book).copyWith(
+            displayPolicy: newSettings.textDisplayPolicy,
+          ),
+        );
+        await tester.pump();
+        expect(bloc.receivedEvents.whereType<LoadContent>(), isEmpty);
+
+        final latestSettings = newSettings.copyWith(
+          textDisplayPolicy: newSettings.textDisplayPolicy.merged(
+            TextDisplayBookClass.general,
+            const TextDisplaySlot(
+              target: TextTarget.body,
+              view: TextView.regular,
+              channel: TextChannel.copy,
+            ),
+            const TextDisplayPatch(anchorMarkers: MarkVisibility.hide),
+          ),
+        );
+        bloc.emitStateForTest(TextBookLoading(book, 0, false, const []));
+        settingsBloc.emitStateForTest(latestSettings);
+        await tester.pump();
+        bloc.emitStateForTest(
+          _loadedState(book).copyWith(
+            displayPolicy: newSettings.textDisplayPolicy,
+          ),
+        );
+        await tester.pump();
+
+        expect(bloc.receivedEvents.whereType<LoadContent>(), hasLength(1));
+      },
+    );
+
     testWidgets('הלחצן למהדורה המובנית כתוב "פתח בתצוגת PDF"', (
       tester,
     ) async {
