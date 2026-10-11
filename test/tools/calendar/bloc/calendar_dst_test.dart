@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/tools/calendar/bloc/calendar_cubit.dart';
+import 'package:otzaria/tools/calendar/dialogs/calendar_event_dialog.dart';
 import 'package:otzaria/tools/calendar/services/google_calendar_service.dart';
 import 'package:otzaria/tools/calendar/services/notification_service.dart';
 import 'package:otzaria/tools/calendar/widgets/calendar_main_panel.dart';
@@ -117,6 +118,60 @@ void main() {
       transition: CalendarDayTransition.sunset,
     );
     expect(today, _plusDays(longDay, 1));
+  });
+
+  group('Week-long range across the 23-hour day', skip: noDst, () {
+    DateTime start() => _plusDays(shortDay!, -3);
+    CustomEvent weekly() => CustomEvent(
+      id: 'e',
+      title: 'e',
+      description: '',
+      createdAt: start(),
+      baseGregorianDate: start(),
+      baseJewishYear: 5786,
+      baseJewishMonth: 1,
+      baseJewishDay: 1,
+      recurrenceType: RecurrenceType.weekly,
+      endGregorianDate: _plusDays(start(), 7),
+    );
+
+    test('legacy weekly end date is migrated to recurrence end', () {
+      final json = weekly().toJson()..remove('recurrenceEndDate');
+      final migrated = CustomEvent.fromJson(json);
+      expect(migrated.recurrenceEndDate, _plusDays(start(), 7));
+      expect(migrated.endGregorianDate, isNull);
+    });
+
+    testWidgets('dialog rejects a range as long as the week', (tester) async {
+      tester.view.devicePixelRatio = 1.0;
+      await tester.binding.setSurfaceSize(const Size(1200, 900));
+      addTearDown(() {
+        tester.view.resetDevicePixelRatio();
+        tester.binding.setSurfaceSize(null);
+      });
+      CalendarEventDialogResult? result;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () async => result = await showCalendarEventDialog(
+                  context: context,
+                  state: CalendarState.initial(),
+                  existingEvent: weekly(),
+                ),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('שמור שינויים'));
+      await tester.pumpAndSettle();
+      expect(result, isNull);
+    });
   });
 
   group('Week view across a DST change', skip: noDst, () {
