@@ -69,13 +69,13 @@ bool isDuplicateChapterChild(
   TocEntry child,
   List<String> content,
 ) {
-  final preview = _previewForChild(child, content);
+  // נבדק לפני התצוגה המקדימה — היא יקרה ו-_findPos עוברת על כל הפסוקים.
   if (child.index != chapter.index) {
     return false;
   }
   final normalizedChapter = chapter.text.trim();
   final normalizedChild = child.text.trim();
-  final normalizedPreview = preview.trim();
+  final normalizedPreview = _previewForChild(child, content).trim();
   return normalizedChild == normalizedChapter ||
       normalizedPreview == normalizedChapter ||
       normalizedPreview.startsWith(normalizedChapter);
