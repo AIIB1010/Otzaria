@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
+import 'package:otzaria/tabs/bloc/tabs_event.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,6 +20,7 @@ import 'package:otzaria/settings/engine/settings_state.dart';
 import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
 import 'package:otzaria/tabs/bloc/tabs_state.dart';
 import 'package:otzaria/tabs/models/text_tab.dart';
+import 'package:otzaria/tabs/models/combined_tab.dart';
 import 'package:otzaria/tabs/reading_screen.dart';
 import 'package:otzaria/history/bloc/history_bloc.dart';
 import 'package:otzaria/history/bloc/history_event.dart';
@@ -46,6 +49,7 @@ void main() {
   Future<void> pumpReadingScreen(
     WidgetTester tester, {
     int tabCount = 3,
+    TextDirection direction = TextDirection.rtl,
   }) async {
     await Settings.init(cacheProvider: MemoryCacheProvider());
     DataRepository.instance.library = Future.value(
@@ -109,7 +113,12 @@ void main() {
             BlocProvider<TourCubit>.value(value: tourCubit),
             BlocProvider<HistoryBloc>.value(value: historyBloc),
           ],
-          child: const MaterialApp(home: ReadingScreen()),
+          child: MaterialApp(
+            home: Directionality(
+              textDirection: direction,
+              child: const ReadingScreen(),
+            ),
+          ),
         ),
       ),
     );
@@ -145,6 +154,194 @@ void main() {
     );
   });
 
+  for (final touch in [true, false]) {
+    testWidgets(
+      '${touch ? 'touch' : 'desktop'} לשונית הנכנסת בהחלקה מקבלת מיד את מדדי החלון',
+      (tester) async {
+        ReadingScreen.debugForceTouchTabs = touch;
+        addTearDown(() => ReadingScreen.debugForceTouchTabs = null);
+        await pumpReadingScreen(tester);
+        tester.view.devicePixelRatio = 2;
+        tester.view.physicalSize = const Size(2000, 1400);
+        tester.view.padding = const FakeViewPadding(top: 40);
+        tester.view.viewPadding = const FakeViewPadding(top: 40);
+        tester.platformDispatcher.textScaleFactorTestValue = 1.1;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        await tester.pump();
+        final controller = tester
+            .widget<PageView>(find.byKey(const ValueKey('normal_tab_view')))
+            .controller!;
+        if (touch) {
+          controller.position.jumpTo(250);
+        } else {
+          final detector = tester.widget<RawGestureDetector>(
+            find.byWidgetPredicate(
+              (w) => w is RawGestureDetector && w.child is PageView,
+            ),
+          );
+          final factory = detector.gestures[HorizontalDragGestureRecognizer]!;
+          final recognizer =
+              factory.constructor() as HorizontalDragGestureRecognizer;
+          factory.initializer(recognizer);
+          addTearDown(recognizer.dispose);
+          recognizer.onStart!(DragStartDetails());
+          recognizer.onUpdate!(
+            DragUpdateDetails(
+              delta: const Offset(250, 0),
+              globalPosition: Offset.zero,
+            ),
+          );
+        }
+        await tester.pump();
+        final incoming = find.byWidgetPredicate(
+          (w) => w is TextBookViewerBloc && identical(w.tab, tabs[1]),
+          skipOffstage: false,
+        );
+        final scaffold = find.descendant(
+          of: incoming,
+          matching: find.byType(Scaffold, skipOffstage: false),
+        );
+        expect(controller.page, closeTo(0.25, 0.001));
+        expect(tabsBloc.state.currentTabIndex, 0);
+        expect(
+          tester
+              .getRect(scaffold.first)
+              .overlaps(const Rect.fromLTWH(0, 0, 1000, 700)),
+          isTrue,
+        );
+        final data = MediaQuery.of(tester.element(scaffold.first));
+        expect(
+          {
+            'size': data.size,
+            'padding': data.padding,
+            'ratio': data.devicePixelRatio,
+            'textScale': data.textScaler.scale(10),
+          },
+          {
+            'size': const Size(1000, 700),
+            'padding': const EdgeInsets.only(top: 20),
+            'ratio': 2.0,
+            'textScale': 11.0,
+          },
+        );
+      },
+    );
+  }
+
+  for (final direction in TextDirection.values) {
+    testWidgets('החלקה ארוכה, חזרה וביטול שומרים מדדים חיים ($direction)', (
+      tester,
+    ) async {
+      ReadingScreen.debugForceTouchTabs = false;
+      addTearDown(() => ReadingScreen.debugForceTouchTabs = null);
+      await pumpReadingScreen(tester, tabCount: 4, direction: direction);
+      final controller = pageController(tester);
+      final recognizer = desktopSwipe(tester);
+      final sign = direction == TextDirection.rtl ? 1.0 : -1.0;
+      tester.view.physicalSize = const Size(1000, 700);
+      await tester.pump();
+      recognizer.onStart!(DragStartDetails());
+      recognizer.onUpdate!(
+        DragUpdateDetails(
+          delta: Offset(sign * 1250, 0),
+          globalPosition: Offset.zero,
+        ),
+      );
+      await tester.pump();
+      expect(controller.page, closeTo(1.25, 0.001));
+      expect(tabsBloc.state.currentTabIndex, 0);
+      tester.view.physicalSize = const Size(900, 650);
+      await tester.pump();
+      for (final index in [0, 1, 2]) {
+        expect(bookMediaQuery(tester, tabs[index]).size, const Size(900, 650));
+      }
+      expect(bookMediaQuery(tester, tabs[3]).size, const Size(1600, 900));
+      recognizer.onUpdate!(
+        DragUpdateDetails(
+          delta: Offset(-sign * 900, 0),
+          globalPosition: Offset.zero,
+        ),
+      );
+      await tester.pump();
+      expect(controller.page, closeTo(0.25, 0.001));
+      recognizer.onCancel!();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 35));
+      expect(controller.page, inExclusiveRange(0, 0.25));
+      tester.view.physicalSize = const Size(800, 600);
+      await tester.pump();
+      for (final index in [0, 1]) {
+        expect(bookMediaQuery(tester, tabs[index]).size, const Size(800, 600));
+      }
+      await tester.pumpAndSettle();
+      expect(controller.page, 0);
+      var backgroundRebuilds = 0;
+      debugOnRebuildDirtyWidget = (element, _) {
+        if (_isInsideBackgroundBook(element)) backgroundRebuilds++;
+      };
+      addTearDown(() => debugOnRebuildDirtyWidget = null);
+      tester.view.physicalSize = const Size(700, 500);
+      await tester.pump();
+      debugOnRebuildDirtyWidget = null;
+      expect(backgroundRebuilds, 0);
+      expect(bookMediaQuery(tester, tabs[1]).size, const Size(800, 600));
+    });
+
+    testWidgets('הלשונית היוצאת מתעדכנת במהלך אנימציית מעבר ($direction)', (
+      tester,
+    ) async {
+      ReadingScreen.debugForceTouchTabs = false;
+      addTearDown(() => ReadingScreen.debugForceTouchTabs = null);
+      await pumpReadingScreen(tester, direction: direction);
+      final controller = pageController(tester);
+      final recognizer = desktopSwipe(tester);
+      final sign = direction == TextDirection.rtl ? 1.0 : -1.0;
+      recognizer.onStart!(DragStartDetails());
+      recognizer.onUpdate!(
+        DragUpdateDetails(
+          delta: Offset(sign * 1200, 0),
+          globalPosition: Offset.zero,
+        ),
+      );
+      await tester.pump();
+      expect(controller.page, closeTo(0.75, 0.001));
+      recognizer.onEnd!(DragEndDetails());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 35));
+      expect(tabsBloc.state.currentTabIndex, 1);
+      expect(controller.page, inExclusiveRange(0.75, 1));
+      tester.view.physicalSize = const Size(1000, 700);
+      await tester.pump();
+      for (final index in [0, 1]) {
+        expect(bookMediaQuery(tester, tabs[index]).size, const Size(1000, 700));
+      }
+      expect(bookMediaQuery(tester, tabs[2]).size, const Size(1600, 900));
+      await tester.pumpAndSettle();
+      expect(controller.page, 1);
+    });
+  }
+
+  testWidgets('שתי חלוניות של לשונית מפוצלת פעילה מקבלות מדדים חיים', (
+    tester,
+  ) async {
+    await pumpReadingScreen(tester);
+    tabsBloc.emit(
+      TabsState(
+        tabs: [
+          CombinedTab(rightTab: tabs[0], leftTab: tabs[1]),
+          tabs[2],
+        ],
+        currentTabIndex: 0,
+      ),
+    );
+    await tester.pumpAndSettle();
+    tester.view.physicalSize = const Size(1000, 700);
+    await tester.pump();
+    for (final index in [0, 1]) {
+      expect(bookMediaQuery(tester, tabs[index]).size, const Size(1000, 700));
+    }
+    expect(bookMediaQuery(tester, tabs[2]).size, const Size(1600, 900));
+  });
   testWidgets('טאב רקע מוצג בגודל החלון החדש כשעוברים אליו', (tester) async {
     await pumpReadingScreen(tester);
 
@@ -162,6 +359,35 @@ void main() {
       const Size(1000, 700),
     );
   });
+}
+
+PageController pageController(WidgetTester tester) => tester
+    .widget<PageView>(find.byKey(const ValueKey('normal_tab_view')))
+    .controller!;
+
+MediaQueryData bookMediaQuery(WidgetTester tester, TextBookTab tab) {
+  final book = find.byWidgetPredicate(
+    (widget) => widget is TextBookViewerBloc && identical(widget.tab, tab),
+    skipOffstage: false,
+  );
+  final scaffold = find.descendant(
+    of: book,
+    matching: find.byType(Scaffold, skipOffstage: false),
+  );
+  return MediaQuery.of(tester.element(scaffold.first));
+}
+
+HorizontalDragGestureRecognizer desktopSwipe(WidgetTester tester) {
+  final detector = tester.widget<RawGestureDetector>(
+    find.byWidgetPredicate(
+      (widget) => widget is RawGestureDetector && widget.child is PageView,
+    ),
+  );
+  final factory = detector.gestures[HorizontalDragGestureRecognizer]!;
+  final recognizer = factory.constructor() as HorizontalDragGestureRecognizer;
+  factory.initializer(recognizer);
+  addTearDown(recognizer.dispose);
+  return recognizer;
 }
 
 Future<void> showTab(WidgetTester tester, int index) async {
@@ -263,6 +489,13 @@ class _TestSettingsBloc extends Bloc<SettingsEvent, SettingsState>
 
 class _TestTabsBloc extends Cubit<TabsState> implements TabsBloc {
   _TestTabsBloc(super.initialState);
+
+  @override
+  void add(TabsEvent event) {
+    if (event is SetCurrentTab) {
+      emit(state.copyWith(currentTabIndex: event.index));
+    }
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
