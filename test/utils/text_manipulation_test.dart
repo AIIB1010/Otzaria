@@ -1283,5 +1283,36 @@ Future<void> main() async {
         'א < ב <small>(ג)</small> ד',
       );
     });
+
+    test('כמה פותחים לפני סוגר אחד - רק הפנימי נעטף', () {
+      expect(
+        formatTextWithParentheses('(א (ב (ג) ד'),
+        '(א (ב <small>(ג)</small> ד',
+      );
+    });
+
+    test('סוגר בודד לפני הסוגריים אינו משפיע', () {
+      expect(
+        formatTextWithParentheses('א) ב (ג)'),
+        'א) ב <small>(ג)</small>',
+      );
+    });
+
+    test('שני זוגות פנימיים בתוך חיצוני נעטפים בנפרד', () {
+      expect(
+        formatTextWithParentheses('(א (ב) (ג))'),
+        '(א <small>(ב)</small> <small>(ג)</small>)',
+      );
+    });
+
+    test('שורה ארוכה עם פותחים רבים בלי סוגר מעובדת בזמן ליניארי', () {
+      final text = '${'ראה (שם ' * 2000}סוף (א)';
+      final stopwatch = Stopwatch()..start();
+      final result = formatTextWithParentheses(text);
+      stopwatch.stop();
+
+      expect(result, '${'ראה (שם ' * 2000}סוף <small>(א)</small>');
+      expect(stopwatch.elapsedMilliseconds, lessThan(300));
+    });
   });
 }
