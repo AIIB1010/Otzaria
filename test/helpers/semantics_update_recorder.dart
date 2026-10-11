@@ -67,9 +67,6 @@ class SemanticsUpdateRecorder {
   /// כל העדכונים שנדחו היו נדחים על ידי המנוע.
   final List<SemanticsUpdateViolation> violations = [];
 
-  /// מספר העדכונים שהוקלטו.
-  int get updateCount => _updates;
-
   /// מנקה את המודל ואת הממצאים — לתחילת תרחיש חדש באותו קובץ בדיקה.
   void reset() {
     _children.clear();

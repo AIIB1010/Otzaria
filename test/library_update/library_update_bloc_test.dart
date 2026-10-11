@@ -32,10 +32,6 @@ class _FakeService implements LibraryUpdateService {
   });
 
   @override
-  Future<RecoveryResult> recoverIfNeeded() async =>
-      const RecoveryResult(RecoveryAction.none);
-
-  @override
   Future<LibraryUpdatePlan> checkForUpdate({
     required bool allowPrerelease,
   }) async {
@@ -225,10 +221,6 @@ class _GatedAtApplyService implements LibraryUpdateService {
   });
 
   @override
-  Future<RecoveryResult> recoverIfNeeded() async =>
-      const RecoveryResult(RecoveryAction.none);
-
-  @override
   Future<LibraryUpdatePlan> checkForUpdate({
     required bool allowPrerelease,
   }) async => plan;
@@ -270,10 +262,6 @@ class _GatedAtApplyService implements LibraryUpdateService {
 class _VerifyThenCommitService implements LibraryUpdateService {
   final LibraryUpdatePlan plan;
   _VerifyThenCommitService(this.plan);
-
-  @override
-  Future<RecoveryResult> recoverIfNeeded() async =>
-      const RecoveryResult(RecoveryAction.none);
 
   @override
   Future<LibraryUpdatePlan> checkForUpdate({
@@ -349,10 +337,6 @@ class _GatedService implements LibraryUpdateService {
   final LibraryUpdatePlan plan;
   final Completer<void> gate;
   _GatedService(this.plan, this.gate);
-
-  @override
-  Future<RecoveryResult> recoverIfNeeded() async =>
-      const RecoveryResult(RecoveryAction.none);
 
   @override
   Future<LibraryUpdatePlan> checkForUpdate({

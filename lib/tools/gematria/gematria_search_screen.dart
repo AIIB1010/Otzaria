@@ -129,17 +129,6 @@ class GematriaSearchScreenState extends State<GematriaSearchScreen>
     );
   }
 
-  void requestKeyboardFocus() {
-    if (!mounted || !_searchFocusNode.canRequestFocus) return;
-    _searchFocusNode.requestFocus();
-  }
-
-  void closeTransientPanels() {
-    if (!_showingSettings) return;
-    setState(() => _showingSettings = false);
-    _rerunSearchIfNeeded();
-  }
-
   @override
   void deactivate() {
     if (_showingSettings) {

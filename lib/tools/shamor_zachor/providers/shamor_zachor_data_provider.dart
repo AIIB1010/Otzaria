@@ -565,12 +565,8 @@ class ShamorZachorDataProvider with ChangeNotifier {
     });
   }
 
-  // Other methods (retry, clearError, etc)
+  // Other methods (retry, etc)
   void retry() => loadAllData();
-  void clearError() {
-    _error = null;
-    notifyListeners();
-  }
 
   /// Add a book to Shamor Zachor tracking
   /// This saves the book ID to a tracked books list in Hive-backed settings

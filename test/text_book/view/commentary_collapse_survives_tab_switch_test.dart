@@ -158,8 +158,6 @@ class _TestTextBookBloc extends Bloc<TextBookEvent, TextBookState>
     on<TextBookEvent>((event, emit) {});
   }
 
-  void emitStateForTest(TextBookState state) => emit(state);
-
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

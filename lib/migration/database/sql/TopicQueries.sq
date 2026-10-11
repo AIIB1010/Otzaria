@@ -20,12 +20,3 @@ linkBookTopic:
 INSERT INTO book_topic (bookId, topicId)
 VALUES (?, ?)
 ON CONFLICT (bookId, topicId) DO NOTHING;
-
-unlinkBookTopic:
-DELETE FROM book_topic WHERE bookId = ? AND topicId = ?;
-
-deleteAllBookTopics:
-DELETE FROM book_topic WHERE bookId = ?;
-
-countBookTopics:
-SELECT COUNT(*) FROM book_topic WHERE bookId = ?;

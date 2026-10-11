@@ -102,7 +102,6 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
     on<RerunSearch>((_, _) => _reSearch());
     on<UpdateDistance>(_onUpdateDistance);
     on<UpdateDistanceWithoutSearch>(_onUpdateDistanceWithoutSearch);
-    on<UpdateProximityScope>(_onUpdateProximityScope);
     on<UpdateProximityScopeWithoutSearch>(_onUpdateProximityScopeWithoutSearch);
     on<UpdateWordMatchMode>(_onUpdateWordMatchMode);
     on<UpdateWordMatchModeWithoutSearch>(_onUpdateWordMatchModeWithoutSearch);
@@ -112,7 +111,6 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
     on<UpdatePluginSearchSelectionsWithoutSearch>(
       _onUpdatePluginSearchSelectionsWithoutSearch,
     );
-    on<UpdateBooksToSearch>(_onUpdateBooksToSearch);
     on<AddFacet>(_onAddFacet);
     on<RemoveFacet>(_onRemoveFacet);
     on<SetFacet>(_onSetFacet);
@@ -189,9 +187,6 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
     final shouldSkipFacetRecount =
         state.facetCounts.isNotEmpty &&
         recountSignature == _facetCountsSignature;
-
-    // Clear global cache for new search
-    TantivyDataProvider.clearGlobalCache();
 
     emit(
       state.copyWith(
@@ -542,16 +537,6 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
     _updateDistanceConfiguration(event.distance, emit);
   }
 
-  void _onUpdateProximityScope(
-    UpdateProximityScope event,
-    Emitter<SearchState> emit,
-  ) {
-    if (!_updateProximityScopeConfiguration(event.scope, emit)) {
-      return;
-    }
-    _reSearch();
-  }
-
   void _onUpdateProximityScopeWithoutSearch(
     UpdateProximityScopeWithoutSearch event,
     Emitter<SearchState> emit,
@@ -698,14 +683,6 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
 
     emit(state.copyWith(configuration: newConfig));
     return true;
-  }
-
-  void _onUpdateBooksToSearch(
-    UpdateBooksToSearch event,
-    Emitter<SearchState> emit,
-  ) {
-    emit(state.copyWith(booksToSearch: event.books));
-    _reSearch();
   }
 
   Future<void> _onAddFacet(

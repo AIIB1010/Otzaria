@@ -47,7 +47,7 @@ class DatabaseGenerator {
   final Set<String> _processedPriorityBookKeys = {};
 
   /// Overall progress across books
-  int _totalBooksToProcess = 0;
+  final int _totalBooksToProcess = 0;
   int _processedBooksCount = 0;
 
   /// Book contents cache: maps library-relative key -> list of lines
@@ -56,70 +56,10 @@ class DatabaseGenerator {
   DatabaseGenerator(this.sourceDirectory, this.repository, {this.onProgress})
     : _libraryRoot = sourceDirectory;
 
-  Future<void> _restoreDurability() async {
-    await repository.setSynchronous('NORMAL');
-    await repository.setJournalMode('WAL');
-  }
-
   /// Initializes the generator for sync operations where generate() is not called.
   /// [libraryRoot] Optional root path for library-relative calculations.
   void initializeForSync({String? libraryRoot}) {
     _libraryRoot = libraryRoot ?? sourceDirectory;
-  }
-
-  /// Generates the database by processing metadata, directories, and links.
-  /// This is the main entry point for the database generation process.
-  Future<void> generate() async {
-    try {
-      // Disable foreign keys for better performance
-      await _disableForeignKeys();
-
-      // יצירה מאפס: קריסה באמצע מחייבת ממילא יצירה מחדש, לכן מוותרים על עמידות.
-      await repository.setSynchronous('OFF');
-      await repository.setJournalMode('MEMORY');
-
-      // Process hierarchy - expect sourceDirectory to be the parent folder containing "אוצריא"
-      final libraryPath = path.join(sourceDirectory, 'אוצריא');
-
-      final libraryDir = Directory(libraryPath);
-      if (!await libraryDir.exists()) {
-        throw StateError(
-          'התיקייה "אוצריא" לא נמצאה בתיקייה שנבחרה. נא לבחור את תיקיית האב של אוצריא.',
-        );
-      }
-
-      _libraryRoot = libraryPath;
-
-      // Estimate total number of books for progress tracking
-      _totalBooksToProcess = await _countFiles(libraryPath);
-
-      // Preload all book contents into RAM
-      await processDirectory(libraryPath, null, 0);
-
-      // Process links
-      await processLinks();
-
-      // Build category closure table
-      await repository.rebuildCategoryClosure();
-
-      // Restore PRAGMAs
-      await _enableForeignKeys();
-      await _restoreDurability();
-    } catch (e, stackTrace) {
-      // Restore settings on error
-      try {
-        await _enableForeignKeys();
-        await _restoreDurability();
-      } catch (innerEx) {
-        _log.warning(
-          'Error restoring database settings after failure',
-          innerEx,
-        );
-      }
-
-      _log.severe('Error during generation', e, stackTrace);
-      rethrow;
-    }
   }
 
   /// Processes a directory recursively, creating categories and books.
@@ -814,32 +754,6 @@ class DatabaseGenerator {
     final id = await repository.insertSource(resolvedSourceName, -1);
     _sourceNameToId[resolvedSourceName] = id;
     return id;
-  }
-
-  /// Count txt files in directory for progress tracking
-  Future<int> _countFiles(String dirPath) async {
-    try {
-      final dir = Directory(dirPath);
-      var count = 0;
-      await for (final entity in dir.list(recursive: true)) {
-        if (entity is File && await isSupportedBookFileByContent(entity.path)) {
-          count++;
-        }
-      }
-      return count;
-    } catch (e) {
-      return 0;
-    }
-  }
-
-  /// Disables foreign key constraints
-  Future<void> _disableForeignKeys() async {
-    await repository.executeRawQuery('PRAGMA foreign_keys = OFF');
-  }
-
-  /// Re-enables foreign key constraints
-  Future<void> _enableForeignKeys() async {
-    await repository.executeRawQuery('PRAGMA foreign_keys = ON');
   }
 }
 

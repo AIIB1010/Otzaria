@@ -26,9 +26,6 @@ import 'package:otzaria_search_engine/otzaria_search_engine.dart';
 
 import '../test_helpers/memory_cache_provider.dart';
 
-class MockSearchBloc extends MockBloc<SearchEvent, SearchState>
-    implements SearchBloc {}
-
 class MockSettingsBloc extends MockBloc<SettingsEvent, SettingsState>
     implements SettingsBloc {}
 

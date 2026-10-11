@@ -18,15 +18,6 @@ INSERT INTO book_author (bookId, authorId)
 VALUES (?, ?)
 ON CONFLICT (bookId, authorId) DO NOTHING;
 
-unlinkBookAuthor:
-DELETE FROM book_author WHERE bookId = ? AND authorId = ?;
-
-deleteAllBookAuthors:
-DELETE FROM book_author WHERE bookId = ?;
-
-countBookAuthors:
-SELECT COUNT(*) FROM book_author WHERE bookId = ?;
-
 selectAllBookTitleToGeneration:
 SELECT b.title, GROUP_CONCAT(DISTINCT g.name) as generationName
 FROM book b

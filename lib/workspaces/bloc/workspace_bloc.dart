@@ -52,7 +52,6 @@ class WorkspaceBloc extends Bloc<WorkspaceEvent, WorkspaceState> {
     on<RemoveWorkspace>(_onRemoveWorkspace, transformer: sequential());
     on<SwitchToWorkspace>(_onSwitchToWorkspace, transformer: sequential());
     on<RenameWorkspace>(_onRenameWorkspace, transformer: sequential());
-    on<ClearWorkspaces>(_onClearWorkspaces, transformer: sequential());
     on<UpdateCurrentWorkspaceTabs>(
       _onUpdateCurrentWorkspaceTabs,
       transformer: sequential(),
@@ -297,37 +296,6 @@ class WorkspaceBloc extends Bloc<WorkspaceEvent, WorkspaceState> {
     } catch (e) {
       UiSnack.showError(NotesMessages.workspaceSaveFailed);
       emit(state.copyWith(error: 'Failed to rename workspace: $e'));
-    }
-  }
-
-  Future<void> _onClearWorkspaces(
-    ClearWorkspaces event,
-    Emitter<WorkspaceState> emit,
-  ) async {
-    try {
-      final defaultWorkspace = Workspace(
-        name: "ברירת מחדל",
-        tabs: _cloneTabs(event.currentTabs),
-        activeTabIndex: event.currentTabIndex,
-        activePane: event.activePane,
-      );
-
-      // "מחק את כל השולחנות" פירושו הכול, גם מה שחלון אחר הוסיף.
-      final saved = await _repository.mutateWorkspaces(
-        (_) => [defaultWorkspace],
-      );
-      await _repository.saveActiveWorkspaceId(defaultWorkspace.id);
-
-      emit(
-        state.copyWith(
-          workspaces: saved,
-          activeWorkspaceId: defaultWorkspace.id,
-          clearError: true,
-        ),
-      );
-    } catch (e) {
-      UiSnack.showError(NotesMessages.workspaceSaveFailed);
-      emit(state.copyWith(error: 'Failed to clear workspaces: $e'));
     }
   }
 

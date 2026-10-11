@@ -350,11 +350,6 @@ class TextRendererService {
   static String stripHtml(String text) {
     return utils.stripHtmlIfNeeded(text);
   }
-
-  /// קיצור טקסט לאורך מקסימלי
-  static String truncate(String text, int maxLength) {
-    return utils.truncate(text, maxLength);
-  }
 }
 
 class _RenderCacheKey {

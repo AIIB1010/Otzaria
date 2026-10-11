@@ -1,5 +1,3 @@
-import 'package:kosher_dart/kosher_dart.dart';
-
 /// Utility class for Hebrew text formatting and conversions.
 class HebrewUtils {
   HebrewUtils._();
@@ -93,36 +91,6 @@ class HebrewUtils {
     }
 
     return buffer.toString();
-  }
-
-  /// Format a Hebrew year with geresh/gershayim, supporting thousands.
-  static String formatHebrewYear(int year) {
-    final thousands = year ~/ 1000;
-    final remainder = year % 1000;
-
-    final formatter = HebrewDateFormatter()..hebrewFormat = true;
-    final formattedRemainder = remainder == 0
-        ? ''
-        : formatter
-              .formatHebrewNumber(remainder)
-              .replaceAll('"', '')
-              .replaceAll('״', '')
-              .replaceAll("'", '')
-              .replaceAll('׳', '');
-
-    final remainderWithMarks = formattedRemainder.isEmpty
-        ? ''
-        : _addGershayim(formattedRemainder);
-
-    if (thousands > 0) {
-      final thousandsPart = '${intToHebrewWithoutQuotes(thousands)}׳';
-      if (remainderWithMarks.isEmpty) {
-        return thousandsPart;
-      }
-      return '$thousandsPart$remainderWithMarks';
-    }
-
-    return remainderWithMarks;
   }
 
   static String _addGershayim(String value) {

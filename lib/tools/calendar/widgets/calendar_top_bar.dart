@@ -56,7 +56,6 @@ class CalendarTopBar extends StatefulWidget {
   final VoidCallback onToggleEventsPanel;
   final VoidCallback onToggleSettingsPanel;
   final VoidCallback onPrint;
-  final VoidCallback onToggleSidebar;
   final bool isJumpToDateSearchOpen;
   final VoidCallback onToggleJumpToDateSearch;
   final VoidCallback onCloseJumpToDateSearch;
@@ -77,7 +76,6 @@ class CalendarTopBar extends StatefulWidget {
     required this.onToggleEventsPanel,
     required this.onToggleSettingsPanel,
     required this.onPrint,
-    required this.onToggleSidebar,
     required this.isJumpToDateSearchOpen,
     required this.onToggleJumpToDateSearch,
     required this.onCloseJumpToDateSearch,

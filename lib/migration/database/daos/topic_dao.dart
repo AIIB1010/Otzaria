@@ -40,22 +40,4 @@ class TopicDao {
     db.execute(_queries['linkBookTopic']!, [bookId, topicId]);
     return db.lastInsertRowId;
   }
-
-  Future<int> unlinkBookTopic(int bookId, int topicId) async {
-    final db = await database;
-    db.execute(_queries['unlinkBookTopic']!, [bookId, topicId]);
-    return db.updatedRows;
-  }
-
-  Future<int> deleteAllBookTopics(int bookId) async {
-    final db = await database;
-    db.execute(_queries['deleteAllBookTopics']!, [bookId]);
-    return db.updatedRows;
-  }
-
-  Future<int> countBookTopics(int bookId) async {
-    final db = await database;
-    return firstIntValue(db.select(_queries['countBookTopics']!, [bookId])) ??
-        0;
-  }
 }

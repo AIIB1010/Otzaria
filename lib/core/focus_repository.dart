@@ -273,14 +273,6 @@ class FocusRepository {
     });
   }
 
-  void dispose() {
-    _resizeDebounceTimer?.cancel();
-    librarySearchFocusNode.dispose();
-    findRefSearchFocusNode.dispose();
-    librarySearchController.dispose();
-    findRefSearchController.dispose();
-  }
-
   /// מאפס את כל מצב ה-restorers לצורך בדיקות בלבד.
   ///
   /// אין לקרוא לזה מחוץ לקבצי test.

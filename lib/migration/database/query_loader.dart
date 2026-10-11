@@ -33,7 +33,6 @@ class QueryLoader {
       'Database.sq',
       'DocxTextCacheQueries.sq',
       'LineQueries.sq',
-      'LineRefQueries.sq',
       'LinkQueries.sq',
       'PdfAnchorCacheQueries.sq',
       'PdfOutlineCacheQueries.sq',

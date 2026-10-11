@@ -60,7 +60,7 @@ void main() {
       await store.saveLibraries([library]);
       await store.saveFolders([r'C:\dbs']);
 
-      expect(store.loadLibraries(), [library]);
+      expect(store.loadLibrariesOrNull(), [library]);
       expect(store.loadFolders(), [r'C:\dbs']);
     });
 
@@ -70,7 +70,7 @@ void main() {
         SettingsRepository.keyAttachedLibraries,
         '[{"displayName": "בלי slug"}, ${jsonEncode(good.toJson())}]',
       );
-      expect(store.loadLibraries(), [good]);
+      expect(store.loadLibrariesOrNull(), [good]);
     });
 
     test('JSON שבור — רשימה ריקה', () async {
@@ -82,7 +82,6 @@ void main() {
         SettingsRepository.keyAttachedLibraryFolders,
         '[1, "", "C:/ok"]',
       );
-      expect(store.loadLibraries(), isEmpty);
       expect(store.loadLibrariesOrNull(), isNull);
       expect(store.loadFolders(), ['C:/ok']);
     });

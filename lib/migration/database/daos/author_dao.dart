@@ -41,24 +41,6 @@ class AuthorDao {
     return db.lastInsertRowId;
   }
 
-  Future<int> unlinkBookAuthor(int bookId, int authorId) async {
-    final db = await database;
-    db.execute(_queries['unlinkBookAuthor']!, [bookId, authorId]);
-    return db.updatedRows;
-  }
-
-  Future<int> deleteAllBookAuthors(int bookId) async {
-    final db = await database;
-    db.execute(_queries['deleteAllBookAuthors']!, [bookId]);
-    return db.updatedRows;
-  }
-
-  Future<int> countBookAuthors(int bookId) async {
-    final db = await database;
-    return firstIntValue(db.select(_queries['countBookAuthors']!, [bookId])) ??
-        0;
-  }
-
   /// מחזירה מיפוי title ← שם תקופה לכל הספרים שיש להם מחבר עם תקופה ידועה
   Future<Map<String, String>> getAllBookTitleToGeneration() async {
     if (!(await _db.capabilities).hasGenerations) return {};
