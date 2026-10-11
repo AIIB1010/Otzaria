@@ -7,6 +7,7 @@ import 'package:otzaria/tabs/models/tab.dart';
 import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/utils/text/ref_helper.dart';
+import 'package:otzaria/utils/ui/reading_left_pane_policy.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 /// כתובת השורה עם שם הספר: ה-heRef המלא (עד הפסוק) כשיש, אחרת נתיב הכותרות.
@@ -148,6 +149,39 @@ Future<Bookmark?> bookmarkFromReadingTab(
   }
 
   return null;
+}
+
+/// הטאב שפותח את [bookmark]. לסימניית מפרשים נבנה טאב מקור בלתי-תלוי
+/// ונגזר ממנו PdfCommentatorsTab/CommentatorsTab; אחרת — טאב הספר עצמו.
+OpenedTab tabFromBookmark(Bookmark bookmark) {
+  final openLeftPane = shouldAutoOpenReadingLeftPane();
+  if (bookmark.targetKind == BookmarkTargetKind.commentators) {
+    if (bookmark.book is PdfBook) {
+      final sourceTab = PdfBookTab(
+        book: bookmark.book as PdfBook,
+        pageNumber: bookmark.index,
+        openLeftPane: openLeftPane,
+      )..activeCommentators = bookmark.commentatorsToShow.toSet();
+      return PdfCommentatorsTab(sourceTab: sourceTab);
+    }
+
+    final sourceTab =
+        OpenedTab.fromBook(
+              bookmark.book,
+              bookmark.index,
+              commentators: bookmark.commentatorsToShow,
+              openLeftPane: openLeftPane,
+            )
+            as TextBookTab;
+    return CommentatorsTab(sourceTab: sourceTab);
+  }
+
+  return OpenedTab.fromBook(
+    bookmark.book,
+    bookmark.index,
+    commentators: bookmark.commentatorsToShow,
+    openLeftPane: openLeftPane,
+  );
 }
 
 /// מוצא את הכותרת המתאימה לעמוד מסוים ב-outline של PDF.
