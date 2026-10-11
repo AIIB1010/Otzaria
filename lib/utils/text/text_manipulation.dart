@@ -1516,94 +1516,50 @@ String _mapGenerationToCategory(String generation) {
   return _defaultCategory;
 }
 
-// Matches the Tetragrammaton with any Hebrew diacritics or cantillation marks.
 /// מקטין טקסט בתוך סוגריים עגולים
 /// תנאים:
 /// 1. אם יש סוגר פותח נוסף בפנים - מתעלם מהסוגר החיצוני ומקטין רק את הפנימיים
 /// 2. אם אין סוגר סוגר עד סוף המקטע - לא מקטין כלום
 String formatTextWithParentheses(String text) {
-  if (text.isEmpty) return text;
+  if (!text.contains('(') || !text.contains(')')) return text;
 
-  final StringBuffer result = StringBuffer();
-  int i = 0;
-
+  final result = StringBuffer();
+  var written = 0;
+  // התנאים שלמעלה שקולים לכך: פותח נעטף רק כשהסוגר הבא אחריו (מחוץ לתגים) הוא סוגר.
+  var pendingOpen = -1;
+  var i = 0;
   while (i < text.length) {
+    final char = text.codeUnitAt(i);
     // תגי HTML עוברים כמכלול - אחרת סוגריים בתוך attribute (למשל
     // style="color:rgb(0,0,0)") נעטפים ב-<small> וההגדרה נהרסת.
-    if (text[i] == '<') {
+    if (char == 0x3C) {
       final anchorEnd = _linkAnchorElementEnd(text, i);
       if (anchorEnd != -1) {
-        result.write(text.substring(i, anchorEnd));
         i = anchorEnd;
         continue;
       }
       final tagEnd = _htmlTagEnd(text, i);
       if (tagEnd != -1) {
-        result.write(text.substring(i, tagEnd + 1));
         i = tagEnd + 1;
         continue;
       }
+    } else if (char == 0x28) {
+      pendingOpen = i;
+    } else if (char == 0x29) {
+      if (pendingOpen != -1) {
+        result
+          ..write(text.substring(written, pendingOpen))
+          ..write('<small>')
+          ..write(text.substring(pendingOpen, i + 1))
+          ..write('</small>');
+        written = i + 1;
+      }
+      pendingOpen = -1;
     }
-
-    if (text[i] == '(') {
-      // מחפשים את הסוגר הסוגר המתאים
-      int openCount = 1;
-      int j = i + 1;
-      int innerOpenIndex = -1;
-
-      // בודקים אם יש סוגר פותח נוסף בפנים
-      while (j < text.length && openCount > 0) {
-        if (text[j] == '<') {
-          final anchorEnd = _linkAnchorElementEnd(text, j);
-          if (anchorEnd != -1) {
-            j = anchorEnd;
-            continue;
-          }
-          final tagEnd = _htmlTagEnd(text, j);
-          if (tagEnd != -1) {
-            j = tagEnd + 1;
-            continue;
-          }
-        }
-        if (text[j] == '(') {
-          if (innerOpenIndex == -1) {
-            innerOpenIndex = j; // שומרים את המיקום של הסוגר הפנימי הראשון
-          }
-          openCount++;
-        } else if (text[j] == ')') {
-          openCount--;
-        }
-        j++;
-      }
-
-      // אם לא מצאנו סוגר סוגר - מוסיפים הכל כמו שהוא
-      if (openCount > 0) {
-        result.write(text[i]);
-        i++;
-        continue;
-      }
-
-      // אם יש סוגר פנימי - מתעלמים מהחיצוני ומעבדים רק את הפנימי
-      if (innerOpenIndex != -1) {
-        // מוסיפים את החלק עד הסוגר הפנימי
-        result.write(text.substring(i, innerOpenIndex));
-        // ממשיכים מהסוגר הפנימי
-        i = innerOpenIndex;
-        continue;
-      }
-
-      // אם אין סוגר פנימי - מקטינים את כל התוכן
-      final content = text.substring(i + 1, j - 1);
-      result.write('<small>(');
-      result.write(content);
-      result.write(')</small>');
-      i = j;
-    } else {
-      result.write(text[i]);
-      i++;
-    }
+    i++;
   }
-
+  if (written == 0) return text;
+  result.write(text.substring(written));
   return result.toString();
 }
 
