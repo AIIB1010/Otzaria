@@ -1765,21 +1765,12 @@ class BackupService {
     }
 
     try {
-      final database = PersonalNotesDatabase.instance;
-      final booksWithNotes = await database.listBooksWithNotes();
-
-      int currentNoteCount = 0;
-      int editedAfterBackup = 0;
-
-      for (final bookInfo in booksWithNotes) {
-        try {
-          final notes = await database.loadNotes(bookInfo.bookId);
-          currentNoteCount += notes.length;
-          editedAfterBackup += notes
-              .where((n) => n.updatedAt.isAfter(backupDate))
-              .length;
-        } catch (_) {}
-      }
+      final updateTimes = await PersonalNotesDatabase.instance
+          .listNoteUpdateTimes();
+      final currentNoteCount = updateTimes.length;
+      final editedAfterBackup = updateTimes
+          .where((t) => t.isAfter(backupDate))
+          .length;
 
       // 5+ new notes
       if (currentNoteCount - backupNoteCount >= 5) return true;

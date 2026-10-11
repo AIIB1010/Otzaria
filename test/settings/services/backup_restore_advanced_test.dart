@@ -834,6 +834,70 @@ void main() {
       expect(status.hasSignificantChanges, isFalse);
     });
 
+    group('סף ההערות בגיבוי ישן', () {
+      Future<DateTime> writeOldNotesBackup(int noteCount) async {
+        final path = await writeBackupFile(
+          timestamp: agedTimestamp(3),
+          data: {
+            'notes': [
+              {'bookId': 'ספר', 'notes': List.generate(noteCount, (_) => {})},
+            ],
+          },
+        );
+        final backupDate = DateTime.now().subtract(const Duration(days: 3));
+        await File(path).setLastModified(backupDate);
+        return backupDate;
+      }
+
+      Future<void> insertNotes(int count, DateTime updatedAt, {int from = 0}) =>
+          PersonalNotesDatabase.instance.batchInsertNotes([
+            for (var i = from; i < from + count; i++)
+              buildNote(
+                id: 'note-$i',
+                bookId: 'ספר ${i % 3}',
+              ).copyWith(updatedAt: updatedAt),
+          ]);
+
+      test('5 הערות חדשות בכמה ספרים מעוררות המלצה, 4 לא', () async {
+        final backupDate = await writeOldNotesBackup(2);
+        final before = backupDate.subtract(const Duration(hours: 1));
+
+        await insertNotes(6, before);
+        expect(
+          (await BackupService.analyzeBackupStatus()).hasSignificantChanges,
+          isFalse,
+        );
+
+        await insertNotes(1, before, from: 6);
+        expect(
+          (await BackupService.analyzeBackupStatus()).hasSignificantChanges,
+          isTrue,
+        );
+      });
+
+      test('30% מההערות נערכו אחרי הגיבוי מעוררות המלצה', () async {
+        final backupDate = await writeOldNotesBackup(10);
+
+        await insertNotes(8, backupDate.subtract(const Duration(hours: 1)));
+        await insertNotes(2, backupDate.add(const Duration(hours: 1)), from: 8);
+        expect(
+          (await BackupService.analyzeBackupStatus()).hasSignificantChanges,
+          isFalse,
+        );
+
+        await PersonalNotesDatabase.instance.batchInsertNotes([
+          buildNote(
+            id: 'note-0',
+            bookId: 'ספר 0',
+          ).copyWith(updatedAt: backupDate.add(const Duration(hours: 1))),
+        ], replace: true);
+        expect(
+          (await BackupService.analyzeBackupStatus()).hasSignificantChanges,
+          isTrue,
+        );
+      });
+    });
+
     test('קובץ גיבוי פגום אינו מפיל את הניתוח', () async {
       await Directory(backupDir).create(recursive: true);
       await File(
