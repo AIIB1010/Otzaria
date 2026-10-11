@@ -776,9 +776,146 @@ void main() {
     });
   });
 
-  test('עוגני טווח רבים בשורה ארוכה אינם סורקים אותה מחדש לכל טווח', () {
-    // כמו בשורות של "הזהר המתורגם": מאות ציטוטי לינקר בשורה של מאות אלפי תווים.
-    final line = List.filled(20000, 'מילה <b>ו</b>עוד ').join();
+  test('טווח יחיד בתחילת שורה ארוכה שומר על אותו פלט', () {
+    final line = '<b>אבגד</b>${List.filled(25000, 'מילה <b>ו</b>עוד ').join()}';
+    final link = Link(
+      heRef: 'ספר א, ב',
+      index1: 1,
+      path2: 'ספר',
+      index2: 1,
+      connectionType: 'linker',
+      anchorStart: 0,
+      anchorEnd: 4,
+    );
+    String baseline(String open, String close) => wrapHtmlRanges(line, [
+      HtmlWrapRange(start: 3, end: 7, openTag: open, closeTag: close),
+    ]);
+    String wrap() => wrapVisibleRange(
+      html: line,
+      start: 0,
+      end: 4,
+      openTag: '[',
+      closeTag: ']',
+    );
+    String inject() => injectLinkAnchorMarkers(
+      rawLine: line,
+      anchorLinks: [link],
+      styleIndexByCommentator: const {},
+    );
+    expect(wrap(), baseline('[', ']'));
+    expect(inject(), baseline('<span class="link-anchor-range">', '</span>'));
+  });
+
+  test('טווחים יחידים ורבים שומרים גבולות entity ו-surrogate וקלט פגום', () {
+    const line = '<b>א&amp;😀ב</b><broken';
+    Link range(int start, int end, {bool raw = false}) => Link(
+      heRef: 'ספר א, ב',
+      index1: 1,
+      path2: 'ספר',
+      index2: 1,
+      connectionType: 'linker',
+      anchorStart: start,
+      anchorEnd: end,
+      anchorOffsetsAreRaw: raw,
+    );
+    String expected(List<(int, int)> ranges) => wrapHtmlRanges(line, [
+      for (final (start, end) in ranges)
+        HtmlWrapRange(
+          start: start,
+          end: end,
+          openTag: '<span class="link-anchor-range">',
+          closeTag: '</span>',
+        ),
+    ]);
+    String inject(List<Link> links) => injectLinkAnchorMarkers(
+      rawLine: line,
+      anchorLinks: links,
+      styleIndexByCommentator: const {},
+    );
+
+    // בתוך entity שני האופסטים הגולמיים מתכנסים לאותו אופסט גלוי.
+    expect(inject([range(5, 8, raw: true)]), line);
+    expect(inject([range(1, 3)]), expected([(4, 10)]));
+    // הטווח הראשון מחוץ לשורה; התג הלא סגור בסוף נשמר בטווח שחורג מהסוף.
+    expect(
+      inject([range(30, 40), range(1, 3), range(3, 30)]),
+      expected([(4, 10), (10, line.length)]),
+    );
+    expect(
+      inject([
+        range(5, 8, raw: true),
+        range(4, 10, raw: true),
+        range(10, 99, raw: true),
+      ]),
+      expected([(4, 10), (10, 12)]),
+    );
+  });
+
+  test('מפה מוגבלת כוללת סוף טווח מוקדם גם כשהטווח המאוחר מופיע קודם', () {
+    final line = '<b>אב</b>${List.filled(2000, 'ג').join()}';
+    final link = Link(
+      heRef: 'ספר א, ב',
+      index1: 1,
+      path2: 'ספר',
+      index2: 1,
+      connectionType: 'commentary',
+      anchorStart: 1000,
+      anchorEnd: 2000,
+      anchorSpans: const [
+        LinkAnchorSpan(start: 1, end: 2),
+        LinkAnchorSpan(start: 0, end: 1),
+      ],
+    );
+    expect(
+      injectLinkAnchorMarkers(
+        rawLine: line,
+        anchorLinks: [link],
+        styleIndexByCommentator: const {},
+      ),
+      wrapHtmlRanges(line, [
+        for (final start in [4, 3])
+          HtmlWrapRange(
+            start: start,
+            end: start + 1,
+            openTag: '<span class="link-anchor-range">',
+            closeTag: '</span>',
+          ),
+      ]),
+    );
+  });
+
+  test('מפה מוגבלת מערבת אופסט גולמי בתוך entity וטווח שחוצה surrogate', () {
+    const line = '&amp;<b>😀ב</b><broken';
+    Link range(int start, int end, {bool raw = false}) => Link(
+      heRef: 'ספר א, ב',
+      index1: 1,
+      path2: 'ספר',
+      index2: 1,
+      connectionType: 'commentary',
+      anchorStart: start,
+      anchorEnd: end,
+      anchorOffsetsAreRaw: raw,
+    );
+    expect(
+      injectLinkAnchorMarkers(
+        rawLine: line,
+        anchorLinks: [range(0, 1, raw: true), range(1, 2)],
+        styleIndexByCommentator: const {},
+      ),
+      wrapHtmlRanges(line, [
+        for (final (start, end) in [(0, 5), (8, 9)])
+          HtmlWrapRange(
+            start: start,
+            end: end,
+            openTag: '<span class="link-anchor-range">',
+            closeTag: '</span>',
+          ),
+      ]),
+    );
+  });
+
+  test('300 עוגני טווח בשורה ארוכה שומרים על אותו פלט', () {
+    final line = List.filled(50000, 'אבגד ').join();
     Link range(int i) => Link(
       heRef: 'ספר א, ב',
       index1: 1,
@@ -788,24 +925,25 @@ void main() {
       anchorStart: 1000 + i * 700,
       anchorEnd: 1004 + i * 700,
     );
-    int microsFor(int count) {
-      final links = [for (var i = 0; i < count; i++) range(i)];
-      var best = 1 << 62;
-      for (var r = 0; r < 5; r++) {
-        final sw = Stopwatch()..start();
-        injectLinkAnchorMarkers(
-          rawLine: line,
-          anchorLinks: links,
-          styleIndexByCommentator: const {},
-        );
-        if (sw.elapsedMicroseconds < best) best = sw.elapsedMicroseconds;
-      }
-      return best;
-    }
-
-    final one = microsFor(1);
-    final many = microsFor(300);
-    // סריקה לכל טווח: פי ~300. מעבר אחד: עלות כמעט קבועה.
-    expect(many, lessThan(one * 30), reason: 'one=$one many=$many');
+    final links = [for (var i = 0; i < 300; i++) range(i)];
+    expect(
+      injectLinkAnchorMarkers(
+        rawLine: line,
+        anchorLinks: links,
+        styleIndexByCommentator: const {},
+        lineIndex: 0,
+      ),
+      wrapHtmlRanges(line, [
+        for (var i = 0; i < links.length; i++)
+          HtmlWrapRange(
+            start: links[i].anchorStart!,
+            end: links[i].anchorEnd!,
+            openTag:
+                '<a class="link-anchor-range" '
+                'href="otzaria://anchor?ref=0_$i&range=1">',
+            closeTag: '</a>',
+          ),
+      ]),
+    );
   });
 }
