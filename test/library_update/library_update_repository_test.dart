@@ -992,13 +992,48 @@ void main() {
   );
 
   test(
+    'DB לקריאה-בלבד נחסם לפני ההורדה בהודעה עם הנתיב (issue #2346)',
+    () async {
+      final dbPath = p.join(tmp.path, DatabaseConstants.databaseFileName);
+      _writeDb(dbPath, version: 1, marker: 'old');
+      // קובץ לקריאה-בלבד: SQLite פותח אותו RO בשקט ונכשל רק ב-INSERT הראשון.
+      await _setReadOnly(dbPath, true);
+
+      final repository = LibraryUpdateRepository(
+        discovery: _unusedDiscovery(),
+        downloader: _LocalPatchDownloader(p.join(tmp.path, 'patch.db')),
+        refreshService: _NoopRefreshService(),
+        dbPathProvider: () => dbPath,
+        dataRootProvider: () async => tmp.path,
+        nowTimestamp: () => '2026-09-07T00:00:00Z',
+      );
+
+      try {
+        await expectLater(
+          repository.applyDeltaPlan(_deltaPlan()),
+          throwsA(
+            predicate(
+              (e) => '$e'.contains('הרשאת כתיבה') && '$e'.contains(tmp.path),
+            ),
+          ),
+        );
+      } finally {
+        await _setReadOnly(dbPath, false);
+      }
+    },
+    timeout: const Timeout(Duration(seconds: 30)),
+  );
+
+  test(
     'נסיגה מ-WAL לסגירת חיבור ה-RO נרשמת ל-errors.txt',
     () async {
       final dbPath = p.join(tmp.path, DatabaseConstants.databaseFileName);
       _writeDb(dbPath, version: 1, marker: 'old');
       AppPaths.debugOverrideDataRootPath(tmp.path);
-      // קובץ לקריאה-בלבד: SQLite פותח אותו RO בשקט וההמרה ל-WAL לא תופסת.
-      await _setReadOnly(dbPath, true);
+      // קורא באמצע transaction מחזיק נעילה משותפת: ההמרה ל-WAL לא תופסת.
+      final reader = sqlite3.sqlite3.open(dbPath)
+        ..execute('BEGIN')
+        ..select('SELECT value FROM marker');
 
       final repository = LibraryUpdateRepository(
         discovery: _unusedDiscovery(),
@@ -1016,9 +1051,9 @@ void main() {
         );
         final log = ErrorLogFile.resolveFile().readAsStringSync();
         expect(log, contains('journal_mode=WAL failed'));
-        expect(log, contains('readonly database'));
+        expect(log, contains('database is locked'));
       } finally {
-        await _setReadOnly(dbPath, false);
+        reader.close();
         AppPaths.debugOverrideDataRootPath(null);
       }
     },
