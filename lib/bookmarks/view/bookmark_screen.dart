@@ -15,15 +15,10 @@ import 'package:otzaria/navigation/bloc/navigation_event.dart';
 import 'package:otzaria/navigation/bloc/navigation_state.dart';
 import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
 import 'package:otzaria/tabs/bloc/tabs_event.dart';
-import 'package:otzaria/tabs/models/commentators_tab.dart';
-import 'package:otzaria/tabs/models/pdf_commentators_tab.dart';
-import 'package:otzaria/tabs/models/pdf_tab.dart';
-import 'package:otzaria/tabs/models/tab.dart';
-import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/models/books.dart';
+import 'package:otzaria/bookmarks/utils/bookmark_from_tab.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/messages/notes_messages.dart';
-import 'package:otzaria/utils/ui/reading_left_pane_policy.dart';
 import 'package:otzaria/widgets/controls/action_buttons.dart';
 import 'package:otzaria/widgets/lists/items_list_view.dart';
 import 'package:otzaria/widgets/dialogs/app_dialogs.dart';
@@ -119,46 +114,12 @@ class _BookmarkViewState extends State<BookmarkView> {
     return bDate.compareTo(aDate);
   }
 
-  /// בונה את ה-Tab המתאים לסימניה. עבור [BookmarkTargetKind.commentators]
-  /// יוצרים sourceTab בלתי-תלוי וגורסה אותו ל-PdfCommentatorsTab/CommentatorsTab,
-  /// בדומה לזרימה ב-HistoryScreen.
-  OpenedTab _buildTabForBookmark(Bookmark bookmark) {
-    final openLeftPane = shouldAutoOpenReadingLeftPane();
-    if (bookmark.targetKind == BookmarkTargetKind.commentators) {
-      if (bookmark.book is PdfBook) {
-        final sourceTab = PdfBookTab(
-          book: bookmark.book as PdfBook,
-          pageNumber: bookmark.index,
-          openLeftPane: openLeftPane,
-        )..activeCommentators = bookmark.commentatorsToShow.toSet();
-        return PdfCommentatorsTab(sourceTab: sourceTab);
-      }
-
-      final sourceTab =
-          OpenedTab.fromBook(
-                bookmark.book,
-                bookmark.index,
-                commentators: bookmark.commentatorsToShow,
-                openLeftPane: openLeftPane,
-              )
-              as TextBookTab;
-      return CommentatorsTab(sourceTab: sourceTab);
-    }
-
-    return OpenedTab.fromBook(
-      bookmark.book,
-      bookmark.index,
-      commentators: bookmark.commentatorsToShow,
-      openLeftPane: openLeftPane,
-    );
-  }
-
   void _openBook(
     BuildContext context,
     Bookmark bookmark, {
     String? targetTitle,
   }) {
-    final tab = _buildTabForBookmark(bookmark);
+    final tab = tabFromBookmark(bookmark);
 
     context.read<TabsBloc>().add(
       OpenOrFocusTab(
@@ -183,7 +144,7 @@ class _BookmarkViewState extends State<BookmarkView> {
     for (final bookmark in group.items) {
       tabsBloc.add(
         OpenOrFocusTab(
-          _buildTabForBookmark(bookmark),
+          tabFromBookmark(bookmark),
           targetTitle: bookmark.ref,
           navigateToPositionIfReused: true,
         ),
@@ -193,7 +154,7 @@ class _BookmarkViewState extends State<BookmarkView> {
     if (group.items.length > 1) {
       final first = group.items.first;
       tabsBloc.add(
-        OpenOrFocusTab(_buildTabForBookmark(first), targetTitle: first.ref),
+        OpenOrFocusTab(tabFromBookmark(first), targetTitle: first.ref),
       );
     }
     context.read<NavigationBloc>().add(const NavigateToScreen(Screen.reading));

@@ -318,6 +318,28 @@ class LibraryUpdateRepository implements LibraryUpdateService {
     try {
       for (var i = 0; i < steps.length; i++) {
         final step = steps[i];
+        void report(
+          LibraryUpdatePhase phase, {
+          String? stage,
+          int? bytesDownloaded,
+          int? bytesTotal,
+          double? applyProgress,
+        }) => onProgress?.call(
+          LibraryUpdateProgress(
+            phase: phase,
+            stepIndex: i,
+            totalSteps: steps.length,
+            bytesDownloaded: bytesDownloaded,
+            bytesTotal: bytesTotal,
+            stage: stage,
+            applyProgress: applyProgress,
+          ),
+        );
+        void reportVerify(int done, int total) => report(
+          LibraryUpdatePhase.verifying,
+          applyProgress: _fraction(done, total),
+        );
+
         final patchFile = step.manifest.patchFiles.first;
         final url = step.patchFileUrls[patchFile.file];
         if (url == null) {
@@ -330,16 +352,7 @@ class LibraryUpdateRepository implements LibraryUpdateService {
                     patchFile: patchFile,
                     destDir: cacheDir,
                     isCancelled: isCancelled,
-                    onVerifyProgress: (done, total) => onProgress?.call(
-                      LibraryUpdateProgress(
-                        phase: LibraryUpdatePhase.verifying,
-                        stepIndex: i,
-                        totalSteps: steps.length,
-                        applyProgress: total > 0
-                            ? (done / total).clamp(0.0, 1.0)
-                            : null,
-                      ),
-                    ),
+                    onVerifyProgress: reportVerify,
                   )
             : null;
 
@@ -352,13 +365,7 @@ class LibraryUpdateRepository implements LibraryUpdateService {
           reusableExtracted: reusablePatchPath != null,
         );
 
-        onProgress?.call(
-          LibraryUpdateProgress(
-            phase: LibraryUpdatePhase.downloading,
-            stepIndex: i,
-            totalSteps: steps.length,
-          ),
-        );
+        report(LibraryUpdatePhase.downloading);
         final patchPath =
             reusablePatchPath ??
             await downloader.downloadAndExtract(
@@ -366,38 +373,19 @@ class LibraryUpdateRepository implements LibraryUpdateService {
               downloadUrl: url,
               destDir: cacheDir,
               isCancelled: isCancelled,
-              onProgress: (downloaded, total) => onProgress?.call(
-                LibraryUpdateProgress(
-                  phase: LibraryUpdatePhase.downloading,
-                  stepIndex: i,
-                  totalSteps: steps.length,
-                  bytesDownloaded: downloaded,
-                  bytesTotal: total,
-                ),
+              onProgress: (downloaded, total) => report(
+                LibraryUpdatePhase.downloading,
+                bytesDownloaded: downloaded,
+                bytesTotal: total,
               ),
               // אימות patch פרוס של כמה GB נמשך עשרות שניות — בלי מד הוא נראה קפוא.
-              onVerifyProgress: (done, total) => onProgress?.call(
-                LibraryUpdateProgress(
-                  phase: LibraryUpdatePhase.verifying,
-                  stepIndex: i,
-                  totalSteps: steps.length,
-                  applyProgress: total > 0
-                      ? (done / total).clamp(0.0, 1.0)
-                      : null,
-                ),
-              ),
+              onVerifyProgress: reportVerify,
             );
 
         try {
           // ביטול בדיוק אחרי החילוץ ולפני ההחלה — עוצרים לפני שנוגעים ב-DB.
           _throwIfCancelled(isCancelled);
-          onProgress?.call(
-            LibraryUpdateProgress(
-              phase: LibraryUpdatePhase.applying,
-              stepIndex: i,
-              totalSteps: steps.length,
-            ),
-          );
+          report(LibraryUpdatePhase.applying);
           // מד השורות מדווח בלי שם שלב; ה-onStage האחרון הוא השלב שבו הוא נמדד
           // ('upserts' או 'deletes'), וה-BLoC גוזר ממנו את ההודעה.
           String? currentStage;
@@ -415,38 +403,19 @@ class LibraryUpdateRepository implements LibraryUpdateService {
             verifyTableBytesHint: verifyTableBytes,
             onStage: (stage) {
               currentStage = stage;
-              onProgress?.call(
-                LibraryUpdateProgress(
-                  phase: LibraryUpdatePhase.applying,
-                  stepIndex: i,
-                  totalSteps: steps.length,
-                  stage: stage,
-                ),
-              );
+              report(LibraryUpdatePhase.applying, stage: stage);
             },
-            onApplyProgress: (rowsDone, rowsTotal) => onProgress?.call(
-              LibraryUpdateProgress(
-                phase: LibraryUpdatePhase.applying,
-                stepIndex: i,
-                totalSteps: steps.length,
-                stage: currentStage,
-                applyProgress: rowsTotal > 0
-                    ? (rowsDone / rowsTotal).clamp(0.0, 1.0)
-                    : null,
-              ),
+            onApplyProgress: (rowsDone, rowsTotal) => report(
+              LibraryUpdatePhase.applying,
+              stage: currentStage,
+              applyProgress: _fraction(rowsDone, rowsTotal),
             ),
             onVerifyProgress: (done, total) {
               lastVerifyDone = done;
-              onProgress?.call(
-                LibraryUpdateProgress(
-                  phase: LibraryUpdatePhase.applying,
-                  stepIndex: i,
-                  totalSteps: steps.length,
-                  stage: 'verifyToHash',
-                  applyProgress: total > 0
-                      ? (done / total).clamp(0.0, 1.0)
-                      : null,
-                ),
+              report(
+                LibraryUpdatePhase.applying,
+                stage: 'verifyToHash',
+                applyProgress: _fraction(done, total),
               );
             },
           );
@@ -581,7 +550,7 @@ class LibraryUpdateRepository implements LibraryUpdateService {
           LibraryUpdateProgress(
             phase: LibraryUpdatePhase.applying,
             stage: 'verifyDeferred',
-            applyProgress: total > 0 ? (done / total).clamp(0.0, 1.0) : null,
+            applyProgress: _fraction(done, total),
           ),
         ),
       );
@@ -1205,6 +1174,9 @@ class LibraryUpdateRepository implements LibraryUpdateService {
       if (file.existsSync()) file.deleteSync();
     } catch (_) {}
   }
+
+  static double? _fraction(int done, int total) =>
+      total > 0 ? (done / total).clamp(0.0, 1.0) : null;
 
   static int? _readIntQuietly(File file) {
     try {

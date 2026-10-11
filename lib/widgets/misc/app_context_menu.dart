@@ -117,11 +117,7 @@ class AppContextMenuRegionState extends State<AppContextMenuRegion> {
       return;
     }
     await _openContextMenu(
-      renderObject.localToGlobal(
-        renderObject.size.center(
-          Offset.zero,
-        ),
-      ),
+      renderObject.localToGlobal(renderObject.size.center(Offset.zero)),
     );
   }
 
@@ -521,100 +517,16 @@ class AppContextMenuRegionState extends State<AppContextMenuRegion> {
         );
       }
 
-      if (entry.childrenBuilder != null) {
-        if (!entry.enabled) {
-          return MenuItemButton(
-            key: widget.menuItemKeysByLabel?[entry.label ?? ''],
-            requestFocusOnHover: false,
-            style: buildAppSubmenuItemStyle(context, metrics),
-            onPressed: null,
-            child: buildAppMenuRowContent(
-              context,
-              metrics,
-              maxWidth: contentMaxWidth,
-              label: entry.label ?? '',
-              labelWidget: entry.labelWidget,
-              icon: entry.icon,
-              trailing: entry.trailing,
-              isDestructive: entry.isDestructive,
-              enabled: false,
-            ),
-          );
-        }
-
-        final controller = submenuControllers[entry];
-        return _LazyAppSubmenuButton(
-          key: widget.menuItemKeysByLabel?[entry.label ?? ''],
-          entry: entry,
-          entriesBuilder: () => _normalizeEntries(entry.childrenBuilder!()),
-          metrics: metrics,
-          maxWidth: maxWidth,
-          menuStyle: _menuStyle(context, metrics),
-          controller: controller,
-          onOpen: () {
-            for (final ctrl in submenuControllers.values) {
-              if (ctrl != controller && ctrl.isOpen) ctrl.close();
-            }
-          },
-          buildChildren: (submenuEntries, submenuMaxWidth) =>
-              _buildSubmenuChildren(
-                context,
-                submenuEntries,
-                metrics,
-                submenuMaxWidth,
-              ),
-        );
-      }
-
-      final rawChildren = entry.children;
-      if (rawChildren != null && rawChildren.isNotEmpty) {
-        final normalizedChildren = _normalizeEntries(rawChildren);
-        final hasEnabledChildren = hasEnabledAppContextMenuEntries(
-          normalizedChildren,
-        );
-        if (!entry.enabled || !hasEnabledChildren) {
-          return MenuItemButton(
-            key: widget.menuItemKeysByLabel?[entry.label ?? ''],
-            requestFocusOnHover: false,
-            style: buildAppSubmenuItemStyle(context, metrics),
-            onPressed: null,
-            child: buildAppMenuRowContent(
-              context,
-              metrics,
-              maxWidth: contentMaxWidth,
-              label: entry.label ?? '',
-              labelWidget: entry.labelWidget,
-              icon: entry.icon,
-              trailing: entry.trailing,
-              isDestructive: entry.isDestructive,
-              enabled: false,
-            ),
-          );
-        }
-
-        final controller = submenuControllers[entry];
-        return _LazyAppSubmenuButton(
-          key: widget.menuItemKeysByLabel?[entry.label ?? ''],
-          entry: entry,
-          entriesBuilder: () => normalizedChildren,
-          metrics: metrics,
-          maxWidth: maxWidth,
-          menuStyle: _menuStyle(context, metrics),
-          controller: controller,
-          onOpen: () {
-            for (final ctrl in submenuControllers.values) {
-              if (ctrl != controller && ctrl.isOpen) ctrl.close();
-            }
-          },
-          buildChildren: (submenuEntries, submenuMaxWidth) =>
-              _buildSubmenuChildren(
-                context,
-                submenuEntries,
-                metrics,
-                submenuMaxWidth,
-              ),
-        );
-      }
+      final submenu = _buildSubmenuEntry(
+        context,
+        entry,
+        metrics,
+        key: widget.menuItemKeysByLabel?[entry.label ?? ''],
+        contentMaxWidth: contentMaxWidth,
+        submenuMaxWidth: maxWidth,
+        submenuControllers: submenuControllers,
+      );
+      if (submenu != null) return submenu;
 
       if (entry.isHighlighted) {
         return _HoverableHighlightedRow(
@@ -631,32 +543,12 @@ class AppContextMenuRegionState extends State<AppContextMenuRegion> {
         );
       }
 
-      return _wrapWithHoverPreview(
+      return _buildLeafEntry(
+        context,
         entry,
         metrics,
-        MenuItemButton(
-          key: widget.menuItemKeysByLabel?[entry.label ?? ''],
-          requestFocusOnHover: false,
-          style: buildAppSubmenuItemStyle(context, metrics),
-          onPressed: entry.enabled
-              ? () {
-                  _closeContextMenu();
-                  entry.onTap?.call();
-                }
-              : null,
-          child: buildAppMenuRowContent(
-            context,
-            metrics,
-            maxWidth: contentMaxWidth,
-            label: entry.label ?? '',
-            labelWidget: entry.labelWidget,
-            icon: entry.icon,
-            trailing: entry.trailing,
-            isSelected: entry.isSelected,
-            isDestructive: entry.isDestructive,
-            enabled: entry.enabled,
-          ),
-        ),
+        key: widget.menuItemKeysByLabel?[entry.label ?? ''],
+        contentMaxWidth: contentMaxWidth,
       );
     }).toList();
   }
@@ -703,111 +595,130 @@ class AppContextMenuRegionState extends State<AppContextMenuRegion> {
         );
       }
 
-      if (entry.childrenBuilder != null) {
-        if (!entry.enabled) {
-          return MenuItemButton(
-            requestFocusOnHover: false,
-            style: buildAppSubmenuItemStyle(context, metrics),
-            onPressed: null,
-            child: buildAppMenuRowContent(
-              context,
-              metrics,
-              maxWidth: submenuContentMaxWidth,
-              label: entry.label ?? '',
-              labelWidget: entry.labelWidget,
-              icon: entry.icon,
-              trailing: entry.trailing,
-              isDestructive: entry.isDestructive,
-              enabled: false,
-            ),
-          );
-        }
-
-        return _LazyAppSubmenuButton(
-          entry: entry,
-          entriesBuilder: () => _normalizeEntries(entry.childrenBuilder!()),
-          metrics: metrics,
-          maxWidth: submenuContentMaxWidth,
-          menuStyle: _menuStyle(context, metrics),
-          buildChildren: (submenuEntries, submenuMaxWidth) =>
-              _buildSubmenuChildren(
-                context,
-                submenuEntries,
-                metrics,
-                submenuMaxWidth,
-              ),
-        );
-      }
-
-      final rawChildren = entry.children;
-      if (rawChildren != null && rawChildren.isNotEmpty) {
-        final normalizedChildren = _normalizeEntries(rawChildren);
-        final hasEnabledChildren = hasEnabledAppContextMenuEntries(
-          normalizedChildren,
-        );
-        if (!entry.enabled || !hasEnabledChildren) {
-          return MenuItemButton(
-            requestFocusOnHover: false,
-            style: buildAppSubmenuItemStyle(context, metrics),
-            onPressed: null,
-            child: buildAppMenuRowContent(
-              context,
-              metrics,
-              maxWidth: submenuContentMaxWidth,
-              label: entry.label ?? '',
-              labelWidget: entry.labelWidget,
-              icon: entry.icon,
-              trailing: entry.trailing,
-              isDestructive: entry.isDestructive,
-              enabled: false,
-            ),
-          );
-        }
-
-        return _LazyAppSubmenuButton(
-          entry: entry,
-          entriesBuilder: () => normalizedChildren,
-          metrics: metrics,
-          maxWidth: submenuContentMaxWidth,
-          menuStyle: _menuStyle(context, metrics),
-          buildChildren: (submenuEntries, submenuMaxWidth) =>
-              _buildSubmenuChildren(
-                context,
-                submenuEntries,
-                metrics,
-                submenuMaxWidth,
-              ),
-        );
-      }
-
-      return _wrapWithHoverPreview(
+      final submenu = _buildSubmenuEntry(
+        context,
         entry,
         metrics,
-        MenuItemButton(
-          key: entry.key,
-          requestFocusOnHover: false,
-          style: buildAppSubmenuItemStyle(context, metrics),
-          onPressed: entry.enabled
-              ? () {
-                  _closeContextMenu();
-                  entry.onTap?.call();
-                }
-              : null,
-          child: buildAppMenuRowContent(
-            context,
-            metrics,
-            maxWidth: submenuContentMaxWidth,
-            label: entry.label ?? '',
-            labelWidget: entry.labelWidget,
-            icon: entry.icon,
-            trailing: entry.trailing,
-            isSelected: entry.isSelected,
-            isDestructive: entry.isDestructive,
-            enabled: entry.enabled,
-          ),
-        ),
+        key: null,
+        contentMaxWidth: submenuContentMaxWidth,
+        submenuMaxWidth: submenuContentMaxWidth,
+      );
+      if (submenu != null) return submenu;
+
+      return _buildLeafEntry(
+        context,
+        entry,
+        metrics,
+        key: entry.key,
+        contentMaxWidth: submenuContentMaxWidth,
       );
     }).toList();
+  }
+
+  /// פריט עם תת-תפריט — עצל (childrenBuilder) או מוכן (children); null אם
+  /// הפריט אינו תת-תפריט. משמש גם לתפריט הראשי וגם לתתי-התפריטים.
+  Widget? _buildSubmenuEntry(
+    BuildContext context,
+    AppContextMenuEntry entry,
+    AppMenuMetrics metrics, {
+    required Key? key,
+    required double contentMaxWidth,
+    required double submenuMaxWidth,
+    Map<AppContextMenuEntry, MenuController>? submenuControllers,
+  }) {
+    final childrenBuilder = entry.childrenBuilder;
+    final rawChildren = entry.children;
+    final List<AppContextMenuEntry> Function() entriesBuilder;
+    var enabled = entry.enabled;
+    if (childrenBuilder != null) {
+      entriesBuilder = () => _normalizeEntries(childrenBuilder());
+    } else if (rawChildren != null && rawChildren.isNotEmpty) {
+      final normalizedChildren = _normalizeEntries(rawChildren);
+      enabled &= hasEnabledAppContextMenuEntries(normalizedChildren);
+      entriesBuilder = () => normalizedChildren;
+    } else {
+      return null;
+    }
+
+    if (!enabled) {
+      return MenuItemButton(
+        key: key,
+        requestFocusOnHover: false,
+        style: buildAppSubmenuItemStyle(context, metrics),
+        onPressed: null,
+        child: buildAppMenuRowContent(
+          context,
+          metrics,
+          maxWidth: contentMaxWidth,
+          label: entry.label ?? '',
+          labelWidget: entry.labelWidget,
+          icon: entry.icon,
+          trailing: entry.trailing,
+          isDestructive: entry.isDestructive,
+          enabled: false,
+        ),
+      );
+    }
+
+    final controller = submenuControllers?[entry];
+    return _LazyAppSubmenuButton(
+      key: key,
+      entry: entry,
+      entriesBuilder: entriesBuilder,
+      metrics: metrics,
+      maxWidth: submenuMaxWidth,
+      menuStyle: _menuStyle(context, metrics),
+      controller: controller,
+      onOpen: submenuControllers == null
+          ? null
+          : () {
+              for (final ctrl in submenuControllers.values) {
+                if (ctrl != controller && ctrl.isOpen) ctrl.close();
+              }
+            },
+      buildChildren: (submenuEntries, submenuMaxWidth) => _buildSubmenuChildren(
+        context,
+        submenuEntries,
+        metrics,
+        submenuMaxWidth,
+      ),
+    );
+  }
+
+  Widget _buildLeafEntry(
+    BuildContext context,
+    AppContextMenuEntry entry,
+    AppMenuMetrics metrics, {
+    required Key? key,
+    required double contentMaxWidth,
+  }) {
+    return _wrapWithHoverPreview(
+      entry,
+      metrics,
+      MenuItemButton(
+        key: key,
+        requestFocusOnHover: false,
+        style: buildAppSubmenuItemStyle(context, metrics),
+        onPressed: entry.enabled
+            ? () {
+                _closeContextMenu();
+                entry.onTap?.call();
+              }
+            : null,
+        child: buildAppMenuRowContent(
+          context,
+          metrics,
+          maxWidth: contentMaxWidth,
+          label: entry.label ?? '',
+          labelWidget: entry.labelWidget,
+          icon: entry.icon,
+          trailing: entry.trailing,
+          isSelected: entry.isSelected,
+          isDestructive: entry.isDestructive,
+          enabled: entry.enabled,
+        ),
+      ),
+    );
   }
 
   /// עוטף פריט עלה ב-[_MenuItemHoverPreview] כאשר הוגדר לו
@@ -1016,10 +927,8 @@ class _LazyAppSubmenuButtonState extends State<_LazyAppSubmenuButton>
         );
     final menuChildren = (_menuChildren ?? const <Widget>[])
         .map(
-          (child) => Directionality(
-            textDirection: contentTextDirection,
-            child: child,
-          ),
+          (child) =>
+              Directionality(textDirection: contentTextDirection, child: child),
         )
         .toList();
 
@@ -1061,9 +970,7 @@ class _LazyAppSubmenuButtonState extends State<_LazyAppSubmenuButton>
           },
           submenuIcon: const WidgetStatePropertyAll<Widget?>(SizedBox.shrink()),
           style: buildAppSubmenuItemStyle(context, widget.metrics),
-          menuStyle: widget.menuStyle.copyWith(
-            alignment: submenuAlignment,
-          ),
+          menuStyle: widget.menuStyle.copyWith(alignment: submenuAlignment),
           menuChildren: menuChildren,
           child: Directionality(
             textDirection: contentTextDirection,
@@ -1129,9 +1036,7 @@ class _AppContextMenuPanel extends StatelessWidget {
             3,
         shape:
             menuStyle?.shape?.resolve(const <WidgetState>{}) ??
-            RoundedRectangleBorder(
-              borderRadius: AppTokens.borderRadiusAll,
-            ),
+            RoundedRectangleBorder(borderRadius: AppTokens.borderRadiusAll),
         clipBehavior: Clip.antiAlias,
         child: IntrinsicWidth(
           child: ConstrainedBox(
@@ -1168,9 +1073,7 @@ class _AppContextMenuPanel extends StatelessWidget {
 
 class _PreserveSelectionSecondaryTapRecognizer extends EagerGestureRecognizer {
   _PreserveSelectionSecondaryTapRecognizer({required this.shouldPreserve})
-    : super(
-        allowedButtonsFilter: (buttons) => buttons & kSecondaryButton != 0,
-      );
+    : super(allowedButtonsFilter: (buttons) => buttons & kSecondaryButton != 0);
 
   final bool Function(Offset globalPosition) shouldPreserve;
 
