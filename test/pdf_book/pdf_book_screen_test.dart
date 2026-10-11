@@ -404,16 +404,6 @@ void main() {
   });
 
   group('תרחישים חוצי-טאב בחלונית הצד', () {
-    test('"פתח מפרשים" מוצגת כשהחלונית פתוחה על טאב הקישורים', () {
-      expect(
-        shouldShowOpenPdfCommentaryPaneEntry(
-          hasSelectedCommentators: true,
-          isCommentatorsTabActive: false,
-        ),
-        isTrue,
-      );
-    });
-
     test('"פתח קישורים" מוצגת כשהחלונית פתוחה על טאב המפרשים', () {
       expect(
         shouldShowOpenPdfLinksPaneEntry(

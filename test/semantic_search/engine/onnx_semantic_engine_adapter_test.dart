@@ -9,17 +9,6 @@ import 'package:otzaria/semantic_search/models/semantic_engine_models.dart';
 import 'package:otzaria/semantic_search/models/semantic_failure.dart';
 import 'package:otzaria_search_engine/otzaria_search_engine.dart';
 
-const onnxConfig = SemanticConfigInput(
-  rootDir: '/semantic',
-  modelPath: '/model.onnx',
-  modelId: 'otzaria-v1',
-  embeddingDim: 1024,
-  pooling: 'in-graph',
-  maxTokens: 256,
-  modelQuantization: 'int8',
-  embeddingTextVersion: 2,
-);
-
 const onnxStatus = SemanticStatus(
   state: SemanticState.ready,
   enabled: true,
