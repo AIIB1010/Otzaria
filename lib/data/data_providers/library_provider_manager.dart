@@ -397,34 +397,6 @@ class LibraryProviderManager {
     return toc;
   }
 
-  /// Checks if a book exists in any provider
-  Future<bool> bookExists(
-    String title, {
-    int? categoryId,
-    String? fileType,
-  }) async {
-    if (!_isInitialized) await initialize();
-
-    final mapped = _resolveBookKey(
-      title,
-      categoryId: categoryId,
-      fileType: fileType,
-    );
-    if (mapped != null) {
-      return true;
-    }
-
-    final located = await _locateBookInProviders(
-      title,
-      categoryId: categoryId,
-      fileType: fileType,
-    );
-    if (located == null) return false;
-
-    _mapBook(located.key, located.provider);
-    return true;
-  }
-
   /// Clears all caches
   void clearCaches() {
     _clearBookMapping();
