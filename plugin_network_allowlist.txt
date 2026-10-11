@@ -101,3 +101,6 @@ https://nominatim.openstreetmap.org/reverse
 # מפת הרחובות הסמוכים (OpenStreetMap), לזיהוי כיוון לפי רחוב; נשמרת לשימוש בלי אינטרנט
 https://overpass-api.de/api/interpreter
 https://overpass.kumi.systems/api/interpreter
+
+# ׳אתר ׳המשיב
+https://hameshiv.com/
