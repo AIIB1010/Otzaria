@@ -151,7 +151,6 @@ class PersonalNotesService {
 
   Future<List<PersonalNote>> deleteNote({
     required String bookId,
-    required String bookContent,
     required String noteId,
   }) async {
     await _database.deleteNote(noteId);
