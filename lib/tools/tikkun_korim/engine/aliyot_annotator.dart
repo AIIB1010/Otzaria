@@ -8,21 +8,23 @@ import 'package:otzaria/tools/tikkun_korim/engine/official_pages_builder.dart';
 import 'package:otzaria/tools/tikkun_korim/models/tikkun_models.dart';
 import 'package:otzaria/utils/text/numeral_formats.dart';
 
-final RegExp _kqMarks = RegExp('[\u{E010}-\u{E012}]');
-final RegExp _nikudAndMaqaf = RegExp('[֑-ׇ־]');
-final RegExp _zeiraRabati = RegExp('[\u{E020}-\u{E023}]');
-final RegExp _maskedName = RegExp('יקוק');
-
 /// תוויות שלוש ההפסקות של קריאת שני וחמישי, לפי סדרן.
 const List<String> kWeekdayAliyaLabels = ['כהן', 'לוי', 'ישראל'];
 
 /// נרמול מילה לצורך השוואה: בלי ניקוד, מקף וסימוני PUA; שם השם המוסתר
 /// מוחזר לצורתו כדי שהתאמת מילות הפתיחה תעבוד בשני הכיוונים.
-String normalizeForMatch(String s) => s
-    .replaceAll(_kqMarks, '')
-    .replaceAll(_nikudAndMaqaf, '')
-    .replaceAll(_zeiraRabati, '')
-    .replaceAll(_maskedName, 'יהוה');
+String normalizeForMatch(String s) {
+  final kept = <int>[];
+  for (final code in s.codeUnits) {
+    final dropped =
+        (code >= 0x0591 && code <= 0x05C7) ||
+        (code >= kKetivQereStart && code <= kKetivQereEnd) ||
+        (code >= kZeiraStart && code <= kRabatiEnd);
+    if (!dropped) kept.add(code);
+  }
+  final stripped = kept.length == s.length ? s : String.fromCharCodes(kept);
+  return stripped.replaceAll('יקוק', 'יהוה');
+}
 
 String normalizeParashaName(String uiName) =>
     TikkunData.normalizeParashaName(uiName);
