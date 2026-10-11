@@ -1,6 +1,7 @@
 import 'package:otzaria/plugins/services/plugin_user_folder_grants.dart';
 import 'package:otzaria/library/hidden/hidden_library_selection.dart';
 import 'package:otzaria/library/hidden/hidden_library_store.dart';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -1608,6 +1609,72 @@ void main() {
       final restored = AttachedLibrariesRepository.instance.libraries.single;
       expect(restored.updateSource, isNull);
       expect(restored.updateSourceProbed, isFalse);
+    });
+  });
+
+  group('analyzeBackupStatus', () {
+    void writeOldBackup(Map<String, dynamic> data, {String? raw}) {
+      final dir = Directory(p.join(tempDir.path, 'backups'))
+        ..createSync(recursive: true);
+      File(p.join(dir.path, 'otzaria_backup_2026-01-01T00-00-00.000.json'))
+        ..writeAsStringSync(raw ?? jsonEncode(data))
+        ..setLastModifiedSync(DateTime.now().subtract(const Duration(days: 3)));
+    }
+
+    test('גיבוי גדול מפוענח בלי לחסום את ה-UI isolate', () async {
+      writeOldBackup({
+        'settings': {'key-analyze-probe': 'changed'},
+        'history': [
+          for (var i = 0; i < 120000; i++)
+            {'ref': 'בראשית ברא אלהים את השמים ואת הארץ $i', 'index': i},
+        ],
+      });
+
+      final clock = Stopwatch()..start();
+      var last = 0;
+      var maxGap = 0;
+      void recordGap() {
+        final now = clock.elapsedMilliseconds;
+        if (now - last > maxGap) maxGap = now - last;
+        last = now;
+      }
+
+      final ticker = Timer.periodic(
+        const Duration(milliseconds: 1),
+        (_) => recordGap(),
+      );
+      final status = await BackupService.analyzeBackupStatus();
+      ticker.cancel();
+      recordGap();
+
+      expect(status.hasSignificantChanges, isTrue);
+      // יחסי למשך הכולל ולא סף מוחלט, כדי שעומס על המכונה לא יכשיל.
+      expect(maxGap, lessThan(clock.elapsedMilliseconds / 2));
+    });
+
+    test('שינוי בהגדרות מסומן, והגדרות זהות אינן מסומנות', () async {
+      await Settings.setValue<String>('key-analyze-probe', 'same');
+      writeOldBackup({
+        'settings': {'key-analyze-probe': 'same'},
+      });
+      expect(
+        (await BackupService.analyzeBackupStatus()).hasSignificantChanges,
+        isFalse,
+      );
+
+      writeOldBackup({
+        'settings': {'key-analyze-probe': 'other'},
+      });
+      final status = await BackupService.analyzeBackupStatus();
+      expect(status.hasSignificantChanges, isTrue);
+      expect(status.lastBackupDate, isNotNull);
+    });
+
+    test('קובץ גיבוי פגום אינו ממליץ על גיבוי', () async {
+      writeOldBackup(const {}, raw: '{not json');
+      final status = await BackupService.analyzeBackupStatus();
+      expect(status.hasSignificantChanges, isFalse);
+      expect(status.lastBackupDate, isNotNull);
     });
   });
 }
