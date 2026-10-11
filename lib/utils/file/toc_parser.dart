@@ -24,12 +24,19 @@ class TocParser {
 
   /// Internal representation of a detected heading line.
   static List<_Header> _extractHeaders(String content) {
-    final lines = content.split('\n');
     final List<_Header> headers = [];
 
-    for (int i = 0; i < lines.length; i++) {
-      final rawLine = lines[i];
-      final line = rawLine.trimLeft();
+    var i = 0;
+    for (var start = 0; start <= content.length; i++) {
+      var end = content.indexOf('\n', start);
+      if (end < 0) end = content.length;
+      final lineStart = start;
+      start = end + 1;
+      // שורה שנפתחת באות אינה כותרת — בלי לחתוך אותה מתוך הספר.
+      if (lineStart == end || _startsPlainText(content.codeUnitAt(lineStart))) {
+        continue;
+      }
+      final line = content.substring(lineStart, end).trimLeft();
 
       // Markdown headings: # .. ######
       // We require a space after the hashes to reduce false positives.
@@ -92,6 +99,11 @@ class TocParser {
 
     return roots;
   }
+
+  /// תו שאינו רווח, `#` או `<` — ASCII גלוי או עברית.
+  static bool _startsPlainText(int c) =>
+      (c > 0x20 && c < 0x7F && c != 0x23 && c != 0x3C) ||
+      (c >= 0x0590 && c <= 0x05FF);
 
   static String _stripHtmlTags(String html) {
     return html.replaceAll(RegExp(r'<[^>]*>'), '').trim();

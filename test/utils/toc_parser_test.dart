@@ -162,5 +162,17 @@ void main() {
         );
       }
     });
+
+    test('every first code unit of a line matches the oracle (perf)', () {
+      for (var c = 0; c <= 0xFFFF; c++) {
+        final ch = String.fromCharCode(c);
+        final content = '$ch<h2>א</h2>\n$ch## ב\n$chג\n$ch\n\r<h1>ד</h1>\r';
+        expect(
+          _flatten(TocParser.parseEntriesFromContent(content)),
+          _oracleHeaders(content),
+          reason: c.toRadixString(16),
+        );
+      }
+    });
   });
 }
