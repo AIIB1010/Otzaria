@@ -358,19 +358,4 @@ class SearchQueryBuilder {
   /// המקף העברי (־) והמקף הלועזי (-) מומרים לרווח; רווחים מרובים מצומצמים.
   static String sanitizeQuery(String query) =>
       engine.sanitizeQuery(query: query);
-
-  static Map<String, String> effectiveSpacingValues({
-    required int wordCount,
-    required Map<String, String> spacingValues,
-    required int searchDistance,
-  }) {
-    if (spacingValues.isNotEmpty || searchDistance <= 0 || wordCount < 2) {
-      return spacingValues;
-    }
-
-    return {
-      for (var index = 0; index < wordCount - 1; index++)
-        '$index-${index + 1}': '$searchDistance',
-    };
-  }
 }

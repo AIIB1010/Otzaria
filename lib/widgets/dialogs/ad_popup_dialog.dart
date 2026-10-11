@@ -16,14 +16,10 @@ const _organizationsLoadError = 'לא ניתן לטעון את פרטי הארג
 /// פופאפ פרסומת עם אנימציה מתקדמת
 class AdPopupDialog extends StatefulWidget {
   final String title;
-  final String? imageUrl;
-  final VoidCallback? onAdTap;
 
   const AdPopupDialog({
     super.key,
     required this.title,
-    this.imageUrl,
-    this.onAdTap,
   });
 
   @override

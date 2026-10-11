@@ -19,9 +19,6 @@ class LinkGroup {
     required this.links,
   });
 
-  /// מספר הקישורים בקבוצה
-  int get count => links.length;
-
   /// האם הקבוצה ריקה
   bool get isEmpty => links.isEmpty;
 

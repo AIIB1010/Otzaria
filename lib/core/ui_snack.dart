@@ -260,16 +260,8 @@ class UiSnack {
 
   // ── קבועי טקסט — הערכים מרוכזים ב-CommonMessages ────────────────────────────
   static const String textCopied = CommonMessages.textCopied;
-  static const String formattedTextCopied = CommonMessages.formattedTextCopied;
-  static const String copyError = CommonMessages.copyError;
-  static const String formattedCopyError = CommonMessages.formattedCopyError;
   static const String sectionNotFound = CommonMessages.sectionNotFound;
-  static const String bookNotFound = CommonMessages.bookNotFound;
-  static const String noteCreated = CommonMessages.noteCreated;
   static const String savedSuccessfully = CommonMessages.savedSuccessfully;
-  static const String textNotFound = CommonMessages.textNotFound;
-  static const String noTextSelected = CommonMessages.noTextSelected;
-  static const String cleanupCompleted = CommonMessages.cleanupCompleted;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

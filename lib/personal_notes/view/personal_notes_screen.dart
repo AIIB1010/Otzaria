@@ -1240,7 +1240,6 @@ class _PersonalNotesManagerScreenState
                 child: IgnorePointer(
                   child: PersonalNoteContentView(
                     note: note,
-                    allowSelection: false,
                     maxPreviewChars: 280,
                     textStyle: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: cs.onSurfaceVariant,

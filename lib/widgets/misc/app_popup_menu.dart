@@ -344,8 +344,6 @@ class _AppPopupMenuButtonState<T> extends State<AppPopupMenuButton<T>> {
     }
   }
 
-  Future<void> showMenu() => _showAdaptiveMenu();
-
   @override
   Widget build(BuildContext context) {
     assert(widget.entries != null || widget.itemBuilder != null);
@@ -1636,27 +1634,4 @@ class _SubmenuLayoutDelegate extends SingleChildLayoutDelegate {
   bool shouldRelayout(covariant _SubmenuLayoutDelegate oldDelegate) =>
       oldDelegate.itemRect != itemRect ||
       oldDelegate.openToRight != openToRight;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// showAppMenu — הצגת תפריט במיקום מוחלט
-// ═══════════════════════════════════════════════════════════════════════════
-
-Future<T?> showAppMenu<T>({
-  required BuildContext context,
-  required RelativeRect position,
-  required List<AppMenuEntry<T>> entries,
-}) {
-  final metrics =
-      Theme.of(context).extension<AppMenuMetrics>() ??
-      AppMenuMetrics.create(compactMenus: false);
-  return showMenu<T>(
-    context: context,
-    position: position,
-    items: entries
-        .map<PopupMenuEntry<T>>(
-          (entry) => buildAppPopupMenuItem<T>(context, entry, metrics, null),
-        )
-        .toList(),
-  );
 }

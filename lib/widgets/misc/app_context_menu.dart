@@ -107,10 +107,6 @@ class AppContextMenuRegionState extends State<AppContextMenuRegion> {
     }
   }
 
-  void closeMenu() {
-    _closeContextMenu();
-  }
-
   Future<void> showMenu() async {
     final renderObject = context.findRenderObject();
     if (renderObject is! RenderBox || !renderObject.hasSize) {
