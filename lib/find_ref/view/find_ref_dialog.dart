@@ -951,7 +951,13 @@ class _FindRefDialogState extends State<FindRefDialog> {
     _rememberCurrentQuery();
     final segment = entry.targetSegment ?? 0;
     Navigator.of(context).pop();
-    openBook(context, entry.book, segment, '');
+    openBook(
+      context,
+      entry.book,
+      segment,
+      '',
+      explicitIndex: true,
+    );
   }
 
   /// בודק אם מחרוזת היא קישור otzaria:// או zayit:// תקין וניתן לפענוח.
