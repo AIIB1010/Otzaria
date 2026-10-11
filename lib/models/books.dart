@@ -90,6 +90,24 @@ abstract class Book {
 
   Map<String, dynamic> toJson();
 
+  /// שדות הסריאליזציה המשותפים; [type] מכוון את [Book.fromJson].
+  Map<String, dynamic> baseJson(String type) => {
+    'id': id,
+    'title': title,
+    if (this case FileBook(:final path)) 'path': path,
+    'type': type,
+    'author': author,
+    'filePath': filePath,
+    'fileType': fileType,
+    'categoryPath': categoryPath,
+    'categoryId': categoryId,
+    'heCategories': heCategories,
+    'heEra': heEra,
+    'source': source.wireKey,
+    'isUserBook': isUserBook,
+    'externalLibraryId': externalLibraryId,
+  };
+
   factory Book.fromJson(Map<String, dynamic> json) {
     switch (json['type']) {
       case 'TextBook':
@@ -293,25 +311,11 @@ class TextBook extends Book {
   ///
   /// Returns a JSON object with a 'title' key.
   @override
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'title': title,
-      'type': 'TextBook',
-      'author': author,
-      'filePath': filePath,
-      'fileType': fileType,
-      'categoryPath': categoryPath,
-      'categoryId': categoryId,
-      'heCategories': heCategories,
-      'heEra': heEra,
-      'source': source.wireKey,
-      'isUserBook': isUserBook,
-      'externalLibraryId': externalLibraryId,
-      'versionTitle': versionTitle,
-      'heVersionTitle': heVersionTitle,
-    };
-  }
+  Map<String, dynamic> toJson() => {
+    ...baseJson('TextBook'),
+    'versionTitle': versionTitle,
+    'heVersionTitle': heVersionTitle,
+  };
 }
 
 /// Represents a book from the Otzar HaChochma digital library.
@@ -473,24 +477,7 @@ class PdfBook extends FileBook {
   }
 
   @override
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'title': title,
-      'path': path,
-      'type': 'PdfBook',
-      'author': author,
-      'filePath': filePath,
-      'categoryPath': categoryPath,
-      'categoryId': categoryId,
-      'fileType': fileType,
-      'heCategories': heCategories,
-      'heEra': heEra,
-      'source': source.wireKey,
-      'isUserBook': isUserBook,
-      'externalLibraryId': externalLibraryId,
-    };
-  }
+  Map<String, dynamic> toJson() => baseJson('PdfBook');
 
   @override
   String toString() => 'pdfBook(title: $title, path: $path)';
@@ -679,24 +666,7 @@ class EpubBook extends ConvertibleDocumentBook {
   }
 
   @override
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'title': title,
-      'path': path,
-      'type': 'EpubBook',
-      'author': author,
-      'filePath': filePath,
-      'fileType': fileType,
-      'categoryPath': categoryPath,
-      'categoryId': categoryId,
-      'heCategories': heCategories,
-      'heEra': heEra,
-      'source': source.wireKey,
-      'isUserBook': isUserBook,
-      'externalLibraryId': externalLibraryId,
-    };
-  }
+  Map<String, dynamic> toJson() => baseJson('EpubBook');
 
   @override
   String toString() => 'EpubBook(title: $title, path: $path)';
@@ -755,24 +725,7 @@ class DocumentBook extends ConvertibleDocumentBook {
   }
 
   @override
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'title': title,
-      'path': path,
-      'type': 'DocumentBook',
-      'author': author,
-      'filePath': filePath,
-      'fileType': fileType,
-      'categoryPath': categoryPath,
-      'categoryId': categoryId,
-      'heCategories': heCategories,
-      'heEra': heEra,
-      'source': source.wireKey,
-      'isUserBook': isUserBook,
-      'externalLibraryId': externalLibraryId,
-    };
-  }
+  Map<String, dynamic> toJson() => baseJson('DocumentBook');
 
   @override
   String toString() => 'DocumentBook(title: $title, fileType: $fileType)';

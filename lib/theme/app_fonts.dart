@@ -12,6 +12,7 @@ import 'package:flutter/services.dart' show FontLoader;
 import 'package:path/path.dart' as p;
 import 'package:system_fonts/system_fonts.dart' show SystemFonts;
 import 'package:otzaria/utils/file/font_file_reader.dart';
+import 'package:otzaria/utils/file/sfnt_bytes.dart';
 import 'package:otzaria/utils/file/sfnt_metadata_reader.dart';
 import 'package:otzaria/utils/file/system_font_locator.dart';
 
@@ -461,25 +462,15 @@ class AppFonts {
   ]) {
     // TTC (TrueType Collection): magic "ttcf" at offset 0.
     // numFonts at offset 8; font offsets start at offset 12.
-    if (base == 0 &&
-        data.length >= 16 &&
-        data[0] == 0x74 &&
-        data[1] == 0x74 &&
-        data[2] == 0x63 &&
-        data[3] == 0x66) {
-      final numFonts =
-          (data[8] << 24) | (data[9] << 16) | (data[10] << 8) | data[11];
+    if (base == 0 && data.length >= 16 && data.sfntTag(0) == 'ttcf') {
+      final numFonts = data.sfntU32(8);
       if (numFonts <= 0) return false;
       // FontLoader טוען את ה-face הראשון; רווח ב-face אחר אינו מגן עליו.
       final facesToCheck = codePoint == null ? numFonts : 1;
       for (int i = 0; i < facesToCheck; i++) {
         final offsetPos = 12 + i * 4;
         if (offsetPos + 4 > data.length) break;
-        final fontOffset =
-            (data[offsetPos] << 24) |
-            (data[offsetPos + 1] << 16) |
-            (data[offsetPos + 2] << 8) |
-            data[offsetPos + 3];
+        final fontOffset = data.sfntU32(offsetPos);
         if (fontOffset <= 0 || fontOffset >= data.length) continue;
         if (_sfntCoversAny(data, overlaps, fontOffset, codePoint)) {
           return true;
@@ -488,27 +479,9 @@ class AppFonts {
       return false;
     }
 
-    int u16(int offset) {
-      if (offset + 2 > data.length) return -1;
-      return (data[offset] << 8) | data[offset + 1];
-    }
-
-    int u32(int offset) {
-      if (offset + 4 > data.length) return -1;
-      return (data[offset] << 24) |
-          (data[offset + 1] << 16) |
-          (data[offset + 2] << 8) |
-          data[offset + 3];
-    }
-
-    String tag4(int offset) {
-      if (offset + 4 > data.length) return '';
-      return String.fromCharCodes(data.sublist(offset, offset + 4));
-    }
-
     // Offset table (ב-base; היסטי הטבלאות מוחלטים בתוך data).
     if (base + 12 > data.length) return false;
-    final numTables = u16(base + 4);
+    final numTables = data.sfntU16(base + 4);
     if (numTables <= 0) return false;
 
     // Table records
@@ -521,10 +494,10 @@ class AppFonts {
 
     for (int i = 0; i < numTables; i++) {
       final rec = tableDirOffset + i * recordSize;
-      final tag = tag4(rec);
+      final tag = data.sfntTag(rec);
       if (tag == 'cmap') {
-        cmapOffset = u32(rec + 8);
-        cmapLength = u32(rec + 12);
+        cmapOffset = data.sfntU32(rec + 8);
+        cmapLength = data.sfntU32(rec + 12);
         break;
       }
     }
@@ -535,7 +508,7 @@ class AppFonts {
 
     // cmap header
     if (cmapOffset + 4 > data.length) return false;
-    final cmapNumTables = u16(cmapOffset + 2);
+    final cmapNumTables = data.sfntU16(cmapOffset + 2);
     if (cmapNumTables <= 0) return false;
 
     // Choose best subtable.
@@ -550,9 +523,9 @@ class AppFonts {
     int bestRank = 999;
     for (int i = 0; i < cmapNumTables; i++) {
       final rec = encodingRecordsOffset + i * encodingRecordSize;
-      final platformId = u16(rec);
-      final encodingId = u16(rec + 2);
-      final subOffset = u32(rec + 4);
+      final platformId = data.sfntU16(rec);
+      final encodingId = data.sfntU16(rec + 2);
+      final subOffset = data.sfntU32(rec + 4);
       if (subOffset < 0) continue;
       final abs = cmapOffset + subOffset;
       if (abs < cmapOffset || abs + 2 > cmapEnd) continue;
@@ -573,17 +546,17 @@ class AppFonts {
     }
 
     if (bestSubtableOffset == null) return false;
-    final format = u16(bestSubtableOffset);
+    final format = data.sfntU16(bestSubtableOffset);
     if (format < 0) return false;
 
     if (format == 4) {
       // Format 4 (BMP)
-      final length = u16(bestSubtableOffset + 2);
+      final length = data.sfntU16(bestSubtableOffset + 2);
       if (length < 16) return false;
       final subtableEnd = bestSubtableOffset + length;
       if (subtableEnd > cmapEnd) return false;
 
-      final segCountX2 = u16(bestSubtableOffset + 6);
+      final segCountX2 = data.sfntU16(bestSubtableOffset + 6);
       if (segCountX2 <= 0 || (segCountX2 % 2) != 0) return false;
       final segCount = segCountX2 ~/ 2;
 
@@ -595,17 +568,17 @@ class AppFonts {
       if (idRangeOffsetOffset + segCount * 2 > subtableEnd) return false;
 
       for (int i = 0; i < segCount; i++) {
-        final endCode = u16(endCodesOffset + i * 2);
-        final startCode = u16(startCodesOffset + i * 2);
+        final endCode = data.sfntU16(endCodesOffset + i * 2);
+        final startCode = data.sfntU16(startCodesOffset + i * 2);
         if (endCode < 0 || startCode < 0) continue;
 
         // End sentinel often uses 0xFFFF.
         if (endCode == 0xFFFF && startCode == 0xFFFF) continue;
         if (!overlaps(startCode, endCode)) continue;
         if (codePoint == null) return true;
-        final delta = u16(idDeltasOffset + i * 2);
+        final delta = data.sfntU16(idDeltasOffset + i * 2);
         final rangePosition = idRangeOffsetOffset + i * 2;
-        final rangeOffset = u16(rangePosition);
+        final rangeOffset = data.sfntU16(rangePosition);
         if (rangeOffset == 0) return ((codePoint + delta) & 0xffff) != 0;
         final glyphPosition =
             rangePosition + rangeOffset + (codePoint - startCode) * 2;
@@ -613,7 +586,7 @@ class AppFonts {
             glyphPosition + 2 > subtableEnd) {
           return false;
         }
-        final glyph = u16(glyphPosition);
+        final glyph = data.sfntU16(glyphPosition);
         return glyph != 0 && ((glyph + delta) & 0xffff) != 0;
       }
       return false;
@@ -622,12 +595,12 @@ class AppFonts {
     if (format == 12) {
       // Format 12 (full Unicode)
       // u16 format, u16 reserved, u32 length, u32 language, u32 nGroups
-      final length = u32(bestSubtableOffset + 4);
+      final length = data.sfntU32(bestSubtableOffset + 4);
       if (length < 16) return false;
       final subtableEnd = bestSubtableOffset + length;
       if (subtableEnd > cmapEnd) return false;
 
-      final nGroups = u32(bestSubtableOffset + 12);
+      final nGroups = data.sfntU32(bestSubtableOffset + 12);
       if (nGroups <= 0) return false;
       final groupsOffset = bestSubtableOffset + 16;
       const groupSize = 12;
@@ -635,12 +608,12 @@ class AppFonts {
 
       for (int i = 0; i < nGroups; i++) {
         final off = groupsOffset + i * groupSize;
-        final startChar = u32(off);
-        final endChar = u32(off + 4);
+        final startChar = data.sfntU32(off);
+        final endChar = data.sfntU32(off + 4);
         if (startChar < 0 || endChar < 0) continue;
         if (!overlaps(startChar, endChar)) continue;
         if (codePoint == null) return true;
-        return u32(off + 8) + codePoint - startChar != 0;
+        return data.sfntU32(off + 8) + codePoint - startChar != 0;
       }
       return false;
     }
@@ -654,22 +627,12 @@ class AppFonts {
   /// רבים השדות ריקים — ואז מוחזר [FontCategory.unknown].
   static FontCategory _sfntCategory(Uint8List data, [int base = 0]) {
     // TTC: נבדק את הגופן הראשון בלבד לצורך הסיווג.
-    if (base == 0 &&
-        data.length >= 16 &&
-        data[0] == 0x74 &&
-        data[1] == 0x74 &&
-        data[2] == 0x63 &&
-        data[3] == 0x66) {
-      final numFonts =
-          (data[8] << 24) | (data[9] << 16) | (data[10] << 8) | data[11];
+    if (base == 0 && data.length >= 16 && data.sfntTag(0) == 'ttcf') {
+      final numFonts = data.sfntU32(8);
       for (int i = 0; i < numFonts; i++) {
         final offsetPos = 12 + i * 4;
         if (offsetPos + 4 > data.length) break;
-        final fontOffset =
-            (data[offsetPos] << 24) |
-            (data[offsetPos + 1] << 16) |
-            (data[offsetPos + 2] << 8) |
-            data[offsetPos + 3];
+        final fontOffset = data.sfntU32(offsetPos);
         if (fontOffset <= 0 || fontOffset >= data.length) continue;
         final cat = _sfntCategory(data, fontOffset);
         if (cat != FontCategory.unknown) return cat;
@@ -677,22 +640,9 @@ class AppFonts {
       return FontCategory.unknown;
     }
 
-    int u16(int offset) {
-      if (offset + 2 > data.length) return -1;
-      return (data[offset] << 8) | data[offset + 1];
-    }
-
-    int u32(int offset) {
-      if (offset + 4 > data.length) return -1;
-      return (data[offset] << 24) |
-          (data[offset + 1] << 16) |
-          (data[offset + 2] << 8) |
-          data[offset + 3];
-    }
-
     // Offset table (ב-base; היסטי הטבלאות מוחלטים בתוך data).
     if (base + 12 > data.length) return FontCategory.unknown;
-    final numTables = u16(base + 4);
+    final numTables = data.sfntU16(base + 4);
     if (numTables <= 0) return FontCategory.unknown;
 
     final tableDirOffset = base + 12;
@@ -704,13 +654,8 @@ class AppFonts {
     int os2Offset = -1;
     for (int i = 0; i < numTables; i++) {
       final rec = tableDirOffset + i * recordSize;
-      if (rec + 4 > data.length) break;
-      if (data[rec] == 0x4F && // 'O'
-          data[rec + 1] == 0x53 && // 'S'
-          data[rec + 2] == 0x2F && // '/'
-          data[rec + 3] == 0x32) {
-        // '2'
-        os2Offset = u32(rec + 8);
+      if (data.sfntTag(rec) == 'OS/2') {
+        os2Offset = data.sfntU32(rec + 8);
         break;
       }
     }
@@ -719,7 +664,7 @@ class AppFonts {
     }
 
     // sFamilyClass (int16 @ 30) — הבייט הגבוה הוא מזהה המחלקה.
-    final familyClass = u16(os2Offset + 30);
+    final familyClass = data.sfntU16(os2Offset + 30);
     if (familyClass >= 0) {
       final classId = (familyClass >> 8) & 0xFF;
       switch (classId) {
@@ -953,19 +898,8 @@ class AppFonts {
   /// קורא מטבלאות ה-SFNT את שם המשפחה, מחלקת המשקל וסימוני בולד/נטוי/ציר-wght.
   /// מחזיר null אם המבנה פגום. אינו תומך ב-TTC (system_fonts מחזיר ttf/otf בלבד).
   static _FontFaceInfo? _sfntFaceInfo(Uint8List data) {
-    int u16(int o) => (o + 2 > data.length) ? -1 : (data[o] << 8) | data[o + 1];
-    int u32(int o) => (o + 4 > data.length)
-        ? -1
-        : (data[o] << 24) |
-              (data[o + 1] << 16) |
-              (data[o + 2] << 8) |
-              data[o + 3];
-    String tag4(int o) => (o + 4 > data.length)
-        ? ''
-        : String.fromCharCodes(data.sublist(o, o + 4));
-
     if (data.length < 12) return null;
-    final numTables = u16(4);
+    final numTables = data.sfntU16(4);
     if (numTables <= 0) return null;
     const dir = 12;
     if (dir + numTables * 16 > data.length) return null;
@@ -973,15 +907,15 @@ class AppFonts {
     int os2 = -1, head = -1, name = -1, fvar = -1;
     for (int i = 0; i < numTables; i++) {
       final rec = dir + i * 16;
-      switch (tag4(rec)) {
+      switch (data.sfntTag(rec)) {
         case 'OS/2':
-          os2 = u32(rec + 8);
+          os2 = data.sfntU32(rec + 8);
         case 'head':
-          head = u32(rec + 8);
+          head = data.sfntU32(rec + 8);
         case 'name':
-          name = u32(rec + 8);
+          name = data.sfntU32(rec + 8);
         case 'fvar':
-          fvar = u32(rec + 8);
+          fvar = data.sfntU32(rec + 8);
       }
     }
 
@@ -989,33 +923,33 @@ class AppFonts {
     bool bold = false;
     bool italic = false;
     if (os2 >= 0 && os2 + 64 <= data.length) {
-      final w = u16(os2 + 4);
+      final w = data.sfntU16(os2 + 4);
       if (w > 0) weightClass = w;
-      final fsSel = u16(os2 + 62);
+      final fsSel = data.sfntU16(os2 + 62);
       if (fsSel >= 0) {
         italic = (fsSel & 0x01) != 0;
         bold = (fsSel & 0x20) != 0;
       }
     }
     if (head >= 0 && head + 46 <= data.length) {
-      final macStyle = u16(head + 44);
+      final macStyle = data.sfntU16(head + 44);
       if (macStyle >= 0) {
         bold = bold || (macStyle & 0x01) != 0;
         italic = italic || (macStyle & 0x02) != 0;
       }
     }
 
-    final family = _readSfntFamilyName(data, name, u16);
+    final family = _readSfntFamilyName(data, name);
 
     bool hasWeightAxis = false;
     if (fvar >= 0 && fvar + 16 <= data.length) {
-      final axesOffset = u16(fvar + 4);
-      final axisCount = u16(fvar + 8);
-      final axisSize = u16(fvar + 10);
+      final axesOffset = data.sfntU16(fvar + 4);
+      final axisCount = data.sfntU16(fvar + 8);
+      final axisSize = data.sfntU16(fvar + 10);
       if (axesOffset > 0 && axisCount > 0 && axisSize >= 4) {
         final axesBase = fvar + axesOffset;
         for (int i = 0; i < axisCount; i++) {
-          if (tag4(axesBase + i * axisSize) == 'wght') {
+          if (data.sfntTag(axesBase + i * axisSize) == 'wght') {
             hasWeightAxis = true;
             break;
           }
@@ -1036,14 +970,10 @@ class AppFonts {
   /// שם המשפחה הבסיסי (nameID 1), כך ש-Regular ו-Bold מקבלים שם זהה.
   /// בכל nameID מועדפת רשומת Windows (platform 3) — Windows מקבץ לפיה, ובגופני
   /// Medium רבים רשומות פלטפורמה 0/1 נושאות את שם הבסיס וממזגות משפחות שונות.
-  static String _readSfntFamilyName(
-    Uint8List data,
-    int nameOffset,
-    int Function(int) u16,
-  ) {
+  static String _readSfntFamilyName(Uint8List data, int nameOffset) {
     if (nameOffset < 0 || nameOffset + 6 > data.length) return '';
-    final count = u16(nameOffset + 2);
-    final storageOffset = nameOffset + u16(nameOffset + 4);
+    final count = data.sfntU16(nameOffset + 2);
+    final storageOffset = nameOffset + data.sfntU16(nameOffset + 4);
     if (count <= 0) return '';
     final recordsBase = nameOffset + 6;
     if (recordsBase + count * 12 > data.length) return '';
@@ -1054,11 +984,11 @@ class AppFonts {
     String? basic;
     for (int i = 0; i < count; i++) {
       final rec = recordsBase + i * 12;
-      final nameId = u16(rec + 6);
+      final nameId = data.sfntU16(rec + 6);
       if (nameId != 1 && nameId != 16) continue;
-      final platformId = u16(rec);
-      final length = u16(rec + 8);
-      final strOffset = storageOffset + u16(rec + 10);
+      final platformId = data.sfntU16(rec);
+      final length = data.sfntU16(rec + 8);
+      final strOffset = storageOffset + data.sfntU16(rec + 10);
       if (length <= 0 || strOffset + length > data.length) continue;
 
       final String decoded;

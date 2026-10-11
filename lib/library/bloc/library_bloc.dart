@@ -42,6 +42,25 @@ class LibraryBloc extends Bloc<LibraryEvent, LibraryState> {
   Future<Library> _visibleLibrary() async =>
       filterHiddenFromLibrary(await _repository.library, hiddenStore.load());
 
+  /// טוען את העץ הגלוי ומציג את שורש הספרייה במקום התצוגה הקודמת.
+  Future<void> _emitLibraryRoot(
+    Emitter<LibraryState> emit, {
+    String? changedHebrewBooksPath,
+  }) async {
+    final library = await _visibleLibrary();
+    emit(
+      state.copyWith(
+        library: library,
+        currentCategory: library,
+        isLoading: false,
+        searchResults: null,
+        searchQuery: null,
+        selectedTopics: null,
+        changedHebrewBooksPath: changedHebrewBooksPath,
+      ),
+    );
+  }
+
   // קיבוץ רענונים: כשרענון כבר רץ, בקשות נוספות נצברות ומתמזגות לרענון יחיד
   // שרץ בסיום — במקום לבנות מחדש את הקטלוג (~7030 ספרים) לכל בקשה.
   bool _refreshInFlight = false;
@@ -93,18 +112,7 @@ class LibraryBloc extends Bloc<LibraryEvent, LibraryState> {
       // כאן הייתה גורמת לבניית הקטלוג (~7030 ספרים) פעמיים בעלייה. הרענון
       // המאולץ נשאר נכון ב-RefreshLibrary/UpdateLibraryPath, שם הנתונים השתנו.
       DataRepository.instance.invalidateExternalBooksCache();
-      Library library = await _visibleLibrary();
-
-      emit(
-        state.copyWith(
-          library: library,
-          currentCategory: library,
-          isLoading: false,
-          searchResults: null,
-          searchQuery: null,
-          selectedTopics: null,
-        ),
-      );
+      await _emitLibraryRoot(emit);
 
       // prune של תיקיות מותאמות שנמחקו מהדיסק הוא משימת תחזוקה — לא חיוני
       // להצגת הספרייה הראשונית. הוא כולל I/O סינכרוני כבד (File.exists,
@@ -525,18 +533,7 @@ class LibraryBloc extends Bloc<LibraryEvent, LibraryState> {
         );
       }
 
-      final library = await _visibleLibrary();
-
-      emit(
-        state.copyWith(
-          library: library,
-          currentCategory: library,
-          isLoading: false,
-          searchResults: null,
-          searchQuery: null,
-          selectedTopics: null,
-        ),
-      );
+      await _emitLibraryRoot(emit);
     } catch (e) {
       emit(
         state.copyWith(
@@ -564,19 +561,7 @@ class LibraryBloc extends Bloc<LibraryEvent, LibraryState> {
       DataRepository.instance.library = FileSystemData.instance.getLibrary();
       DataRepository.instance.invalidateExternalBooksCache();
 
-      final library = await _visibleLibrary();
-
-      emit(
-        state.copyWith(
-          library: library,
-          currentCategory: library,
-          isLoading: false,
-          searchResults: null,
-          searchQuery: null,
-          selectedTopics: null,
-          changedHebrewBooksPath: event.path,
-        ),
-      );
+      await _emitLibraryRoot(emit, changedHebrewBooksPath: event.path);
     } catch (e) {
       emit(
         state.copyWith(
@@ -604,19 +589,7 @@ class LibraryBloc extends Bloc<LibraryEvent, LibraryState> {
       DataRepository.instance.library = FileSystemData.instance.getLibrary();
       DataRepository.instance.invalidateExternalBooksCache();
 
-      final library = await _visibleLibrary();
-
-      emit(
-        state.copyWith(
-          library: library,
-          currentCategory: library,
-          isLoading: false,
-          searchResults: null,
-          searchQuery: null,
-          selectedTopics: null,
-          changedHebrewBooksPath: '',
-        ),
-      );
+      await _emitLibraryRoot(emit, changedHebrewBooksPath: '');
 
       developer.log(
         'Hebrew books path removed successfully',
