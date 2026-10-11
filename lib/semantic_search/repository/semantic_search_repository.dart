@@ -141,7 +141,7 @@ class SemanticSearchRepository {
     _download,
     isOffline: () => _settings.isOfflineMode,
     onChecking: _showChecking,
-    onSource: (staged) => _jobFromStaged = staged,
+    onSource: _showSource,
   );
   StreamSubscription<SearchFeedbackConsent>? _consentSubscription;
   SemanticModelIdentity? _identity;
@@ -1120,6 +1120,15 @@ class SemanticSearchRepository {
       SemanticAvailabilityPhase.downloading,
       progress.withChecking(checking),
     );
+  }
+
+  void _showSource(bool staged) {
+    if (_jobFromStaged == staged) return;
+    _jobFromStaged = staged;
+    final progress = _jobProgress;
+    if (progress != null) {
+      _reportProgress(progress.item, progress.receivedBytes, force: true);
+    }
   }
 
   /// ההתקדמות הכוללת של העבודה בשלב [item], אחרי [received] בתים.
