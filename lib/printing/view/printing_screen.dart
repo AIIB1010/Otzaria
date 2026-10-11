@@ -900,25 +900,23 @@ class _PrintingScreenState extends State<PrintingScreen> {
 
     final shouldReplaceHolyNames = _shouldReplaceHolyNames;
 
-    // חלוקה גולמית לשורות בלבד. הטרנספורמציות היקרות (הסרת ניקוד/טעמים/HTML
-    // והחלפת שמות קודש) מוחלות פר-שורה על הטווח הנבחר ב-_buildPrintBlocks —
-    // לא על כל הספר. חוסך עבודה כשמדפיסים קטע קצר מתוך ספר ארוך.
-    final allLines = dataString.split('\n');
+    // הטרנספורמציות היקרות מוחלות פר-שורה רק על הטווח הנבחר ב-_buildPrintBlocks.
+    final totalLines = await _totalLineCount();
     final pageMargin = this.pageMargin;
     final fontSize = this.fontSize;
 
-    final bookName = allLines.isNotEmpty
-        ? stripHtmlIfNeeded(_applyTextTransforms(allLines[0]))
-        : '';
-    final selectedStart = startLine.clamp(0, allLines.length);
-    final selectedEnd = endLine.clamp(selectedStart, allLines.length);
+    final bookName = stripHtmlIfNeeded(
+      _applyTextTransforms(linesInRange(dataString, 0, 1).first),
+    );
+    final selectedStart = startLine.clamp(0, totalLines);
+    final selectedEnd = endLine.clamp(selectedStart, totalLines);
 
     final personalNotes = _includePersonalNotes
         ? await _getPersonalNotesForBook(widget.bookId)
         : const <PersonalNote>[];
 
     final blocks = await _buildPrintBlocks(
-      allLines: allLines,
+      rangeLines: linesInRange(dataString, selectedStart, selectedEnd),
       selectedStart: selectedStart,
       selectedEnd: selectedEnd,
       shouldReplaceHolyNames: shouldReplaceHolyNames,
@@ -1211,7 +1209,7 @@ class _PrintingScreenState extends State<PrintingScreen> {
   }
 
   Future<List<Map<String, String>>> _buildPrintBlocks({
-    required List<String> allLines,
+    required List<String> rangeLines,
     required int selectedStart,
     required int selectedEnd,
     required bool shouldReplaceHolyNames,
@@ -1237,7 +1235,7 @@ class _PrintingScreenState extends State<PrintingScreen> {
 
     for (var i = selectedStart; i < selectedEnd; i++) {
       // הטרנספורמציות מוחלות רק על שורות הטווח; ב-Word ה-HTML נשמר לעיצוב.
-      final lineText = _applyTextTransforms(allLines[i]);
+      final lineText = _applyTextTransforms(rangeLines[i - selectedStart]);
       blocks.add({
         'kind': 'text',
         'text': keepHtml ? lineText : stripHtmlIfNeeded(lineText),
@@ -1333,23 +1331,23 @@ class _PrintingScreenState extends State<PrintingScreen> {
     final shouldReplaceHolyNames = _shouldReplaceHolyNames;
 
     // שומרים את תגיות ה-HTML — WordExportService ממיר אותן לעיצוב במסמך
-    final allLines = dataString.split('\n').toList();
-    var bookName = allLines.isNotEmpty
-        ? stripHtmlIfNeeded(_applyTextTransforms(allLines.first))
-        : widget.bookId;
+    final totalLines = await _totalLineCount();
+    var bookName = stripHtmlIfNeeded(
+      _applyTextTransforms(linesInRange(dataString, 0, 1).first),
+    );
     if (bookName.trim().isEmpty) {
       bookName = widget.bookId;
     }
 
-    final selectedStart = startLine.clamp(0, allLines.length);
-    final selectedEnd = endLine.clamp(selectedStart, allLines.length);
+    final selectedStart = startLine.clamp(0, totalLines);
+    final selectedEnd = endLine.clamp(selectedStart, totalLines);
     final personalNotes = _includePersonalNotes
         ? await _getPersonalNotesForBook(widget.bookId)
         : const <PersonalNote>[];
 
     final legacyBlocks = _foldPersonalNoteBlocks(
       await _buildPrintBlocks(
-        allLines: allLines,
+        rangeLines: linesInRange(dataString, selectedStart, selectedEnd),
         selectedStart: selectedStart,
         selectedEnd: selectedEnd,
         shouldReplaceHolyNames: shouldReplaceHolyNames,
