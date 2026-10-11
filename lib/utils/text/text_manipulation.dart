@@ -1683,18 +1683,42 @@ String replaceHolyNames(
   String s, {
   HolyNameStyle style = HolyNameStyle.kufKuf,
 }) {
-  return s.replaceAllMapped(
-    _holyName,
-    (match) {
-      if (_hasThreeContiguousHebrewLettersBeforeMatch(s, match.start)) {
-        return match.group(0)!;
-      }
+  // סריקת RegExp על כל השורה יקרה בשורות ארוכות, לכן מנסים
+  // התאמה רק כשאחרי ה-י באות "הוה", בדילוג על כל מה שעשוי להיות Mn.
+  StringBuffer? out;
+  var copied = 0;
+  for (var i = s.indexOf('י'); i >= 0; i = s.indexOf('י', i + 1)) {
+    if (!_mayBeHolyName(s, i)) continue;
+    final match = _holyName.matchAsPrefix(s, i);
+    if (match == null) continue;
+    i = match.end - 1;
+    if (_hasThreeContiguousHebrewLettersBeforeMatch(s, match.start)) continue;
+    (out ??= StringBuffer())
+      ..write(s.substring(copied, match.start))
+      ..write(
+        style == HolyNameStyle.hehApostrophe
+            ? "ה'"
+            : 'י${match[1]}ק${match[2]}ו${match[3]}ק${match[4]}',
+      );
+    copied = match.end;
+  }
+  return out == null ? s : (out..write(s.substring(copied))).toString();
+}
 
-      return style == HolyNameStyle.hehApostrophe
-          ? "ה'"
-          : 'י${match[1]}ק${match[2]}ו${match[3]}ק${match[4]}';
-    },
-  );
+/// מסנן מקדים ל-[_holyName]: "הוה" אחרי ה-י, בדילוג על כל יחידה שעשויה להיות
+/// Mn (כולן ≥ U+0300; אות עברית אינה Mn). ההתאמה עצמה נבדקת ב-RegExp.
+bool _mayBeHolyName(String s, int yod) {
+  var j = yod + 1;
+  for (final letter in const [0x05D4, 0x05D5, 0x05D4]) {
+    while (j < s.length) {
+      final c = s.codeUnitAt(j);
+      if (c < 0x0300 || (c >= 0x05D0 && c <= 0x05EA)) break;
+      j++;
+    }
+    if (j >= s.length || s.codeUnitAt(j) != letter) return false;
+    j++;
+  }
+  return true;
 }
 
 bool _hasThreeContiguousHebrewLettersBeforeMatch(String text, int matchStart) {
