@@ -48,6 +48,48 @@ import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 const _kAllChapter = -1;
 
+/// תצוגה מקדימה של ~4 מילים ראשונות של הפסקה.
+String _getParaPreview(String rawText) {
+  final plain = utils
+      .stripHtmlIfNeeded(rawText)
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+  if (plain.isEmpty) return '';
+  const maxChars = 40;
+  if (plain.length <= maxChars) return plain;
+  final lastSpace = plain.lastIndexOf(' ', maxChars);
+  final cut = lastSpace > 0 ? lastSpace : maxChars;
+  return '${plain.substring(0, cut)}...';
+}
+
+/// האם [child] משכפל את כותרת [chapter] (ולכן אינו פסוק לבחירה).
+@visibleForTesting
+bool isDuplicateChapterChild(
+  TocEntry chapter,
+  TocEntry child,
+  List<String> content,
+) {
+  // נבדק לפני התצוגה המקדימה — היא יקרה ו-_findPos עוברת על כל הפסוקים.
+  if (child.index != chapter.index) {
+    return false;
+  }
+  final normalizedChapter = chapter.text.trim();
+  final normalizedChild = child.text.trim();
+  final normalizedPreview = _previewForChild(child, content).trim();
+  return normalizedChild == normalizedChapter ||
+      normalizedPreview == normalizedChapter ||
+      normalizedPreview.startsWith(normalizedChapter);
+}
+
+String _previewForChild(TocEntry child, List<String> content) {
+  final textFromContent = child.index < content.length
+      ? content[child.index]
+      : '';
+  return textFromContent.trim().isNotEmpty
+      ? _getParaPreview(textFromContent)
+      : child.text;
+}
+
 /// אינדקס השורה האחרונה של [chapter] ברשימת [chapters].
 ///
 /// פרק שאינו האחרון נתחם ע"י תחילת הפרק העוקב פחות 1. לפרק האחרון אין פרק
@@ -482,11 +524,7 @@ class _CommentatorsTabScreenState extends State<CommentatorsTabScreen>
         bestChapter = ch;
         bestVerseIdx = _kAllChapter;
         for (int i = 0; i < ch.children.length; i++) {
-          if (_isDuplicateChapterChild(
-            ch,
-            ch.children[i],
-            _previewForChild(ch, ch.children[i], content),
-          )) {
+          if (isDuplicateChapterChild(ch, ch.children[i], content)) {
             continue;
           }
           if (ch.children[i].index <= lineIndex) {
@@ -1210,49 +1248,6 @@ class _CommentatorsTabScreenState extends State<CommentatorsTabScreen>
     );
   }
 
-  /// מחזיר תצוגה מקדימה של ~4 מילים ראשונות של הפסקה
-  String _getParaPreview(String rawText) {
-    final plain = utils
-        .stripHtmlIfNeeded(rawText)
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-    if (plain.isEmpty) return '';
-    const maxChars = 40;
-    if (plain.length <= maxChars) return plain;
-    final lastSpace = plain.lastIndexOf(' ', maxChars);
-    final cut = lastSpace > 0 ? lastSpace : maxChars;
-    return '${plain.substring(0, cut)}...';
-  }
-
-  bool _isDuplicateChapterChild(
-    TocEntry chapter,
-    TocEntry child,
-    String preview,
-  ) {
-    if (child.index != chapter.index) {
-      return false;
-    }
-    final normalizedChapter = chapter.text.trim();
-    final normalizedChild = child.text.trim();
-    final normalizedPreview = preview.trim();
-    return normalizedChild == normalizedChapter ||
-        normalizedPreview == normalizedChapter ||
-        normalizedPreview.startsWith(normalizedChapter);
-  }
-
-  String _previewForChild(
-    TocEntry chapter,
-    TocEntry child,
-    List<String> content,
-  ) {
-    final textFromContent = child.index < content.length
-        ? content[child.index]
-        : '';
-    return textFromContent.trim().isNotEmpty
-        ? _getParaPreview(textFromContent)
-        : child.text;
-  }
-
   bool _isHeadingOnlyParagraphOffset(
     TocEntry chapter,
     int offset,
@@ -1274,11 +1269,7 @@ class _CommentatorsTabScreenState extends State<CommentatorsTabScreen>
         .asMap()
         .entries
         .where(
-          (entry) => !_isDuplicateChapterChild(
-            chapter,
-            entry.value,
-            _previewForChild(chapter, entry.value, content),
-          ),
+          (entry) => !isDuplicateChapterChild(chapter, entry.value, content),
         )
         .map((entry) => entry.key)
         .toList();
@@ -1331,7 +1322,7 @@ class _CommentatorsTabScreenState extends State<CommentatorsTabScreen>
       if (chapter.children.isNotEmpty) {
         for (final i in _selectableVerseIndices(chapter, content)) {
           final child = chapter.children[i];
-          final preview = _previewForChild(chapter, child, content);
+          final preview = _previewForChild(child, content);
           if (preview.isEmpty) continue;
           items.add(
             _TocListItem.subItem(
