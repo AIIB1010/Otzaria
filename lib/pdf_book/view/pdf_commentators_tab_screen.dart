@@ -54,6 +54,32 @@ const int _kAllPara = -1;
 /// רוחב חלונית הניווט בכרטיסיית המפרשים.
 const double _kNavPaneWidth = 320;
 
+/// פסקאות (שורות טקסט לא-ריקות) בתוך הכותרת [headingIdx]; לכל היותר [limit].
+@visibleForTesting
+List<({int lineIdx, String text})> headingParagraphs(
+  List<String> lines,
+  List<MapEntry<String, int>> headings,
+  int headingIdx, {
+  int? limit,
+}) {
+  if (headingIdx >= headings.length) return const [];
+  final start = headings[headingIdx].value;
+  final headingText = headings[headingIdx].key.trim();
+  final end = headingIdx + 1 < headings.length
+      ? headings[headingIdx + 1].value - 1
+      : lines.length - 1;
+  final result = <({int lineIdx, String text})>[];
+  for (int i = start; i <= end && i < lines.length; i++) {
+    if (result.length == limit) break;
+    final clean = utils.stripHtmlIfNeeded(lines[i]).trim();
+    if (i == start && clean == headingText) {
+      continue;
+    }
+    if (clean.isNotEmpty) result.add((lineIdx: i, text: clean));
+  }
+  return result;
+}
+
 class PdfCommentatorsTabScreen extends StatefulWidget {
   final PdfCommentatorsTab tab;
 
@@ -561,26 +587,14 @@ class _PdfCommentatorsTabScreenState extends State<PdfCommentatorsTabScreen>
     super.dispose();
   }
 
-  /// פסקאות (שורות טקסט לא-ריקות) בתוך heading נבחר
-  List<({int lineIdx, String text})> _getParagraphs(int headingIdx) {
+  List<({int lineIdx, String text})> _getParagraphs(
+    int headingIdx, {
+    int? limit,
+  }) {
     final lines = _textLines;
-    if (lines == null) return const [];
     final headings = _sortedHeadings;
-    if (headings == null || headingIdx >= headings.length) return const [];
-    final start = headings[headingIdx].value;
-    final headingText = headings[headingIdx].key.trim();
-    final end = headingIdx + 1 < headings.length
-        ? headings[headingIdx + 1].value - 1
-        : lines.length - 1;
-    final result = <({int lineIdx, String text})>[];
-    for (int i = start; i <= end && i < lines.length; i++) {
-      final clean = utils.stripHtmlIfNeeded(lines[i]).trim();
-      if (i == start && clean == headingText) {
-        continue;
-      }
-      if (clean.isNotEmpty) result.add((lineIdx: i, text: clean));
-    }
-    return result;
+    if (lines == null || headings == null) return const [];
+    return headingParagraphs(lines, headings, headingIdx, limit: limit);
   }
 
   /// טווח שורות לחלונית המפרשים
@@ -1044,7 +1058,11 @@ class _PdfCommentatorsTabScreenState extends State<PdfCommentatorsTabScreen>
                 final isGroupEnd = listIdx == filteredIdx.length;
                 final isActiveHeading = idx == _selectedHeadingIdx;
                 final isExpanded = _expandedHeadings.contains(idx);
-                final paras = _getParagraphs(idx);
+                // מכווצת — די בפסקה אחת כדי לדעת אם להציג חץ.
+                final paras = _getParagraphs(
+                  idx,
+                  limit: isExpanded ? null : 1,
+                );
 
                 final headingRow = _buildHeadingRow(
                   context: context,
