@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:otzaria/models/link_types.dart';
 import 'package:otzaria/models/links.dart';
 import 'package:otzaria/personal_notes/utils/note_anchor_utils.dart';
@@ -97,6 +99,8 @@ String injectLinkAnchorMarkers({
   final visibleAtRaw = <int, int>{};
   int toVisible(int rawOffset) =>
       visibleAtRaw[rawOffset] ??= _visibleOffsetAtRaw(rawLine, rawOffset);
+  _VisibleChars? visibleChars;
+  ({int count, int maxEnd})? rangeBounds;
   for (var linkIndex = 0; linkIndex < anchorLinks.length; linkIndex++) {
     final link = anchorLinks[linkIndex];
     // continue ולא סינון מראש: האינדקס מזהה את הקישור ב-href של הסמן.
@@ -122,8 +126,20 @@ String injectLinkAnchorMarkers({
           ? null
           : (link.anchorOffsetsAreRaw ? toVisible(end) : end);
       if (end != null && end > span.start) {
-        final rawStart = _rawStartOfVisible(rawLine, visibleStart);
-        final rawEnd = _rawEndOfVisible(rawLine, visibleEnd!);
+        // רק כשיש טווח בפועל: סמני נקודה אינם צריכים מפת תווים.
+        final bounds = rangeBounds ??= _rangeBounds(anchorLinks, skipLinker);
+        final int rawStart;
+        final int rawEnd;
+        if (bounds.count == 1) {
+          // טווח יחיד נשאר במסלול הסורקים המקורי ללא הקצאת מערכים.
+          rawStart = _rawStartOfVisible(rawLine, visibleStart);
+          rawEnd = _rawEndOfVisible(rawLine, visibleEnd!);
+        } else {
+          // גם end גולמי הוא חסם עליון לספירה הגלויה: תגים/entities מצמצמים אותה.
+          final chars = visibleChars ??= _VisibleChars(rawLine, bounds.maxEnd);
+          rawStart = chars.rawStart(visibleStart);
+          rawEnd = chars.rawEnd(visibleEnd!);
+        }
         if (rawStart < rawEnd) {
           // עם lineIndex הטווח לחיץ/מרחף (a); בלעדיו — סימון בלבד (span).
           final tag = lineIndex == null ? 'span' : 'a';
@@ -172,6 +188,28 @@ String injectLinkAnchorMarkers({
 
 bool _isLinkerLink(Link link) =>
     LinkTypes.normalize(link.connectionType) == LinkTypes.linker;
+
+({int count, int maxEnd}) _rangeBounds(List<Link> links, bool skipLinker) {
+  var count = 0;
+  var maxEnd = 0;
+  void include(int? start, int? end) {
+    if (start == null || start < 0 || end == null || end <= start) return;
+    count++;
+    if (end > maxEnd) maxEnd = end;
+  }
+
+  for (final link in links) {
+    if (skipLinker && _isLinkerLink(link)) continue;
+    if (link.anchorSpans.isEmpty) {
+      include(link.anchorStart, link.anchorEnd);
+    } else {
+      for (final span in link.anchorSpans) {
+        include(span.start, span.end);
+      }
+    }
+  }
+  return (count: count, maxEnd: maxEnd);
+}
 
 /// עוטף טווח תווים-גלויים [start, end) של שורת HTML בתגי פתיחה/סגירה, תוך
 /// שמירת קינון תקין סביב תגים לא-מאוזנים (דרך [wrapHtmlRanges]).
@@ -225,32 +263,6 @@ int _rawStartOfVisible(String html, int visibleOffset) {
   return len;
 }
 
-/// אופסט גולמי ← מספר התווים הגלויים שלפניו. ההיפוך של [_rawStartOfVisible],
-/// ולכן סופר בדיוק כמוהו: תג = 0, entity = 1, '&' בודד = 1.
-int _visibleOffsetAtRaw(String html, int rawOffset) {
-  final limit = rawOffset.clamp(0, html.length);
-  var visible = 0;
-  var i = 0;
-  while (i < limit) {
-    if (html.codeUnitAt(i) == _lt) {
-      final close = html.indexOf('>', i);
-      // תג שנחתך באמצע ע"י האופסט: מה שאחריו כבר לא נספר.
-      if (close < 0 || close >= limit) break;
-      i = close + 1;
-    } else {
-      if (html.codeUnitAt(i) == _amp) {
-        final end = (i + 10 < html.length) ? i + 10 : html.length;
-        final j = html.indexOf(';', i + 1);
-        i = (j > 0 && j < end) ? j + 1 : i + 1;
-      } else {
-        i++;
-      }
-      visible++;
-    }
-  }
-  return visible;
-}
-
 /// אינדקס גולמי מיד אחרי התו הגלוי מספר [visibleOffset]-1 — סוף טווח
 /// אקסקלוסיבי שאינו בולע תגים עוקבים.
 int _rawEndOfVisible(String html, int visibleOffset) {
@@ -276,6 +288,82 @@ int _rawEndOfVisible(String html, int visibleOffset) {
     }
   }
   return len;
+}
+
+/// גבולות גולמיים של התווים הגלויים הדרושים לטווחים, במעבר אחד:
+/// שורה ארוכה נושאת מאות עוגני טווח,
+/// וסריקה מתחילתה לכל טווח ריבועית. המפה נעצרת אחרי סוף הטווח הרחוק ביותר;
+/// תג לא סגור עוצר את הספירה.
+class _VisibleChars {
+  final int _length;
+  final Int32List _starts;
+  final Int32List _ends;
+  int _count = 0;
+
+  _VisibleChars(String html, int maxEnd)
+    : _length = html.length,
+      _starts = Int32List(maxEnd < html.length ? maxEnd : html.length),
+      _ends = Int32List(maxEnd < html.length ? maxEnd : html.length) {
+    final len = html.length;
+    var i = 0;
+    while (i < len && _count < _starts.length) {
+      if (html.codeUnitAt(i) == _lt) {
+        final close = html.indexOf('>', i);
+        if (close < 0) return;
+        i = close + 1;
+      } else {
+        _starts[_count] = i;
+        if (html.codeUnitAt(i) == _amp) {
+          final end = (i + 10 < len) ? i + 10 : len;
+          final j = html.indexOf(';', i + 1);
+          i = (j > 0 && j < end) ? j + 1 : i + 1;
+        } else {
+          i++;
+        }
+        _ends[_count++] = i;
+      }
+    }
+  }
+
+  /// אינדקס גולמי של תחילת התו הגלוי מספר [visibleOffset] (אחרי תגים קודמים);
+  /// אורך המחרוזת כשהאופסט מעבר לסוף.
+  int rawStart(int visibleOffset) =>
+      visibleOffset >= 0 && visibleOffset < _count
+      ? _starts[visibleOffset]
+      : _length;
+
+  /// אינדקס גולמי מיד אחרי התו הגלוי מספר [visibleOffset]-1 — סוף טווח
+  /// אקסקלוסיבי שאינו בולע תגים עוקבים.
+  int rawEnd(int visibleOffset) {
+    if (visibleOffset <= 0) return 0;
+    return visibleOffset <= _count ? _ends[visibleOffset - 1] : _length;
+  }
+}
+
+/// אופסט גולמי ← מספר התווים הגלויים שלפניו. ההיפוך של [_VisibleChars],
+/// ולכן סופר בדיוק כמוהו: תג = 0, entity = 1, '&' בודד = 1.
+int _visibleOffsetAtRaw(String html, int rawOffset) {
+  final limit = rawOffset.clamp(0, html.length);
+  var visible = 0;
+  var i = 0;
+  while (i < limit) {
+    if (html.codeUnitAt(i) == _lt) {
+      final close = html.indexOf('>', i);
+      // תג שנחתך באמצע ע"י האופסט: מה שאחריו כבר לא נספר.
+      if (close < 0 || close >= limit) break;
+      i = close + 1;
+    } else {
+      if (html.codeUnitAt(i) == _amp) {
+        final end = (i + 10 < html.length) ? i + 10 : html.length;
+        final j = html.indexOf(';', i + 1);
+        i = (j > 0 && j < end) ? j + 1 : i + 1;
+      } else {
+        i++;
+      }
+      visible++;
+    }
+  }
+  return visible;
 }
 
 String _injectAtVisibleOffsets(
