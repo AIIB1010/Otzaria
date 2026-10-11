@@ -211,25 +211,33 @@ String removeVolwels(String s) {
   return String.fromCharCodes(units, 0, n);
 }
 
+bool _isNikudMark(int c) =>
+    (c >= 0x05B0 && c <= 0x05BC) ||
+    c == 0x05BF ||
+    c == 0x05C1 ||
+    c == 0x05C2 ||
+    c == 0x05C4 ||
+    c == 0x05C5 ||
+    c == 0x05C7;
+
 /// מסיר ניקוד בלבד ומשאיר את הטעמים במקומם: נקודות התנועה, דגש, רפה, נקודות
 /// שי"ן/שי"ן ו-U+05C7. מקף, פסק, מתג וסוף פסוק נשארים — הם שייכים לטעמים.
 String removeNikudOnly(String s) {
+  if (!_nonLatin1.hasMatch(s)) return s;
+  var firstChange = 0;
+  while (firstChange < s.length && !_isNikudMark(s.codeUnitAt(firstChange))) {
+    firstChange++;
+  }
+  if (firstChange == s.length) return s;
+
   final units = Uint16List(s.length);
   var n = 0;
   for (var i = 0; i < s.length; i++) {
     final c = s.codeUnitAt(i);
-    if ((c >= 0x05B0 && c <= 0x05BC) ||
-        c == 0x05BF ||
-        c == 0x05C1 ||
-        c == 0x05C2 ||
-        c == 0x05C4 ||
-        c == 0x05C5 ||
-        c == 0x05C7) {
-      continue;
-    }
+    if (_isNikudMark(c)) continue;
     units[n++] = c;
   }
-  return n == s.length ? s : String.fromCharCodes(units, 0, n);
+  return String.fromCharCodes(units, 0, n);
 }
 
 /// מסיר ניקוד ו/או טעמים לפי שני הדגלים — הכניסה האחידה של כל המסלולים
@@ -1754,16 +1762,24 @@ bool _hasThreeContiguousHebrewLettersBeforeMatch(String text, int matchStart) {
   return false;
 }
 
+bool _isTeamimMark(int c) =>
+    (c >= 0x0591 && c <= 0x05AF) || c == 0x05BD || c == 0x05BE || c == 0x05C0;
+
 /// מקף הופך לרווח; פסק (ורווח או מקף שצמודים לפניו), מתג וטעמים נמחקים.
 String removeTeamim(String s) {
+  if (!_nonLatin1.hasMatch(s)) return s;
+  var firstChange = 0;
+  while (firstChange < s.length && !_isTeamimMark(s.codeUnitAt(firstChange))) {
+    firstChange++;
+  }
+  if (firstChange == s.length) return s;
+
   final units = Uint16List(s.length);
   var n = 0;
-  var hasMaqaf = false;
   for (var i = 0; i < s.length; i++) {
     final c = s.codeUnitAt(i);
     if (c == 0x05BE) {
       units[n++] = 0x20;
-      hasMaqaf = true;
     } else if (c == 0x05C0) {
       final prev = i > 0 ? s.codeUnitAt(i - 1) : 0;
       if (prev == 0x20 || prev == 0x05BE) n--;
@@ -1771,7 +1787,7 @@ String removeTeamim(String s) {
       units[n++] = c;
     }
   }
-  return n == s.length && !hasMaqaf ? s : String.fromCharCodes(units, 0, n);
+  return String.fromCharCodes(units, 0, n);
 }
 
 /// נורמליזציה להתאמת מקור: בלי ניקוד, טעמים, גרשיים ופיסוק; "שו"ע" → "שוע".

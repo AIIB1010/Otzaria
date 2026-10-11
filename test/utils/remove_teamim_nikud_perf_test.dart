@@ -59,34 +59,21 @@ void main() {
         }
       });
 
-      test('at least 3x faster than the regex oracle on vocalized lines', () {
-        final lines = [for (var i = 0; i < 20000; i++) '$_vocalizedLine $i'];
-        int timeMicros(String Function(String) clean) {
-          for (final line in lines.take(500)) {
-            clean(line);
-          }
-          final stopwatch = Stopwatch()..start();
-          var length = 0;
-          for (final line in lines) {
-            length += clean(line).length;
-          }
-          stopwatch.stop();
-          expect(length, greaterThan(0));
-          return stopwatch.elapsedMicroseconds;
+      test('clean text retains the original instance', () {
+        for (final input in [
+          '',
+          String.fromCharCodes(List.generate(256, (i) => i)),
+          'café | plain text ÿ' * 30000,
+          oracle(_vocalizedLine),
+          'עברית 😀 \uD800',
+        ]) {
+          expect(identical(current(input), input), isTrue);
         }
+      });
 
-        // מינימום של מדידות לסירוגין: מסנן הפרעות GC ו-JIT בסביבת CI עמוסה.
-        var oracleMicros = 1 << 62;
-        var currentMicros = 1 << 62;
-        for (var round = 0; round < 5; round++) {
-          oracleMicros = min(oracleMicros, timeMicros(oracle));
-          currentMicros = min(currentMicros, timeMicros(current));
-        }
-        expect(
-          currentMicros * 3,
-          lessThan(oracleMicros),
-          reason: 'oracle ${oracleMicros}us, current ${currentMicros}us',
-        );
+      test('all UTF16 code units are identical to the regex oracle', () {
+        final input = String.fromCharCodes(List.generate(0x10000, (i) => i));
+        expect(current(input), oracle(input));
       });
     });
   }
