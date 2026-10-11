@@ -115,7 +115,6 @@ seforim.db
 LOG.txt
 macos/Podfile.lock
 macos/Flutter/GeneratedPluginRegistrant.swift
-isolate.pdf
 
 sentry.properties
 .sentry-native/

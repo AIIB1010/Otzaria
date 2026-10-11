@@ -689,7 +689,6 @@
   "test/plugins/view/widgets/plugin_webview_focus_restorer_test.dart": 3.1,
   "test/printing/commentary_print_builder_test.dart": 5.1,
   "test/printing/export_restriction_service_test.dart": 2.9,
-  "test/printing/pdf_isolate_test.dart": 4.4,
   "test/printing/pdf_sheet_composer_test.dart": 3.5,
   "test/printing/print_content_models_test.dart": 3.0,
   "test/printing/print_range_links_test.dart": 4.4,
