@@ -961,6 +961,39 @@ const double _kGridPadding = 30;
 /// מתחת לסרגל.
 const double _kGridTopPadding = 24;
 
+class _FocusedGridItemKeepAlive extends StatefulWidget {
+  final Widget child;
+
+  const _FocusedGridItemKeepAlive({required this.child});
+
+  @override
+  State<_FocusedGridItemKeepAlive> createState() =>
+      _FocusedGridItemKeepAliveState();
+}
+
+class _FocusedGridItemKeepAliveState extends State<_FocusedGridItemKeepAlive>
+    with AutomaticKeepAliveClientMixin {
+  bool _hasFocus = false;
+
+  @override
+  bool get wantKeepAlive => _hasFocus;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onFocusChange: (hasFocus) {
+        if (_hasFocus == hasFocus) return;
+        _hasFocus = hasFocus;
+        updateKeepAlive();
+      },
+      child: widget.child,
+    );
+  }
+}
+
 /// ניווט חיצים בין כרטיסי הרשת בלבד — הפוקוס עובר ברצף בין הכרטיסים
 /// ולא בורח לכפתורי הסרגל/הצד (המסלול הכיווני של Flutter אינו תחום לרשת).
 ///
@@ -969,12 +1002,14 @@ const double _kGridTopPadding = 24;
 class LibraryGridKeyNavigator extends StatelessWidget {
   final int crossAxisCount;
   final VoidCallback? onExitTop;
+  final bool Function(FocusNode)? revealFocusedItem;
   final Widget child;
 
   const LibraryGridKeyNavigator({
     super.key,
     required this.crossAxisCount,
     this.onExitTop,
+    this.revealFocusedItem,
     required this.child,
   });
 
@@ -991,8 +1026,9 @@ class LibraryGridKeyNavigator extends StatelessWidget {
   KeyEventResult _handleKey(
     BuildContext context,
     FocusNode node,
-    KeyEvent event,
-  ) {
+    KeyEvent event, {
+    bool afterReveal = false,
+  }) {
     if (event is KeyUpEvent) return KeyEventResult.ignored;
     final isRtl = Directionality.of(context) == TextDirection.rtl;
     final int? delta = switch (event.logicalKey) {
@@ -1002,10 +1038,47 @@ class LibraryGridKeyNavigator extends StatelessWidget {
       LogicalKeyboardKey.arrowUp => -crossAxisCount,
       _ => null,
     };
+    final primary = FocusManager.instance.primaryFocus;
+    if (primary != null &&
+        !primary.rect.isFinite &&
+        !afterReveal &&
+        revealFocusedItem != null) {
+      final isTab = event.logicalKey == LogicalKeyboardKey.tab;
+      final isShiftPressed = HardwareKeyboard.instance.isShiftPressed;
+      if (delta != null || isTab) {
+        if (revealFocusedItem!(primary)) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!context.mounted || node.context == null) return;
+            final current = FocusManager.instance.primaryFocus;
+            if (current == null ||
+                !node.traversalDescendants.contains(current)) {
+              return;
+            }
+            if (isTab) {
+              if (isShiftPressed) {
+                current.previousFocus();
+              } else {
+                current.nextFocus();
+              }
+            } else {
+              _handleKey(context, node, event, afterReveal: true);
+            }
+            FocusManager.instance.applyFocusChangesIfNeeded();
+          });
+          return KeyEventResult.handled;
+        }
+      }
+    }
     if (delta == null) return KeyEventResult.ignored;
 
-    final cards = node.traversalDescendants.toList();
-    final primary = FocusManager.instance.primaryFocus;
+    // ברשת עצלה כרטיס שנבנה בגלילה מעלה נרשם בסוף עץ הפוקוס; הסדר נקבע לפי המיקום.
+    final cards = node.traversalDescendants.toList()
+      ..sort((a, b) {
+        final byRow = a.rect.top.compareTo(b.rect.top);
+        if (byRow != 0) return byRow;
+        final byX = a.rect.left.compareTo(b.rect.left);
+        return isRtl ? -byX : byX;
+      });
     final index = primary == null ? -1 : cards.indexOf(primary);
     if (index < 0) return KeyEventResult.ignored;
 
@@ -1043,11 +1116,17 @@ class MyGridView extends StatelessWidget {
   final VoidCallback? onExitTop;
   final double minItemHeight;
 
+  /// גולל בעצמו ובונה רק את הכרטיסים שבתצוגה; אחרת נבנים כולם בתוך גלילה חיצונית.
+  final bool scrollable;
+  final ScrollController? controller;
+
   const MyGridView({
     super.key,
     required this.items,
     this.onExitTop,
     this.minItemHeight = 0,
+    this.scrollable = false,
+    this.controller,
   });
 
   @override
@@ -1083,33 +1162,62 @@ class MyGridView extends StatelessWidget {
           childAspectRatio = (baseRatio * textAdjustment).clamp(1.45, 2.15);
         }
 
+        final childHeight = minItemHeight > 0
+            ? max(minItemHeight, cellWidth / childAspectRatio)
+            : cellWidth / childAspectRatio;
+
         return LibraryGridKeyNavigator(
           crossAxisCount: crossAxisCount,
           onExitTop: onExitTop,
+          revealFocusedItem: scrollable
+              ? (focusNode) {
+                  final focusContext = focusNode.context;
+                  final index = focusContext
+                      ?.findAncestorWidgetOfExactType<IndexedSemantics>()
+                      ?.index;
+                  final scrollableState = focusContext == null
+                      ? null
+                      : Scrollable.maybeOf(focusContext);
+                  if (index == null || scrollableState == null) return false;
+                  final rowOffset =
+                      _kGridTopPadding +
+                      (index ~/ crossAxisCount) *
+                          (childHeight + kLibraryGridSpacing);
+                  // כרטיס ממוקד שנשמר מחוץ ל-sliver חסר bounds עד לפריסת השורה.
+                  scrollableState.position.jumpTo(
+                    rowOffset.clamp(
+                      0.0,
+                      scrollableState.position.maxScrollExtent,
+                    ),
+                  );
+                  return true;
+                }
+              : null,
           child: FocusTraversalGroup(
             policy: ReadingOrderTraversalPolicy(),
-            child: Padding(
+            child: GridView.builder(
+              controller: controller,
               padding: const EdgeInsets.fromLTRB(
                 _kGridPadding,
                 _kGridTopPadding,
                 _kGridPadding,
                 _kGridPadding,
               ),
-              child: GridView.builder(
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: crossAxisCount,
-                  childAspectRatio: childAspectRatio,
-                  mainAxisExtent: minItemHeight > 0
-                      ? max(minItemHeight, cellWidth / childAspectRatio)
-                      : null,
-                  crossAxisSpacing: kLibraryGridSpacing,
-                  mainAxisSpacing: kLibraryGridSpacing,
-                ),
-                itemCount: items.length,
-                itemBuilder: (context, index) => items[index],
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: crossAxisCount,
+                childAspectRatio: childAspectRatio,
+                mainAxisExtent: minItemHeight > 0
+                    ? max(minItemHeight, cellWidth / childAspectRatio)
+                    : null,
+                crossAxisSpacing: kLibraryGridSpacing,
+                mainAxisSpacing: kLibraryGridSpacing,
               ),
+              itemCount: items.length,
+              itemBuilder: (context, index) => scrollable
+                  ? _FocusedGridItemKeepAlive(child: items[index])
+                  : items[index],
+              shrinkWrap: !scrollable,
+              physics: scrollable ? null : const NeverScrollableScrollPhysics(),
             ),
           ),
         );

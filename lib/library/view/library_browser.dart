@@ -331,6 +331,7 @@ class _LibraryBrowserState extends State<LibraryBrowser>
   bool get wantKeepAlive => true;
 
   final FocusNode _firstGridItemFocusNode = FocusNode();
+  final ScrollController _categoryGridController = ScrollController();
   final GlobalKey _tourLibraryKey = GlobalKey();
   final GlobalKey _tourLibrarySearchKey = GlobalKey();
   final GlobalKey _tourBookCardKey = GlobalKey();
@@ -424,6 +425,7 @@ class _LibraryBrowserState extends State<LibraryBrowser>
   void dispose() {
     PluginLibraryBooksRegistry.instance.removeListener(_onPluginBooksChanged);
     _firstGridItemFocusNode.dispose();
+    _categoryGridController.dispose();
     _scrollDebounce?.cancel();
     _searchDebounce?.cancel();
     _secondaryRowVisible.dispose();
@@ -1495,15 +1497,7 @@ class _LibraryBrowserState extends State<LibraryBrowser>
               ),
             );
           }
-          final categoryItems = _buildCategoryContent(state.currentCategory!);
-          if (categoryItems.isEmpty) {
-            final repo = context.read<FocusRepository>();
-            return _buildEmptyState(context, state, settingsState, repo);
-          }
-          return SingleChildScrollView(
-            key: PageStorageKey(state.currentCategory),
-            child: Column(children: categoryItems),
-          );
+          return _buildCategoryContent(state.currentCategory!);
         }
         if (state.searchResults != null) {
           final visibleResults = _visibleBooks(state.searchResults!);
@@ -1544,8 +1538,7 @@ class _LibraryBrowserState extends State<LibraryBrowser>
     return (subCategories: filteredSubCategories, books: filteredBooks);
   }
 
-  List<Widget> _buildCategoryContent(Category category) {
-    final List<Widget> items = [];
+  Widget _buildCategoryContent(Category category) {
     final (subCategories: filteredSubCategories, books: filteredBooks) =
         _displayedContent(category);
 
@@ -1586,13 +1579,13 @@ class _LibraryBrowserState extends State<LibraryBrowser>
         attachedTourKey = true;
       }
     }
-    items.add(
-      MyGridView(
-        items: allItems,
-        onExitTop: () => _refocusSearchBar(selectAll: true),
-      ),
+    return MyGridView(
+      key: PageStorageKey(category),
+      items: allItems,
+      onExitTop: () => _refocusSearchBar(selectAll: true),
+      scrollable: true,
+      controller: _categoryGridController,
     );
-    return items;
   }
 
   Widget _buildBookItem(
@@ -2828,14 +2821,17 @@ class _LibraryBrowserState extends State<LibraryBrowser>
 
   bool _focusFirstGridItem(LibraryState state) {
     // הצומת מחובר לפריט הראשון גם בעיון בקטגוריות, לא רק בתוצאות חיפוש.
-    if (_firstGridItemFocusNode.context != null &&
+    if ((_firstGridItemFocusNode.context?.mounted ?? false) &&
         _firstGridItemFocusNode.canRequestFocus) {
       LibraryGridKeyNavigator.focusCard(_firstGridItemFocusNode);
       return true;
     }
 
-    final results = state.searchResults;
-    if (results == null || results.isEmpty) {
+    // ברשת קטגוריה שנגללה עמוק הכרטיס הראשון אינו בנוי; גוללים לראש וממקדים אחרי הבנייה.
+    if (_categoryGridController.hasClients &&
+        _categoryGridController.offset > 0) {
+      _categoryGridController.jumpTo(0);
+    } else if (state.searchResults?.isNotEmpty != true) {
       return false;
     }
 
