@@ -1938,16 +1938,6 @@ Future<void> _loadCerts() async {
   trustCertificates(await loadNetfreeCaBytes());
 }
 
-/// Clean up resources when the app is closing
-void cleanup() {
-  _appWindowListener?.dispose();
-
-  // Clear shared book/acronym caches
-  BooksCache.instance.clear();
-  AcronymsCache.instance.clear();
-  GenerationCache.instance.clear();
-}
-
 // Note: TOC parsing helper moved to lib/utils/toc_parser.dart for reuse
 
 /// נקודת הכניסה של חלון אוצריא נוסף.

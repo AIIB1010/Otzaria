@@ -14,7 +14,6 @@ import 'package:otzaria/tools/tikkun_korim/export/tikkun_export_dialog.dart';
 import 'package:otzaria/tools/tikkun_korim/export/tikkun_pdf_exporter.dart';
 import 'package:otzaria/tools/tikkun_korim/models/tikkun_models.dart';
 import 'package:otzaria/tools/tikkun_korim/repository/tikkun_contracts.dart';
-import 'package:otzaria/tools/tikkun_korim/repository/tikkun_dependencies.dart';
 import 'package:otzaria/tools/tikkun_korim/repository/tikkun_korim_repository.dart';
 import 'package:otzaria/tools/tikkun_korim/settings/tikkun_settings.dart';
 import 'package:otzaria/settings/settings_exports.dart';
@@ -58,8 +57,8 @@ class TikkunKorimScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final engine = this.engine ?? TikkunDependencies.engine;
-    final data = this.data ?? TikkunDependencies.data;
+    final engine = this.engine;
+    final data = this.data;
     if (engine == null || data == null) {
       return const ToolEmptyState(
         icon: FluentIcons.book_open_24_regular,

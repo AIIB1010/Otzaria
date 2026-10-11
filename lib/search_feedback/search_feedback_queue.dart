@@ -84,7 +84,6 @@ class SearchFeedbackQueue {
         SearchFeedbackLimits.batchBytes -
         SearchFeedbackLimits.batchEnvelopeReserve,
   }) : _owner = newSearchFeedbackId();
-  static const strikesFileName = 'strikes.json';
   // כל האובייקטים באותו isolate משתמשים באותו סדר; ה-OS מסנכרן תהליכים.
   static final Map<String, Future<void>> _tails = {};
   final Future<Directory> Function() _directory;
@@ -199,10 +198,6 @@ class SearchFeedbackQueue {
       'now': now,
     });
     return SearchFeedbackStrikeRecord.fromJson(value)!;
-  }
-
-  Future<void> clearStrikes(String name) async {
-    await _run('clearStrike', {'name': name});
   }
 }
 
@@ -324,8 +319,6 @@ Future<Map<String, Object?>> _queueDisk(
           args['kind'] as String,
           args['now'] as DateTime,
         )).toJson();
-      case 'clearStrike':
-        await queue.clearStrikes(args['name'] as String);
       case 'purge':
         // משאיר מחסום גם לכתיבה שכבר החלה בחלון אחר, בלי למחוק את קובץ הנעילה.
         final temp = File('$path.epoch.tmp');
@@ -449,8 +442,6 @@ class _DiskQueue {
   int get eventCount => _segments.fold(0, (sum, s) => sum + s.events);
 
   int get byteCount => _segments.fold(0, (sum, s) => sum + s.bytes);
-
-  bool get isEmpty => eventCount == 0;
 
   /// מריץ את [action] אחרי כל הפעולות הקודמות; כשל אינו שובר את התור.
   Future<T> _serialized<T>(Future<T> Function() action) {
@@ -580,13 +571,6 @@ class _DiskQueue {
     _strikes[name] = record;
     await _saveStrikes(await _directory());
     return record;
-  });
-
-  /// מאפס את ספירת הכשלים של מקטע.
-  Future<void> clearStrikes(String name) => _serialized(() async {
-    await _ensureLoaded();
-    if (_strikes.remove(name) == null) return;
-    await _saveStrikes(await _directory());
   });
 
   static bool _isSegmentName(String name) =>

@@ -181,7 +181,6 @@ class DeveloperDiagnostics {
   bool _previousPaintSize = false;
 
   bool get isCollecting => _running;
-  DiagnosticsLaunchMode get launchMode => _launchMode;
 
   /// Called once from main(); cheap and does no I/O unless requested.
   void initFromLaunch(List<String> args, {Map<String, String>? environment}) {
