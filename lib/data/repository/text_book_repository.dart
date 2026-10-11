@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:otzaria/attached_libraries/repository/attached_library_registry.dart';
 import 'package:otzaria/attached_libraries/repository/external_link_repository.dart';
+import 'package:otzaria/data/data_providers/db_read_worker.dart';
 import 'package:otzaria/data/data_providers/file_system_data_provider.dart';
 import 'package:otzaria/data/data_providers/sqlite_data_provider.dart';
 import 'package:otzaria/data/data_providers/library_provider_manager.dart';
@@ -412,8 +413,11 @@ class TextBookRepository {
     if (dbBook == null) return userOnly();
 
     // שולף את הפרשנים ישירות מה-DB, כולל מספר הקישורים של כל מפרש
-    final commentatorsData = await repository.database.linkDao
-        .selectCommentatorsByBook(dbBook.id);
+    final commentatorsData = await _selectCommentatorsByBook(
+      repository,
+      book.source,
+      dbBook.id,
+    );
 
     // מפרש עשוי להופיע בכמה שורות (מחבר לכל שורה) עם אותו linkCount; לוקחים
     // את הערך המרבי כמספר הקישורים לספר.
@@ -599,6 +603,29 @@ class TextBookRepository {
 
     // מיון לפי דורות (ראשונים→אחרונים→…) לצורך פסי ההפרדה בתת-התפריט.
     return CommentaryService.sortLinksByEra(mergeExtraLinks(links, external));
+  }
+
+  /// ב-seforim.db השאילתה סורקת את כל קישורי הספר (עד 124ms בבראשית),
+  /// ולכן רצה ב-worker ולא על ה-UI isolate.
+  Future<List<Map<String, dynamic>>> _selectCommentatorsByBook(
+    SeforimRepository repository,
+    BookSource source,
+    int bookId,
+  ) async {
+    final dbPath = _sqliteProvider.dbPath;
+    if (source.isOfficial && dbPath.isNotEmpty) {
+      try {
+        return (await DbReadWorker.request('commentatorsByBook', {
+                  'dbPath': dbPath,
+                  'bookId': bookId,
+                })
+                as List)
+            .cast<Map<String, dynamic>>();
+      } on DbReadWorkerUnavailable {
+        // נופלים לשאילתה הישירה, כמו שאר הקריאות כשה-worker אינו זמין.
+      }
+    }
+    return repository.database.linkDao.selectCommentatorsByBook(bookId);
   }
 
   /// המאגר שבו יושבים קישורי [source]: seforim.db או המסד המצורף. לספר
