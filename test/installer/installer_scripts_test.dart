@@ -3826,6 +3826,36 @@ void main() {
       );
     });
 
+    test('$_assistant: החלפת שפה במקום — בלי שאלת יציאה ובלי הפתיחה שוב', () {
+      final script = _script(_assistant);
+      final change = _routine(script, 'procedure UiSwitchLanguage()');
+      // Exec ו-ShellExec של Inno מסרבים להפעיל את Setup עצמו.
+      expect(change, contains('UiCreateProcess(Exe, AddQuotes(Exe)'));
+      expect(change, contains("' /LANG=' + Lang + ' /HANDOFF='"));
+      // הסגירה שהעותק החדש שולח עוברת בלי UiAskExit; חלון מושבת היה מתעלם ממנה.
+      expect(change, contains('UiClosing := True;'));
+      expect(change, isNot(contains('WizardForm.Enabled := False')));
+      final sync = _routine(script, 'procedure UiSyncLanguage()');
+      expect(sync, contains('(UiPage = wpWelcome) and UiHeroDone'));
+      expect(sync, contains('UiLangWaitMs'));
+      expect(
+        sync,
+        contains('PostMessage(UiLangHandoff, UiWmSysCommand, UiScClose, 0)'),
+      );
+      final init = _routine(script, 'procedure UiAssistantInitializeWizard()');
+      expect(init, contains("ExpandConstant('{param:HANDOFF|0}')"));
+      expect(init, contains('UiHeroDone := True;'));
+      expect(init, contains('WizardForm.SetBounds(R.Left, R.Top'));
+      expect(
+        _routine(script, 'procedure UiPlaceLanguageButton('),
+        contains('.Img.Left := UiX('),
+      );
+      expect(
+        _routine(script, 'procedure UiButtonClick('),
+        contains('UiBtnLanguage: UiSwitchLanguage();'),
+      );
+    });
+
     test('$_assistant: כל טקסט קיים בשתי השפות, וכל קריאה מוצאת אותו', () {
       final script = _script(_assistant);
       for (final section in const ['CustomMessages', 'Messages']) {
@@ -3857,8 +3887,19 @@ void main() {
         script,
         'CustomMessages',
       )['english']!.entries) {
+        // מעבר לשפה השנייה כתוב בה: מי שעובר אליה קורא אותה, ולא את שפת החלון.
+        if (const {'OtherLanguage', 'LanguageSwitching'}.contains(key)) {
+          continue;
+        }
         expect(value, isNot(matches(hebrew)), reason: 'english.$key בעברית');
       }
+      expect(_text(script, 'english', 'OtherLanguage'), 'עברית');
+      expect(_text(script, 'hebrew', 'OtherLanguage'), 'English');
+      expect(_text(script, 'english', 'LanguageSwitching'), matches(hebrew));
+      expect(
+        _text(script, 'hebrew', 'LanguageSwitching'),
+        isNot(matches(hebrew)),
+      );
       final used = {
         for (final m in RegExp(
           r"(?:CustomMessage\('|Msg1\('|\{cm:)(\w+)",
