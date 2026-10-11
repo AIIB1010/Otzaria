@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:otzaria/models/link_types.dart';
 import 'package:otzaria/models/links.dart';
 import 'package:otzaria/personal_notes/utils/note_anchor_utils.dart';
@@ -97,6 +99,7 @@ String injectLinkAnchorMarkers({
   final visibleAtRaw = <int, int>{};
   int toVisible(int rawOffset) =>
       visibleAtRaw[rawOffset] ??= _visibleOffsetAtRaw(rawLine, rawOffset);
+  _VisibleChars? visibleChars;
   for (var linkIndex = 0; linkIndex < anchorLinks.length; linkIndex++) {
     final link = anchorLinks[linkIndex];
     // continue ולא סינון מראש: האינדקס מזהה את הקישור ב-href של הסמן.
@@ -122,8 +125,9 @@ String injectLinkAnchorMarkers({
           ? null
           : (link.anchorOffsetsAreRaw ? toVisible(end) : end);
       if (end != null && end > span.start) {
-        final rawStart = _rawStartOfVisible(rawLine, visibleStart);
-        final rawEnd = _rawEndOfVisible(rawLine, visibleEnd!);
+        final chars = visibleChars ??= _VisibleChars(rawLine);
+        final rawStart = chars.rawStart(visibleStart);
+        final rawEnd = chars.rawEnd(visibleEnd!);
         if (rawStart < rawEnd) {
           // עם lineIndex הטווח לחיץ/מרחף (a); בלעדיו — סימון בלבד (span).
           final tag = lineIndex == null ? 'span' : 'a';
@@ -184,8 +188,9 @@ String wrapVisibleRange({
   required String closeTag,
 }) {
   if (start < 0 || end <= start) return html;
-  final rawStart = _rawStartOfVisible(html, start);
-  final rawEnd = _rawEndOfVisible(html, end);
+  final chars = _VisibleChars(html);
+  final rawStart = chars.rawStart(start);
+  final rawEnd = chars.rawEnd(end);
   if (rawStart >= rawEnd) return html;
   return wrapHtmlRanges(html, [
     HtmlWrapRange(
@@ -199,33 +204,55 @@ String wrapVisibleRange({
 
 const _lt = 0x3C, _amp = 0x26;
 
-/// אינדקס גולמי של תחילת התו הגלוי מספר [visibleOffset] (אחרי תגים קודמים);
-/// אורך המחרוזת כשהאופסט מעבר לסוף.
-int _rawStartOfVisible(String html, int visibleOffset) {
-  var visible = 0;
-  var i = 0;
-  final len = html.length;
-  while (i < len) {
-    if (html.codeUnitAt(i) == _lt) {
-      final close = html.indexOf('>', i);
-      if (close < 0) return len;
-      i = close + 1;
-    } else {
-      if (visible == visibleOffset) return i;
-      if (html.codeUnitAt(i) == _amp) {
-        final end = (i + 10 < len) ? i + 10 : len;
-        final j = html.indexOf(';', i + 1);
-        i = (j > 0 && j < end) ? j + 1 : i + 1;
+/// גבולות גולמיים של כל תו גלוי, במעבר אחד: שורה ארוכה נושאת מאות עוגני טווח,
+/// וסריקה מתחילתה לכל טווח ריבועית. תג לא סגור עוצר את הספירה.
+class _VisibleChars {
+  final int _length;
+  final Int32List _starts;
+  final Int32List _ends;
+  int _count = 0;
+
+  _VisibleChars(String html)
+    : _length = html.length,
+      _starts = Int32List(html.length),
+      _ends = Int32List(html.length) {
+    final len = html.length;
+    var i = 0;
+    while (i < len) {
+      if (html.codeUnitAt(i) == _lt) {
+        final close = html.indexOf('>', i);
+        if (close < 0) return;
+        i = close + 1;
       } else {
-        i++;
+        _starts[_count] = i;
+        if (html.codeUnitAt(i) == _amp) {
+          final end = (i + 10 < len) ? i + 10 : len;
+          final j = html.indexOf(';', i + 1);
+          i = (j > 0 && j < end) ? j + 1 : i + 1;
+        } else {
+          i++;
+        }
+        _ends[_count++] = i;
       }
-      visible++;
     }
   }
-  return len;
+
+  /// אינדקס גולמי של תחילת התו הגלוי מספר [visibleOffset] (אחרי תגים קודמים);
+  /// אורך המחרוזת כשהאופסט מעבר לסוף.
+  int rawStart(int visibleOffset) =>
+      visibleOffset >= 0 && visibleOffset < _count
+      ? _starts[visibleOffset]
+      : _length;
+
+  /// אינדקס גולמי מיד אחרי התו הגלוי מספר [visibleOffset]-1 — סוף טווח
+  /// אקסקלוסיבי שאינו בולע תגים עוקבים.
+  int rawEnd(int visibleOffset) {
+    if (visibleOffset <= 0) return 0;
+    return visibleOffset <= _count ? _ends[visibleOffset - 1] : _length;
+  }
 }
 
-/// אופסט גולמי ← מספר התווים הגלויים שלפניו. ההיפוך של [_rawStartOfVisible],
+/// אופסט גולמי ← מספר התווים הגלויים שלפניו. ההיפוך של [_VisibleChars],
 /// ולכן סופר בדיוק כמוהו: תג = 0, entity = 1, '&' בודד = 1.
 int _visibleOffsetAtRaw(String html, int rawOffset) {
   final limit = rawOffset.clamp(0, html.length);
@@ -249,33 +276,6 @@ int _visibleOffsetAtRaw(String html, int rawOffset) {
     }
   }
   return visible;
-}
-
-/// אינדקס גולמי מיד אחרי התו הגלוי מספר [visibleOffset]-1 — סוף טווח
-/// אקסקלוסיבי שאינו בולע תגים עוקבים.
-int _rawEndOfVisible(String html, int visibleOffset) {
-  if (visibleOffset <= 0) return 0;
-  var visible = 0;
-  var i = 0;
-  final len = html.length;
-  while (i < len) {
-    if (html.codeUnitAt(i) == _lt) {
-      final close = html.indexOf('>', i);
-      if (close < 0) return len;
-      i = close + 1;
-    } else {
-      if (html.codeUnitAt(i) == _amp) {
-        final end = (i + 10 < len) ? i + 10 : len;
-        final j = html.indexOf(';', i + 1);
-        i = (j > 0 && j < end) ? j + 1 : i + 1;
-      } else {
-        i++;
-      }
-      visible++;
-      if (visible == visibleOffset) return i;
-    }
-  }
-  return len;
 }
 
 String _injectAtVisibleOffsets(
