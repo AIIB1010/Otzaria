@@ -70,4 +70,43 @@ void main() {
   test('שורת כותרת אינה מקבלת מפתח', () {
     expect(buildLineRefKey('ישעיהו', const ['ישעיהו']), isNull);
   });
+
+  group('lineRefIndexEntries', () {
+    // מפתחות כל שורה בנפרד — מה שהאינדקס חייב להכיל.
+    List<(int, int)> naive(
+      List<({int lineIndex, String heRef})> refs,
+      String title,
+    ) => [
+      for (final ref in refs)
+        if (buildLineRefKey(ref.heRef, [title]) case final key?) ...[
+          (refKeyHash(key), ref.lineIndex),
+          for (final partial in partialLineRefKeys(ref.heRef, [title]))
+            (refKeyHash(partial), ref.lineIndex),
+        ],
+    ];
+
+    // ספר אישי: עשר שורות תחת כל כותרת חולקות heRef אחד.
+    final refs = [
+      for (var i = 0; i < 20000; i++)
+        (lineIndex: i, heRef: 'טור, חושן משפט, סימן ${i ~/ 100}, ${i ~/ 10}'),
+      (lineIndex: 20000, heRef: 'טור'),
+    ];
+
+    test('זהה למפתחות שמחושבים לכל שורה בנפרד', () {
+      expect(lineRefIndexEntries(refs, 'טור'), naive(refs, 'טור'));
+    });
+
+    test('heRef שחוזר בשורות רצופות אינו מחושב מחדש', () {
+      final naiveWatch = Stopwatch()..start();
+      naive(refs, 'טור');
+      naiveWatch.stop();
+      final watch = Stopwatch()..start();
+      lineRefIndexEntries(refs, 'טור');
+      watch.stop();
+      expect(
+        watch.elapsedMicroseconds * 3,
+        lessThan(naiveWatch.elapsedMicroseconds),
+      );
+    });
+  });
 }
