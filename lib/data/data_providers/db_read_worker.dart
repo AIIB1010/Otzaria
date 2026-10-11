@@ -811,6 +811,12 @@ void _workerMain(_Bootstrap bootstrap) {
         return repo.database.linkDao.selectCommentatorsByBook(
           args['bookId'] as int,
         );
+      case 'bookCatalog':
+        final repo = await ensureRepo(args['dbPath'] as String);
+        return (
+          books: await repo.getAllBooksLean(),
+          categories: await repo.getAllCategories(),
+        );
       case 'bookText':
         final repo = await ensureRepo(args['dbPath'] as String);
         return readBookContentText(
