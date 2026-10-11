@@ -80,9 +80,6 @@ class TikkunKorimBloc extends Bloc<TikkunKorimEvent, TikkunKorimState> {
     on<TikkunBookmarkAdded>(_onBookmarkAdded);
     on<TikkunBookmarkRemoved>(_onBookmarkRemoved);
     on<TikkunBookmarkOpened>(_onBookmarkOpened);
-    on<TikkunScrollHandled>(
-      (_, emit) => emit(state.copyWith(clearScroll: true)),
-    );
   }
 
   /// רוחב הטור נגזר מן השיטה, ולכן הוא חלק ממודל הרוחב שהעימוד נחתך לפיו.

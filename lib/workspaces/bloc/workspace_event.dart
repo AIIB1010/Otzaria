@@ -91,26 +91,6 @@ class RenameWorkspace extends WorkspaceEvent {
   List<Object?> get props => [workspaceId, newName];
 }
 
-/// Event to clear all workspaces and create a default one.
-///
-/// Carries the current tabs data to preserve them in the new default workspace.
-class ClearWorkspaces extends WorkspaceEvent {
-  final List<OpenedTab> currentTabs;
-  final int currentTabIndex;
-
-  /// צד החלונית הפעילה — ראו [Workspace.activePane].
-  final String? activePane;
-
-  const ClearWorkspaces({
-    required this.currentTabs,
-    required this.currentTabIndex,
-    this.activePane,
-  });
-
-  @override
-  List<Object?> get props => [currentTabs, currentTabIndex, activePane];
-}
-
 /// Event to update the current workspace with new tab data.
 ///
 /// Used for auto-save or explicit save operations.
