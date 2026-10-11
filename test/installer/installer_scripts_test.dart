@@ -3826,6 +3826,134 @@ void main() {
       );
     });
 
+    test('$_assistant: החלפת שפה במקום — בלי שאלת יציאה ובלי הפתיחה שוב', () {
+      final script = _script(_assistant);
+      final change = _routine(script, 'procedure UiSwitchLanguage()');
+      // Exec ו-ShellExec של Inno מסרבים להפעיל את Setup עצמו.
+      expect(change, contains('UiCreateProcess(Exe, AddQuotes(Exe)'));
+      expect(change, contains("' /LANG=' + Lang + ' /HANDOFF='"));
+      expect(change, isNot(contains('UiClosing := True;')));
+      expect(change, isNot(contains('WizardForm.Enabled := False')));
+      final sync = _routine(script, 'procedure UiSyncLanguage()');
+      expect(sync, contains('(UiPage = wpWelcome) and UiHeroDone'));
+      expect(sync, contains('UiLangWaitMs'));
+      expect(
+        sync,
+        isNot(contains('PostMessage(UiLangHandoff')),
+      );
+      final init = _routine(script, 'procedure UiAssistantInitializeWizard()');
+      expect(init, contains("ExpandConstant('{param:HANDOFF|0}')"));
+      expect(init, contains('UiHeroDone := True;'));
+      expect(init, contains('WizardForm.SetBounds(R.Left, R.Top'));
+      expect(
+        _routine(script, 'procedure UiPlaceLanguageButton('),
+        contains('.Img.Left := UiX('),
+      );
+      expect(
+        _routine(script, 'procedure UiButtonClick('),
+        contains('UiBtnLanguage: UiSwitchLanguage();'),
+      );
+    });
+
+    test('$_assistant: החלפת שפה — ניסיון שפג אינו מקבל ילד מאוחר', () {
+      final script = _script(_assistant);
+      final change = _routine(script, 'procedure UiSwitchLanguage()');
+      expect(change, contains('UiLangAttempt := UiLangAttempt + 1;'));
+      expect(change, contains('IntToStr(UiProcessId())'));
+      expect(change, contains('UiNowMs() * 1000'));
+      expect(change, contains("' /HANDOFFEVENT=' + Name"));
+      expect(change, contains('DLLGetLastError() = 183'));
+      final sync = _routine(script, 'procedure UiSyncLanguage()');
+      expect(
+        sync.indexOf('UiNowMs() - UiLangSince >= UiLangWaitMs'),
+        lessThan(sync.lastIndexOf('UiWaitEvent(UiLangReady, 0)')),
+      );
+      expect(sync, contains('if UiSetEvent(UiLangAccepted) then'));
+      expect(sync, contains('WizardForm.Close;'));
+      expect(
+        sync.indexOf('if UiIsWindowEnabled(WizardForm.Handle) <> 0 then'),
+        lessThan(sync.indexOf('if UiSetEvent(UiLangAccepted) then')),
+      );
+      expect(sync, isNot(contains('PostMessage(')));
+      final abort = _routine(script, 'procedure UiAbortLanguageSwitch()');
+      expect(abort, contains('UiReleaseLanguageEvents();'));
+      expect(abort, contains('UiLangSince := 0;'));
+      expect(abort, contains("if UiLangEventName <> '' then"));
+      expect(abort, contains('UiClosing := True;'));
+      expect(abort, contains('WizardForm.Close;'));
+      expect(abort, contains('UiSetWindowPos(WizardForm.Handle, -2'));
+    });
+
+    test('$_assistant: החלפת שפה — הילד מחזיק אישור לפני מוכנות', () {
+      final script = _script(_assistant);
+      final init = _routine(script, 'procedure UiAssistantInitializeWizard()');
+      expect(init, contains("ExpandConstant('{param:HANDOFFEVENT|}')"));
+      expect(
+        init,
+        contains(r"UiOpenEvent($100002, False, UiLangEventName + '-ready')"),
+      );
+      expect(
+        init,
+        contains(r"UiOpenEvent($100000, False, UiLangEventName + '-accepted')"),
+      );
+      expect(init, contains('UiLangSince := UiNowMs();'));
+      expect(init, isNot(contains('UiSetEvent(')));
+      final sync = _routine(script, 'procedure UiSyncLanguage()');
+      expect(sync, contains('(UiLangReady = 0) or (UiLangAccepted = 0)'));
+      expect(sync, contains('if not UiSetEvent(UiLangReady) then'));
+      expect(sync, contains('if Status = 258 then'));
+      expect(sync, contains('Shown and WizardForm.Visible and'));
+      expect(
+        sync,
+        contains(
+          'if WizardForm.Visible and (UiIsWindowEnabled(WizardForm.Handle) <> 0) then',
+        ),
+      );
+      expect(
+        sync,
+        contains('(UiIsWindowEnabled(WizardForm.Handle) <> 0) then'),
+      );
+      expect(sync, contains('else if Status <> 0 then'));
+      expect(
+        sync.indexOf('UiWaitEvent(UiLangReady, 0)'),
+        lessThan(sync.indexOf('UiRedrawWindow(')),
+      );
+      expect(sync, contains('UiWaitEvent(UiLangAccepted, 0)'));
+      expect(sync, contains("UiLangEventName := '';"));
+      expect(sync, contains('else if (Status <> 258)'));
+      expect(sync, contains('else if Status <> 258'));
+      expect(
+        sync.indexOf('UiWaitEvent(UiLangAccepted, 0)'),
+        lessThan(sync.indexOf('UiNowMs() - UiLangSince >= 2 * UiLangWaitMs')),
+      );
+      final release = _routine(script, 'procedure UiReleaseLanguageEvents()');
+      expect(release, contains('UiCloseHandle(UiLangReady)'));
+      expect(release, contains('UiCloseHandle(UiLangAccepted)'));
+      expect(release, contains('UiLangReady := 0;'));
+      expect(release, contains('UiLangAccepted := 0;'));
+      expect(
+        _routine(script, 'procedure DeinitializeSetup()'),
+        contains('UiReleaseLanguageEvents();'),
+      );
+    });
+
+    test('$_assistant: החלפת שפה — אין הורדה לפני אישור הילד', () {
+      final script = _script(_assistant);
+      expect(
+        _routine(script, 'procedure UiButtonClick('),
+        contains("if (UiLangSince > 0) or (UiLangEventName <> '') then exit;"),
+      );
+      final next = _routine(script, 'function NextButtonClick(');
+      expect(
+        next,
+        contains("Result := (UiLangSince = 0) and (UiLangEventName = '');"),
+      );
+      expect(
+        next.indexOf('if not Result then exit;'),
+        lessThan(next.indexOf('LoadManifestStep()')),
+      );
+    });
+
     test('$_assistant: כל טקסט קיים בשתי השפות, וכל קריאה מוצאת אותו', () {
       final script = _script(_assistant);
       for (final section in const ['CustomMessages', 'Messages']) {
@@ -3857,8 +3985,19 @@ void main() {
         script,
         'CustomMessages',
       )['english']!.entries) {
+        // מעבר לשפה השנייה כתוב בה: מי שעובר אליה קורא אותה, ולא את שפת החלון.
+        if (const {'OtherLanguage', 'LanguageSwitching'}.contains(key)) {
+          continue;
+        }
         expect(value, isNot(matches(hebrew)), reason: 'english.$key בעברית');
       }
+      expect(_text(script, 'english', 'OtherLanguage'), 'עברית');
+      expect(_text(script, 'hebrew', 'OtherLanguage'), 'English');
+      expect(_text(script, 'english', 'LanguageSwitching'), matches(hebrew));
+      expect(
+        _text(script, 'hebrew', 'LanguageSwitching'),
+        isNot(matches(hebrew)),
+      );
       final used = {
         for (final m in RegExp(
           r"(?:CustomMessage\('|Msg1\('|\{cm:)(\w+)",

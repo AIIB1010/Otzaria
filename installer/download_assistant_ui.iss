@@ -31,6 +31,9 @@ english.StopYes=Stop
 english.StopNo=Keep Downloading
 english.InstallFailedTitle=Couldn't start the installer
 english.InstallFailedText=You can run it yourself from the folder:%n%1
+; בשפה השנייה עצמה: מי שעובר אליה קורא אותה, ולא את שפת החלון.
+english.OtherLanguage=עברית
+english.LanguageSwitching=מחליף לעברית…
 
 hebrew.CardSize=גודל ההורדה: %1
 hebrew.RowVersion=גרסה
@@ -57,6 +60,8 @@ hebrew.StopYes=עצור
 hebrew.StopNo=המשך להוריד
 hebrew.InstallFailedTitle=לא ניתן היה להפעיל את המתקין
 hebrew.InstallFailedText=אפשר להפעיל אותו ידנית מתוך התיקייה:%n%1
+hebrew.OtherLanguage=English
+hebrew.LanguageSwitching=Switching to English…
 
 [Code]
 const
@@ -66,6 +71,9 @@ const
   UiBtnInstall = UiBtnFirstAdapter + 3;
   UiBtnOpenFolder = UiBtnFirstAdapter + 4;
   UiBtnDone = UiBtnFirstAdapter + 5;
+  UiBtnLanguage = UiBtnFirstAdapter + 6;
+  { אם העותק בשפה השנייה לא נפתח עד אז, החלון הזה חוזר לפעולה. }
+  UiLangWaitMs = 15000;
 
   UiSrcDownload = UiSrcFirstAdapter;
   UiSrcWork = UiSrcFirstAdapter + 1;
@@ -80,6 +88,44 @@ var
   UiErrBadge: TBitmapImage;
   UiErrTitle, UiErrBody, UiErrLink: TNewStaticText;
   UiErrTech: TRichEditViewer;
+  UiLangHandoff: HWND;
+  UiLangSince: Extended;
+  UiLangEventName: String;
+  UiLangReady, UiLangAccepted, UiLangAttempt: Longint;
+
+type
+  TUiStartupInfo = record
+    Size: LongWord;
+    Reserved, Desktop, Title: Longint;
+    X, Y, XSize, YSize, XChars, YChars, Fill, Flags: LongWord;
+    ShowWindow, Reserved2Size: Word;
+    Reserved2, StdInput, StdOutput, StdError: Longint;
+  end;
+
+  TUiProcessInfo = record
+    Process, Thread: Longint;
+    ProcessId, ThreadId: LongWord;
+  end;
+
+function UiIsWindow(Wnd: HWND): BOOL;
+  external 'IsWindow@user32.dll stdcall';
+function UiCreateProcess(App, CommandLine: String; ProcessAttr, ThreadAttr: Longint;
+  Inherit: BOOL; Flags: LongWord; Env, Dir: Longint; var Startup: TUiStartupInfo;
+  var Info: TUiProcessInfo): BOOL;
+  external 'CreateProcessW@kernel32.dll stdcall';
+function UiCloseHandle(Handle: Longint): BOOL;
+  external 'CloseHandle@kernel32.dll stdcall';
+function UiCreateEvent(Attributes: Longint; ManualReset, InitialState: BOOL;
+  Name: String): Longint;
+  external 'CreateEventW@kernel32.dll stdcall';
+function UiOpenEvent(Access: LongWord; Inherit: BOOL; Name: String): Longint;
+  external 'OpenEventW@kernel32.dll stdcall';
+function UiSetEvent(Handle: Longint): BOOL;
+  external 'SetEvent@kernel32.dll stdcall';
+function UiWaitEvent(Handle: Longint; Milliseconds: LongWord): LongWord;
+  external 'WaitForSingleObject@kernel32.dll stdcall';
+function UiProcessId(): LongWord;
+  external 'GetCurrentProcessId@kernel32.dll stdcall';
 
 { ============================ כרטיסים ============================ }
 
@@ -783,6 +829,172 @@ begin
     UiBuildInstalling();
 end;
 
+{ ============================ שפה ============================ }
+
+procedure UiReleaseLanguageEvents();
+begin
+  if UiLangReady <> 0 then UiCloseHandle(UiLangReady);
+  if UiLangAccepted <> 0 then UiCloseHandle(UiLangAccepted);
+  UiLangReady := 0;
+  UiLangAccepted := 0;
+end;
+
+procedure UiAbortLanguageSwitch();
+begin
+  UiReleaseLanguageEvents();
+  UiLangSince := 0;
+  if UiLangEventName <> '' then
+  begin
+    UiClosing := True;
+    WizardForm.Close;
+  end
+  else
+    UiSetWindowPos(WizardForm.Handle, -2, 0, 0, 0, 0, $1 or $2 or $10);
+end;
+
+{ Inno קובע את השפה רק בהפעלה. האב מאשר את העותק המוכן לפני שהוא נסגר. }
+procedure UiSwitchLanguage();
+var
+  Lang, Exe, Name: String;
+  Startup: TUiStartupInfo;
+  Info: TUiProcessInfo;
+begin
+  if EnglishUi() then
+    Lang := 'hebrew'
+  else
+    Lang := 'english';
+  UiLangAttempt := UiLangAttempt + 1;
+  Name := 'Local\OtzariaDL-' + IntToStr(UiProcessId()) + '-' +
+    Format('%.0f', [UiNowMs() * 1000]) + '-' + IntToStr(UiLangAttempt);
+  UiLangReady := UiCreateEvent(0, True, False, Name + '-ready');
+  if (UiLangReady = 0) or (DLLGetLastError() = 183) then
+  begin
+    UiReleaseLanguageEvents();
+    exit;
+  end;
+  UiLangAccepted := UiCreateEvent(0, True, False, Name + '-accepted');
+  if (UiLangAccepted = 0) or (DLLGetLastError() = 183) then
+  begin
+    UiReleaseLanguageEvents();
+    exit;
+  end;
+  { Exec ו-ShellExec של Inno מסרבים להפעיל את Setup עצמו לפני ההתקנה. }
+  Exe := ExpandConstant('{srcexe}');
+  Startup.Size := SizeOf(Startup);
+  Startup.Flags := 1;
+  Startup.ShowWindow := SW_SHOWNORMAL;
+  if not UiCreateProcess(Exe, AddQuotes(Exe) + ' /LANG=' + Lang + ' /HANDOFF=' +
+    IntToStr(WizardForm.Handle) + ' /HANDOFFEVENT=' + Name,
+    0, 0, False, 0, 0, 0, Startup, Info) then
+  begin
+    Log('DownloadAssistant: language switch failed: ' + SysErrorMessage(DLLGetLastError()));
+    UiReleaseLanguageEvents();
+    exit;
+  end;
+  UiCloseHandle(Info.Process);
+  UiCloseHandle(Info.Thread);
+  UiLangSince := UiNowMs();
+  { HWND_TOPMOST; SWP_NOSIZE, SWP_NOMOVE, SWP_NOACTIVATE }
+  UiSetWindowPos(WizardForm.Handle, -1, 0, 0, 0, 0, $1 or $2 or $10);
+end;
+
+{ "English" או, בזמן ההחלפה, "Switching to English…"; הרוחב לפי הכיתוב. }
+procedure UiPlaceLanguageButton(const Caption: String);
+var
+  W: Integer;
+begin
+  if not Assigned(UiButtons[UiBtnLanguage].Img) then
+  begin
+    UiMakeButton(UiBtnLanguage, WizardForm.WelcomePage, 'btn_ghost', 0, Px(12));
+    if UiGlyphW() > 0 then
+      UiButtons[UiBtnLanguage].Glyph := #$E774;
+  end;
+  W := UiTextW(Caption, 14, True) + UiGlyphW() + Px(32) + 4;
+  UiButtons[UiBtnLanguage].Width := W;
+  { הכיתוב בקו השוליים של העמוד; רק רקע הריחוף חורג מהם. }
+  UiButtons[UiBtnLanguage].Img.Left := UiX(Px(UiMargin - 16) - 2, W, Px(UiWidth));
+end;
+
+{ הכפתור מופיע עם "בואו נתחיל". ילד שלא אושר אינו מתחיל הורדות. }
+procedure UiSyncLanguage();
+var
+  Shown: Boolean;
+  Caption: String;
+  Status: LongWord;
+begin
+  Shown := (UiPage = wpWelcome) and UiHeroDone;
+  if UiLangSince > 0 then
+  begin
+    if UiLangEventName <> '' then
+    begin
+      Status := UiWaitEvent(UiLangAccepted, 0);
+      if Status = 0 then
+      begin
+        UiReleaseLanguageEvents();
+        UiLangEventName := '';
+        UiLangHandoff := 0;
+        UiLangSince := 0;
+      end
+      { אישור שנשלח תקף גם כשהילד חזר לפעול מאוחר. האב ממתין רק 15 שניות. }
+      else if (Status <> 258) or (UiLangReady = 0) or (UiLangAccepted = 0) or
+              (UiNowMs() - UiLangSince >= 2 * UiLangWaitMs) then
+      begin
+        if WizardForm.Visible and (UiIsWindowEnabled(WizardForm.Handle) <> 0) then
+          UiAbortLanguageSwitch();
+      end
+      else if Shown and WizardForm.Visible and
+              (UiIsWindowEnabled(WizardForm.Handle) <> 0) then
+      begin
+        Status := UiWaitEvent(UiLangReady, 0);
+        if Status = 258 then
+        begin
+          UiRedrawWindow(WizardForm.Handle, 0, 0, $185);
+          if not UiSetEvent(UiLangReady) then UiAbortLanguageSwitch();
+        end
+        else if Status <> 0 then
+          UiAbortLanguageSwitch();
+      end;
+    end
+    else
+    begin
+      { פקיעה קודמת למוכנות: ילד מאוחר אינו יכול לסגור אב שחזר לפעולה. }
+      if (UiNowMs() - UiLangSince >= UiLangWaitMs) or
+         (UiLangReady = 0) or (UiLangAccepted = 0) then
+        UiAbortLanguageSwitch()
+      else
+      begin
+        Status := UiWaitEvent(UiLangReady, 0);
+        if Status = 0 then
+        begin
+          if UiIsWindowEnabled(WizardForm.Handle) <> 0 then
+          begin
+            if UiSetEvent(UiLangAccepted) then
+            begin
+              UiReleaseLanguageEvents();
+              UiLangSince := 0;
+              UiClosing := True;
+              WizardForm.Close;
+            end
+            else
+              UiAbortLanguageSwitch();
+          end;
+        end
+        else if Status <> 258 then
+          UiAbortLanguageSwitch();
+      end;
+    end;
+  end;
+  if UiLangSince > 0 then
+    Caption := CustomMessage('LanguageSwitching')
+  else
+    Caption := CustomMessage('OtherLanguage');
+  if Shown and (not Assigned(UiButtons[UiBtnLanguage].Img) or
+     (UiButtons[UiBtnLanguage].Caption <> Caption)) then
+    UiPlaceLanguageButton(Caption);
+  if Assigned(UiButtons[UiBtnLanguage].Img) then
+    UiSetButton(UiBtnLanguage, Shown, UiLangSince = 0, Caption);
+end;
+
 { ============================ כפתורים ============================ }
 
 { Inno מקבל סגירה רק בעמוד שיש בו "ביטול". בעמודי ההתקדמות השאלה נשאלת כאן,
@@ -807,6 +1019,7 @@ begin
   { בזמן דו-שיח החלון מושבת; לחיצה שבכל זאת הגיעה הייתה פותחת שאלה שנייה. }
   if UiIsWindowEnabled(WizardForm.Handle) = 0 then
     exit;
+  if (UiLangSince > 0) or (UiLangEventName <> '') then exit;
   for I := 0 to GetArrayLength(UiButtons) - 1 do
     if (Sender = UiButtons[I].Img) and UiButtons[I].Shown and UiButtons[I].Enabled then
       case I of
@@ -840,6 +1053,7 @@ begin
             WizardForm.Close;
           end;
         UiBtnClose: UiRequestClose();
+        UiBtnLanguage: UiSwitchLanguage();
       else
         UiCoreButtonClick(I);
       end;
@@ -893,6 +1107,7 @@ end;
 
 procedure UiAdapterSyncFooter();
 begin
+  UiSyncLanguage();
   if UiPage = ConnectPage.ID then
     UiSetButton(UiBtnAbort, ConnectPage.AbortButton.Visible,
       ConnectPage.AbortButton.Enabled and not StopRequested, CustomMessage('Cancel'))
@@ -905,8 +1120,29 @@ end;
 { ============================ חיבור לאשף ============================ }
 
 procedure UiAssistantInitializeWizard();
+var
+  R: TUiRect;
 begin
   UiInitializeWizard('title_', 'title_en_', CustomMessage('StartButton'));
+  { עותק שנפתח בהחלפת שפה: במקום החלון הקודם, בלי הפתיחה שכבר הוצגה בו. }
+  UiLangHandoff := StrToIntDef(ExpandConstant('{param:HANDOFF|0}'), 0);
+  UiLangEventName := ExpandConstant('{param:HANDOFFEVENT|}');
+  if UiLangEventName <> '' then
+  begin
+    { קונים את שני ה-handles לפני ready, כדי ש-accepted ישרוד את יציאת האב. }
+    UiLangReady := UiOpenEvent($100002, False, UiLangEventName + '-ready');
+    UiLangAccepted := UiOpenEvent($100000, False, UiLangEventName + '-accepted');
+    UiLangSince := UiNowMs();
+  end;
+  if UiLangHandoff <> 0 then
+    if not UiIsWindow(UiLangHandoff) or not UiGetWindowRect(UiLangHandoff, R) then
+      UiLangHandoff := 0;
+  if UiLangHandoff <> 0 then
+  begin
+    UiHeroDone := True;
+    WizardForm.CenterOnShow := False;
+    WizardForm.SetBounds(R.Left, R.Top, WizardForm.Width, WizardForm.Height);
+  end;
   { MinimizePathName מקצר את שורת המצב לרוחב התווית, והתווית עצמה מוסתרת. }
   DownloadPage.Msg2Label.Width := Px(4000);
   WorkPage.Msg2Label.Width := Px(4000);

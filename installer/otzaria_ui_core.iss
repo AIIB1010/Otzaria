@@ -134,6 +134,8 @@ type
     Width: Integer;
     Back: TColor;
     Danger: Boolean;
+    { תו מגופן הסמלים של Windows, בצד שבו הכיתוב מתחיל. }
+    Glyph: String;
   end;
 
   TUiCard = record
@@ -734,6 +736,54 @@ begin
     Result := DT_RTLREADING;
 end;
 
+{ Fluent ב-Windows 11, MDL2 ב-10; False כשאין אף אחד מהם. }
+function UiSetIconFont(C: TCanvas; Size: Integer; Color: TColor): Boolean;
+begin
+  C.Font.Name := 'Segoe Fluent Icons';
+  if not FontExists(C.Font.Name) then
+    C.Font.Name := 'Segoe MDL2 Assets';
+  Result := FontExists(C.Font.Name);
+  C.Font.Style := [];
+  C.Font.Height := -Px(Size);
+  C.Font.Color := Color;
+end;
+
+{ הרוחב שסמל של 16 והרווח שאחריו תופסים לפני הכיתוב. }
+function UiGlyphW(): Integer;
+begin
+  Result := 0;
+  if UiSetIconFont(UiMeasure.Canvas, 16, 0) then
+    Result := Px(16 + 8);
+end;
+
+{ סמל וכיתוב ממורכזים יחד; הסמל בצד שבו הקריאה מתחילה. }
+procedure UiGlyphText(C: TCanvas; const Glyph, S: String; W, H: Integer; Color: TColor);
+var
+  TextW, GlyphW, X: Integer;
+  R: TUiRect;
+  Flags: LongWord;
+begin
+  TextW := UiTextW(S, 14, True);
+  GlyphW := UiGlyphW();
+  X := (W - GlyphW - TextW) div 2;
+  if GlyphW > 0 then
+  begin
+    UiSetIconFont(C, 16, Color);
+    C.Brush.Style := bsClear;
+    R.Left := UiX(X + TextW + Px(8), Px(16), W);
+    R.Top := 0;
+    R.Right := R.Left + Px(16);
+    R.Bottom := H;
+    UiDrawText(C.Handle, Glyph, -1, R, DT_CENTER or DT_VCENTER or DT_SINGLELINE or
+      DT_NOPREFIX);
+  end;
+  { כיוון הקריאה לפי הכיתוב: "Switching to English…" בחלון עברי נשאר עם הנקודות בסוף. }
+  Flags := DT_VCENTER or DT_SINGLELINE or DT_NOPREFIX;
+  if UiHasHebrew(S) then
+    Flags := Flags or DT_RTLREADING;
+  UiText(C, S, UiX(X, TextW, W), 0, TextW, H, 14, True, Color, Flags);
+end;
+
 { שלוש פרוסות אנכיות: עליונה ותחתונה בגודלן, והאמצעית חוזרת עד המילוי. }
 { פרוסה אמצעית נמתחת בקריאה אחת: ציור שורה-שורה עלה מאות קריאות לכרטיס. }
 procedure UiDrawStretch(C: TCanvas; X, Y, W, H: Integer; Art: TBitmap);
@@ -875,9 +925,13 @@ begin
       Color := UiOnTonalColor
     else
       Color := UiPrimaryColor;
-    UiText(Bmp.Canvas, UiButtons[I].Caption, 0, 0, Bmp.Width, Bmp.Height, 14, True, Color,
-      DT_CENTER or DT_VCENTER or DT_SINGLELINE or DT_NOPREFIX or
-      UiReading(UiButtons[I].Caption));
+    if UiButtons[I].Glyph <> '' then
+      UiGlyphText(Bmp.Canvas, UiButtons[I].Glyph, UiButtons[I].Caption, Bmp.Width,
+        Bmp.Height, Color)
+    else
+      UiText(Bmp.Canvas, UiButtons[I].Caption, 0, 0, Bmp.Width, Bmp.Height, 14, True, Color,
+        DT_CENTER or DT_VCENTER or DT_SINGLELINE or DT_NOPREFIX or
+        UiReading(UiButtons[I].Caption));
   end;
   UiButtons[I].Img.Bitmap := Bmp;
   UiButtons[I].Img.SetBounds(UiButtons[I].Img.Left, UiButtons[I].Img.Top, W, H);
@@ -927,6 +981,7 @@ begin
   else
     UiButtons[I].Back := UiPageColor;
   UiButtons[I].Danger := False;
+  UiButtons[I].Glyph := '';
 end;
 
 { ראש כפתור במקום Index (מלמעלה) בערימה של Count כפתורים, בקואורדינטות 100% של
