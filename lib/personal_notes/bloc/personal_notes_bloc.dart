@@ -203,7 +203,6 @@ class PersonalNotesBloc extends Bloc<PersonalNotesEvent, PersonalNotesState> {
       final notes = await _repository.deleteNote(
         bookId: event.bookId,
         noteId: event.noteId,
-        categoryId: state.categoryId,
       );
       _emitNotes(event.bookId, notes, emit);
     } catch (e) {

@@ -43,12 +43,7 @@ class _ServiceRepository extends PersonalNotesRepository {
   Future<List<PersonalNote>> deleteNote({
     required String bookId,
     required String noteId,
-    int? categoryId,
-  }) => service.deleteNote(
-    bookId: bookId,
-    bookContent: 'שורה ראשונה\nשורה שנייה',
-    noteId: noteId,
-  );
+  }) => service.deleteNote(bookId: bookId, noteId: noteId);
 }
 
 void main() {

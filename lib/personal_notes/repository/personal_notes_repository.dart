@@ -97,15 +97,7 @@ class PersonalNotesRepository {
   Future<List<PersonalNote>> deleteNote({
     required String bookId,
     required String noteId,
-    int? categoryId,
-  }) async {
-    final bookContent = await _loadBookContent(bookId, categoryId: categoryId);
-    return _service.deleteNote(
-      bookId: bookId,
-      bookContent: bookContent,
-      noteId: noteId,
-    );
-  }
+  }) => _service.deleteNote(bookId: bookId, noteId: noteId);
 
   Future<List<PersonalNote>> repositionNote({
     required String bookId,
