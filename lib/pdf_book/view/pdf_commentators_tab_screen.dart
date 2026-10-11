@@ -1058,7 +1058,11 @@ class _PdfCommentatorsTabScreenState extends State<PdfCommentatorsTabScreen>
                 final isGroupEnd = listIdx == filteredIdx.length;
                 final isActiveHeading = idx == _selectedHeadingIdx;
                 final isExpanded = _expandedHeadings.contains(idx);
-                final paras = _getParagraphs(idx);
+                // מכווצת — די בפסקה אחת כדי לדעת אם להציג חץ.
+                final paras = _getParagraphs(
+                  idx,
+                  limit: isExpanded ? null : 1,
+                );
 
                 final headingRow = _buildHeadingRow(
                   context: context,
