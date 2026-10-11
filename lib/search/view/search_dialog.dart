@@ -548,14 +548,12 @@ class _SearchDialogState extends State<SearchDialog> {
         if (!isExact) _searchTab.searchOptions.clear();
       });
       _searchTab.searchOptionsChanged.value++;
-      if (isExact) {
-        final savedDistance = SearchDefaults.loadDistanceDefault();
-        _searchTab.searchBloc.add(
-          _usesStagedSubmit
-              ? UpdateDistanceWithoutSearch(savedDistance)
-              : UpdateDistance(savedDistance),
-        );
-      }
+      final savedDistance = SearchDefaults.loadDistanceDefault();
+      _searchTab.searchBloc.add(
+        _usesStagedSubmit
+            ? UpdateDistanceWithoutSearch(savedDistance)
+            : UpdateDistance(savedDistance),
+      );
     }
 
     return MenuAnchor(
@@ -582,26 +580,24 @@ class _SearchDialogState extends State<SearchDialog> {
                       : (checked) => saveDefault(key, checked ?? false),
                   child: Text(isExact ? context.settingsText(key) : key),
                 ),
-              if (isExact) ...[
-                const Divider(height: 8),
-                MenuItemButton(
-                  closeOnActivate: false,
-                  onPressed: () {
-                    setState(() {
-                      SearchDefaults.saveDistanceDefault(state.distance);
-                    });
-                    UiSnack.show(
-                      LibraryMessages.distanceSetAsDefault(state.distance),
-                    );
-                  },
-                  child: Text(
-                    context.settingsText(
-                      'קבע את המרווח הנוכחי ({distance}) כברירת מחדל',
-                      args: {'distance': state.distance},
-                    ),
+              const Divider(height: 8),
+              MenuItemButton(
+                closeOnActivate: false,
+                onPressed: () {
+                  setState(() {
+                    SearchDefaults.saveDistanceDefault(state.distance);
+                  });
+                  UiSnack.show(
+                    LibraryMessages.distanceSetAsDefault(state.distance),
+                  );
+                },
+                child: Text(
+                  context.settingsText(
+                    'קבע את המרווח הנוכחי ({distance}) כברירת מחדל',
+                    args: {'distance': state.distance},
                   ),
                 ),
-              ],
+              ),
             ],
             leadingIcon: const Icon(FluentIcons.options_24_regular),
             child: Text(
