@@ -4,6 +4,7 @@ import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/app_paths.dart';
 import 'package:otzaria/data/sqlite/sqlite3_api.dart';
+import 'package:otzaria/personal_notes/models/personal_note.dart';
 import 'package:otzaria/personal_notes/storage/personal_notes_database.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
 
@@ -68,5 +69,34 @@ void main() {
       opened.first.select('PRAGMA table_info(personal_notes)'),
       isNotEmpty,
     );
+  });
+
+  test('זמני העדכון של כל ההערות זהים לאלה שבטעינה המלאה', () async {
+    final notes = [
+      for (var i = 0; i < 9; i++)
+        PersonalNote(
+          id: 'n$i',
+          bookId: 'ספר ${i % 3}',
+          lineNumber: i,
+          lastKnownLineNumber: i,
+          status: PersonalNoteStatus.located,
+          content: 'תוכן',
+          contentPlain: 'תוכן',
+          contentFormat: PersonalNoteContentFormat.plain,
+          createdAt: DateTime(2026, 1, 1),
+          updatedAt: DateTime(2026, 1, 1, i, 0, 0, 0, i * 7),
+        ),
+    ];
+    await database.batchInsertNotes(notes);
+
+    final fromFullLoad = [
+      for (final book in await database.listBooksWithNotes())
+        for (final note in await database.loadNotes(book.bookId))
+          note.updatedAt,
+    ];
+    final times = await database.listNoteUpdateTimes();
+
+    expect(times, unorderedEquals(fromFullLoad));
+    expect(times, hasLength(9));
   });
 }
