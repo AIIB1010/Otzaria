@@ -23,6 +23,7 @@ import 'package:otzaria/widgets/controls/action_buttons.dart';
 import 'package:otzaria/widgets/lists/items_list_view.dart';
 import 'package:otzaria/widgets/dialogs/app_dialogs.dart';
 import 'package:otzaria/widgets/dialogs/input_dialog.dart';
+import 'package:otzaria/utils/calendar_days.dart';
 
 class BookmarksDialog extends StatelessWidget {
   /// אם מסופק, יוצגו רק סימניות של ספר זה (הדיאלוג הופך לתצוגת
@@ -476,12 +477,12 @@ class BookmarkDateGroups {
     }
     final today = DateTime(now.year, now.month, now.day);
     // ראשון=weekday 7 → 7%7=0, שני=1, ..., שבת=6
-    final startOfThisWeek = today.subtract(Duration(days: today.weekday % 7));
+    final startOfThisWeek = addCalendarDays(today, -(today.weekday % 7));
     _starts = [
       today,
-      today.subtract(const Duration(days: 1)),
+      addCalendarDays(today, -1),
       startOfThisWeek,
-      startOfThisWeek.subtract(const Duration(days: 7)),
+      addCalendarDays(startOfThisWeek, -7),
       DateTime(now.year, now.month, 1),
       now.month == 1
           ? DateTime(now.year - 1, 12, 1)

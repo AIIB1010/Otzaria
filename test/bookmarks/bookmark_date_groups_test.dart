@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/bookmarks/view/bookmark_screen.dart';
 
+import '../test_helpers/dst_days.dart';
+
 /// המימוש המקורי, שבנה את כל גבולות התקופות מחדש לכל סימניה.
 String _referenceKey(DateTime? date, DateTime now) {
   if (date == null) return '8_older';
@@ -64,6 +66,25 @@ void main() {
         }
       }
     });
+
+    test(
+      'גבולות אתמול והשבועות נופלים בחצות גם אחרי יום מעבר שעון',
+      skip: noDstSkipReason,
+      () {
+        for (final day in [localDayLasting(23)!, localDayLasting(25)!]) {
+          final starts = BookmarkDateGroups().periodStarts(
+            atHour(plusDays(day, 1), 12),
+          );
+          expect(starts[1], day);
+          final week = plusDays(day, 7);
+          final weekStarts = BookmarkDateGroups().periodStarts(
+            atHour(week, 12),
+          );
+          expect(weekStarts[2], plusDays(week, -(week.weekday % 7)));
+          expect(weekStarts[3], plusDays(weekStarts[2], -7));
+        }
+      },
+    );
 
     test('תווית לפי המפתח', () {
       final groups = BookmarkDateGroups();

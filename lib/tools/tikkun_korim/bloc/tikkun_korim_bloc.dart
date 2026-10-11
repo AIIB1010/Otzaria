@@ -14,6 +14,7 @@ import 'package:otzaria/tools/tikkun_korim/repository/tikkun_korim_repository.da
 import 'package:otzaria/tools/tikkun_korim/settings/tikkun_settings.dart';
 import 'package:otzaria/tools/tikkun_korim/view/stam_roof_metrics.dart';
 import 'package:otzaria/tools/tikkun_korim/view/stam_width_measurer.dart';
+import 'package:otzaria/utils/calendar_days.dart';
 import 'package:otzaria/utils/text/numeral_formats.dart';
 
 part 'tikkun_korim_event.dart';
@@ -28,7 +29,7 @@ String defaultUpcomingParashaName(
       ? 0
       : (DateTime.saturday - date.weekday) % 7;
   final shabbat = JewishCalendar.fromDateTime(
-    date.add(Duration(days: daysUntilShabbat)),
+    addCalendarDays(date, daysUntilShabbat),
   )..inIsrael = inIsrael;
   return (HebrewDateFormatter()..hebrewFormat = true).formatParsha(shabbat);
 }

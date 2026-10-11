@@ -81,6 +81,7 @@ import 'package:otzaria/tabs/models/searching_tab.dart';
 import 'package:otzaria/tabs/models/tab.dart';
 
 import '../../support/search_engine_test_init.dart';
+import '../../test_helpers/dst_days.dart';
 
 class _MockHistoryBloc extends Mock implements HistoryBloc {}
 
@@ -463,6 +464,27 @@ Future<void> main() async {
         ),
       );
     });
+
+    test(
+      'parasha does not depend on the hour on the day clocks fall back',
+      skip: noDstSkipReason,
+      () async {
+        final day = localDayLasting(25)!;
+        final shabbat = JewishCalendar.fromDateTime(shabbatOnOrAfter(day))
+          ..inIsrael = true;
+        final expected = (HebrewDateFormatter()..hebrewFormat = true)
+            .formatParsha(
+              shabbat,
+            );
+        Future<Object?> parashaAt(DateTime date) async =>
+            (await adapter.execute('calendar', 'getJewishDate', {
+                  'date': date.toIso8601String(),
+                })
+                as Map<String, dynamic>)['parasha'];
+        expect(await parashaAt(atHour(day, 12)), expected);
+        expect(await parashaAt(atHour(day, 0, 30)), expected);
+      },
+    );
 
     test('returns rosh chodesh entries with correct kind', () async {
       final jewishDate = JewishDate()

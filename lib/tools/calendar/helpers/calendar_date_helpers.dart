@@ -10,6 +10,8 @@ import 'package:flutter/material.dart';
 import 'package:kosher_dart/kosher_dart.dart';
 import 'package:otzaria/tools/calendar/bloc/calendar_cubit.dart';
 
+export 'package:otzaria/utils/calendar_days.dart';
+
 // ═══════════════════════════════════════════════════════════════════════════
 //  קבועים
 // ═══════════════════════════════════════════════════════════════════════════
@@ -57,10 +59,6 @@ const List<String> kGregorianMonths = [
 // ═══════════════════════════════════════════════════════════════════════════
 //  מ-hebrew_date_utils.dart
 // ═══════════════════════════════════════════════════════════════════════════
-
-/// מוסיף ימי לוח ולא 24 שעות: ביום מעבר שעון היום ארוך או קצר משעה.
-DateTime addCalendarDays(DateTime date, int days) =>
-    DateTime(date.year, date.month, date.day + days);
 
 /// מחזיר את הדף היומי (בבלי) לתאריך נתון
 Daf getDafYomi(DateTime date) {

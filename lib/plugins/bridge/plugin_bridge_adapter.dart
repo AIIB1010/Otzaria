@@ -151,6 +151,7 @@ import 'package:otzaria/plugins/services/plugin_text_occurrence_service.dart';
 import 'package:otzaria/plugins/services/text_source_map_service.dart';
 import 'package:otzaria/search/utils/facet_helper.dart';
 import 'package:otzaria/widgets/smart_text/render_settings.dart';
+import 'package:otzaria/utils/calendar_days.dart';
 
 /// גופן הממשק שאוצריא מוסרת לתוספים: sans מובנה שנשאר חד ב-11-12px.
 /// גופן הקריאה (`fontFamily`) אינו תחליף לו — הוא מצויר ל-25px,
@@ -6400,7 +6401,7 @@ class PluginBridgeAdapter {
     final dayOfWeek = date.weekday; // 1=Mon … 6=Sat, 7=Sun in Dart
     // Dart weekday: Mon=1 … Sat=6, Sun=7. Shabbat = Saturday = 6.
     final daysUntilShabbat = dayOfWeek == 6 ? 0 : (6 - dayOfWeek) % 7;
-    final shabbatDate = date.add(Duration(days: daysUntilShabbat));
+    final shabbatDate = addCalendarDays(date, daysUntilShabbat);
     final shabbatCalendar = JewishCalendar.fromDateTime(shabbatDate)
       ..inIsrael = inIsrael;
     return formatter.formatParsha(shabbatCalendar);

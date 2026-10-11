@@ -1,5 +1,6 @@
 import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kosher_dart/kosher_dart.dart';
 import 'package:otzaria/core/messages/tools_messages.dart';
 import 'package:otzaria/tools/tikkun_korim/bloc/tikkun_korim_bloc.dart';
 import 'package:otzaria/tools/tikkun_korim/models/tikkun_models.dart';
@@ -7,6 +8,7 @@ import 'package:otzaria/tools/tikkun_korim/repository/tikkun_contracts.dart';
 import 'package:otzaria/tools/tikkun_korim/repository/tikkun_korim_repository.dart';
 import 'package:otzaria/tools/tikkun_korim/settings/tikkun_settings.dart';
 
+import '../../../test_helpers/dst_days.dart';
 import '../support/tikkun_fakes.dart';
 
 void main() {
@@ -49,6 +51,28 @@ void main() {
       'נשא',
     );
   });
+
+  test(
+    'פרשת השבוע אינה תלויה בשעה ביום שהשעון חוזר בו',
+    skip: noDstSkipReason,
+    () {
+      final day = localDayLasting(25)!;
+      final shabbat = JewishCalendar.fromDateTime(shabbatOnOrAfter(day))
+        ..inIsrael = true;
+      final expected = (HebrewDateFormatter()..hebrewFormat = true)
+          .formatParsha(
+            shabbat,
+          );
+      expect(
+        defaultUpcomingParashaName(atHour(day, 12), inIsrael: true),
+        expected,
+      );
+      expect(
+        defaultUpcomingParashaName(atHour(day, 0, 30), inIsrael: true),
+        expected,
+      );
+    },
+  );
 
   group('טעינה ראשונה', () {
     blocTest<TikkunKorimBloc, TikkunKorimState>(
