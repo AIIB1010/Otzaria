@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:otzaria/plugins/services/plugin_new_tab_page_registry.dart';
+import 'package:otzaria/plugins/models/plugin_valid_permissions.dart';
 import 'package:otzaria/plugins/bloc/plugin_system_bloc.dart';
 import 'package:otzaria/plugins/bloc/plugin_system_event.dart';
 import 'package:otzaria/plugins/bloc/plugin_system_state.dart';
@@ -117,6 +119,8 @@ void main() {
   const menuItem = PluginContextMenuItem(id: 'item', label: 'Item');
 
   tearDown(() {
+    PluginNewTabPageRegistry.instance.remove('p1');
+    PluginNewTabPageRegistry.instance.remove('p2');
     PluginToolbarRegistry.instance.removeAll('p1');
     ContextMenuRegistry.instance.removeAll('p1');
     PluginShortcutRegistry.instance.removeAll('p1');
@@ -138,6 +142,17 @@ void main() {
       ),
     );
     await expectLater(bloc.stream, emitsThrough(isA<PluginSystemLoaded>()));
+  }
+
+  for (final permission in ['navigation.write', pluginNewTabPagePermission]) {
+    test('שלילת $permission משחררת בעלות בכפתור לשונית חדשה', () async {
+      final registry = PluginNewTabPageRegistry.instance;
+      expect(registry.register('p1'), isTrue);
+      expect(registry.register('p2'), isFalse);
+      await revoke(permission);
+      expect(registry.register('p2'), isTrue);
+      expect(registry.activePluginId, 'p2');
+    });
   }
 
   test('revoking reader.toolbar removes the plugin toolbar items', () async {

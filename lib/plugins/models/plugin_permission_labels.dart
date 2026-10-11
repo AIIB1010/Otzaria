@@ -290,6 +290,11 @@ const Map<String, PluginPermissionInfo> _permissionLabels = {
   ),
 
   // ===== ניווט =====
+  pluginNewTabPagePermission: PluginPermissionInfo(
+    label: "כפתור לשונית חדשה (+)",
+    icon: FluentIcons.add_24_regular,
+    description: "פתיחת דף התוסף בכפתור '+'. רק תוסף אחד יכול לקבל הרשאה זו.",
+  ),
   'navigation.write': PluginPermissionInfo(
     label: 'ניווט במסכים',
     icon: FluentIcons.navigation_24_regular,

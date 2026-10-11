@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:otzaria_icons/otzaria_icons.dart';
 import 'package:window_manager/window_manager.dart';
@@ -39,6 +40,12 @@ import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../helpers/memory_settings_cache.dart';
+
+class _NewTabRegistryRepo extends Fake implements PluginRegistryRepository {
+  @override
+  Future<String?> getNewTabPageOwner() async =>
+      PluginNewTabPageRegistry.instance.activePluginId;
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -150,6 +157,7 @@ void main() {
       tester,
     ) async {
       final registry = PluginNewTabPageRegistry.instance;
+      registry.repositoryForTesting = _NewTabRegistryRepo();
       final launcher = PluginPageLauncher.instance;
       final oldNavigator = launcher.navigator;
       final opened = <String>[];
@@ -161,6 +169,7 @@ void main() {
       );
       final settingsBloc = _TestSettingsBloc(SettingsState.initial());
       addTearDown(() async {
+        registry.repositoryForTesting = null;
         registry.remove('review.first');
         registry.remove('review.second');
         launcher.markPageClosed('review.first');
@@ -187,6 +196,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byTooltip('כרטיסייה חדשה'), findsOneWidget);
       await tester.tap(find.byTooltip('כרטיסייה חדשה'));
+      await tester.pump();
       expect(opened, ['review.first']);
       registry.remove('review.second');
       expect(registry.activePluginId, 'review.first');
@@ -199,6 +209,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byTooltip('כרטיסייה חדשה'), findsOneWidget);
       await tester.tap(find.byTooltip('כרטיסייה חדשה'));
+      await tester.pump();
       expect(opened, ['review.first', 'review.second']);
       registry.remove('review.second');
       await tester.pumpAndSettle();

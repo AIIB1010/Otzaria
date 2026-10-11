@@ -5,6 +5,9 @@ import 'package:otzaria/plugins/models/plugin_manifest.dart';
 import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
 import 'package:otzaria/plugins/storage/plugin_system_database.dart';
 import 'package:otzaria/plugins/utils/plugin_safe_mode.dart';
+import 'package:otzaria/plugins/services/plugin_new_tab_page_registry.dart';
+import 'package:otzaria/plugins/services/plugin_new_tab_page_service.dart';
+import 'package:otzaria/plugins/services/plugin_page_launcher.dart';
 
 PluginManifest _manifest({String id = 'p', int? toolTabOrder}) {
   return PluginManifest.fromJson({
@@ -51,6 +54,9 @@ class _FakeDb implements PluginSystemDatabase {
   final List<({String pluginId, bool showInTools})> showInToolsCalls = [];
 
   _FakeDb(this.plugins);
+
+  @override
+  Future<String?> getNewTabPageOwner() async => plugins.firstOrNull?.pluginId;
 
   @override
   Future<List<InstalledPlugin>> getAllInstalledPlugins() async =>
@@ -109,6 +115,10 @@ void main() {
         completed++;
         return v;
       });
+      final owner = repo.getNewTabPageOwner().then((v) {
+        completed++;
+        return v;
+      });
       await pumpEventQueue();
       expect(completed, 0);
       PluginSafeMode.active.value = true;
@@ -116,7 +126,38 @@ void main() {
       expect((await all).single.enabled, isFalse);
       expect((await one)!.enabled, isFalse);
       expect(await enabled, isFalse);
+      expect(await owner, isNull);
     });
+
+    test(
+      'safe mode suppresses ownership sync and opening without writes',
+      () async {
+        final fake = _FakeDb([_plugin(id: 'a')]);
+        final repo = PluginRegistryRepository(database: fake);
+        final registry = PluginNewTabPageRegistry.forTesting(repo);
+        final service = PluginNewTabPageService(registry: registry);
+        final launcher = PluginPageLauncher.instance;
+        final previousNavigator = launcher.navigator;
+        final opened = <String>[];
+        launcher.navigator = opened.add;
+        addTearDown(() {
+          launcher.navigator = previousNavigator;
+          registry.dispose();
+        });
+        registry.selectOwner('a');
+        await registry.open();
+        expect(opened, isEmpty);
+        expect(registry.activePluginId, isNull);
+        registry.selectOwner('a');
+        await service.syncOwner(repo);
+        expect(registry.activePluginId, isNull);
+        expect(await fake.getNewTabPageOwner(), 'a');
+        PluginSafeMode.active.value = false;
+        await service.syncOwner(repo);
+        await registry.open();
+        expect(opened, ['a']);
+      },
+    );
 
     test('every plugin reads as disabled', () async {
       final repo = PluginRegistryRepository(

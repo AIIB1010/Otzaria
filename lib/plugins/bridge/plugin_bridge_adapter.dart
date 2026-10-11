@@ -108,7 +108,8 @@ import 'package:otzaria/plugins/services/context_menu_registry.dart';
 import 'package:otzaria/plugins/services/plugin_toolbar_registry.dart';
 import 'package:otzaria/plugins/services/plugin_unsaved_changes_registry.dart';
 import 'package:otzaria/plugins/services/plugin_page_launcher.dart';
-import 'package:otzaria/plugins/services/plugin_new_tab_page_registry.dart';
+import 'package:otzaria/plugins/services/plugin_new_tab_page_service.dart';
+import 'package:otzaria/plugins/view/plugin_new_tab_page_choice.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:otzaria/plugins/services/plugin_print_service.dart';
 import 'package:otzaria/printing/view/printing_screen.dart';
@@ -6856,9 +6857,18 @@ class PluginBridgeAdapter {
           throw Exception('error.invalid_params: enabled must be boolean');
         }
         if (enabled == false) {
-          PluginNewTabPageRegistry.instance.remove(plugin.pluginId);
+          await PluginNewTabPageService.instance.release(
+            plugin.pluginId,
+            _pluginRepo,
+          );
         } else {
-          return PluginNewTabPageRegistry.instance.register(plugin.pluginId);
+          return PluginNewTabPageService.instance.request(
+            plugin.pluginId,
+            _pluginRepo,
+            onConflict: (ownerId) => unawaited(
+              notifyPluginNewTabPageConflict(plugin, ownerId, _pluginRepo),
+            ),
+          );
         }
         return true;
       case 'openSelf':

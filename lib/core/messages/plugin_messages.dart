@@ -54,6 +54,11 @@ abstract class PluginMessages {
   static String resetPluginDataError(Object error) =>
       'שגיאה באיפוס נתוני התוסף: $error';
 
+  static String newTabPageOccupied(String requester, String owner) =>
+      'התוסף "$requester" מבקש את כפתור "+", שכבר ניתן ל"$owner". '
+      'ניתן לבחור בהודעה זו או בהרשאות התוספים.';
+  static const String chooseNewTabPagePlugin = 'בחר תוסף';
+
   // ===== ניהול תוספים =====
   static String loadPluginsError(Object error) => 'שגיאה בטעינת תוספים: $error';
 
