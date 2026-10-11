@@ -1,5 +1,4 @@
 import '../utils/json_utils.dart';
-import 'package:flutter/widgets.dart';
 
 /// Result of a book search operation
 class BookSearchResult {
@@ -161,24 +160,6 @@ class BookSection {
       children: (json['children'] as List<dynamic>? ?? const [])
           .map((child) => BookSection.fromJson(JsonUtils.asMap(child)))
           .toList(),
-    );
-  }
-
-  BookSection copyWith({
-    String? id,
-    String? title,
-    int? level,
-    int? startPage,
-    int? endPage,
-    List<BookSection>? children,
-  }) {
-    return BookSection(
-      id: id ?? this.id,
-      title: title ?? this.title,
-      level: level ?? this.level,
-      startPage: startPage ?? this.startPage,
-      endPage: endPage ?? this.endPage,
-      children: children ?? this.children,
     );
   }
 
@@ -402,23 +383,6 @@ class BookDetails {
   bool get hasMultipleParts =>
       (sections != null && sections!.length > 1) || parts.length > 1;
 
-  /// Clear the learnable items cache (useful for testing)
-  void clearCache() {
-    _learnableItemsCache = null;
-    _sectionLeafIndexMapCache = null;
-  }
-
-  Map<String, dynamic> toJson() => {
-    'contentType': contentType,
-    'isCustom': isCustom,
-    if (id != null) 'id': id,
-    'parts': parts.map((p) => p.toJson()).toList(),
-    if (originalPageCount != null) 'originalPageCount': originalPageCount,
-    if (sections != null)
-      'sections': sections!.map((section) => section.toJson()).toList(),
-    if (categoryPath != null) 'categoryPath': categoryPath,
-  };
-
   bool get hasNestedSections =>
       sections != null && sections!.any((section) => !section.isLeaf);
 
@@ -495,26 +459,6 @@ class LearnableItem {
     this.hierarchyPath = const [],
   });
 
-  LearnableItem copyWith({
-    String? partName,
-    int? pageNumber,
-    String? amudKey,
-    int? absoluteIndex,
-    String? sectionId,
-    String? displayLabel,
-    List<String>? hierarchyPath,
-  }) {
-    return LearnableItem(
-      partName: partName ?? this.partName,
-      pageNumber: pageNumber ?? this.pageNumber,
-      amudKey: amudKey ?? this.amudKey,
-      absoluteIndex: absoluteIndex ?? this.absoluteIndex,
-      sectionId: sectionId ?? this.sectionId,
-      displayLabel: displayLabel ?? this.displayLabel,
-      hierarchyPath: hierarchyPath ?? this.hierarchyPath,
-    );
-  }
-
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -533,17 +477,4 @@ class LearnableItem {
       amudKey.hashCode ^
       absoluteIndex.hashCode ^
       sectionId.hashCode;
-}
-
-/// Notification to request navigation to a book
-class BookNavigationNotification extends Notification {
-  final String categoryName;
-  final String bookName;
-  final BookDetails bookDetails;
-
-  BookNavigationNotification({
-    required this.categoryName,
-    required this.bookName,
-    required this.bookDetails,
-  });
 }
