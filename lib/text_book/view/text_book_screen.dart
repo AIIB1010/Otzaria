@@ -258,7 +258,12 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
   final NavPanelSearchHost _searchHost = NavPanelSearchHost();
   late final ValueNotifier<double> _sidebarWidth;
   late final StreamSubscription<SettingsState> _settingsSub;
+  late final StreamSubscription<TextBookState> _textBookSub;
   StreamSubscription<LibraryState>? _libraryReloadSub;
+  bool _pendingTextDisplayPolicyReload = false;
+  bool _pendingFontFamilyReload = false;
+  bool _pendingNikudSettingsReload = false;
+  bool _pendingPunctuationSettingsReload = false;
   int? _sidebarTabIndex; // אינדקס הכרטיסייה בסרגל הצדי
   // עוקב אחרי מצב הפאנל הצדדי כדי לבקש פוקוס לשדה החיפוש רק ברגע שהפאנל
   // נפתח (false→true) ולא בכל rebuild - אחרת היה גונב פוקוס מתוכן הספר.
@@ -852,11 +857,13 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
     );
 
     // שמירת הגדרות נוכחיות כדי לזהות שינויים
-    double previousFontSize = context.read<SettingsBloc>().state.fontSize;
-    String previousFontFamily = context.read<SettingsBloc>().state.fontFamily;
-    SettingsState previousSettingsState = context.read<SettingsBloc>().state;
+    final settingsBloc = context.read<SettingsBloc>();
+    final textBookBloc = context.read<TextBookBloc>();
+    double previousFontSize = settingsBloc.state.fontSize;
+    String previousFontFamily = settingsBloc.state.fontFamily;
+    SettingsState previousSettingsState = settingsBloc.state;
 
-    _settingsSub = context.read<SettingsBloc>().stream.listen((state) {
+    _settingsSub = settingsBloc.stream.listen((state) {
       _sidebarWidth.value = state.sidebarWidth;
 
       // אם גודל הגופן השתנה, עדכן אותו מיידית
@@ -871,7 +878,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
         context.read<TextBookBloc>().add(UpdateFontSize(state.fontSize));
       }
 
-      // אם משפחת הגופן או הסרת ניקוד השתנו, טען מחדש את התוכן
+      // משפחת הגופן או כל חריץ בתצוגת הטקסט (גם העתקה וייצוא) — טעינה מחדש
       final isNikudSettingsChange = shouldReloadForNikudSettingsChange(
         previous: previousSettingsState,
         current: state,
@@ -881,38 +888,86 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
             previous: previousSettingsState,
             current: state,
           );
-      if (state.fontFamily != previousFontFamily ||
-          isNikudSettingsChange ||
-          isPunctuationSettingsChange) {
+      final isFontFamilyChange = state.fontFamily != previousFontFamily;
+      final isTextDisplayPolicyChange =
+          state.textDisplayPolicy != previousSettingsState.textDisplayPolicy;
+      if (isFontFamilyChange || isTextDisplayPolicyChange) {
         previousFontFamily = state.fontFamily;
         previousSettingsState = state;
 
         if (!mounted) return;
 
-        final currentState = context.read<TextBookBloc>().state;
+        final currentState = textBookBloc.state;
         if (currentState is TextBookLoaded) {
-          context.read<TextBookBloc>().add(
-            LoadContent(
-              fontSize: state.fontSize,
-              showSplitView: currentState.showSplitView,
-              removeNikud: state.defaultRemoveNikud,
-              forceCloseLeftPane: widget.isInCombinedView,
-              preserveState: true,
-              // שמירת מצב הניקוד הנוכחי של המשתמש רק כשרק הגופן
-              // השתנה - אם הגדרות הניקוד עצמן השתנו, יש להחיל את
-              // הערך החדש
-              preserveRemoveNikud: !isNikudSettingsChange,
-              preserveRemovePunctuation: !isPunctuationSettingsChange,
-              // שינוי הגדרות גלובליות (גופן/ניקוד) לעולם לא יכבה
-              // את מצב הרצף שהמשתמש בחר עבור הספר.
-              preserveContinuousReadingMode: true,
-            ),
+          _reloadTextBookForSettings(
+            textBookBloc: textBookBloc,
+            currentState: currentState,
+            settings: state,
+            nikudSettingsChanged: isNikudSettingsChange,
+            punctuationSettingsChanged: isPunctuationSettingsChange,
           );
+        } else {
+          _pendingFontFamilyReload |= isFontFamilyChange;
+          _pendingTextDisplayPolicyReload |= isTextDisplayPolicyChange;
+          _pendingNikudSettingsReload |= isNikudSettingsChange;
+          _pendingPunctuationSettingsReload |= isPunctuationSettingsChange;
         }
       } else {
         previousSettingsState = state;
       }
     });
+
+    _textBookSub = textBookBloc.stream.listen((state) {
+      if (!mounted || state is! TextBookLoaded) return;
+
+      final latestSettings = settingsBloc.state;
+      final policyIsStale =
+          _pendingTextDisplayPolicyReload &&
+          state.displayPolicy != latestSettings.textDisplayPolicy;
+      if (!_pendingFontFamilyReload && !policyIsStale) {
+        _clearPendingTextSettingsReload();
+        return;
+      }
+
+      final nikudSettingsChanged = _pendingNikudSettingsReload;
+      final punctuationSettingsChanged = _pendingPunctuationSettingsReload;
+      _clearPendingTextSettingsReload();
+      _reloadTextBookForSettings(
+        textBookBloc: textBookBloc,
+        currentState: state,
+        settings: latestSettings,
+        nikudSettingsChanged: nikudSettingsChanged,
+        punctuationSettingsChanged: punctuationSettingsChanged,
+      );
+    });
+  }
+
+  void _clearPendingTextSettingsReload() {
+    _pendingTextDisplayPolicyReload = false;
+    _pendingFontFamilyReload = false;
+    _pendingNikudSettingsReload = false;
+    _pendingPunctuationSettingsReload = false;
+  }
+
+  void _reloadTextBookForSettings({
+    required TextBookBloc textBookBloc,
+    required TextBookLoaded currentState,
+    required SettingsState settings,
+    required bool nikudSettingsChanged,
+    required bool punctuationSettingsChanged,
+  }) {
+    textBookBloc.add(
+      LoadContent(
+        fontSize: settings.fontSize,
+        showSplitView: currentState.showSplitView,
+        removeNikud: settings.defaultRemoveNikud,
+        forceCloseLeftPane: widget.isInCombinedView,
+        preserveState: true,
+        preserveRemoveNikud: !nikudSettingsChanged,
+        preserveRemovePunctuation: !punctuationSettingsChanged,
+        preserveContinuousReadingMode: true,
+      ),
+    );
   }
 
   @override
@@ -1144,6 +1199,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
     _pageShapeSidebarTabNotifier.dispose();
     _pageShapeOpenSettingsNotifier.dispose();
     _settingsSub.cancel();
+    _textBookSub.cancel();
     _libraryReloadSub?.cancel();
     super.dispose();
   }
