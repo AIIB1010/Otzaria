@@ -1,3 +1,4 @@
+import 'package:otzaria/text_book/view/widgets/selection_gutter_painter.dart';
 import 'package:otzaria/shortcuts/dynamic/dynamic_shortcut.dart';
 import 'package:otzaria/text_book/utils/reader_paragraph_copy.dart';
 import 'package:otzaria/text_book/utils/reader_menu_entries.dart';
@@ -2507,9 +2508,6 @@ class _CombinedViewState extends State<CombinedView> {
       if (isHighlighted) {
         return theme.colorScheme.secondaryContainer.withValues(alpha: 0.4);
       }
-      if (isSelected) {
-        return AppSurfaces.paragraphSelectionBackground(theme.colorScheme);
-      }
       return null;
     }();
 
@@ -2542,413 +2540,429 @@ class _CombinedViewState extends State<CombinedView> {
           curve: Curves.easeInOut,
           // decoration קבוע שומר על עומק הטקסט ועל מצב <details> בבחירה.
           decoration: BoxDecoration(color: backgroundColor),
-          child: Listener(
-            onPointerDown: (event) {
-              if (event.buttons != kPrimaryMouseButton) return;
-              final root = context.findRenderObject();
-              if (root != null) {
-                _selectionPointerLineIndex = primaryLineIndex;
-                _selectionPointerColumn = renderedTextOffsetAtPosition(
-                  root: root,
-                  globalPosition: event.position,
-                );
-              }
-            },
-            child: EnhancedGestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onDragSelectionStart: () {
-                // כניסה למצב בחירה בגלל drag
-                if (!_selectionManager.isInSelectionMode) {
-                  _selectionManager.setAnchor(actionLineIndex());
-                }
-              },
-              onSingleTap: () {
-                if (_anchorHandledCurrentTap) {
-                  _anchorHandledCurrentTap = false;
-                  return;
-                }
-                // במצב רציף, לחיצה רגילה על פסקה לא בוחרת שורה — הלחיצה
-                // הספציפית מטופלת בתוך ContinuousReadingParagraph (recognizer לכל שורה).
-                if (isContinuousParagraph) {
-                  return;
-                }
-                _focusNode.requestFocus();
-                // מאפס את הטקסט השמור כשלוחצים על הפסקה
-                if (mounted) {
-                  _savedSelectedText.value = null;
-                  _savedSelectedIndex.value = null;
-                  _currentSelectedIndex.value = null;
-                  _selectionLineStart = null;
-                  _selectionLineEnd = null;
-                  _selectionStartColumn = null;
-                  widget.onSelectedTextChanged?.call(null, null, null);
-                }
-                // פשוט מעדכן את selectedIndex - זה יגרום לבנייה מחדש
-                if (isSelected) {
-                  _addTextBookEventIfOpen(const UpdateSelectedIndex(null));
-                } else {
-                  _addTextBookEventIfOpen(
-                    UpdateSelectedIndex(primaryLineIndex),
+          child: CustomPaint(
+            // הטקסט מצויר מעל הסמן כדי שאותיות בקצה השורה לא יוסתרו.
+            painter: isSelected && !isContinuousParagraph
+                ? SelectionGutterPainter(theme.colorScheme.primary)
+                : null,
+            child: Listener(
+              onPointerDown: (event) {
+                if (event.buttons != kPrimaryMouseButton) return;
+                final root = context.findRenderObject();
+                if (root != null) {
+                  _selectionPointerLineIndex = primaryLineIndex;
+                  _selectionPointerColumn = renderedTextOffsetAtPosition(
+                    root: root,
+                    globalPosition: event.position,
                   );
-
-                  // גלילה אוטומטית כך שהקטע יהיה בראש העמוד
-                  // רק אם יש מפרשים להצגה ואנחנו במצב ExpansionTiles
-                  if (widget.showCommentaryAsExpansionTiles &&
-                      _hasCommentaries(state, primaryLineIndex)) {
-                    final tapped = widget
-                        .tab
-                        .positionsListener
-                        .itemPositions
-                        .value
-                        .where(
-                          (p) => p.index == index && p.itemLeadingEdge >= 0,
-                        )
-                        .firstOrNull;
-                    // עיגון על הפסקה בגובה הנוכחי (התצוגה לא זזה): הכרטיס נפתח
-                    // כלפי מטה גם כשעוגן הרשימה מתחתיה, ולא דוחף אותה מהמסך.
-                    if (tapped != null) {
-                      widget.tab.scrollController.jumpTo(
-                        index: index,
-                        alignment: tapped.itemLeadingEdge,
-                      );
-                    }
-                    // מחכים שה-UI יתעדכן עם פתיחת המפרש, ואז קופצים למיקום
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      Future.delayed(const Duration(milliseconds: 300), () {
-                        if (mounted && widget.tab.scrollController.isAttached) {
-                          // הטקסט הבא ב-90% מגובה המסך, כך שהכרטיס (עד 75%) נראה כולו.
-                          final itemCount = state.readingSegments.isNotEmpty
-                              ? state.readingSegments.length
-                              : widget.data.length;
-                          final hasNext = index + 1 < itemCount;
-                          final next = widget
-                              .tab
-                              .positionsListener
-                              .itemPositions
-                              .value
-                              .where((p) => p.index == index + 1)
-                              .firstOrNull;
-                          // הגלילה רק חושפת את הכרטיס: טקסט הבא שכבר מעל קו ה-90%
-                          // (בסוף הספר) היה נגרר אליו למטה, והרשימה קופצת אחורה.
-                          if (tapped != null &&
-                              next != null &&
-                              next.itemLeadingEdge <= 0.9) {
-                            return;
-                          }
-                          widget.tab.scrollController.scrollTo(
-                            // לפסקה האחרונה אין טקסט הבא — מעלים אותה ככל שסוף הספר מאפשר.
-                            index: hasNext ? index + 1 : index,
-                            alignment: hasNext ? 0.9 : 0,
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.easeInOut,
-                          );
-                        }
-                      });
-                    });
+                }
+              },
+              child: EnhancedGestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onDragSelectionStart: () {
+                  // כניסה למצב בחירה בגלל drag
+                  if (!_selectionManager.isInSelectionMode) {
+                    _selectionManager.setAnchor(actionLineIndex());
                   }
-                }
-              },
-              onDoubleTap: () {
-                // Double-click → בחירת פסקה שלמה
-                // הערה: SelectionArea של Flutter לא תומך בבחירה פרוגרמטית,
-                // לכן הפיצ'ר הזה לא מומש במלואו. SelectionArea יבצע את פעולת
-                // ברירת המחדל שלו (בחירת מילה). לבחירת פסקה, המשתמש יכול
-                // להשתמש ב-Shift+Click או Drag.
-                _focusNode.requestFocus();
-                _selectionManager.enterDoubleClickMode(actionLineIndex());
-              },
-              onShiftClick: () {
-                // Shift+Click → בחירת טווח
-                _focusNode.requestFocus();
-                if (!_selectionManager.hasAnchor()) {
-                  // אם אין anchor, קובעים אותו
-                  _selectionManager.setAnchor(actionLineIndex());
-                }
-                // SelectionArea יטפל בבחירת הטווח
-              },
-              onCtrlClick: () {
-                // Ctrl+Click → הוספה/הסרה של הקטע מבחירה מרובה (ללא גלילה אוטומטית)
-                if (isContinuousParagraph) {
-                  return;
-                }
-                _focusNode.requestFocus();
-                _addTextBookEventIfOpen(
-                  UpdateSelectedIndex(primaryLineIndex, additive: true),
-                );
-              },
-              onSecondaryTapDown: (details) {
-                // שומר את האינדקס הנוכחי לשימוש בתפריט ההקשר
-                if (mounted) {
-                  _currentSelectedIndex.value = actionLineIndex();
-                  if (!isContinuousParagraph) {
-                    final root = context.findRenderObject();
-                    final selectedText = _savedSelectedText.value;
-                    final occurrenceStart = root == null || selectedText == null
-                        ? null
-                        : renderedSelectionStartAtPosition(
-                            root: root,
-                            globalPosition: details.globalPosition,
-                            selectedSegment: selectedText,
-                          );
-                    if (occurrenceStart != null) {
-                      _selectionStartColumn = occurrenceStart;
-                    }
+                },
+                onSingleTap: () {
+                  if (_anchorHandledCurrentTap) {
+                    _anchorHandledCurrentTap = false;
+                    return;
                   }
-                }
-              },
-              child: ValueListenableBuilder<String?>(
-                valueListenable: _savedSelectedText,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2.0),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      return BlocBuilder<SettingsBloc, SettingsState>(
-                        builder: (context, settingsState) {
-                          // בתצוגה מקדימה הרוחב הזמין הוא של החלונית, לא של
-                          // אזור קריאה — הגבלת רוחב הטקסט הייתה מצרה אותו שוב.
-                          final textMaxWidth = widget.isPreviewMode
-                              ? 0.0
-                              : textColumnMaxWidthOf(
-                                  context,
-                                  setting: settingsState.textMaxWidth,
-                                  availableWidth: constraints.maxWidth,
-                                );
+                  // במצב רציף, לחיצה רגילה על פסקה לא בוחרת שורה — הלחיצה
+                  // הספציפית מטופלת בתוך ContinuousReadingParagraph (recognizer לכל שורה).
+                  if (isContinuousParagraph) {
+                    return;
+                  }
+                  _focusNode.requestFocus();
+                  // מאפס את הטקסט השמור כשלוחצים על הפסקה
+                  if (mounted) {
+                    _savedSelectedText.value = null;
+                    _savedSelectedIndex.value = null;
+                    _currentSelectedIndex.value = null;
+                    _selectionLineStart = null;
+                    _selectionLineEnd = null;
+                    _selectionStartColumn = null;
+                    widget.onSelectedTextChanged?.call(null, null, null);
+                  }
+                  // פשוט מעדכן את selectedIndex - זה יגרום לבנייה מחדש
+                  if (isSelected) {
+                    _addTextBookEventIfOpen(const UpdateSelectedIndex(null));
+                  } else {
+                    _addTextBookEventIfOpen(
+                      UpdateSelectedIndex(primaryLineIndex),
+                    );
 
-                          // במצב רציף — פסקה מכמה שורות מקור.
-                          if (isContinuousParagraph) {
-                            final baseTextStyle = TextStyle(
-                              fontSize: widget.textSize,
-                              fontFamily: AppFonts.renderFontFamily(
-                                settingsState.fontFamily,
-                              ),
-                              height: settingsState.lineHeight,
-                              color: Theme.of(context).colorScheme.onSurface,
+                    // גלילה אוטומטית כך שהקטע יהיה בראש העמוד
+                    // רק אם יש מפרשים להצגה ואנחנו במצב ExpansionTiles
+                    if (widget.showCommentaryAsExpansionTiles &&
+                        _hasCommentaries(state, primaryLineIndex)) {
+                      final tapped = widget
+                          .tab
+                          .positionsListener
+                          .itemPositions
+                          .value
+                          .where(
+                            (p) => p.index == index && p.itemLeadingEdge >= 0,
+                          )
+                          .firstOrNull;
+                      // עיגון על הפסקה בגובה הנוכחי (התצוגה לא זזה): הכרטיס נפתח
+                      // כלפי מטה גם כשעוגן הרשימה מתחתיה, ולא דוחף אותה מהמסך.
+                      if (tapped != null) {
+                        widget.tab.scrollController.jumpTo(
+                          index: index,
+                          alignment: tapped.itemLeadingEdge,
+                        );
+                      }
+                      // מחכים שה-UI יתעדכן עם פתיחת המפרש, ואז קופצים למיקום
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        Future.delayed(const Duration(milliseconds: 300), () {
+                          if (mounted &&
+                              widget.tab.scrollController.isAttached) {
+                            // הטקסט הבא ב-90% מגובה המסך, כך שהכרטיס (עד 75%) נראה כולו.
+                            final itemCount = state.readingSegments.isNotEmpty
+                                ? state.readingSegments.length
+                                : widget.data.length;
+                            final hasNext = index + 1 < itemCount;
+                            final next = widget
+                                .tab
+                                .positionsListener
+                                .itemPositions
+                                .value
+                                .where((p) => p.index == index + 1)
+                                .firstOrNull;
+                            // הגלילה רק חושפת את הכרטיס: טקסט הבא שכבר מעל קו ה-90%
+                            // (בסוף הספר) היה נגרר אליו למטה, והרשימה קופצת אחורה.
+                            if (tapped != null &&
+                                next != null &&
+                                next.itemLeadingEdge <= 0.9) {
+                              return;
+                            }
+                            widget.tab.scrollController.scrollTo(
+                              // לפסקה האחרונה אין טקסט הבא — מעלים אותה ככל שסוף הספר מאפשר.
+                              index: hasNext ? index + 1 : index,
+                              alignment: hasNext ? 0.9 : 0,
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeInOut,
                             );
-                            Widget paragraphPart(List<int> lineIndices) =>
-                                _buildContinuousSegmentText(
-                                  segment: segment,
-                                  state: state,
-                                  settingsState: settingsState,
-                                  baseTextStyle: baseTextStyle,
-                                  noteMap: noteMap,
-                                  lineIndices: lineIndices,
-                                );
+                          }
+                        });
+                      });
+                    }
+                  }
+                },
+                onDoubleTap: () {
+                  // Double-click → בחירת פסקה שלמה
+                  // הערה: SelectionArea של Flutter לא תומך בבחירה פרוגרמטית,
+                  // לכן הפיצ'ר הזה לא מומש במלואו. SelectionArea יבצע את פעולת
+                  // ברירת המחדל שלו (בחירת מילה). לבחירת פסקה, המשתמש יכול
+                  // להשתמש ב-Shift+Click או Drag.
+                  _focusNode.requestFocus();
+                  _selectionManager.enterDoubleClickMode(actionLineIndex());
+                },
+                onShiftClick: () {
+                  // Shift+Click → בחירת טווח
+                  _focusNode.requestFocus();
+                  if (!_selectionManager.hasAnchor()) {
+                    // אם אין anchor, קובעים אותו
+                    _selectionManager.setAnchor(actionLineIndex());
+                  }
+                  // SelectionArea יטפל בבחירת הטווח
+                },
+                onCtrlClick: () {
+                  // Ctrl+Click → הוספה/הסרה של הקטע מבחירה מרובה (ללא גלילה אוטומטית)
+                  if (isContinuousParagraph) {
+                    return;
+                  }
+                  _focusNode.requestFocus();
+                  _addTextBookEventIfOpen(
+                    UpdateSelectedIndex(primaryLineIndex, additive: true),
+                  );
+                },
+                onSecondaryTapDown: (details) {
+                  // שומר את האינדקס הנוכחי לשימוש בתפריט ההקשר
+                  if (mounted) {
+                    _currentSelectedIndex.value = actionLineIndex();
+                    if (!isContinuousParagraph) {
+                      final root = context.findRenderObject();
+                      final selectedText = _savedSelectedText.value;
+                      final occurrenceStart =
+                          root == null || selectedText == null
+                          ? null
+                          : renderedSelectionStartAtPosition(
+                              root: root,
+                              globalPosition: details.globalPosition,
+                              selectedSegment: selectedText,
+                            );
+                      if (occurrenceStart != null) {
+                        _selectionStartColumn = occurrenceStart;
+                      }
+                    }
+                  }
+                },
+                child: ValueListenableBuilder<String?>(
+                  valueListenable: _savedSelectedText,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2.0),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        return BlocBuilder<SettingsBloc, SettingsState>(
+                          builder: (context, settingsState) {
+                            // בתצוגה מקדימה הרוחב הזמין הוא של החלונית, לא של
+                            // אזור קריאה — הגבלת רוחב הטקסט הייתה מצרה אותו שוב.
+                            final textMaxWidth = widget.isPreviewMode
+                                ? 0.0
+                                : textColumnMaxWidthOf(
+                                    context,
+                                    setting: settingsState.textMaxWidth,
+                                    availableWidth: constraints.maxWidth,
+                                  );
 
-                            // כרטיס המפרשים נבנה מתחת לשורה שנלחצה ע"י פיצול
-                            // הפסקה סביבה — בתחתית הפסקה הוא היה מחוץ למסך.
-                            final splitPos =
-                                widget.showCommentaryAsExpansionTiles &&
-                                    isSelected &&
-                                    _hasCommentaries(state, selectedLineIndex)
-                                ? segment.sourceLineIndices.indexOf(
-                                    selectedLineIndex,
-                                  )
-                                : -1;
-                            final segmentText = splitPos < 0
-                                ? paragraphPart(segment.sourceLineIndices)
-                                : Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      paragraphPart(
-                                        segment.sourceLineIndices.sublist(
-                                          0,
-                                          splitPos + 1,
-                                        ),
-                                      ),
-                                      _buildCommentaryCard(
-                                        state,
-                                        selectedLineIndex,
-                                      ),
-                                      if (splitPos + 1 <
-                                          segment.sourceLineIndices.length)
+                            // במצב רציף — פסקה מכמה שורות מקור.
+                            if (isContinuousParagraph) {
+                              final baseTextStyle = TextStyle(
+                                fontSize: widget.textSize,
+                                fontFamily: AppFonts.renderFontFamily(
+                                  settingsState.fontFamily,
+                                ),
+                                height: settingsState.lineHeight,
+                                color: Theme.of(context).colorScheme.onSurface,
+                              );
+                              Widget paragraphPart(List<int> lineIndices) =>
+                                  CustomPaint(
+                                    painter: isSelected
+                                        ? SelectionGutterPainter(
+                                            theme.colorScheme.primary,
+                                          )
+                                        : null,
+                                    child: _buildContinuousSegmentText(
+                                      segment: segment,
+                                      state: state,
+                                      settingsState: settingsState,
+                                      baseTextStyle: baseTextStyle,
+                                      noteMap: noteMap,
+                                      lineIndices: lineIndices,
+                                    ),
+                                  );
+
+                              // כרטיס המפרשים נבנה מתחת לשורה שנלחצה ע"י פיצול
+                              // הפסקה סביבה — בתחתית הפסקה הוא היה מחוץ למסך.
+                              final splitPos =
+                                  widget.showCommentaryAsExpansionTiles &&
+                                      isSelected &&
+                                      _hasCommentaries(state, selectedLineIndex)
+                                  ? segment.sourceLineIndices.indexOf(
+                                      selectedLineIndex,
+                                    )
+                                  : -1;
+                              final segmentText = splitPos < 0
+                                  ? paragraphPart(segment.sourceLineIndices)
+                                  : Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
                                         paragraphPart(
                                           segment.sourceLineIndices.sublist(
+                                            0,
                                             splitPos + 1,
                                           ),
                                         ),
-                                    ],
-                                  );
+                                        _buildCommentaryCard(
+                                          state,
+                                          selectedLineIndex,
+                                        ),
+                                        if (splitPos + 1 <
+                                            segment.sourceLineIndices.length)
+                                          paragraphPart(
+                                            segment.sourceLineIndices.sublist(
+                                              splitPos + 1,
+                                            ),
+                                          ),
+                                      ],
+                                    );
+                              final constrainedText = textMaxWidth > 0
+                                  ? Center(
+                                      child: ConstrainedBox(
+                                        constraints: BoxConstraints(
+                                          maxWidth: textMaxWidth,
+                                        ),
+                                        child: segmentText,
+                                      ),
+                                    )
+                                  : segmentText;
+                              return constrainedText;
+                            }
+
+                            // איסוף קישורי inline (start/end מתייחסים לטקסט המקורי)
+                            List<Link> linksForLine = const [];
+                            if (settingsState.enableHtmlLinks &&
+                                state.book.versionTitle == null) {
+                              linksForLine =
+                                  (state.linksByLine[primaryLineIndex + 1] ??
+                                          const <Link>[])
+                                      .where(
+                                        (link) =>
+                                            link.start != null &&
+                                            link.end != null,
+                                      )
+                                      .toList();
+                            }
+
+                            // קישורי inline ראשונים — האופסטים שלהם גולמיים.
+                            String data = injectInlineLinks(
+                              widget.data[primaryLineIndex],
+                              linksForLine,
+                            );
+                            data = inline_notes.addInlineNotePreviewLinks(
+                              data,
+                              lineIndex: primaryLineIndex,
+                            );
+                            data = _injectNumberedNoteMarkers(
+                              data,
+                              primaryLineIndex,
+                              state,
+                            );
+
+                            // סמני עוגן-מילה — לפני כל עיבוד שמוסיף תוכן גלוי.
+                            data = _injectAnchorMarkersForLine(
+                              data,
+                              primaryLineIndex,
+                              state,
+                            );
+
+                            // סמן חלוקה (אות/סעיף) — תוכן גלוי, אחרי סמני העוגן.
+                            data = prependSectionMarker(
+                              data,
+                              _sectionMarkersByLine[primaryLineIndex],
+                            );
+
+                            // סימוני הערות אישיות — אחרונים.
+                            final dataWithLinks = buildAnnotatedLineHtml(
+                              rawLine: data,
+                              sourceLine: widget.data[primaryLineIndex],
+                              notesForLine: notesForLine,
+                              lineIndex0: primaryLineIndex,
+                              underlineColor: Theme.of(
+                                context,
+                              ).colorScheme.primary,
+                            );
+
+                            // הדגשת טקסט ממוקד: highlightText מופעל רק בשורה permanentHighlightLine
+                            final textWidget = SmartTextWidget(
+                              text: dataWithLinks,
+                              highlightBookId: state.book.title,
+                              highlightBookUid: PluginBookIdentity.uidOf(
+                                state.book,
+                              ),
+                              highlightBookDbId: state.book.id,
+                              highlightBookType: PluginBookIdentity.typeOf(
+                                state.book,
+                              ),
+                              highlightBookSource: PluginBookIdentity.sourceOf(
+                                state.book,
+                              ),
+                              highlightSectionIndex: primaryLineIndex,
+                              highlightSourceText:
+                                  widget.data[primaryLineIndex],
+                              widgetKey: ValueKey(
+                                'html_${widget.tab.book.title}_$primaryLineIndex',
+                              ),
+                              settings: RenderSettings.fromProfile(
+                                state.bodyDisplayProfile,
+                                searchText:
+                                    (state.highlightText.isNotEmpty &&
+                                        state.permanentHighlightLine == index)
+                                    ? state.highlightText
+                                    : state.searchText,
+                                highlightYellowBackground:
+                                    state.highlightText.isNotEmpty &&
+                                    state.permanentHighlightLine == index,
+                                searchOptions: state.searchOptions,
+                                alternativeWords: state.alternativeWords,
+                                spacingValues: state.spacingValues,
+                                isFuzzySearch:
+                                    state.searchMode == SearchMode.fuzzy,
+                                searchMode: state.searchMode,
+                                searchDistance: state.searchDistance,
+                                matchPolicy: state.matchPolicy,
+                                partialWordHighlight: !state.searchWholeWord,
+                                // לפי שורת התוכן המוצגת — index הוא אינדקס
+                                // מקטע במצב קריאה רציפה, לא אינדקס שורה.
+                                isSearchResultLine: state
+                                    .lineParticipatesInSearchHighlight(
+                                      primaryLineIndex,
+                                    ),
+                                previousLineText: state.searchResultNeighbour(
+                                  primaryLineIndex,
+                                  next: false,
+                                ),
+                                nextLineText: state.searchResultNeighbour(
+                                  primaryLineIndex,
+                                  next: true,
+                                ),
+                                fontSize: widget.textSize,
+                                fontFamily: settingsState.fontFamily,
+                                fontWeight: settingsState.fontBold
+                                    ? FontWeight.bold
+                                    : null,
+                                lineHeight: settingsState.lineHeight,
+                              ),
+                              onOpenBook: widget.openBookCallback,
+                              onNoteTap: notesForLine.isEmpty
+                                  ? null
+                                  : (line) => _onInlineNoteTap(line),
+                              onAnchorTap: _handleAnchorTap,
+                              onAnchorHover: _handleAnchorHover,
+                              onAnchorHoverExit: _handleAnchorHoverExit,
+                              onTouchPreview: _handleTouchPreview,
+                            );
+
                             final constrainedText = textMaxWidth > 0
                                 ? Center(
                                     child: ConstrainedBox(
                                       constraints: BoxConstraints(
                                         maxWidth: textMaxWidth,
                                       ),
-                                      child: segmentText,
+                                      child: textWidget,
                                     ),
                                   )
-                                : segmentText;
+                                : textWidget;
+
                             return constrainedText;
-                          }
-
-                          // איסוף קישורי inline (start/end מתייחסים לטקסט המקורי)
-                          List<Link> linksForLine = const [];
-                          if (settingsState.enableHtmlLinks &&
-                              state.book.versionTitle == null) {
-                            linksForLine =
-                                (state.linksByLine[primaryLineIndex + 1] ??
-                                        const <Link>[])
-                                    .where(
-                                      (link) =>
-                                          link.start != null &&
-                                          link.end != null,
-                                    )
-                                    .toList();
-                          }
-
-                          // קישורי inline ראשונים — האופסטים שלהם גולמיים.
-                          String data = injectInlineLinks(
-                            widget.data[primaryLineIndex],
-                            linksForLine,
-                          );
-                          data = inline_notes.addInlineNotePreviewLinks(
-                            data,
-                            lineIndex: primaryLineIndex,
-                          );
-                          data = _injectNumberedNoteMarkers(
-                            data,
-                            primaryLineIndex,
-                            state,
-                          );
-
-                          // סמני עוגן-מילה — לפני כל עיבוד שמוסיף תוכן גלוי.
-                          data = _injectAnchorMarkersForLine(
-                            data,
-                            primaryLineIndex,
-                            state,
-                          );
-
-                          // סמן חלוקה (אות/סעיף) — תוכן גלוי, אחרי סמני העוגן.
-                          data = prependSectionMarker(
-                            data,
-                            _sectionMarkersByLine[primaryLineIndex],
-                          );
-
-                          // סימוני הערות אישיות — אחרונים.
-                          final dataWithLinks = buildAnnotatedLineHtml(
-                            rawLine: data,
-                            sourceLine: widget.data[primaryLineIndex],
-                            notesForLine: notesForLine,
-                            lineIndex0: primaryLineIndex,
-                            underlineColor: Theme.of(
-                              context,
-                            ).colorScheme.primary,
-                          );
-
-                          // הדגשת טקסט ממוקד: highlightText מופעל רק בשורה permanentHighlightLine
-                          final textWidget = SmartTextWidget(
-                            text: dataWithLinks,
-                            highlightBookId: state.book.title,
-                            highlightBookUid: PluginBookIdentity.uidOf(
-                              state.book,
-                            ),
-                            highlightBookDbId: state.book.id,
-                            highlightBookType: PluginBookIdentity.typeOf(
-                              state.book,
-                            ),
-                            highlightBookSource: PluginBookIdentity.sourceOf(
-                              state.book,
-                            ),
-                            highlightSectionIndex: primaryLineIndex,
-                            highlightSourceText: widget.data[primaryLineIndex],
-                            widgetKey: ValueKey(
-                              'html_${widget.tab.book.title}_$primaryLineIndex',
-                            ),
-                            settings: RenderSettings.fromProfile(
-                              state.bodyDisplayProfile,
-                              searchText:
-                                  (state.highlightText.isNotEmpty &&
-                                      state.permanentHighlightLine == index)
-                                  ? state.highlightText
-                                  : state.searchText,
-                              highlightYellowBackground:
-                                  state.highlightText.isNotEmpty &&
-                                  state.permanentHighlightLine == index,
-                              searchOptions: state.searchOptions,
-                              alternativeWords: state.alternativeWords,
-                              spacingValues: state.spacingValues,
-                              isFuzzySearch:
-                                  state.searchMode == SearchMode.fuzzy,
-                              searchMode: state.searchMode,
-                              searchDistance: state.searchDistance,
-                              matchPolicy: state.matchPolicy,
-                              partialWordHighlight: !state.searchWholeWord,
-                              // לפי שורת התוכן המוצגת — index הוא אינדקס
-                              // מקטע במצב קריאה רציפה, לא אינדקס שורה.
-                              isSearchResultLine: state
-                                  .lineParticipatesInSearchHighlight(
-                                    primaryLineIndex,
-                                  ),
-                              previousLineText: state.searchResultNeighbour(
-                                primaryLineIndex,
-                                next: false,
-                              ),
-                              nextLineText: state.searchResultNeighbour(
-                                primaryLineIndex,
-                                next: true,
-                              ),
-                              fontSize: widget.textSize,
-                              fontFamily: settingsState.fontFamily,
-                              fontWeight: settingsState.fontBold
-                                  ? FontWeight.bold
-                                  : null,
-                              lineHeight: settingsState.lineHeight,
-                            ),
-                            onOpenBook: widget.openBookCallback,
-                            onNoteTap: notesForLine.isEmpty
-                                ? null
-                                : (line) => _onInlineNoteTap(line),
-                            onAnchorTap: _handleAnchorTap,
-                            onAnchorHover: _handleAnchorHover,
-                            onAnchorHoverExit: _handleAnchorHoverExit,
-                            onTouchPreview: _handleTouchPreview,
-                          );
-
-                          final constrainedText = textMaxWidth > 0
-                              ? Center(
-                                  child: ConstrainedBox(
-                                    constraints: BoxConstraints(
-                                      maxWidth: textMaxWidth,
-                                    ),
-                                    child: textWidget,
-                                  ),
-                                )
-                              : textWidget;
-
-                          return constrainedText;
-                        },
-                      );
-                    },
+                          },
+                        );
+                      },
+                    ),
                   ),
-                ),
-                builder: (context, selectedText, child) {
-                  return AppContextMenuRegion(
-                    // לחיצה ימנית על הטקסט המסומן (כולל הרווח שבין שורות-תצוגה של
-                    // שורת-מקור שנשברה) לא תשחרר את הבחירה; לחיצה על חלק לא-מסומן
-                    // מבטלת כרגיל.
-                    shouldPreserveSelectionOnSecondaryTap: (globalPosition) =>
-                        _shouldPreserveSelectionAt(
-                          globalPosition,
-                          primaryLineIndex,
-                          context,
+                  builder: (context, selectedText, child) {
+                    return AppContextMenuRegion(
+                      // לחיצה ימנית על הטקסט המסומן (כולל הרווח שבין שורות-תצוגה של
+                      // שורת-מקור שנשברה) לא תשחרר את הבחירה; לחיצה על חלק לא-מסומן
+                      // מבטלת כרגיל.
+                      shouldPreserveSelectionOnSecondaryTap: (globalPosition) =>
+                          _shouldPreserveSelectionAt(
+                            globalPosition,
+                            primaryLineIndex,
+                            context,
+                          ),
+                      menuBuilder: (menuCtx, tapPos) => [
+                        ...ContextMenuUtils.buildInlineLinkContextMenuEntries(
+                          menuCtx,
+                          tapPos,
                         ),
-                    menuBuilder: (menuCtx, tapPos) => [
-                      ...ContextMenuUtils.buildInlineLinkContextMenuEntries(
-                        menuCtx,
-                        tapPos,
-                      ),
-                      ..._buildContextMenuForIndex(
-                        state,
-                        primaryLineIndex,
-                        menuCtx,
-                        selectedText,
-                        tapPos,
-                      ),
-                    ],
-                    child: child!,
-                  );
-                },
+                        ..._buildContextMenuForIndex(
+                          state,
+                          primaryLineIndex,
+                          menuCtx,
+                          selectedText,
+                          tapPos,
+                        ),
+                      ],
+                      child: child!,
+                    );
+                  },
+                ),
               ),
             ),
           ),
@@ -3157,8 +3171,6 @@ class _CombinedViewState extends State<CombinedView> {
           ? AppColors.permanentHighlight
           : state.highlightedLine == lineIndex
           ? colorScheme.secondaryContainer.withValues(alpha: 0.4)
-          : state.selectedIndices.contains(lineIndex)
-          ? AppSurfaces.paragraphSelectionBackground(colorScheme)
           : null;
       final style = backgroundColor == null
           ? baseTextStyle
