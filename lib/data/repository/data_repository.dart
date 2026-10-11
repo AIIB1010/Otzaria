@@ -90,9 +90,14 @@ class DataRepository {
   /// Invalidates cached external books so they are re-fetched on next access.
   /// Call this when the library is refreshed.
   void invalidateExternalBooksCache() {
+    invalidateHebrewBooksCache();
+    _otzarBooksFuture = null;
+  }
+
+  /// סריקה מחדש של קובצי היברובוקס המקומיים בלבד (למשל אחרי הורדה).
+  void invalidateHebrewBooksCache() {
     _hebrewBooksFuture = null;
     _localHebrewBooksFuture = null;
-    _otzarBooksFuture = null;
   }
 
   DataRepository({FileSystemData? fileSystemData})
