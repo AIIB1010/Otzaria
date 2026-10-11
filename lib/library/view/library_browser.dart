@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:otzaria_icons/otzaria_icons.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:otzaria/plugins/models/plugin_search_field_action.dart';
 import 'package:otzaria/core/focus_repository.dart';
 import 'package:otzaria/core/messages/messages_exports.dart';
 import 'package:otzaria/core/ui_snack.dart';
@@ -902,6 +903,7 @@ class _LibraryBrowserState extends State<LibraryBrowser>
                 args: {'category': state.currentCategory?.title ?? ''},
               ),
               maxWidth: isCompact ? 500 : 400,
+              pluginActionsField: PluginSearchField.library,
               onChanged: (value) {
                 context.read<LibraryBloc>().add(UpdateSearchQuery(value));
                 context.read<LibraryBloc>().add(const SelectTopics([]));
