@@ -189,6 +189,16 @@ class PersonalNotesDatabase {
     }).toList();
   }
 
+  /// זמני העדכון של כל ההערות, בלי לטעון את התוכן. שורה פגומה מדולגת.
+  Future<List<DateTime>> listNoteUpdateTimes() async {
+    final db = await database;
+    return db
+        .select('SELECT $_columnUpdatedAt FROM $_tableNotes')
+        .map((row) => DateTime.tryParse(row[_columnUpdatedAt] as String))
+        .nonNulls
+        .toList();
+  }
+
   /// יישוב מיקומים בזמן טעינה אינו מודיע למאזינים, כדי למנוע לולאת טעינות.
   Future<void> batchUpdateNotes(List<PersonalNote> notes) async {
     final db = await database;

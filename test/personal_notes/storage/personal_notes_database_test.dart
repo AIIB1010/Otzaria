@@ -99,4 +99,15 @@ void main() {
     expect(times, unorderedEquals(fromFullLoad));
     expect(times, hasLength(9));
   });
+
+  test('זמן עדכון פגום מדלג על השורה ולא מפיל את הספירה', () async {
+    final db = await database.database;
+    db.execute(
+      "INSERT INTO personal_notes (id, book_id, status, content, created_at, updated_at) "
+      "VALUES ('bad', 'ספר', 'located', '', '2026-01-01', 'לא תאריך'), "
+      "('good', 'ספר', 'located', '', '2026-01-01', '2026-01-02T00:00:00.000')",
+    );
+
+    expect(await database.listNoteUpdateTimes(), [DateTime(2026, 1, 2)]);
+  });
 }
