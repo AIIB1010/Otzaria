@@ -27,7 +27,6 @@ class CommentatorsSelectionPanel extends StatefulWidget {
   final ValueChanged<List<String>> onSelectionChanged;
   final VoidCallback? onSelectionApplied;
   final String bookTitle;
-  final Widget? emptyState;
 
   /// מפרשים "נדירים" שמוסתרים מהרשימה, אלא אם הם ב-[lineRelevantCommentators].
   final Set<String> rareCommentators;
@@ -64,7 +63,6 @@ class CommentatorsSelectionPanel extends StatefulWidget {
     required this.onSelectionChanged,
     required this.bookTitle,
     this.onSelectionApplied,
-    this.emptyState,
     this.rareCommentators = const {},
     this.lineRelevantCommentators = const {},
     this.typeChipKeys = const [],
@@ -556,12 +554,11 @@ class _CommentatorsSelectionPanelState
   @override
   Widget build(BuildContext context) {
     if (widget.groups.every((group) => group.commentators.isEmpty)) {
-      return widget.emptyState ??
-          const Center(
-            child: Text(
-              'אין מפרשים',
-            ),
-          );
+      return const OtzariaEmptyState(
+        isCompact: true,
+        icon: OtzariaIcons.links_24_regular,
+        title: 'אין מפרשים',
+      );
     }
 
     final delegate = NavPanelSearchDelegate(
