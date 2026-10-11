@@ -257,6 +257,31 @@ void main() {
     expect((tab as TextBookTab).index, 0);
   });
 
+  testWidgets('מפרש ללא יעד מוגדר נפתח בתחילת הספר ולא במיקום מההיסטוריה', (
+    tester,
+  ) async {
+    final source = TextBook(id: 1, title: 'בראשית');
+    final rashi = TextBook(id: 81, title: 'רש"י על בראשית');
+    final tab = await _openResult(
+      tester,
+      library: _libraryWith([source, rashi]),
+      history: [Bookmark(ref: 'רש"י על בראשית', book: rashi, index: 40)],
+      result: const DbReferenceResult(
+        title: 'בראשית',
+        reference: 'בראשית פרק א',
+        segment: 0,
+        bookId: 1,
+      ),
+      commentator: const DbCommentatorEntry(
+        title: 'רש"י על בראשית',
+        bookId: 81,
+        targetSegment: null,
+      ),
+    );
+
+    expect((tab as TextBookTab).index, 0);
+  });
+
   testWidgets('תוצאה בשורה 0 שומרת את המפרשים מההיסטוריה', (tester) async {
     final book = TextBook(id: 1, title: 'בראשית');
     final tab = await _openResult(

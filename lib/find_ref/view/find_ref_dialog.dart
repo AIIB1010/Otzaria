@@ -956,7 +956,7 @@ class _FindRefDialogState extends State<FindRefDialog> {
       entry.book,
       segment,
       '',
-      explicitIndex: entry.targetSegment != null,
+      explicitIndex: true,
     );
   }
 
