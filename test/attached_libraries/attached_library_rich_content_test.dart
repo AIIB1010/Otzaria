@@ -474,6 +474,37 @@ void main() {
     expect(await repository.loadNotes(key), hasLength(1));
   });
 
+  test('עריכת טקסט מצורף אחרי טעינת הערות אינה משאירה עוגן ישן', () async {
+    addTearDown(PersonalNotesDatabase.instance.close);
+    final path = fullAttached('notes-updated');
+    final library = await attach(path);
+    final book = await attachedBook(library, SeforimFixtureIds.bereshitTitle);
+    final key = personalNotesBookKey(book);
+    final repository = PersonalNotesRepository();
+    await repository.loadNotes(key, categoryId: book.categoryId);
+    final writer = sqlite3.sqlite3.open(path);
+    try {
+      writer.execute(
+        "UPDATE line SET content = 'טקסט חדש לעיגון' WHERE bookId = 1 AND lineIndex = 1",
+      );
+    } finally {
+      writer.close();
+    }
+    final notes = await repository.addNote(
+      bookId: key,
+      lineNumber: 2,
+      content: 'הערה',
+      contentPlain: 'הערה',
+      contentFormat: PersonalNoteContentFormat.plain,
+      selectedText: 'חדש',
+      categoryId: book.categoryId,
+    );
+
+    expect(notes.single.anchorText, 'חדש');
+    expect(notes.single.anchorPrefix, contains('טקסט'));
+    expect(notes.single.anchorSuffix, contains('לעיגון'));
+  });
+
   test('plugin ref resolver reads line_ref from the attached DB', () async {
     final path = fullAttached('refs');
     SeforimFixtureDb.fillLineRef(path);
