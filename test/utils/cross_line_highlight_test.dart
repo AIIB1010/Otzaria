@@ -46,6 +46,36 @@ Future<void> main() async {
         isEmpty,
       );
     });
+
+    test('מילה בודדת מודגשת זהה עם השורות הסמוכות ובלעדיהן', () {
+      const line = 'אמר רבי יוחנן המים של מעלה';
+      expect(
+        highLight(line, 'המים', previousLine: first, nextLine: second),
+        highLight(line, 'המים'),
+      );
+    });
+
+    test('מילה בודדת אינה סורקת את השורות הסמוכות', () {
+      const line = 'אמר רבי יוחנן המים של מעלה';
+      final neighbour = List.filled(20000, 'של המים').join(' ');
+      int elapsedMicros({required bool withNeighbours}) {
+        final watch = Stopwatch()..start();
+        for (var i = 0; i < 5; i++) {
+          highLight(
+            line,
+            'המים',
+            previousLine: withNeighbours ? neighbour : null,
+            nextLine: withNeighbours ? neighbour : null,
+          );
+        }
+        return watch.elapsedMicroseconds;
+      }
+
+      elapsedMicros(withNeighbours: false);
+      final alone = elapsedMicros(withNeighbours: false);
+      final withNeighbours = elapsedMicros(withNeighbours: true);
+      expect(withNeighbours, lessThan(alone * 10 + 20000));
+    });
   }, skip: engineReady ? false : 'מנוע החיפוש אינו זמין');
 
   group('גבולות התוכן לחיבור שורות', () {
