@@ -565,7 +565,9 @@ class TextBookRepository {
           )
         : await repository.getBookByTitle(currentBookTitle);
 
-    final rows = await repository.getSiblingCommentaryLinkRowsForLine(
+    final rows = await _siblingCommentaryRows(
+      repository,
+      sourceBookSource,
       bookId: sourceBook.id,
       bookTitle: sourceBookTitle,
       lineIndex: sourceLineIndex,
@@ -626,6 +628,40 @@ class TextBookRepository {
       }
     }
     return repository.database.linkDao.selectCommentatorsByBook(bookId);
+  }
+
+  /// בפנייה הראשונה לספר נבנה תוכן העניינים שלו (עד 115ms בבית יוסף), ולכן
+  /// ב-seforim.db השאילתה רצה ב-worker ולא על ה-UI isolate.
+  Future<List<Map<String, dynamic>>> _siblingCommentaryRows(
+    SeforimRepository repository,
+    BookSource source, {
+    required int bookId,
+    required String bookTitle,
+    required int lineIndex,
+    required int excludeBookId,
+  }) async {
+    final dbPath = _sqliteProvider.dbPath;
+    if (source.isOfficial && dbPath.isNotEmpty) {
+      try {
+        return (await DbReadWorker.request('siblingCommentaryRows', {
+                  'dbPath': dbPath,
+                  'bookId': bookId,
+                  'bookTitle': bookTitle,
+                  'lineIndex': lineIndex,
+                  'excludeBookId': excludeBookId,
+                })
+                as List)
+            .cast<Map<String, dynamic>>();
+      } on DbReadWorkerUnavailable {
+        // נופלים לשאילתה הישירה, כמו שאר הקריאות כשה-worker אינו זמין.
+      }
+    }
+    return repository.getSiblingCommentaryLinkRowsForLine(
+      bookId: bookId,
+      bookTitle: bookTitle,
+      lineIndex: lineIndex,
+      excludeBookId: excludeBookId,
+    );
   }
 
   /// המאגר שבו יושבים קישורי [source]: seforim.db או המסד המצורף. לספר
