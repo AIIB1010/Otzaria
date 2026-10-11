@@ -88,9 +88,10 @@ var
   UiErrBadge: TBitmapImage;
   UiErrTitle, UiErrBody, UiErrLink: TNewStaticText;
   UiErrTech: TRichEditViewer;
-  { בעותק החדש: החלון שיש לסגור כשזה מוכן. בעותק הישן: מתי ביקש את ההחלפה. }
   UiLangHandoff: HWND;
   UiLangSince: Extended;
+  UiLangEventName: String;
+  UiLangReady, UiLangAccepted, UiLangAttempt: Longint;
 
 type
   TUiStartupInfo = record
@@ -114,6 +115,17 @@ function UiCreateProcess(App, CommandLine: String; ProcessAttr, ThreadAttr: Long
   external 'CreateProcessW@kernel32.dll stdcall';
 function UiCloseHandle(Handle: Longint): BOOL;
   external 'CloseHandle@kernel32.dll stdcall';
+function UiCreateEvent(Attributes: Longint; ManualReset, InitialState: BOOL;
+  Name: String): Longint;
+  external 'CreateEventW@kernel32.dll stdcall';
+function UiOpenEvent(Access: LongWord; Inherit: BOOL; Name: String): Longint;
+  external 'OpenEventW@kernel32.dll stdcall';
+function UiSetEvent(Handle: Longint): BOOL;
+  external 'SetEvent@kernel32.dll stdcall';
+function UiWaitEvent(Handle: Longint; Milliseconds: LongWord): LongWord;
+  external 'WaitForSingleObject@kernel32.dll stdcall';
+function UiProcessId(): LongWord;
+  external 'GetCurrentProcessId@kernel32.dll stdcall';
 
 { ============================ כרטיסים ============================ }
 
@@ -819,11 +831,31 @@ end;
 
 { ============================ שפה ============================ }
 
-{ Inno קובע את השפה רק בהפעלה, ולכן ההחלפה פותחת עותק ב-/LANG. החלון הזה נשאר עליון
-  עד שהעותק צייר את עצמו וסוגר אותו (UiSyncLanguage), כך שאין הבהוב. }
+procedure UiReleaseLanguageEvents();
+begin
+  if UiLangReady <> 0 then UiCloseHandle(UiLangReady);
+  if UiLangAccepted <> 0 then UiCloseHandle(UiLangAccepted);
+  UiLangReady := 0;
+  UiLangAccepted := 0;
+end;
+
+procedure UiAbortLanguageSwitch();
+begin
+  UiReleaseLanguageEvents();
+  UiLangSince := 0;
+  if UiLangEventName <> '' then
+  begin
+    UiClosing := True;
+    WizardForm.Close;
+  end
+  else
+    UiSetWindowPos(WizardForm.Handle, -2, 0, 0, 0, 0, $1 or $2 or $10);
+end;
+
+{ Inno קובע את השפה רק בהפעלה. האב מאשר את העותק המוכן לפני שהוא נסגר. }
 procedure UiSwitchLanguage();
 var
-  Lang, Exe: String;
+  Lang, Exe, Name: String;
   Startup: TUiStartupInfo;
   Info: TUiProcessInfo;
 begin
@@ -831,22 +863,37 @@ begin
     Lang := 'hebrew'
   else
     Lang := 'english';
+  UiLangAttempt := UiLangAttempt + 1;
+  Name := 'Local\OtzariaDL-' + IntToStr(UiProcessId()) + '-' +
+    Format('%.0f', [UiNowMs() * 1000]) + '-' + IntToStr(UiLangAttempt);
+  UiLangReady := UiCreateEvent(0, True, False, Name + '-ready');
+  if (UiLangReady = 0) or (DLLGetLastError() = 183) then
+  begin
+    UiReleaseLanguageEvents();
+    exit;
+  end;
+  UiLangAccepted := UiCreateEvent(0, True, False, Name + '-accepted');
+  if (UiLangAccepted = 0) or (DLLGetLastError() = 183) then
+  begin
+    UiReleaseLanguageEvents();
+    exit;
+  end;
   { Exec ו-ShellExec של Inno מסרבים להפעיל את Setup עצמו לפני ההתקנה. }
   Exe := ExpandConstant('{srcexe}');
   Startup.Size := SizeOf(Startup);
   Startup.Flags := 1;
   Startup.ShowWindow := SW_SHOWNORMAL;
   if not UiCreateProcess(Exe, AddQuotes(Exe) + ' /LANG=' + Lang + ' /HANDOFF=' +
-    IntToStr(WizardForm.Handle), 0, 0, False, 0, 0, 0, Startup, Info) then
+    IntToStr(WizardForm.Handle) + ' /HANDOFFEVENT=' + Name,
+    0, 0, False, 0, 0, 0, Startup, Info) then
   begin
     Log('DownloadAssistant: language switch failed: ' + SysErrorMessage(DLLGetLastError()));
+    UiReleaseLanguageEvents();
     exit;
   end;
   UiCloseHandle(Info.Process);
   UiCloseHandle(Info.Thread);
   UiLangSince := UiNowMs();
-  { הסגירה שהעותק ישלח אינה שאלת יציאה. חלון מושבת (Enabled) היה מתעלם ממנה. }
-  UiClosing := True;
   { HWND_TOPMOST; SWP_NOSIZE, SWP_NOMOVE, SWP_NOACTIVATE }
   UiSetWindowPos(WizardForm.Handle, -1, 0, 0, 0, 0, $1 or $2 or $10);
 end;
@@ -868,20 +915,75 @@ begin
   UiButtons[UiBtnLanguage].Img.Left := UiX(Px(UiMargin - 16) - 2, W, Px(UiWidth));
 end;
 
-{ הכפתור מופיע עם "בואו נתחיל". העותק החדש סוגר את הקודם רק אחרי שצויר במלואו. }
+{ הכפתור מופיע עם "בואו נתחיל". ילד שלא אושר אינו מתחיל הורדות. }
 procedure UiSyncLanguage();
 var
   Shown: Boolean;
   Caption: String;
+  Status: LongWord;
 begin
-  if (UiLangSince > 0) and (UiNowMs() - UiLangSince > UiLangWaitMs) then
-  begin
-    UiLangSince := 0;
-    UiClosing := False;
-    { HWND_NOTOPMOST }
-    UiSetWindowPos(WizardForm.Handle, -2, 0, 0, 0, 0, $1 or $2 or $10);
-  end;
   Shown := (UiPage = wpWelcome) and UiHeroDone;
+  if UiLangSince > 0 then
+  begin
+    if UiLangEventName <> '' then
+    begin
+      Status := UiWaitEvent(UiLangAccepted, 0);
+      if Status = 0 then
+      begin
+        UiReleaseLanguageEvents();
+        UiLangEventName := '';
+        UiLangHandoff := 0;
+        UiLangSince := 0;
+      end
+      { אישור שנשלח תקף גם כשהילד חזר לפעול מאוחר. האב ממתין רק 15 שניות. }
+      else if (Status <> 258) or (UiLangReady = 0) or (UiLangAccepted = 0) or
+              (UiNowMs() - UiLangSince >= 2 * UiLangWaitMs) then
+      begin
+        if WizardForm.Visible and (UiIsWindowEnabled(WizardForm.Handle) <> 0) then
+          UiAbortLanguageSwitch();
+      end
+      else if Shown and WizardForm.Visible and
+              (UiIsWindowEnabled(WizardForm.Handle) <> 0) then
+      begin
+        Status := UiWaitEvent(UiLangReady, 0);
+        if Status = 258 then
+        begin
+          UiRedrawWindow(WizardForm.Handle, 0, 0, $185);
+          if not UiSetEvent(UiLangReady) then UiAbortLanguageSwitch();
+        end
+        else if Status <> 0 then
+          UiAbortLanguageSwitch();
+      end;
+    end
+    else
+    begin
+      { פקיעה קודמת למוכנות: ילד מאוחר אינו יכול לסגור אב שחזר לפעולה. }
+      if (UiNowMs() - UiLangSince >= UiLangWaitMs) or
+         (UiLangReady = 0) or (UiLangAccepted = 0) then
+        UiAbortLanguageSwitch()
+      else
+      begin
+        Status := UiWaitEvent(UiLangReady, 0);
+        if Status = 0 then
+        begin
+          if UiIsWindowEnabled(WizardForm.Handle) <> 0 then
+          begin
+            if UiSetEvent(UiLangAccepted) then
+            begin
+              UiReleaseLanguageEvents();
+              UiLangSince := 0;
+              UiClosing := True;
+              WizardForm.Close;
+            end
+            else
+              UiAbortLanguageSwitch();
+          end;
+        end
+        else if Status <> 258 then
+          UiAbortLanguageSwitch();
+      end;
+    end;
+  end;
   if UiLangSince > 0 then
     Caption := CustomMessage('LanguageSwitching')
   else
@@ -891,13 +993,6 @@ begin
     UiPlaceLanguageButton(Caption);
   if Assigned(UiButtons[UiBtnLanguage].Img) then
     UiSetButton(UiBtnLanguage, Shown, UiLangSince = 0, Caption);
-  if (UiLangHandoff <> 0) and Shown and WizardForm.Visible then
-  begin
-    { RDW_INVALIDATE, RDW_ERASE, RDW_ALLCHILDREN, RDW_UPDATENOW }
-    UiRedrawWindow(WizardForm.Handle, 0, 0, $185);
-    PostMessage(UiLangHandoff, UiWmSysCommand, UiScClose, 0);
-    UiLangHandoff := 0;
-  end;
 end;
 
 { ============================ כפתורים ============================ }
@@ -924,9 +1019,7 @@ begin
   { בזמן דו-שיח החלון מושבת; לחיצה שבכל זאת הגיעה הייתה פותחת שאלה שנייה. }
   if UiIsWindowEnabled(WizardForm.Handle) = 0 then
     exit;
-  { בזמן החלפת שפה החלון הזה כבר מחכה להיסגר. }
-  if UiLangSince > 0 then
-    exit;
+  if (UiLangSince > 0) or (UiLangEventName <> '') then exit;
   for I := 0 to GetArrayLength(UiButtons) - 1 do
     if (Sender = UiButtons[I].Img) and UiButtons[I].Shown and UiButtons[I].Enabled then
       case I of
@@ -1033,6 +1126,14 @@ begin
   UiInitializeWizard('title_', 'title_en_', CustomMessage('StartButton'));
   { עותק שנפתח בהחלפת שפה: במקום החלון הקודם, בלי הפתיחה שכבר הוצגה בו. }
   UiLangHandoff := StrToIntDef(ExpandConstant('{param:HANDOFF|0}'), 0);
+  UiLangEventName := ExpandConstant('{param:HANDOFFEVENT|}');
+  if UiLangEventName <> '' then
+  begin
+    { קונים את שני ה-handles לפני ready, כדי ש-accepted ישרוד את יציאת האב. }
+    UiLangReady := UiOpenEvent($100002, False, UiLangEventName + '-ready');
+    UiLangAccepted := UiOpenEvent($100000, False, UiLangEventName + '-accepted');
+    UiLangSince := UiNowMs();
+  end;
   if UiLangHandoff <> 0 then
     if not UiIsWindow(UiLangHandoff) or not UiGetWindowRect(UiLangHandoff, R) then
       UiLangHandoff := 0;

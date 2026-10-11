@@ -3315,6 +3315,7 @@ var
   ErrorCode: Integer;
 begin
   UiDeinitializeSetup();
+  UiReleaseLanguageEvents();
   if (RevealPath = '') or not Assigned(RevealCheck) or
      not RevealCheck.Checked then
     exit;
@@ -3330,7 +3331,8 @@ var
   Members: String;
   Free, Total, Needed: Int64;
 begin
-  Result := True;
+  Result := (UiLangSince = 0) and (UiLangEventName = '');
+  if not Result then exit;
 
   if CurPageID = wpWelcome then
   begin
