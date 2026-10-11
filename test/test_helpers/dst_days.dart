@@ -9,6 +9,13 @@ DateTime? localDayLasting(int hours) {
 
 DateTime plusDays(DateTime d, int n) => DateTime(d.year, d.month, d.day + n);
 
+DateTime shabbatOnOrAfter(DateTime day) {
+  while (day.weekday != DateTime.saturday) {
+    day = plusDays(day, 1);
+  }
+  return day;
+}
+
 DateTime atHour(DateTime d, int hour, [int minute = 0]) =>
     DateTime(d.year, d.month, d.day, hour, minute);
 

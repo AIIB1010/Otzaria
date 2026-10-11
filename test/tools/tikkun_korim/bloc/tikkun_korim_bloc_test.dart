@@ -1,5 +1,6 @@
 import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kosher_dart/kosher_dart.dart';
 import 'package:otzaria/core/messages/tools_messages.dart';
 import 'package:otzaria/tools/tikkun_korim/bloc/tikkun_korim_bloc.dart';
 import 'package:otzaria/tools/tikkun_korim/models/tikkun_models.dart';
@@ -56,14 +57,19 @@ void main() {
     skip: noDstSkipReason,
     () {
       final day = localDayLasting(25)!;
-      final atNoon = defaultUpcomingParashaName(
-        atHour(day, 12),
-        inIsrael: true,
+      final shabbat = JewishCalendar.fromDateTime(shabbatOnOrAfter(day))
+        ..inIsrael = true;
+      final expected = (HebrewDateFormatter()..hebrewFormat = true)
+          .formatParsha(
+            shabbat,
+          );
+      expect(
+        defaultUpcomingParashaName(atHour(day, 12), inIsrael: true),
+        expected,
       );
-      expect(atNoon, isNotEmpty);
       expect(
         defaultUpcomingParashaName(atHour(day, 0, 30), inIsrael: true),
-        atNoon,
+        expected,
       );
     },
   );

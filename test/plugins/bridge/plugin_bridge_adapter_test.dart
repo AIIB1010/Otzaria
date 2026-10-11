@@ -470,14 +470,19 @@ Future<void> main() async {
       skip: noDstSkipReason,
       () async {
         final day = localDayLasting(25)!;
+        final shabbat = JewishCalendar.fromDateTime(shabbatOnOrAfter(day))
+          ..inIsrael = true;
+        final expected = (HebrewDateFormatter()..hebrewFormat = true)
+            .formatParsha(
+              shabbat,
+            );
         Future<Object?> parashaAt(DateTime date) async =>
             (await adapter.execute('calendar', 'getJewishDate', {
                   'date': date.toIso8601String(),
                 })
                 as Map<String, dynamic>)['parasha'];
-        final atNoon = await parashaAt(atHour(day, 12));
-        expect(atNoon, isNotEmpty);
-        expect(await parashaAt(atHour(day, 0, 30)), atNoon);
+        expect(await parashaAt(atHour(day, 12)), expected);
+        expect(await parashaAt(atHour(day, 0, 30)), expected);
       },
     );
 
