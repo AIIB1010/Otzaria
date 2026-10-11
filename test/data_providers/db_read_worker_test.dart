@@ -279,6 +279,35 @@ void main() {
     expect(viaWorker.categories, direct.categories);
   });
 
+  test('מפרשים נוספים על שורה מה-worker זהים לשאילתה הישירה', () async {
+    final dbPath = await seedDb('seforim');
+    addCommentaryLink(dbPath);
+    final args = {
+      'bookId': 1,
+      'bookTitle': 'בראשית',
+      'lineIndex': 2,
+      'excludeBookId': -1,
+    };
+    final direct = await onDirectConnection(
+      dbPath,
+      (repo) => repo.getSiblingCommentaryLinkRowsForLine(
+        bookId: 1,
+        bookTitle: 'בראשית',
+        lineIndex: 2,
+        excludeBookId: -1,
+      ),
+    );
+    expect([for (final row in direct) row['targetBookTitle']], ['מפרש']);
+
+    expect(
+      await DbReadWorker.request('siblingCommentaryRows', {
+        ...args,
+        'dbPath': dbPath,
+      }),
+      direct,
+    );
+  });
+
   test('ספר שאינו ברשמי מוחזר למסלול הישיר ולא כשגיאה', () async {
     final dbPath = await seedDb('seforim');
     expect(
@@ -926,6 +955,24 @@ void main() {
       final keys = await provider.getDatabaseOnlyBookTitles();
       expect(keys, hasLength(3));
       expect(keys.any((key) => key.contains('בראשית')), isTrue);
+      expect(DbReadWorker.sentMessageCount - before, 1);
+    });
+
+    test('המפרשים הנוספים על שורה נשלפים ב-worker', () async {
+      addCommentaryLink(dbPath);
+      final repository = TextBookRepository(
+        fileSystem: FileSystemData.instance,
+      );
+      final before = DbReadWorker.sentMessageCount;
+      final links = await repository.getSiblingCommentaries(
+        sourceBookTitle: 'בראשית',
+        sourceCategoryId: 7,
+        sourceLineIndex: 1,
+        currentBookTitle: 'אחר',
+        currentCategoryId: 7,
+      );
+      expect([for (final link in links) link.path2], ['מפרש']);
+      expect(links.single.index2, 2);
       expect(DbReadWorker.sentMessageCount - before, 1);
     });
 
