@@ -378,7 +378,7 @@ class DirectErrorReport extends Equatable {
     bool? serverAcceptedCorrection,
     String? rejectionReason,
   }) {
-    return _copy(
+    return DirectErrorReport(
       id: id,
       senderEmail: senderEmail ?? this.senderEmail,
       subject: subject ?? this.subject,
@@ -392,6 +392,11 @@ class DirectErrorReport extends Equatable {
       sourceFolder: sourceFolder ?? this.sourceFolder,
       libraryVersion: libraryVersion ?? this.libraryVersion,
       queueType: queueType ?? this.queueType,
+      createdAt: createdAt,
+      schemaVersion: schemaVersion,
+      reportKind: reportKind,
+      location: location,
+      client: client,
       correction: correction ?? this.correction,
       serverAcceptedCorrection:
           serverAcceptedCorrection ?? this.serverAcceptedCorrection,
@@ -400,7 +405,7 @@ class DirectErrorReport extends Equatable {
   }
 
   /// עותק זהה עם `report_id` אחר — לתוכן ששונה אחרי שכבר נשלח (409).
-  DirectErrorReport withId(String newId) => _copy(
+  DirectErrorReport withId(String newId) => DirectErrorReport(
     id: newId,
     senderEmail: senderEmail,
     subject: subject,
@@ -414,53 +419,15 @@ class DirectErrorReport extends Equatable {
     sourceFolder: sourceFolder,
     libraryVersion: libraryVersion,
     queueType: queueType,
+    createdAt: createdAt,
+    schemaVersion: schemaVersion,
+    reportKind: reportKind,
+    location: location,
+    client: client,
     correction: correction,
     serverAcceptedCorrection: serverAcceptedCorrection,
     rejectionReason: rejectionReason,
   );
-
-  DirectErrorReport _copy({
-    required String id,
-    required String senderEmail,
-    required String subject,
-    required String bookTitle,
-    required String currentRef,
-    required int lineNumber,
-    required String selectedText,
-    required String errorDetails,
-    required String contextText,
-    required String filePath,
-    required String sourceFolder,
-    required String libraryVersion,
-    required DirectErrorReportQueueType queueType,
-    required TextCorrection? correction,
-    required bool? serverAcceptedCorrection,
-    required String? rejectionReason,
-  }) {
-    return DirectErrorReport(
-      id: id,
-      senderEmail: senderEmail,
-      subject: subject,
-      bookTitle: bookTitle,
-      currentRef: currentRef,
-      lineNumber: lineNumber,
-      selectedText: selectedText,
-      errorDetails: errorDetails,
-      contextText: contextText,
-      filePath: filePath,
-      sourceFolder: sourceFolder,
-      libraryVersion: libraryVersion,
-      queueType: queueType,
-      createdAt: createdAt,
-      schemaVersion: schemaVersion,
-      reportKind: reportKind,
-      location: location,
-      client: client,
-      correction: correction,
-      serverAcceptedCorrection: serverAcceptedCorrection,
-      rejectionReason: rejectionReason,
-    );
-  }
 
   Map<String, dynamic> toJson() => {
     'id': id,
