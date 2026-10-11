@@ -30,6 +30,8 @@ import 'package:otzaria/plugins/view/webview_environment_holder.dart';
 import 'package:otzaria/plugins/utils/plugin_safe_mode.dart';
 import 'package:otzaria/plugins/bloc/plugin_system_bloc.dart';
 import 'package:otzaria/plugins/bloc/plugin_system_event.dart';
+import 'package:otzaria/plugins/services/plugin_new_tab_page_service.dart';
+import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
 import 'package:otzaria/settings/engine/settings_bloc.dart';
 import 'package:otzaria/settings/engine/settings_event.dart';
 import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
@@ -218,6 +220,11 @@ class _WindowBusHostState extends State<WindowBusHost> {
       case LibraryAccessGate.requestResume:
       case LibraryAccessGate.requestOwnerExited:
         return LibraryAccessGate.instance.handlePeerRequest(request);
+      case PluginNewTabPageService.requestChanged:
+        await PluginNewTabPageService.instance.syncOwner(
+          PluginRegistryRepository(),
+        );
+        return true;
       case SettingsSync.requestChanged:
         // הגדרה שונתה בחלון אחר — מוחלת על ה-box המקומי ומרעננת את ה-state.
         return SettingsSync.instance.handleRequest(request);

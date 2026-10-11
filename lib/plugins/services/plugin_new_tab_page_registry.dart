@@ -1,49 +1,57 @@
 import 'package:flutter/foundation.dart';
+import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
 import 'package:otzaria/plugins/services/plugin_page_launcher.dart';
 
-/// Controls what the reader's "+" (new tab) button opens.
-///
-/// Registration belongs to the plugin, not to one WebView instance. This is
-/// intentional: a startup/background instance may register the target and then
-/// be disposed, while the "+" must continue to open the plugin's visible page.
-/// A later registration wins; when no registration remains, the new-tab button is hidden.
+/// בעלות התוסף על '+' שורדת סגירת WebView; מתחרה אינו ממתין להשתלטות עתידית.
 class PluginNewTabPageRegistry extends ChangeNotifier {
   static final PluginNewTabPageRegistry instance = PluginNewTabPageRegistry._();
-  PluginNewTabPageRegistry._();
+  PluginNewTabPageRegistry._() : _repository = PluginRegistryRepository();
+  @visibleForTesting
+  PluginNewTabPageRegistry.forTesting(PluginRegistryRepository repository)
+    : _repository = repository;
+  final PluginRegistryRepository _repository;
+  @visibleForTesting
+  PluginRegistryRepository? repositoryForTesting;
 
-  final Map<String, int> _registrations = {};
-  int _sequence = 0;
+  String? _activePluginId;
 
-  void register(String pluginId) {
-    _registrations[pluginId] = ++_sequence;
+  /// Returns false when another plugin already owns the new-tab button.
+  /// Re-registering the current owner is an idempotent success.
+  bool register(String pluginId) {
+    if (_activePluginId == pluginId) return true;
+    if (_activePluginId != null) return false;
+    selectOwner(pluginId);
+    return true;
+  }
+
+  /// שינוי בעלים שכבר אושר ונשמר בהרשאות התוספים.
+  void selectOwner(String pluginId) {
+    if (_activePluginId == pluginId) return;
+    _activePluginId = pluginId;
     notifyListeners();
   }
 
   void remove(String pluginId) {
-    if (_registrations.remove(pluginId) != null) {
-      notifyListeners();
-    }
+    if (_activePluginId != pluginId) return;
+    _activePluginId = null;
+    notifyListeners();
   }
 
-  bool get hasActiveRegistration => _registrations.isNotEmpty;
+  bool get hasActiveRegistration => _activePluginId != null;
 
-  String? get activePluginId {
-    if (_registrations.isEmpty) return null;
-    String? selected;
-    var newest = -1;
-    for (final entry in _registrations.entries) {
-      if (entry.value > newest) {
-        newest = entry.value;
-        selected = entry.key;
-      }
-    }
-    return selected;
-  }
+  String? get activePluginId => _activePluginId;
 
   /// Opens the registered plugin page. With no registration the button is hidden.
-  void open() {
-    final pluginId = activePluginId;
-    if (pluginId == null) return;
+  Future<void> open() async {
+    if (activePluginId == null) return;
+    final pluginId = await (repositoryForTesting ?? _repository)
+        .getNewTabPageOwner();
+    if (pluginId == null) {
+      final current = activePluginId;
+      if (current != null) remove(current);
+      return;
+    }
+    selectOwner(pluginId);
     PluginPageLauncher.instance.open(
       pluginId,
       topic: 'plugin.page_opened',

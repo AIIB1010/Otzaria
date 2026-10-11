@@ -1368,5 +1368,12 @@
   "ייצוא": "Export",
   "מחיקה": "Delete",
   "מושהה": "Paused",
-  "כרטיסייה חדשה": "New tab"
+  "כרטיסייה חדשה": "New tab",
+  "בחירת תוסף לכפתור לשונית חדשה (+)": "Choose a plugin for the new-tab (+) button",
+  "כפתור \"+\" ניתן לתוסף \"{owner}\". למי להעניק את הכפתור? ניתן לשנות את הבחירה בהרשאות התוספים.": "The \"+\" button belongs to \"{owner}\". Which plugin should own it? You can change your choice in plugin permissions.",
+  "השאר אצל {plugin}": "Keep with {plugin}",
+  "הענק ל{plugin}": "Give to {plugin}",
+  "כפתור לשונית חדשה (+)": "New-tab (+) button",
+  "פתיחת דף התוסף בכפתור \"+\". רק תוסף אחד יכול לקבל הרשאה זו. בעל הכפתור כעת: {owner}": "Open the plugin page with the \"+\" button. Only one plugin can have this permission. Current owner: {owner}",
+  "אין": "None"
 }

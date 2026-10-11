@@ -202,6 +202,9 @@ const pluginSearchFieldActionsPermission = 'search.field_actions';
 /// כי היא מפעילה את ה-WebView של תוסף שלישי, ולא רק מזיזה את המשתמש בין מסכים.
 const pluginOpenOtherPermission = 'plugin.open_other';
 
+/// החלטת המשתמש על כפתור '+'; נוצרת רק אחרי בקשת רישום של התוסף.
+const pluginNewTabPagePermission = 'plugin.new_tab_page';
+
 /// הרשאה להפעלת מנוע התוסף ברקע ללא פתיחת הדף שלו — שער להפעלה העצלה
 /// (`contributes.startup`): המנוע קם רק בעקבות אירוע או לחיצה שהוצהרו.
 const pluginRunOnStartupPermission = 'app.run_on_startup';
