@@ -18,6 +18,39 @@ import 'package:otzaria/widgets/text/otzaria_search_field.dart';
 import 'package:otzaria/widgets/feedback/tool_empty_state.dart';
 import 'package:otzaria/widgets/misc/tool_ui_helpers.dart';
 
+/// מסנן ערכים ש-[field] שלהם מכיל את [query] וממיין: מדויק < מתחיל ב- < מילה שלמה < מכיל.
+/// הדירוג נקבע פעם אחת לערך ולא בכל השוואה, כי המיון מריץ RegExp על ערכים ארוכים.
+@visibleForTesting
+List<Map<String, String>> rankAramaicMatches(
+  List<Map<String, String>> entries,
+  String field,
+  String query,
+) {
+  final wholeWord = RegExp('(^|\\s)${RegExp.escape(query)}(\$|\\s)');
+  final ranked = <({int rank, int pos, Map<String, String> entry})>[];
+  for (final entry in entries) {
+    final text = entry[field]!;
+    final pos = text.indexOf(query);
+    if (pos < 0) continue;
+    final rank = text == query
+        ? 0
+        : pos == 0
+        ? 1
+        : wholeWord.hasMatch(text)
+        ? 2
+        : 3;
+    ranked.add((rank: rank, pos: pos, entry: entry));
+  }
+  ranked.sort((a, b) {
+    final rankCompare = a.rank.compareTo(b.rank);
+    if (rankCompare != 0) return rankCompare;
+    final posCompare = a.pos.compareTo(b.pos);
+    if (posCompare != 0) return posCompare;
+    return a.entry[field]!.length.compareTo(b.entry[field]!.length);
+  });
+  return [for (final r in ranked) r.entry];
+}
+
 class AramaicDictionaryScreen extends StatefulWidget {
   const AramaicDictionaryScreen({super.key, this.repository, this.queryInbox});
 
@@ -116,35 +149,8 @@ class _AramaicDictionaryScreenState extends State<AramaicDictionaryScreen>
 
     final field = _isHebrewToAramaic ? 'hebrewPlain' : 'aramaicPlain';
     setState(() {
-      _filteredResults =
-          _dictionaryData.where((entry) {
-            return entry[field]!.contains(query);
-          }).toList()..sort((a, b) {
-            final textA = a[field]!;
-            final textB = b[field]!;
-            final rankCompare = _matchRank(
-              textA,
-              query,
-            ).compareTo(_matchRank(textB, query));
-            if (rankCompare != 0) return rankCompare;
-            final posCompare = textA
-                .indexOf(query)
-                .compareTo(textB.indexOf(query));
-            if (posCompare != 0) return posCompare;
-            return textA.length.compareTo(textB.length);
-          });
+      _filteredResults = rankAramaicMatches(_dictionaryData, field, query);
     });
-  }
-
-  /// דירוג התאמת טקסט לשאילתה: נמוך = דומה יותר.
-  /// מדויק < מתחיל ב- < מילה שלמה < מכיל.
-  int _matchRank(String text, String query) {
-    if (text == query) return 0;
-    if (text.startsWith(query)) return 1;
-    if (RegExp('(^|\\s)${RegExp.escape(query)}(\$|\\s)').hasMatch(text)) {
-      return 2;
-    }
-    return 3;
   }
 
   void _toggleDirection() {
