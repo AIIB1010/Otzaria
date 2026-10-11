@@ -43,6 +43,53 @@ import '../helpers/memory_settings_cache.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  for (final kind in [PointerDeviceKind.touch, PointerDeviceKind.stylus]) {
+    testWidgets('גרירה קצרה מסדרת כרטיסיות אופקיות ב־$kind', (
+      tester,
+    ) async {
+      final tabs = [
+        _makeTextTab('ספר א'),
+        _makeTextTab('ספר ב'),
+        _makeTextTab('ספר ג'),
+      ];
+      final tabsBloc = _TestTabsBloc(
+        TabsState(tabs: tabs, currentTabIndex: 0),
+      );
+      final navigationBloc = _TestNavigationBloc(
+        const NavigationState(currentScreen: Screen.reading),
+      );
+      final settingsBloc = _TestSettingsBloc(SettingsState.initial());
+      addTearDown(() async {
+        for (final tab in tabs) {
+          tab.dispose();
+        }
+        await tabsBloc.close();
+        await navigationBloc.close();
+        await settingsBloc.close();
+      });
+      await _setSurfaceSize(tester, const Size(1200, 800));
+      await _pumpTitleBar(
+        tester,
+        tabsBloc: tabsBloc,
+        navigationBloc: navigationBloc,
+        settingsBloc: settingsBloc,
+      );
+      await tester.pumpAndSettle();
+      final target = tester.getCenter(find.text('ספר ג'));
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.text('ספר א')),
+        kind: kind,
+      );
+      await tester.pump(const Duration(milliseconds: 20));
+      await gesture.moveTo(target);
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+      final moves = tabsBloc.addedEvents.whereType<MoveTab>().length;
+      expect(moves, 1);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+  }
+
   setUp(() async {
     await Settings.init(cacheProvider: MemorySettingsCache());
   });
