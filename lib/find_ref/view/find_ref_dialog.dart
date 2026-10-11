@@ -46,7 +46,6 @@ import 'package:otzaria/utils/ui/reading_left_pane_policy.dart';
 import 'package:otzaria/tour/tour_target_keys.dart';
 import 'package:otzaria/library/view/grid_items.dart';
 import 'package:otzaria/widgets/text/rtl_text_field.dart';
-import 'package:otzaria/search/models/search_configuration.dart';
 import 'package:otzaria/tabs/models/searching_tab.dart';
 import 'package:otzaria/navigation/view/main_window_screen.dart';
 import 'package:otzaria/widgets/controls/action_buttons.dart';
@@ -74,13 +73,7 @@ class _MainWindowFindRefHost implements FindRefDialogHost {
       debugPrint('[FindRef] openTextSearch: main window screen not mounted');
       return;
     }
-    mainScreen.openSearchDialog(
-      SearchingTab(
-        'חיפוש',
-        query,
-        initialConfiguration: const SearchConfiguration(),
-      ),
-    );
+    mainScreen.openSearchDialog(SearchingTab.newSearch('חיפוש', query));
   }
 }
 

@@ -16,6 +16,9 @@ import 'package:otzaria/models/books.dart';
 import 'package:otzaria/navigation/bloc/navigation_bloc.dart';
 import 'package:otzaria/navigation/bloc/navigation_event.dart';
 import 'package:otzaria/navigation/bloc/navigation_state.dart';
+import 'package:otzaria/search/models/search_configuration.dart';
+import 'package:otzaria/search/search_defaults.dart';
+import 'package:otzaria/search/view/search_dialog.dart';
 import 'package:otzaria/settings/engine/settings_bloc.dart';
 import 'package:otzaria/settings/engine/settings_event.dart';
 import 'package:otzaria/settings/engine/settings_state.dart';
@@ -384,4 +387,38 @@ void main() {
       expect(find.byType(LibraryOverflowTooltipText), findsOneWidget);
     });
   }
+
+  testWidgets(
+    '"פתח חיפוש טקסט" מהמצב הריק מכבד את ברירות המחדל (issue #2360)',
+    (
+      tester,
+    ) async {
+      SearchDefaults.saveModeDefault(SearchMode.exact);
+      SearchDefaults.saveDistanceDefault(3);
+      addTearDown(() => SearchDefaults.saveDistanceDefault(0));
+      final searchController = FocusRepository().librarySearchController
+        ..text = 'בראשית';
+      addTearDown(searchController.clear);
+
+      final library = Library(categories: []);
+      await _pumpLibraryBrowser(
+        tester,
+        LibraryState(
+          library: library,
+          currentCategory: library,
+          searchResults: const [],
+          searchQuery: 'בראשית',
+        ),
+        size: const Size(1200, 800),
+      );
+
+      await tester.tap(find.text('פתח חיפוש טקסט'));
+      await tester.pump();
+      tester.takeException();
+
+      final dialog = tester.widget<SearchDialog>(find.byType(SearchDialog));
+      expect(dialog.existingTab!.queryController.text, 'בראשית');
+      expect(dialog.existingTab!.searchBloc.state.distance, 3);
+    },
+  );
 }
