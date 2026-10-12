@@ -626,7 +626,6 @@ const Map<String, Map<String, String>> kSettingsCatalogs = {
     'חיפוש בתורה בלבד': 'Search Torah Only',
     'חיפוש גימטריה': 'Gematria Search',
     'חיפוש גם בחלקי פסוקים': 'Search parts of pesukim too',
-    'חיפוש ואינדקס': 'Search and Index',
     'חיפוש חדש בכל הספרים': 'New search in all seforim',
     'חיפוש חכם': 'Smart Search',
     'חיפוש חכם (ניסיוני)': 'Smart Search (Experimental)',

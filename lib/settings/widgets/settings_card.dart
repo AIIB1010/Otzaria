@@ -1086,15 +1086,18 @@ class _PathMenuButtonState extends State<_PathMenuButton> {
     final hasPath = widget.currentPath.isNotEmpty;
     final targets = widget.pathTargets;
     final hasTargets = targets != null && targets.isNotEmpty;
+    final platform = Theme.of(context).platform;
     final entries = <AppMenuEntry<_PathMenuAction>>[
-      AppMenuEntry(
-        value: _PathMenuAction.openFolder,
-        label: context.settingsText(
-          hasTargets ? 'פתח תיקייה...' : 'פתח תיקייה',
+      // במובייל אין מנהל קבצים שבו openInFileManager יכול לפתוח תיקייה.
+      if (platform != TargetPlatform.android && platform != TargetPlatform.iOS)
+        AppMenuEntry(
+          value: _PathMenuAction.openFolder,
+          label: context.settingsText(
+            hasTargets ? 'פתח תיקייה...' : 'פתח תיקייה',
+          ),
+          icon: FluentIcons.folder_open_24_regular,
+          enabled: hasPath || hasTargets,
         ),
-        icon: FluentIcons.folder_open_24_regular,
-        enabled: hasPath || hasTargets,
-      ),
       AppMenuEntry(
         value: _PathMenuAction.changeLocation,
         label: context.settingsText(widget.changeLocationLabel),
