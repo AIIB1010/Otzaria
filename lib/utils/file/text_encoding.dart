@@ -141,7 +141,7 @@ class DecodedCandidate {
   /// מספר הבייטים שרק הקידוד הזה מסביר כטקסט סביר.
   final int distinctiveBytes;
 
-  /// מספר הבייטים ‎≥ 0x80‎ בדגימה — הבייטים שיש בהם בכלל עדות לקידוד.
+  /// מספר הבייטים ≥ 0x80 בדגימה — הבייטים שיש בהם בכלל עדות לקידוד.
   final int highBytes;
 
   final int sampleLength;
@@ -1119,7 +1119,7 @@ TextEncodingDetection _detectLegacy(
   );
 }
 
-/// העדות שמבדילה בין קידודי העברית היא בתים ‎≥ 0x80‎ בלבד: ASCII מתפרש זהה
+/// העדות שמבדילה בין קידודי העברית היא בתים ≥ 0x80 בלבד: ASCII מתפרש זהה
 /// בשלושתם. דגימה של מגה-בית ASCII אינה עדות, וכשהיא כל מה שיש — ה-confidence
 /// נשאר נמוך, מה שגם מרחיב את הדגימה לאמצע הקובץ ולזנבו.
 double _highByteEvidenceCap(int highBytes) {

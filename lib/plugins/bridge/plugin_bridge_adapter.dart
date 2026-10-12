@@ -459,7 +459,7 @@ class PluginBridgeDependencies {
   /// למיקום, דרך מנוע `find_ref` המודע-להקשר. מחזיר התאמות עם מיקום ה-index.
   /// אופציונלי — אם לא סופק, `openBookAtRef` נופל להתאמת TOC מקומית בלבד.
   ///
-  /// `bookId` הוא ה-id המספרי ב-DB (‎-1 ל-PDF ממערכת הקבצים), ותקף רק במקור
+  /// `bookId` הוא ה-id המספרי ב-DB (-1 ל-PDF ממערכת הקבצים), ותקף רק במקור
   /// רשמי: שאר המסדים מקצים מזהים באותו טווח, ולכן id שלהם אינו חד-משמעי.
   final Future<
     List<
@@ -1885,7 +1885,7 @@ class PluginBridgeAdapter {
               'linkCount': target.linkCount,
             },
       ],
-      // maxSourceLine מגיע 1-based מהמסד; ‎-1‎ = לספר אין קישורים כלל.
+      // maxSourceLine מגיע 1-based מהמסד; -1 = לספר אין קישורים כלל.
       'maxSourceLine': summary.maxSourceLine - 1,
     };
   }

@@ -591,7 +591,7 @@ class _MeasurementConverterScreenState
                                     child: child,
                                   ),
                                 ),
-                            // ‏panel_right_expand הוא ה"Pane Open" של
+                            // panel_right_expand הוא ה"Pane Open" של
                             // פלואנט — הפאנל עם חץ שפותח אותו, ולא פאנל
                             // סתום שאינו אומר מה הלחיצה תעשה. הוא קיים
                             // בחבילה רק בגודל 20; הגליף נמתח ל-24 כמו כל

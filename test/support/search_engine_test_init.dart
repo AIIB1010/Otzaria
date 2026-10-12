@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:otzaria_search_engine/otzaria_search_engine.dart';
 
 /// מאתר את שורש חבילת המנוע דרך package_config.json (תחת `flutter test`
-/// ‏Isolate.resolvePackageUri מחזיר null, ולכן קוראים את הקובץ ישירות;
+/// Isolate.resolvePackageUri מחזיר null, ולכן קוראים את הקובץ ישירות;
 /// ה-CWD של flutter test הוא שורש הפרויקט).
 String? _searchEnginePackageRoot() {
   final configFile = File('.dart_tool/package_config.json');

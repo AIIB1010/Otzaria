@@ -626,7 +626,7 @@ class FileSyncService {
     final title = path.basenameWithoutExtension(filePath);
     final format = documentFormatFromExtension(filePath);
     if (format == null) {
-      // ‏[_findNewFiles] כבר סינן מול ה-registry, ולכן זהו באג ולא קלט חוקי.
+      // [_findNewFiles] כבר סינן מול ה-registry, ולכן זהו באג ולא קלט חוקי.
       _log.warning('Unsupported file reached the sync pipeline: $filePath');
       return const _FileProcessResult(wasAdded: false, wasUpdated: false);
     }

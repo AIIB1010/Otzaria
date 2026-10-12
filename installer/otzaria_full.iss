@@ -22,7 +22,7 @@
 ; החלקים של שכבת התצוגה שקיימים רק במתקין המלא (עמוד הספרים, WebView2, החילוץ).
 #define InstallerFull
 
-; ארכיטקטורת היעד כמו ב-otzaria.iss: "x64" (ברירת מחדל) או ‎ISCC /DAppArch=arm64‎.
+; ארכיטקטורת היעד כמו ב-otzaria.iss: "x64" (ברירת מחדל) או ISCC /DAppArch=arm64.
 #ifndef AppArch
   #define AppArch "x64"
 #endif
@@ -127,7 +127,7 @@ Root: HKCU; Subkey: "Software\Policies\Microsoft\Office\12.0\Common\Security\Tru
 Root: HKCU; Subkey: "Software\Policies\Microsoft\Office\14.0\Common\Security\Trusted Protocols\All Applications\otzaria:"; Flags: dontcreatekey uninsdeletekey; Check: not IsPortableInstall
 Root: HKCU; Subkey: "Software\Policies\Microsoft\Office\15.0\Common\Security\Trusted Protocols\All Applications\otzaria:"; Flags: dontcreatekey uninsdeletekey; Check: not IsPortableInstall
 Root: HKCU; Subkey: "Software\Policies\Microsoft\Office\16.0\Common\Security\Trusted Protocols\All Applications\otzaria:"; Flags: dontcreatekey uninsdeletekey; Check: not IsPortableInstall
-; הוספת {app} ל-PATH אוטומטית (מאפשר ‎`otzaria pack-plugin`‎ מהטרמינל):
+; הוספת {app} ל-PATH אוטומטית (מאפשר `otzaria pack-plugin` מהטרמינל):
 ; התקנת מנהל → PATH המערכתי; התקנת משתמש → PATH של המשתמש. ה-Check מונע
 ; כפילויות בהתקנה חוזרת; ההסרה מתבצעת ב-CurUninstallStepChanged (לא ניתן
 ; להשתמש ב-uninsdelete* על expandsz "מצטבר" כי הוא ידרוס את הערך כולו).
@@ -797,7 +797,7 @@ begin
   if WizardSilent then
   begin
     InitializeSilentDefaults();
-    // התקנה ניידת שקטה (‎/VERYSILENT /PORTABLE /DIR=...‎): /DIR חובה —
+    // התקנה ניידת שקטה (/VERYSILENT /PORTABLE /DIR=...): /DIR חובה —
     // בלעדיו ברירת המחדל היא תיקיית ההתקנה הקיימת, וה-marker היה הופך
     // אותה לניידת.
     PortableMode := CmdLineParamExists('/PORTABLE') and
@@ -808,7 +808,7 @@ begin
   // כבר שוגרנו מחדש עם מצב התקנה מפורש — ממשיכים ישירות (מונע לולאת שיגור).
   if CmdLineParamExists('/ALLUSERS') or CmdLineParamExists('/CURRENTUSER') then
     exit;
-  // ‎/PORTABLE — ישר לאשף במצב נייד: בלי שדרוג שקט (המשתמש רוצה עותק נייד,
+  // /PORTABLE — ישר לאשף במצב נייד: בלי שדרוג שקט (המשתמש רוצה עותק נייד,
   // לא עדכון של ההתקנה הקיימת) ובלי הסלמת הרשאות.
   if CmdLineParamExists('/PORTABLE') then
     exit;
@@ -817,7 +817,7 @@ begin
 
   if IsUpgradeFromModernVersion() then
   begin
-    // ‎/SILENT מדלג על האשף אך משאיר חלון התקדמות; בריצה השנייה
+    // /SILENT מדלג על האשף אך משאיר חלון התקדמות; בריצה השנייה
     // WizardSilent יהיה True והקוד הזה לא ירוץ שוב.
     if IsAdmin then
     begin
@@ -1041,9 +1041,9 @@ begin
       PortableInstallDirDefault := ExpandConstant('{sd}\OtzariaPortable');
     end;
 
-    // בחירה מוקדמת בעמוד "איך להתקין": ‎/PORTABLE — מצב נייד; ריצה במצב מנהל
+    // בחירה מוקדמת בעמוד "איך להתקין": /PORTABLE — מצב נייד; ריצה במצב מנהל
     // (שיגור-מחדש עם /ALLUSERS) או תהליך מורם — לכל המשתמשים.
-    // ‎/CURRENTUSER = שיגור-מחדש מתהליך מורם שבחר במפורש התקנת משתמש.
+    // /CURRENTUSER = שיגור-מחדש מתהליך מורם שבחר במפורש התקנת משתמש.
     if CmdLineParamExists('/PORTABLE') then
       PortableModeRadio.Checked := True
     else if IsAdminInstallMode or

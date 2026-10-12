@@ -35,7 +35,7 @@ class LineIndexLookup {
           if (_lines[i].startTokenIdx >= 0) i,
       ];
 
-  /// אינדקס השורה האחרונה שה-startTokenIdx שלה ‎<= [tokenIdx]; ‎-1 כשאין.
+  /// אינדקס השורה האחרונה שה-startTokenIdx שלה <= [tokenIdx]; -1 כשאין.
   int find(int tokenIdx) {
     var lo = 0;
     var hi = _validLines.length - 1;

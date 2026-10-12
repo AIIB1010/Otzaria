@@ -74,7 +74,7 @@ class UserHeadingsBuilder {
     return (structures: structures, errors: errors);
   }
 
-  /// null = כותרת-אב בלי שורה; ‎-1‎ = שגיאה (נרשמה ב-[errors]).
+  /// null = כותרת-אב בלי שורה; -1 = שגיאה (נרשמה ב-[errors]).
   static int? _resolveLine(
     ParsedHeading row,
     List<String> lines,

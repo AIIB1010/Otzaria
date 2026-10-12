@@ -540,7 +540,7 @@ void main() {
 
       test('$name: מצב ההתקנה הוא lowest — ולכן GetDataDir תלוי-מצב', () {
         final script = _script(name);
-        // ‎PrivilegesRequired=lowest אומר שהמתקין עולה לא-מורם כברירת מחדל,
+        // PrivilegesRequired=lowest אומר שהמתקין עולה לא-מורם כברירת מחדל,
         // ולכן מיקום הנתונים נגזר מבחירת המשתמש ולא מהעלייה עצמה.
         expect(script, contains('PrivilegesRequired=lowest'));
         expect(
@@ -2091,7 +2091,7 @@ void main() {
         reason: 'הנתיב מקודד בפקודת החתימה — העברת הקובץ תפיל את ה-CI',
       );
 
-      // ‏'Contents/Resources' מקודד כאן ובנפרד ב-app_paths.dart; בלי הקישור
+      // 'Contents/Resources' מקודד כאן ובנפרד ב-app_paths.dart; בלי הקישור
       // הזה שינוי בצד אחד משאיר את הטסטים ירוקים והאפליקציה בלי תוספים.
       expect(
         File('lib/core/app_paths.dart').readAsStringSync(),
@@ -4154,7 +4154,7 @@ void main() {
       final script = _script(_assistant);
       // התג המוטבע הוא ברירת המחדל; בלעדיו הכלי חוזר ל-/releases/latest.
       expect(script, contains('#ifndef AssistantReleaseTag'));
-      // ‎/D‎ עם מרכאות מגיע ל-ISPP עטוף בלוכסנים; נמדד: ‎\0.10.0+139\‎.
+      // /D עם מרכאות מגיע ל-ISPP עטוף בלוכסנים; נמדד: \0.10.0+139\.
       expect(
         script,
         contains('GetEnv("OTZARIA_ASSISTANT_RELEASE_TAG")'),

@@ -126,7 +126,7 @@ void main() {
     expect(byTitle['תבנית']!.fileType, 'dotx');
     expect(byTitle['פתוח']!.fileType, 'odt');
     expect(byTitle['עשיר']!.fileType, 'rtf');
-    // ‏‎.htm‎ אינו ממופה ל-‎.html‎: ‏`fileType` הוא חלק מזהות הספר (§15).
+    // .htm אינו ממופה ל-.html: `fileType` הוא חלק מזהות הספר (§15).
     expect(byTitle['דף']!.fileType, 'html');
     expect(byTitle['ישן']!.fileType, 'htm');
   });

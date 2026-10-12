@@ -1747,7 +1747,7 @@ class _PdfBookScreenState extends State<PdfBookScreen>
             !_navigationFieldFocusNode.hasFocus) {
           _pdfViewFocusNode.requestFocus();
         }
-        // onViewerReady עשוי לירות שוב (טעינה מחדש/‏retry) — משחררים את
+        // onViewerReady עשוי לירות שוב (טעינה מחדש/retry) — משחררים את
         // ה-searcher הקודם לפני יצירת חדש כדי לא להדליף listener וזיכרון.
         textSearcher?.removeListener(_onTextSearcherUpdated);
         textSearcher?.dispose();

@@ -128,7 +128,7 @@ class DatabaseGenerator {
       ' | path=$bookPath'
       ' | declared=${declared?.extension}'
       ' | detected=${e.format?.extension}'
-      // הפורמט שזוהה קודם למוצהר: ל-‎.wbk‎ אין מנוע משל עצמו, ורק התוכן
+      // הפורמט שזוהה קודם למוצהר: ל-.wbk אין מנוע משל עצמו, ורק התוכן
       // מגלה איזו גרסת ממיר רצה בפועל.
       ' | converterVersion=${converterVersionFor(e.format ?? declared)}'
       ' | error=$e',

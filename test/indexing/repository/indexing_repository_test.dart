@@ -562,7 +562,7 @@ void main() {
     ];
 
     test('כל ספר בחבילה מאונדקס, ולכן אין אינדוקס אצל המשתמש', () {
-      // ‏אינדקס שנבנה במכונת ה-CI, ואותה ספרייה בנתיב שהמשתמש בחר.
+      // אינדקס שנבנה במכונת ה-CI, ואותה ספרייה בנתיב שהמשתמש בחר.
       final indexedOnBuildMachine = shippedLibraryAt(
         '/ci/full_installer/books',
       ).map(IndexingRepository.buildIndexedBookFilePath).toSet();
@@ -1857,7 +1857,7 @@ void main() {
       final engine = _RecordingSearchEngine();
       final provider = _RecordingTantivyDataProvider(engine);
       final library = Library(categories: []);
-      // ‏PDF שקבציהם חסרים — עוברים במסלול סמן-ריק, בלי pdfrx ובלי DB.
+      // PDF שקבציהם חסרים — עוברים במסלול סמן-ריק, בלי pdfrx ובלי DB.
       library.books.addAll([
         PdfBook(title: 'א', path: r'C:\missing\א.pdf'),
         PdfBook(title: 'ב', path: r'C:\missing\ב.pdf'),

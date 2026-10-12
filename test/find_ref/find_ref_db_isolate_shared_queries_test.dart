@@ -125,7 +125,7 @@ void main() {
       expect((await isolate.getAllLocalBooksSlim()).first['title'], 'בראשית');
 
       // ההשהיה מדווחת על שחרור מאומת. מחיקת הקובץ כאן היא רק הכנת התרחיש —
-      // ‏unlink ב-macOS/Linux מצליח גם עם מתאר פתוח ואינו מוכיח דבר.
+      // unlink ב-macOS/Linux מצליח גם עם מתאר פתוח ואינו מוכיח דבר.
       expect(await FindRefDbIsolate.suspendForExternalWrite(), isTrue);
       await File(first).delete();
 

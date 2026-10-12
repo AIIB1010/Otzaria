@@ -63,7 +63,7 @@ public struct Strings {
 
     public var english: Bool { language.isEnglish }
 
-    /// ‎%1‎, ‎%2‎… כמו FmtMessage של Inno.
+    /// %1, %2… כמו FmtMessage של Inno.
     public func callAsFunction(_ key: StringKey, _ args: String...) -> String {
         var text = Strings.table(language)[key] ?? key.rawValue
         for (index, arg) in args.enumerated() {

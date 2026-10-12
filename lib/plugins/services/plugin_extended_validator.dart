@@ -1822,7 +1822,7 @@ class PluginExtendedValidator {
     // (3) regex literals — רק אחרי "הקשר רגקס" (תו או מילת מפתח שמרמזים
     // שהבא הוא ביטוי, לא חלוקה). שומרים את ההקשר ב-group(1) וב-group(2),
     // ואת ה-regex עצמו (group(3)) מוחקים (לא נסרק ולא משוחזר). ה-character-class
-    // ‎`\[…\]` בתוך הregex מאפשר `/` בלתי בורח בתוך class (למשל `/[a-z\/]/`).
+    // `\[…\]` בתוך הregex מאפשר `/` בלתי בורח בתוך class (למשל `/[a-z\/]/`).
     // `[` מוחרג מענף התו הבודד: חפיפה בין הענפים גרמה ל-backtracking מעריכי.
     stripped = stripped.replaceAllMapped(
       RegExp(

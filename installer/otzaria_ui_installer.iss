@@ -286,7 +286,7 @@ english.ModePortableDesc=No installation: everything in one folder, e.g. on a US
 english.TaskResetDesc=Warning: deletes personal notes, bookmarks, history and plugin data. The books and backups folders are kept.
 hebrew.ModePortableDesc=בלי התקנה: התוכנה וכל הנתונים בתיקייה אחת, למשל בדיסק-און-קי.
 hebrew.TaskResetDesc=אזהרה: ימחק הערות אישיות, סימניות, היסטוריה ונתוני תוספים. תיקיות הספרים והגיבויים נשמרות.
-; הספרייה והאינדקס שמסייע ההורדה מכין לצד המתקין (חלקים, ‎#1890‎).
+; הספרייה והאינדקס שמסייע ההורדה מכין לצד המתקין (חלקים, #1890).
 english.LibraryWhat=the library
 english.IndexWhat=the search index
 english.LibraryPartsTitle=The library can't be installed

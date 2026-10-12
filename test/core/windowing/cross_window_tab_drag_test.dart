@@ -886,7 +886,7 @@ void main() {
       // וסחיפה מעלה בזמן סידור נמסרה למערכת, גרירת Flutter בוטלה,
       // ו-`MoveTab` לא נורה מעולם. הסידור פשוט אבד.
       //
-      // ‎`leftStrip: false` — סידור אינו יוצא מהרצועה, וזה כל ההבדל.
+      // `leftStrip: false` — סידור אינו יוצא מהרצועה, וזה כל ההבדל.
       final cancelled = await startDragAt(firstTab(), 35);
       moveToTop(8);
       await Future<void>.delayed(settle);

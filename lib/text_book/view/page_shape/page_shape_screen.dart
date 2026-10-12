@@ -1917,7 +1917,7 @@ class _CommentaryPaneState extends State<_CommentaryPane> {
     unawaited(_ensureWindowLoaded(first, last));
   }
 
-  /// האם ה-viewport ‏[first]..[last] בתוך טווח טעון עם שולי ביטחון —
+  /// האם ה-viewport [first]..[last] בתוך טווח טעון עם שולי ביטחון —
   /// בקצות הספר אין מה לטעון מעבר, ולכן השוליים שם מוותרים.
   bool _isWindowLoaded(int first, int last) {
     final content = _content;

@@ -272,7 +272,7 @@ String? pickMacAssetUrl(
 ///
 /// הנכס ל-x64 אינו מסומן בשמו, ולכן ARM מזוהה לפי `arm64`/`aarch64` בלבד.
 /// בהתקנה ניידת ([isPortableInstall]) אין נכס כזה: deb היה מתקין עותק
-/// נפרד ב-‎/opt‎, והעותק שהמשתמש מריץ לא היה מתעדכן לעולם.
+/// נפרד ב-/opt, והעותק שהמשתמש מריץ לא היה מתעדכן לעולם.
 @visibleForTesting
 String? pickLinuxAssetUrl(
   List<Map<String, dynamic>> assets, {

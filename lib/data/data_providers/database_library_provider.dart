@@ -279,7 +279,7 @@ Future<void> _collectBookFilesRecursive(
       } else if (entity is File) {
         final format = documentFormatFromExtension(name);
         if (format == null || !format.isProductionSupported) continue;
-        // ‎.xml‎ ו-‎.wbk‎ נאספים רק אם תוכנם אכן מסמך — אותו שער בדיוק שבסורק
+        // .xml ו-.wbk נאספים רק אם תוכנם אכן מסמך — אותו שער בדיוק שבסורק
         // הסנכרון וב-generator. בלעדיו כל קובץ XML שיושב בתיקיית ספרים היה
         // מדווח למשתמש ככשל המרה.
         if (format.needsContentSniffing &&

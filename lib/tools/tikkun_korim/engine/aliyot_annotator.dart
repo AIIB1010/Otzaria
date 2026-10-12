@@ -29,7 +29,7 @@ String normalizeForMatch(String s) {
 String normalizeParashaName(String uiName) =>
     TikkunData.normalizeParashaName(uiName);
 
-/// אינדקס האסימון שבו מתחילה [parashaName], או ‎-1.
+/// אינדקס האסימון שבו מתחילה [parashaName], או -1.
 int findParashaStart(
   List<TikkunToken> tokens,
   String parashaName, [
@@ -101,7 +101,7 @@ class BookVerseIndex {
     return BookVerseIndex._(byKey);
   }
 
-  /// אינדקס האסימון של המילה הראשונה בפסוק, או ‎-1.
+  /// אינדקס האסימון של המילה הראשונה בפסוק, או -1.
   int wordIdx(int ch, int vs) => _byKey[_key(ch, vs)] ?? -1;
 }
 

@@ -35,7 +35,7 @@ class RecordedSemanticsNode {
   final String label;
   final String tooltip;
 
-  /// מזהה האב בסדר המעבר, או ‎-1 כשאין (כפי שנשלח למנוע).
+  /// מזהה האב בסדר המעבר, או -1 כשאין (כפי שנשלח למנוע).
   final int traversalParent;
   final List<int> childrenInTraversalOrder;
 

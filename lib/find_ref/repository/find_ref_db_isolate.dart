@@ -538,7 +538,7 @@ class FindRefDbIsolate {
       );
       return false;
     } catch (e) {
-      // ‏kill של isolate אינו מריץ finalizers, ולכן ה-handle הנייטיבי עשוי
+      // kill של isolate אינו מריץ finalizers, ולכן ה-handle הנייטיבי עשוי
       // לשרוד את נפילת ה-worker עד סוף התהליך.
       debugPrint(
         '[FindRef isolate] suspend failed ($e) — DB handle may still be open',

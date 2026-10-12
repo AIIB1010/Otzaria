@@ -126,7 +126,7 @@ Directory preparedTreeDirectoryFor(Directory installRoot) {
 }
 
 /// האם התקנת Linux היא עותק נייד שאפשר לעדכן במקום. התקנת deb/rpm יושבת
-/// תחת ‎/opt‎ או ‎/usr‎ ושייכת למנהל החבילות; החותם קיים רק בחבילת ה-FULL.
+/// תחת /opt או /usr ושייכת למנהל החבילות; החותם קיים רק בחבילת ה-FULL.
 bool isLinuxPortableInstall({
   required String executableDirectory,
   required bool hasReleaseStamp,

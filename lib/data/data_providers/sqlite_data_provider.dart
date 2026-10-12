@@ -498,7 +498,7 @@ class SqliteDataProvider {
       if (resolvedBook == null) return null;
       final book = resolvedBook.book;
 
-      // ‏TOC של seforim.db יכול למנות אלפי שורות ולחסום את פתיחת הספר, ולכן
+      // TOC של seforim.db יכול למנות אלפי שורות ולחסום את פתיחת הספר, ולכן
       // נקרא ב-isolate, שמכיר רק אותו. שאר המסדים נקראים בחיבור המקומי.
       final List<db_models.TocEntry> migrationTocEntries;
       if (!resolvedBook.source.isOfficial) {

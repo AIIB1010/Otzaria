@@ -228,7 +228,7 @@ class HtmlLinkHandler {
 
   /// מאתר את הספר שקישור `book://` מפנה אליו, כ-TextBook לפתיחה בלשונית.
   ///
-  /// ‏`findBookByTitle` משווה `runtimeType` ולא `is`, ולכן ספר-מסמך
+  /// `findBookByTitle` משווה `runtimeType` ולא `is`, ולכן ספר-מסמך
   /// (HTML/DOCX/EPUB/ODT) אינו נמצא בחיפוש אחר `TextBook` — אף שהקורא פותח
   /// אותו דרך אותה לשונית בדיוק, בעטיפת `toTextBook()` (ראו
   /// `OpenedTab.fromBook`). בלי ההשלמה כאן כל קישור `book://` אל ספר כזה

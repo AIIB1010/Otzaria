@@ -245,7 +245,7 @@ class FileSystemLibraryProvider implements LibraryProvider {
     if (format != null &&
         format.isProductionSupported &&
         format.isTextual &&
-        // ‎.xml‎ ו-‎.wbk‎ נאספים רק אם תוכנם אכן מסמך — אותו שער שבכל שאר
+        // .xml ו-.wbk נאספים רק אם תוכנם אכן מסמך — אותו שער שבכל שאר
         // נקודות הכניסה. בלעדיו כל קובץ XML בתיקיית הספרים הופך ל"ספר"
         // שנכשל בפתיחה ובכל אינדוקס.
         (!format.needsContentSniffing ||

@@ -574,7 +574,7 @@ export interface LinkTargetSummary {
 
 export interface GetLinkTargetsSummaryResult {
   targets: LinkTargetSummary[];
-  /** השורה הגבוהה ביותר שיש עליה קישור (0-based), או ‎-1‎ כשאין קישורים. */
+  /** השורה הגבוהה ביותר שיש עליה קישור (0-based), או -1 כשאין קישורים. */
   maxSourceLine: number;
 }
 

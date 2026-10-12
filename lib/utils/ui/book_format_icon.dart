@@ -12,7 +12,7 @@ import 'package:otzaria/utils/file/document_format.dart';
 /// כ-`PdfBook`, ורק הנתיב מגלה שאינן PDF.
 IconData bookFormatIcon(Book book) {
   final path = book is FileBook ? book.path : book.filePath;
-  // הסיומת קודמת ל-`fileType`: ‏`PdfBook.fileType` הוא ברירת מחדל של הבנאי
+  // הסיומת קודמת ל-`fileType`: `PdfBook.fileType` הוא ברירת מחדל של הבנאי
   // ולא עובדה שנשמרה, ולכן ספר מסמך שנשמר בהיסטוריה כ-PdfBook היה מוצג
   // כ-PDF לנצח.
   final format =

@@ -65,7 +65,7 @@ bool isPluginDevServerUri(Uri uri, String? devRootPath) {
   return reqPort == devPort;
 }
 
-/// ב-Windows ‏cacheEnabled/clearAllCache לא ממומשים: עוקפים מטמון ו-service worker ישנים.
+/// ב-Windows cacheEnabled/clearAllCache לא ממומשים: עוקפים מטמון ו-service worker ישנים.
 Future<void> loadPluginDevServer(
   InAppWebViewController controller,
   WebUri url,

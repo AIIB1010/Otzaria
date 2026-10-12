@@ -12,13 +12,13 @@
 ;   * הרכבת נכס מפוצל לקובץ אחד היא שרשור בתים טהור דרך TFileStream, בלי
 ;     PowerShell ובלי כלים חיצוניים. נמדד: 2.4GB ב-6.5 שניות.
 
-; תג ה-release שממנו נבנה הכלי, דרך משתנה סביבה: ‎/D‎ עם מרכאות מ-pwsh הגיע
-; ל-ISPP עטוף בלוכסנים (נמדד: ‎\0.10.0+139\‎). בלעדיו — נפילה ל-latest.
+; תג ה-release שממנו נבנה הכלי, דרך משתנה סביבה: /D עם מרכאות מ-pwsh הגיע
+; ל-ISPP עטוף בלוכסנים (נמדד: \0.10.0+139\). בלעדיו — נפילה ל-latest.
 #ifndef AssistantReleaseTag
   #define AssistantReleaseTag GetEnv("OTZARIA_ASSISTANT_RELEASE_TAG")
 #endif
 
-; החלק ‎X.Y.Z‎ של התג, לתצוגה במאפייני הקובץ. בלי תג מוטבע אין מה להציג.
+; החלק X.Y.Z של התג, לתצוגה במאפייני הקובץ. בלי תג מוטבע אין מה להציג.
 #define TagVersionPart AssistantReleaseTag
 #if Pos("+", TagVersionPart) > 0
   #define TagVersionPart Copy(TagVersionPart, 1, Pos("+", TagVersionPart) - 1)
@@ -42,7 +42,7 @@ DisableProgramGroupPage=yes
 DisableReadyPage=no
 PrivilegesRequired=lowest
 OutputDir=.\
-; שם הנכס חייב להישאר ASCII: GitHub מוחק תווים שאינם ‎[A-Za-z0-9._-]‎ משם נכס
+; שם הנכס חייב להישאר ASCII: GitHub מוחק תווים שאינם [A-Za-z0-9._-] משם נכס
 ; שמועלה. הזיהוי העברי מגיע ממאפייני הקובץ שלמטה.
 OutputBaseFilename=Otzaria-Download-Assistant-windows
 ; מאפייני הקובץ אחידים לכל שפה, ולכן בשתיהן; Inno קוטע כל ערך אחרי 60 תווים.
@@ -133,7 +133,7 @@ hebrew.SetupAborted=הפעולה לא הושלמה.%n%nאפשר להפעיל א�
 hebrew.ExitSetupTitle=יציאה מהמסייע
 hebrew.ExitSetupMessage=ההורדה לא הושלמה. קבצים שכבר ירדו יישמרו, והפעלה חוזרת תמשיך מהמקום שבו הפסקת.%n%nלצאת עכשיו?
 
-; כל טקסט שהלוגיקה מציגה. ‎%1‎ נמלא ב-FmtMessage, ו-‎%n‎ הוא מעבר שורה.
+; כל טקסט שהלוגיקה מציגה. %1 נמלא ב-FmtMessage, ו-%n הוא מעבר שורה.
 [CustomMessages]
 ; ב"כולל חיפוש חכם" / "Smart Search included" הרווחים קשיחים (U+00A0), כדי שהצירוף לא יישבר.
 ; שם תת-התיקייה בחוזה המשותף לשלושת המסייעים (expected-selections), זהה בכל שפה.
@@ -507,7 +507,7 @@ begin
       Lowercase(Suffix));
 end;
 
-{ "אוצריא 0.9.98" לפי releaseVersion של המניפסט — לא התג, שיש בו ‎+build. ריק כשאין. }
+{ "אוצריא 0.9.98" לפי releaseVersion של המניפסט — לא התג, שיש בו +build. ריק כשאין. }
 function OtzariaVersionLabel(): String;
 begin
   Result := '';
@@ -792,7 +792,7 @@ begin
     (Pos('..', Repository) = 0);
 end;
 
-{ ‎^[A-Za-z0-9._+-]+$‎, ולא נקודות בלבד: השם משמש גם כנתיב קובץ, ו-'..' או '\'
+{ ^[A-Za-z0-9._+-]+$, ולא נקודות בלבד: השם משמש גם כנתיב קובץ, ו-'..' או '\'
   היו כותבים מחוץ למטמון ולתיקיית היעד. }
 function IsSafeName(const Name: String): Boolean;
 var
@@ -817,7 +817,7 @@ begin
   Result := not OnlyDots;
 end;
 
-{ outputFolder: שמות ‎[A-Za-z0-9._-]‎ מופרדים ב-'/', בלי מקטע ריק או של
+{ outputFolder: שמות [A-Za-z0-9._-] מופרדים ב-'/', בלי מקטע ריק או של
   נקודות בלבד — הוא הופך לנתיב כתיבה בתוך תיקיית הפלט. }
 function IsSafeOutputFolder(const Folder: String): Boolean;
 var
@@ -854,7 +854,7 @@ begin
   Result := 'https://api.github.com/repos/Otzaria/otzaria/releases/' + Path;
 end;
 
-{ החלק ה-X.Y.Z של תג. סיומת ‎+build‎ אינה משתתפת בהשוואה: שני תגים של אותה
+{ החלק ה-X.Y.Z של תג. סיומת +build אינה משתתפת בהשוואה: שני תגים של אותה
   גרסה הם אותה גרסה, וסדר מספרי ה-run אינו סדר גרסאות. }
 function VersionPart(const Tag: String): String;
 var
@@ -868,7 +868,7 @@ begin
     Result := Copy(Result, 2, Length(Result));
 end;
 
-{ 1 אם A גדול מ-B, ‎-1‎ אם קטן, 0 אם שווה. }
+{ 1 אם A גדול מ-B, -1 אם קטן, 0 אם שווה. }
 function CompareVersionText(const A, B: String): Integer;
 var
   PA, PB: TArrayOfString;
@@ -1004,7 +1004,7 @@ begin
     Log('DownloadAssistant: cannot write marker for ' + Name);
 end;
 
-{ ‎-1‎ כשלא ניתן לדעת. }
+{ -1 כשלא ניתן לדעת. }
 function LinkCount(const Path: String): Integer;
 var
   F: TFileStream;
@@ -2382,7 +2382,7 @@ begin
   end;
 end;
 
-{ בתים לשנייה, או ‎-1‎ כשעדיין אין מספיק דגימות. }
+{ בתים לשנייה, או -1 כשעדיין אין מספיק דגימות. }
 function CurrentSpeed(): Int64;
 var
   N: Integer;

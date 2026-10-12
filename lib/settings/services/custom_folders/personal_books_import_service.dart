@@ -102,7 +102,7 @@ class PersonalBooksImportService {
     final errors = <String>[];
 
     for (final sourcePath in sourcePaths) {
-      // שער התוכן ולא הסיומת בלבד: ‎.xml‎ שאינו מסמך Word היה מועתק, ואז
+      // שער התוכן ולא הסיומת בלבד: .xml שאינו מסמך Word היה מועתק, ואז
       // מדולג בשקט בסריקה — המשתמש רואה "יובא" וספר שלעולם אינו מופיע.
       if (!await isSupportedBookFileByContent(sourcePath)) {
         skippedUnsupported++;

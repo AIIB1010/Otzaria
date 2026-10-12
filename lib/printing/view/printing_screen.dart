@@ -759,7 +759,7 @@ class _PrintingScreenState extends State<PrintingScreen> {
   String? _cachedBaseKey;
 
   /// חתימת כל הפרמטרים שמשפיעים על תוכן ה-base PDF. שדות שמשפיעים רק על
-  /// הרסטור (‎_pagesPerSheet, טווח עמודים ב-PDF חיצוני) בכוונה אינם נכללים.
+  /// הרסטור (_pagesPerSheet, טווח עמודים ב-PDF חיצוני) בכוונה אינם נכללים.
   String _baseCacheKey(PdfPageFormat format) {
     if (widget.createPdfOverride != null) {
       return 'override|${orientation.name}|${format.width}x${format.height}';

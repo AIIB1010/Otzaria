@@ -1419,8 +1419,8 @@ Future<void> _enqueueExternalActivationArgs(List<String> args) async {
     }
 
     // לחיצה כפולה על קובץ `.otzplugin` משויך — המערכת מעבירה את הנתיב כארגומנט.
-    // ב-Linux/macOS, ה-desktop entry משתמש ב-‎%u (URL), כך שהמערכת מעבירה
-    // ‎file:///abs/path. ממירים ל-נתיב מקומי לפני שמירה בתור.
+    // ב-Linux/macOS, ה-desktop entry משתמש ב-%u (URL), כך שהמערכת מעבירה
+    // file:///abs/path. ממירים ל-נתיב מקומי לפני שמירה בתור.
     final localPath = _resolveLocalPluginPath(arg);
     if (localPath != null) {
       activationUris.add(_buildLocalPluginInstallUri(localPath));

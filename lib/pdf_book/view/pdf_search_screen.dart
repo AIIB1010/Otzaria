@@ -661,7 +661,7 @@ class PdfBookSearchViewState extends State<PdfBookSearchView> {
     return 'נמצאו ${_searchResults.length} תוצאות';
   }
 
-  /// ‏currentPageNumber ב-state נקבע בפתיחה בלבד; העמוד המוצג בפועל נמצא בקונטרולר.
+  /// currentPageNumber ב-state נקבע בפתיחה בלבד; העמוד המוצג בפועל נמצא בקונטרולר.
   int _currentPage(PdfBookLoaded state) =>
       widget.textSearcher.controller?.pageNumber ?? state.currentPageNumber;
 
