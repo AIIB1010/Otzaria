@@ -412,7 +412,8 @@ class MainWindowScreenState extends State<MainWindowScreen>
   _pluginInstallDialogQueue = SequentialDialogQueue(_showPluginInstallDialog);
 
   bool _hasInitializedPageController = false;
-  bool _isProcessingExternalActivations = false;
+  late final CoalescingDrainRunner _externalActivationDrainRunner =
+      CoalescingDrainRunner(_drainPendingExternalActivations);
 
   /// מונע הערמת פופאפים כשמגיעים כמה קישורי `info` בזה אחר זה.
   bool _isShowingInfoReport = false;
@@ -1317,12 +1318,11 @@ class MainWindowScreenState extends State<MainWindowScreen>
     });
   }
 
-  Future<void> _processPendingExternalActivations() async {
-    if (!mounted || _isProcessingExternalActivations) {
-      return;
-    }
+  Future<void> _processPendingExternalActivations() =>
+      _externalActivationDrainRunner.run();
 
-    _isProcessingExternalActivations = true;
+  Future<void> _drainPendingExternalActivations() async {
+    if (!mounted) return;
     try {
       final pendingUris = await _externalActivationQueue.drainUriStrings();
       for (final uriString in pendingUris) {
@@ -1330,8 +1330,6 @@ class MainWindowScreenState extends State<MainWindowScreen>
       }
     } catch (e, stackTrace) {
       debugPrint('External activation polling failed: $e\n$stackTrace');
-    } finally {
-      _isProcessingExternalActivations = false;
     }
   }
 
