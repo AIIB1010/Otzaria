@@ -120,7 +120,7 @@ class RaisedMarkers {
   // אם הדגשת-חיפוש מזריקה span בתוך הסימון, ההתאמה העצלה נעצרת ב-close
   // הפנימי; הטקסט שיחולץ עדיין מכיל את אות הסימון, ולכן האיתור בציור מצליח.
   //
-  // ארבע משפחות, כולן בסריקה אחת בסדר המסמך (ספירת המופעים תלויה בסדר):
+  // חמש משפחות, כולן בסריקה אחת בסדר המסמך (ספירת המופעים תלויה בסדר):
   //  1+2. שני תגי הסימון של processText.
   //  3.   סימון הערה מוטמעת לחיץ — addInlineNotePreviewLinks פולט בדיוק
   //       `<a class="book-note-marker" href=...>`.
@@ -128,10 +128,11 @@ class RaisedMarkers {
   //       `class="link-anchor link-anchor-N..."`; הצורה החשופה
   //       `class="link-anchor"` נתפסת גם היא, כי customStylesBuilder צובע
   //       אותה שקוף — אחרת הטקסט היה נעלם. טווח-ציטוט
-  //       (`class="link-anchor-range"`) לעולם אינו נתפס ("-" ולא רווח/גרש).
+  //       (`class="link-anchor-range"`) אינו נתפס כאן ("-" ולא רווח/גרש).
   //  7.   סמן-אות של הערה בספר אחר — `<sup>` שעטוף בעוגן ריחוף. הוא נשאר
   //       בגודלו ובמקומו, ורק ה-hit-test של הציור המורם מופנה לעוגן. סמן-מספר
   //       (`(9)` בלי `<sup>`) אינו נתפס כאן — הוא טקסט מודפס רגיל בשורה.
+  //  8.   `<sup>` שטווח-ציטוט עוטף כולו — לחיץ ובצבע הקישור.
   static final RegExp _markerSpanRegex = RegExp(
     '<span class="($kFootnoteMarkerClass|$kRaisedSupClass)">(.*?)</span>'
     '|<a class="book-note-marker"[^>]*>(.*?)</a>'
