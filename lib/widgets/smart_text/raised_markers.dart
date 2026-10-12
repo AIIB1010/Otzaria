@@ -137,6 +137,8 @@ class RaisedMarkers {
     '|<a class="book-note-marker"[^>]*>(.*?)</a>'
     '|<(a|span) class="link-anchor( [^"]*)?"[^>]*>(.*?)</\\4>'
     '|<a class="numbered-note-marker"[^>]*>'
+    '<span class="$kRaisedSupClass">(.*?)</span></a>'
+    '|<a class="link-anchor-range"[^>]*>'
     '<span class="$kRaisedSupClass">(.*?)</span></a>',
     caseSensitive: false,
     dotAll: true,
@@ -236,6 +238,12 @@ class RaisedMarkers {
         rawContent = match[7]!;
         scale = kHtmlSmallerFontScale;
         clickable = true;
+      } else if (match[8] != null) {
+        // sup שעוגן-טווח עוטף אותו כולו: נשאר לחיץ ובצבע הקישור.
+        rawContent = match[8]!;
+        scale = kHtmlSmallerFontScale;
+        clickable = true;
+        useLinkColor = true;
       } else {
         // אות מפרש — צבע קישור, וריאנט טיפוגרפי קבוע למפרש, רקע כשפעילה.
         rawContent = match[6] ?? '';

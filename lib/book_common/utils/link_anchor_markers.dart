@@ -128,8 +128,8 @@ String injectLinkAnchorMarkers({
       if (end != null && end > span.start) {
         // רק כשיש טווח בפועל: סמני נקודה אינם צריכים מפת תווים.
         final bounds = rangeBounds ??= _rangeBounds(anchorLinks, skipLinker);
-        final int rawStart;
-        final int rawEnd;
+        int rawStart;
+        int rawEnd;
         if (bounds.count == 1) {
           // טווח יחיד נשאר במסלול הסורקים המקורי ללא הקצאת מערכים.
           rawStart = _rawStartOfVisible(rawLine, visibleStart);
@@ -139,6 +139,13 @@ String injectLinkAnchorMarkers({
           final chars = visibleChars ??= _VisibleChars(rawLine, bounds.maxEnd);
           rawStart = chars.rawStart(visibleStart);
           rawEnd = chars.rawEnd(visibleEnd!);
+        }
+        // עטיפה בתוך <sup> משאירה אותו sup עם markup (WidgetSpan שמתחלף ב-RTL).
+        if (rawStart >= 5 &&
+            rawLine.startsWith('<sup>', rawStart - 5) &&
+            rawLine.startsWith('</sup>', rawEnd)) {
+          rawStart -= 5;
+          rawEnd += 6;
         }
         if (rawStart < rawEnd) {
           // עם lineIndex הטווח לחיץ/מרחף (a); בלעדיו — סימון בלבד (span).
