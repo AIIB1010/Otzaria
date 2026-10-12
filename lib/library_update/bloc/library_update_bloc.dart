@@ -294,6 +294,8 @@ class LibraryUpdateBloc extends Bloc<LibraryUpdateEvent, LibraryUpdateState> {
         hasUpdate: true,
         changedBookIds: deltaResult.changedBookIds,
         requiresFullIndexRefresh: deltaResult.requiresFullIndexRefresh,
+        appliedFromVersion: plan.localVersion,
+        appliedToVersion: plan.targetVersion,
       );
       await _runCompanionAssets(emit, opId, libraryTag: libraryTagOf(plan));
       final completed = _pendingCompleted;
@@ -412,6 +414,8 @@ class LibraryUpdateBloc extends Bloc<LibraryUpdateEvent, LibraryUpdateState> {
         status: LibraryUpdateStatus.completed,
         message: 'הספרייה הותקנה מחדש לגרסה ${plan.targetVersion}',
         hasUpdate: true,
+        appliedFromVersion: plan.localVersion,
+        appliedToVersion: plan.targetVersion,
       );
       await _runCompanionAssets(emit, opId, libraryTag: libraryTagOf(plan));
       final completed = _pendingCompleted;

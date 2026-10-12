@@ -67,6 +67,7 @@ import 'package:otzaria/personal_notes/bloc/personal_notes_bloc.dart';
 import 'package:otzaria/data/constants/database_constants.dart';
 import 'package:otzaria/empty_library/bloc/empty_library_bloc.dart';
 import 'package:otzaria/library_update/bloc/library_update_bloc.dart';
+import 'package:otzaria/library_update/changes_notes/library_changes_notes.dart';
 import 'package:otzaria/library_update/services/library_access_gate.dart';
 import 'package:otzaria/library_update/repository/library_update_repository.dart';
 import 'package:otzaria/library_update/services/streaming_patch_downloader.dart';
@@ -926,6 +927,7 @@ Future<void> _initializeRestartableRuntime() async {
   unawaited(_runDeferredDataRootWritabilityWarning());
   unawaited(_runDeferredCrashCheck());
   unawaited(_runDeferredAttachedLibraries());
+  unawaited(_runDeferredLibraryChangesNotes());
 }
 
 /// כשקונטיינמנט ה-Job Object לא הוקם, תהליכי msedgewebview2.exe שורדים את
@@ -1186,6 +1188,24 @@ Future<void> _runDeferredStartupStability() async {
 
 /// סריקת תיקיות המסדים ובדיקת המסדים המצורפים (קובץ שנעלם, שהשתנה או
 /// שנוסף). שינוי משודר ל-AttachedLibrariesBloc, שמרענן את עץ הספרייה.
+/// "מה חדש בספרים" שממתין מעדכון קודם (גם מהמעדכן הלא-מקוון).
+Future<void> _runDeferredLibraryChangesNotes() async {
+  // פר-תהליך: ההערות מוצגות פעם אחת, בחלון הראשי.
+  if (WindowRole.isSecondary) return;
+  try {
+    await _mainWindowRevealedCompleter.future.timeout(
+      const Duration(seconds: 20),
+    );
+  } on TimeoutException {
+    // ממשיכים בכל זאת — בלי Navigator ההערות פשוט נשארות לפעם הבאה.
+  }
+  try {
+    await LibraryChangesNotes.instance.showPending();
+  } catch (error, stackTrace) {
+    _logNonFatalInitializationError('Library changes notes', error, stackTrace);
+  }
+}
+
 Future<void> _runDeferredAttachedLibraries() async {
   // פר-תהליך: הסריקה שומרת את הרשימה בהגדרות; חלון משני קורא אותה בלבד.
   if (WindowRole.isSecondary) return;

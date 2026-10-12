@@ -597,6 +597,50 @@ void main() {
     );
 
     blocTest<LibraryUpdateBloc, LibraryUpdateState>(
+      'דלתא שהושלמה מדווחת את טווח הגרסאות שהוחל ("מה חדש בספרים")',
+      build: () => _bloc(_FakeService(deltaPlan)),
+      act: (b) => b.add(const StartLibraryUpdate()),
+      skip: 1,
+      expect: () => [
+        isA<LibraryUpdateState>()
+            .having((s) => s.status, 'status', LibraryUpdateStatus.completed)
+            .having((s) => s.appliedFromVersion, 'from', 1)
+            .having((s) => s.appliedToVersion, 'to', 3),
+      ],
+    );
+
+    blocTest<LibraryUpdateBloc, LibraryUpdateState>(
+      'הורדה מלאה שהושלמה מדווחת את טווח הגרסאות שהוחל',
+      build: () => _bloc(_FakeService(fullPlan)),
+      seed: () => LibraryUpdateState(
+        status: LibraryUpdateStatus.needsFullConfirmation,
+        plan: fullPlan,
+      ),
+      act: (b) => b.add(const ConfirmFullDownload()),
+      skip: 1,
+      expect: () => [
+        isA<LibraryUpdateState>()
+            .having((s) => s.status, 'status', LibraryUpdateStatus.completed)
+            .having((s) => s.appliedFromVersion, 'from', 1)
+            .having((s) => s.appliedToVersion, 'to', 3),
+      ],
+    );
+
+    blocTest<LibraryUpdateBloc, LibraryUpdateState>(
+      'אין עדכון — אין טווח גרסאות',
+      build: () => _bloc(_FakeService(nonePlan)),
+      act: (b) => b.add(const StartLibraryUpdate()),
+      skip: 1,
+      expect: () => [
+        isA<LibraryUpdateState>().having(
+          (s) => s.appliedToVersion,
+          'to',
+          isNull,
+        ),
+      ],
+    );
+
+    blocTest<LibraryUpdateBloc, LibraryUpdateState>(
       'דלתא כבדה עם DB מלא זמין → needsRouteChoice, בלי להריץ apply',
       build: () => _bloc(_FakeService(heavyDeltaWithFullPlan)),
       act: (b) => b.add(const StartLibraryUpdate()),

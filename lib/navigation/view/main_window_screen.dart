@@ -91,6 +91,7 @@ import 'package:otzaria/core/update_check_frequency.dart';
 import 'package:otzaria/settings/settings_exports.dart';
 import 'package:otzaria/library_update/bloc/library_update_bloc.dart';
 import 'package:otzaria/library_update/library_update_work_status.dart';
+import 'package:otzaria/library_update/changes_notes/library_changes_notes.dart';
 import 'package:otzaria/theme/app_surfaces.dart';
 import 'package:otzaria/utils/ui/fullscreen_helper.dart';
 import 'package:otzaria/widgets/dialogs/app_dialogs.dart';
@@ -2899,6 +2900,18 @@ class MainWindowScreenState extends State<MainWindowScreen>
                     requestIds: {requestId},
                   ),
                 );
+                final from = state.appliedFromVersion;
+                final to = state.appliedToVersion;
+                if (state.status == LibraryUpdateStatus.completed &&
+                    from != null &&
+                    to != null) {
+                  unawaited(
+                    LibraryChangesNotes.instance.afterLibraryUpdate(
+                      fromVersion: from,
+                      toVersion: to,
+                    ),
+                  );
+                }
               } else if (state.status ==
                   LibraryUpdateStatus.needsFullConfirmation) {
                 _promptFullDownload(context, state);
