@@ -822,6 +822,25 @@ void main() {
       expect(tapped, 'otzaria://anchor?ref=5_0');
     });
 
+    testWidgets('sup שעטוף בטווח-עוגן מצויר בצבע קישור ולחיץ (#2358)', (
+      tester,
+    ) async {
+      String? tapped;
+      final overlay = await pump(
+        tester,
+        'ובני ישראל יוצאים ביד רמה והמצרים רודפים אחריהם '
+        'וישיגו אותם חונים על הים <a class="link-anchor-range" '
+        'href="otzaria://anchor?ref=5_0&range=1"><sup>4</sup></a> ואחרי',
+        width: 320,
+        onAnchorTap: (url) => tapped = url,
+      );
+      final placement = overlay.debugPlacements().single;
+      expect(placement.marker.useLinkColor, isTrue);
+      await tester.tapAt(overlay.localToGlobal(raisedOnlyPoint(placement)));
+      await tester.pump();
+      expect(tapped, 'otzaria://anchor?ref=5_0&range=1');
+    });
+
     testWidgets('ריחוף על הציור המורם מפעיל את תצוגת העוגן', (tester) async {
       final hovered = <String>[];
       final overlay = await pump(
