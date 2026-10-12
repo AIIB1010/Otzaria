@@ -2994,205 +2994,215 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
             ];
           },
           child: CustomPaint(
-          foregroundPainter: isSelected
-              ? SelectionGutterPainter(theme.colorScheme.primary)
-              : null,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeInOut,
-            decoration: BoxDecoration(color: backgroundColor),
-            // Paint selection over the paragraph without changing text margins.
-            padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
-            child: BlocBuilder<SettingsBloc, SettingsState>(
-              builder: (context, settingsState) {
-                // במצב רציף — פסקה מכמה שורות מקור.
-                if (isContinuousParagraph) {
-                  return _buildContinuousSegmentContent(
-                    segment: segment,
-                    state: state,
-                    settingsState: settingsState,
-                    noteMap: noteMap,
+            foregroundPainter: isSelected
+                ? SelectionGutterPainter(theme.colorScheme.primary)
+                : null,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeInOut,
+              decoration: BoxDecoration(color: backgroundColor),
+              // Paint selection over the paragraph without changing text margins.
+              padding: const EdgeInsets.symmetric(
+                horizontal: 4.0,
+                vertical: 2.0,
+              ),
+              child: BlocBuilder<SettingsBloc, SettingsState>(
+                builder: (context, settingsState) {
+                  // במצב רציף — פסקה מכמה שורות מקור.
+                  if (isContinuousParagraph) {
+                    return _buildContinuousSegmentContent(
+                      segment: segment,
+                      state: state,
+                      settingsState: settingsState,
+                      noteMap: noteMap,
+                    );
+                  }
+
+                  // קישורי inline שייכים לטקסט הראשי; סימוני הערות שייכים גם למפרש.
+                  final inlineLinks =
+                      widget.isMainText &&
+                          settingsState.enableHtmlLinks &&
+                          state.book.versionTitle == null
+                      ? (state.linksByLine[primaryLineIndex + 1] ??
+                                const <Link>[])
+                            .where(
+                              (link) => link.start != null && link.end != null,
+                            )
+                            .toList()
+                      : const <Link>[];
+
+                  final hasOwnAnchors = widget.anchorLinksByLine != null;
+                  var data = widget.content[primaryLineIndex];
+                  if (widget.isMainText) {
+                    // קישורי inline ראשונים — האופסטים שלהם גולמיים.
+                    data = _injectPreviewMarkers(
+                      injectInlineLinks(data, inlineLinks),
+                      primaryLineIndex,
+                      state,
+                    );
+                  } else if (hasOwnAnchors) {
+                    data = _injectOwnAnchorMarkers(
+                      data,
+                      primaryLineIndex,
+                      state,
+                    );
+                  }
+
+                  // הדגשת טקסט ממוקד: highlightText מופעל רק בשורה permanentHighlightLine
+                  final searchText = widget.isMainText
+                      ? ((state.highlightText.isNotEmpty &&
+                                state.permanentHighlightLine == index)
+                            ? state.highlightText
+                            : state.searchText)
+                      : '';
+
+                  // סימוני הערות אישיות — אחרונים.
+                  final annotatedData = notesForLine.isNotEmpty
+                      ? buildAnnotatedLineHtml(
+                          rawLine: data,
+                          sourceLine: widget.content[primaryLineIndex],
+                          notesForLine: notesForLine,
+                          lineIndex0: primaryLineIndex,
+                          underlineColor: Theme.of(context).colorScheme.primary,
+                        )
+                      : data;
+
+                  // מצב הניקוד/פיסוק של הטאב חל גם על טורי המפרשים.
+                  final textWidget = SmartTextWidget(
+                    text: annotatedData,
+                    highlightBookId: widget.isMainText
+                        ? state.book.title
+                        : null,
+                    highlightBookUid: widget.isMainText
+                        ? PluginBookIdentity.uidOf(state.book)
+                        : null,
+                    highlightBookDbId: widget.isMainText ? state.book.id : null,
+                    highlightBookType: widget.isMainText
+                        ? PluginBookIdentity.typeOf(state.book)
+                        : null,
+                    highlightBookSource: widget.isMainText
+                        ? PluginBookIdentity.sourceOf(state.book)
+                        : null,
+                    highlightSectionIndex: widget.isMainText
+                        ? primaryLineIndex
+                        : null,
+                    highlightSourceText: widget.isMainText ? data : null,
+                    widgetKey: ValueKey('html_simple_text_$primaryLineIndex'),
+                    settings: RenderSettings.fromProfile(
+                      _displayProfile(state),
+                      searchText: searchText,
+                      highlightYellowBackground:
+                          widget.isMainText &&
+                          state.highlightText.isNotEmpty &&
+                          state.permanentHighlightLine == index,
+                      searchOptions: widget.isMainText
+                          ? state.searchOptions
+                          : const {},
+                      alternativeWords: widget.isMainText
+                          ? state.alternativeWords
+                          : const {},
+                      spacingValues: widget.isMainText
+                          ? state.spacingValues
+                          : const {},
+                      isFuzzySearch:
+                          widget.isMainText &&
+                          state.searchMode == SearchMode.fuzzy,
+                      searchMode: widget.isMainText
+                          ? state.searchMode
+                          : SearchMode.exact,
+                      searchDistance: widget.isMainText
+                          ? state.searchDistance
+                          : 0,
+                      matchPolicy: widget.isMainText
+                          ? state.matchPolicy
+                          : SearchMatchPolicy.standard,
+                      partialWordHighlight:
+                          widget.isMainText && !state.searchWholeWord,
+                      isSearchResultLine:
+                          widget.isMainText &&
+                          state.lineParticipatesInSearchHighlight(
+                            primaryLineIndex,
+                          ),
+                      previousLineText: widget.isMainText
+                          ? state.searchResultNeighbour(
+                              primaryLineIndex,
+                              next: false,
+                            )
+                          : null,
+                      nextLineText: widget.isMainText
+                          ? state.searchResultNeighbour(
+                              primaryLineIndex,
+                              next: true,
+                            )
+                          : null,
+                      fontSize: widget.fontSize,
+                      fontFamily: widget.fontFamily ?? settingsState.fontFamily,
+                      fontWeight:
+                          (widget.isMainText
+                              ? settingsState.fontBold
+                              : settingsState.commentatorsFontBold)
+                          ? FontWeight.bold
+                          : null,
+                      lineHeight: settingsState.lineHeight,
+                    ),
+                    onOpenBook: widget.openBookCallback,
+                    onNoteTap: notesForLine.isEmpty
+                        ? null
+                        : widget.isMainText
+                        ? (line) => _onInlineNoteTap(line)
+                        : (_) {
+                            final openInSidebar =
+                                widget.onOpenCommentaryPersonalNote;
+                            if (openInSidebar != null &&
+                                widget.bookTitle != null) {
+                              openInSidebar(
+                                _commentaryNotesKey(widget.bookTitle!),
+                                widget.reportBook?.categoryId,
+                                primaryLineIndex + 1,
+                              );
+                            } else {
+                              showPersonalNotesDialog(
+                                context: context,
+                                notes: notesForLine,
+                              );
+                            }
+                          },
+                    onAnchorTap: widget.isMainText || hasOwnAnchors
+                        ? _handlePreviewTap
+                        : null,
+                    onAnchorHover: widget.isMainText || hasOwnAnchors
+                        ? _handlePreviewHover
+                        : null,
+                    onAnchorHoverExit: widget.isMainText || hasOwnAnchors
+                        ? _handlePreviewHoverExit
+                        : null,
+                    onTouchPreview: widget.isMainText || hasOwnAnchors
+                        ? _handleTouchPreview
+                        : null,
                   );
-                }
 
-                // קישורי inline שייכים לטקסט הראשי; סימוני הערות שייכים גם למפרש.
-                final inlineLinks =
-                    widget.isMainText &&
-                        settingsState.enableHtmlLinks &&
-                        state.book.versionTitle == null
-                    ? (state.linksByLine[primaryLineIndex + 1] ??
-                              const <Link>[])
-                          .where(
-                            (link) => link.start != null && link.end != null,
-                          )
-                          .toList()
-                    : const <Link>[];
-
-                final hasOwnAnchors = widget.anchorLinksByLine != null;
-                var data = widget.content[primaryLineIndex];
-                if (widget.isMainText) {
-                  // קישורי inline ראשונים — האופסטים שלהם גולמיים.
-                  data = _injectPreviewMarkers(
-                    injectInlineLinks(data, inlineLinks),
-                    primaryLineIndex,
-                    state,
-                  );
-                } else if (hasOwnAnchors) {
-                  data = _injectOwnAnchorMarkers(data, primaryLineIndex, state);
-                }
-
-                // הדגשת טקסט ממוקד: highlightText מופעל רק בשורה permanentHighlightLine
-                final searchText = widget.isMainText
-                    ? ((state.highlightText.isNotEmpty &&
-                              state.permanentHighlightLine == index)
-                          ? state.highlightText
-                          : state.searchText)
-                    : '';
-
-                // סימוני הערות אישיות — אחרונים.
-                final annotatedData = notesForLine.isNotEmpty
-                    ? buildAnnotatedLineHtml(
-                        rawLine: data,
-                        sourceLine: widget.content[primaryLineIndex],
-                        notesForLine: notesForLine,
-                        lineIndex0: primaryLineIndex,
-                        underlineColor: Theme.of(context).colorScheme.primary,
-                      )
-                    : data;
-
-                // מצב הניקוד/פיסוק של הטאב חל גם על טורי המפרשים.
-                final textWidget = SmartTextWidget(
-                  text: annotatedData,
-                  highlightBookId: widget.isMainText ? state.book.title : null,
-                  highlightBookUid: widget.isMainText
-                      ? PluginBookIdentity.uidOf(state.book)
-                      : null,
-                  highlightBookDbId: widget.isMainText ? state.book.id : null,
-                  highlightBookType: widget.isMainText
-                      ? PluginBookIdentity.typeOf(state.book)
-                      : null,
-                  highlightBookSource: widget.isMainText
-                      ? PluginBookIdentity.sourceOf(state.book)
-                      : null,
-                  highlightSectionIndex: widget.isMainText
-                      ? primaryLineIndex
-                      : null,
-                  highlightSourceText: widget.isMainText ? data : null,
-                  widgetKey: ValueKey('html_simple_text_$primaryLineIndex'),
-                  settings: RenderSettings.fromProfile(
-                    _displayProfile(state),
-                    searchText: searchText,
-                    highlightYellowBackground:
-                        widget.isMainText &&
-                        state.highlightText.isNotEmpty &&
-                        state.permanentHighlightLine == index,
-                    searchOptions: widget.isMainText
-                        ? state.searchOptions
-                        : const {},
-                    alternativeWords: widget.isMainText
-                        ? state.alternativeWords
-                        : const {},
-                    spacingValues: widget.isMainText
-                        ? state.spacingValues
-                        : const {},
-                    isFuzzySearch:
-                        widget.isMainText &&
-                        state.searchMode == SearchMode.fuzzy,
-                    searchMode: widget.isMainText
-                        ? state.searchMode
-                        : SearchMode.exact,
-                    searchDistance: widget.isMainText
-                        ? state.searchDistance
-                        : 0,
-                    matchPolicy: widget.isMainText
-                        ? state.matchPolicy
-                        : SearchMatchPolicy.standard,
-                    partialWordHighlight:
-                        widget.isMainText && !state.searchWholeWord,
-                    isSearchResultLine:
-                        widget.isMainText &&
-                        state.lineParticipatesInSearchHighlight(
-                          primaryLineIndex,
+                  // בטור מפרש רש"י: לעזי רש"י מתחת לשורה (מסתתר לבד אם אין).
+                  // בדיקת הכותרת כאן חוסכת בניית תת-הבלוק בכל שורה של טור שאינו רש"י.
+                  if (!widget.isMainText &&
+                      widget.bookTitle != null &&
+                      isRashiTitle(widget.bookTitle!)) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        textWidget,
+                        LaazCommentarySubBlock.forLine(
+                          rashiBookTitle: widget.bookTitle!,
+                          rashiLineIndex: primaryLineIndex + 1,
+                          baseFontSize: widget.fontSize,
                         ),
-                    previousLineText: widget.isMainText
-                        ? state.searchResultNeighbour(
-                            primaryLineIndex,
-                            next: false,
-                          )
-                        : null,
-                    nextLineText: widget.isMainText
-                        ? state.searchResultNeighbour(
-                            primaryLineIndex,
-                            next: true,
-                          )
-                        : null,
-                    fontSize: widget.fontSize,
-                    fontFamily: widget.fontFamily ?? settingsState.fontFamily,
-                    fontWeight:
-                        (widget.isMainText
-                            ? settingsState.fontBold
-                            : settingsState.commentatorsFontBold)
-                        ? FontWeight.bold
-                        : null,
-                    lineHeight: settingsState.lineHeight,
-                  ),
-                  onOpenBook: widget.openBookCallback,
-                  onNoteTap: notesForLine.isEmpty
-                      ? null
-                      : widget.isMainText
-                      ? (line) => _onInlineNoteTap(line)
-                      : (_) {
-                          final openInSidebar =
-                              widget.onOpenCommentaryPersonalNote;
-                          if (openInSidebar != null &&
-                              widget.bookTitle != null) {
-                            openInSidebar(
-                              _commentaryNotesKey(widget.bookTitle!),
-                              widget.reportBook?.categoryId,
-                              primaryLineIndex + 1,
-                            );
-                          } else {
-                            showPersonalNotesDialog(
-                              context: context,
-                              notes: notesForLine,
-                            );
-                          }
-                        },
-                  onAnchorTap: widget.isMainText || hasOwnAnchors
-                      ? _handlePreviewTap
-                      : null,
-                  onAnchorHover: widget.isMainText || hasOwnAnchors
-                      ? _handlePreviewHover
-                      : null,
-                  onAnchorHoverExit: widget.isMainText || hasOwnAnchors
-                      ? _handlePreviewHoverExit
-                      : null,
-                  onTouchPreview: widget.isMainText || hasOwnAnchors
-                      ? _handleTouchPreview
-                      : null,
-                );
-
-                // בטור מפרש רש"י: לעזי רש"י מתחת לשורה (מסתתר לבד אם אין).
-                // בדיקת הכותרת כאן חוסכת בניית תת-הבלוק בכל שורה של טור שאינו רש"י.
-                if (!widget.isMainText &&
-                    widget.bookTitle != null &&
-                    isRashiTitle(widget.bookTitle!)) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      textWidget,
-                      LaazCommentarySubBlock.forLine(
-                        rashiBookTitle: widget.bookTitle!,
-                        rashiLineIndex: primaryLineIndex + 1,
-                        baseFontSize: widget.fontSize,
-                      ),
-                    ],
-                  );
-                }
-                return textWidget;
-              },
+                      ],
+                    );
+                  }
+                  return textWidget;
+                },
+              ),
             ),
-          )),
+          ),
         ),
       ),
     );

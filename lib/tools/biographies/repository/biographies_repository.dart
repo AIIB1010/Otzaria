@@ -26,7 +26,8 @@ class BiographiesRepository {
   BiographiesRepository({
     Future<String> Function()? updatedPathProvider,
     Future<ByteData> Function(String key)? loadAsset,
-  }) : _updatedPathProvider = updatedPathProvider ?? AppPaths.getBiographiesPath,
+  }) : _updatedPathProvider =
+           updatedPathProvider ?? AppPaths.getBiographiesPath,
        _loadAsset = loadAsset ?? rootBundle.load;
 
   /// טוען את כל הביוגרפיות, ממוינות לפי שם. הטעינה מתבצעת פעם אחת;

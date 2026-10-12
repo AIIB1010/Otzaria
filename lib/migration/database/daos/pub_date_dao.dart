@@ -32,5 +32,4 @@ class PubDateDao {
     db.execute(_queries['linkBookPubDate']!, [bookId, pubDateId]);
     return db.lastInsertRowId;
   }
-
 }

@@ -40,7 +40,9 @@ class CfbBuilder {
     // לסקטור אחד מחק בשקט את הרשומות המוטמעות, והבדיקה שאמורה לכסות אותן
     // רצה על קובץ שאין בו כלום.
     final directorySectors =
-        (_directoryEntryCount(entries) * _directoryEntrySize + sectorSize - 1) ~/
+        (_directoryEntryCount(entries) * _directoryEntrySize +
+            sectorSize -
+            1) ~/
         sectorSize;
 
     final layout = _allocate(entries, directorySectors);

@@ -123,12 +123,13 @@ class _NoteTileState extends State<NoteTile> {
   @override
   Widget build(BuildContext context) {
     if (_isInlineEditing) {
-      final titleText = widget.note.displayTitle != null &&
+      final titleText =
+          widget.note.displayTitle != null &&
               widget.note.displayTitle!.isNotEmpty
           ? 'עריכת הערה - ${widget.note.displayTitle}'
           : (widget.note.lineNumber != null
-              ? 'עריכת הערה - שורה ${widget.note.lineNumber}'
-              : 'עריכת הערה');
+                ? 'עריכת הערה - שורה ${widget.note.lineNumber}'
+                : 'עריכת הערה');
 
       return InlineNoteEditorCard(
         icon: FluentIcons.note_edit_24_regular,

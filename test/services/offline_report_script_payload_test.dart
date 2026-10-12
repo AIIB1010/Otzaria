@@ -118,7 +118,8 @@ void main() {
             // Process.run ב-macOS (osascript), ולכן מחליפים אותו בפלט למסוף.
             .replaceFirst(
               RegExp(r'if command -v zenity[\s\S]*?\nfi\n'),
-              r'cat "$tmp"' '\n',
+              r'cat "$tmp"'
+              '\n',
             );
         final file = File('${dir.path}/send.sh');
         await file.writeAsString(script);

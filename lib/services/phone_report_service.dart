@@ -97,7 +97,6 @@ class PhoneReportService {
         return ReportMessages.phoneSendDataError(statusCode);
     }
   }
-
 }
 
 /// Result of a phone report submission
