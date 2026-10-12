@@ -1591,7 +1591,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
           ),
         );
       } else {
-        bloc.add(LoadPlugins());
+        bloc.add(PluginOverwriteDeclined(state.archivePath));
       }
     } else if (state is PluginSystemDuplicateNameDetected) {
       final versions = state.duplicates.map((p) => p.version).join(', ');
@@ -1660,7 +1660,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
         return true;
       case InstallLocalPluginAction(:final archivePath):
         context.read<PluginSystemBloc>().add(
-          InstallPluginRequested(archivePath),
+          InstallPluginRequested(archivePath, recordsResult: true),
         );
         return true;
       case RunSearchAction(:final query, smart: true):
