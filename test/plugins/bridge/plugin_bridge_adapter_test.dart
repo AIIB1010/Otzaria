@@ -452,6 +452,12 @@ Future<void> main() async {
       expect(response['isLeapYear'], jewishCalendar.isJewishLeapYear());
       expect(response['isShabbat'], jewishCalendar.getDayOfWeek() == 7);
 
+      final daf = jewishCalendar.getDafYomiBavli();
+      expect(response['dafYomi'], {
+        'masechet': daf.getMasechta(),
+        'daf': daf.getDaf(),
+      });
+
       final holidays = (response['holidays'] as List<dynamic>)
           .cast<Map<String, String>>();
       expect(
@@ -463,6 +469,36 @@ Future<void> main() async {
           ),
         ),
       );
+    });
+
+    test(
+      'dafYomi matches the known Daf Yomi Bavli cycle (10 Elul 5777 → Sanhedrin 47)',
+      () async {
+        final jewishDate = JewishDate()
+          ..setJewishDate(5777, JewishDate.ELUL, 10);
+        final state = _buildCalendarState(
+          jewishDate.getGregorianCalendar(),
+          inIsrael: true,
+        );
+        calendarCubit.currentState = state;
+
+        final response =
+            await adapter.execute('calendar', 'getJewishDate', {})
+                as Map<String, dynamic>;
+
+        expect(response['dafYomi'], {'masechet': 'סנהדרין', 'daf': 47});
+      },
+    );
+
+    test('dafYomi is null before the first Daf Yomi cycle started', () async {
+      final state = _buildCalendarState(DateTime(1900, 1, 1), inIsrael: true);
+      calendarCubit.currentState = state;
+
+      final response =
+          await adapter.execute('calendar', 'getJewishDate', {})
+              as Map<String, dynamic>;
+
+      expect(response['dafYomi'], isNull);
     });
 
     test(

@@ -6403,8 +6403,20 @@ class PluginBridgeAdapter {
       'isLeapYear': jewishCalendar.isJewishLeapYear(),
       'isShabbat': jewishCalendar.getDayOfWeek() == 7,
       'parasha': _upcomingParasha(date, inIsrael, formatter),
+      'dafYomi': _buildDafYomiPayload(jewishCalendar),
       'holidays': _buildHolidayPayloads(jewishCalendar, formatter),
     };
+  }
+
+  /// דף היומי (בבלי) לתאריך העברי הנתון. `null` עבור תאריכים שקדמו לתחילת
+  /// המחזור הראשון (י"ח באלול תרפ"ג / 11.9.1923), שלגביהם הספרייה זורקת.
+  Map<String, dynamic>? _buildDafYomiPayload(JewishCalendar jewishCalendar) {
+    try {
+      final daf = jewishCalendar.getDafYomiBavli();
+      return {'masechet': daf.getMasechta(), 'daf': daf.getDaf()};
+    } on ArgumentError {
+      return null;
+    }
   }
 
   String _upcomingParasha(
