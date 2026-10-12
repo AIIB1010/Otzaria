@@ -180,6 +180,9 @@ english.TimeLeft=%1 left
 english.CheckingDownloadedFile=Checking the downloaded file
 english.DownloadingItem=Downloading: %1 (%2 of %3)
 english.DownloadingItemAgain=The download was interrupted, downloading again: %1 (try %2 of %3)
+english.DownloadingItemResumed=Continuing from %4: %1 (%2 of %3)
+english.DownloadingItemContinued=The download was interrupted, continuing from %2: %1
+english.WaitingForOtherAssistant=Another download assistant is downloading %1, waiting…
 english.ErrorStopped=The download was stopped.
 english.ErrorFileUnavailable=Can't prepare the installation because one of the required files isn't available.
 english.ErrorDownloadDamaged=One of the downloaded files was damaged, so it wasn't saved.
@@ -298,6 +301,9 @@ hebrew.TimeLeft=נותרו %1
 hebrew.CheckingDownloadedFile=בודק את הקובץ שירד
 hebrew.DownloadingItem=מוריד: %1 (%2 מתוך %3)
 hebrew.DownloadingItemAgain=ההורדה נקטעה, מוריד שוב: %1 (ניסיון %2 מתוך %3)
+hebrew.DownloadingItemResumed=ממשיך מ-%4: %1 (%2 מתוך %3)
+hebrew.DownloadingItemContinued=ההורדה נקטעה, ממשיך מ-%2: %1
+hebrew.WaitingForOtherAssistant=מסייע הורדה אחר מוריד את %1, ממתין…
 hebrew.ErrorStopped=ההורדה הופסקה.
 hebrew.ErrorFileUnavailable=לא ניתן להכין את ההתקנה משום שאחד הקבצים הדרושים אינו זמין.
 hebrew.ErrorDownloadDamaged=אחד הקבצים שהורדו נמצא פגום ולא נשמר.
@@ -409,7 +415,7 @@ const
   AppendSliceSize = 67108864;
   ManifestSchemaVersion = 1;
   SpeedWindowMs = 5000;
-  { Inno אינו ממשיך הורדה מאמצע: חיבור שנקטע מחייב להוריד את הקובץ כולו שוב. }
+  { Inno (כשאין curl) אינו ממשיך הורדה מאמצע: חיבור שנקטע מוריד את הקובץ כולו שוב. }
   DownloadAttempts = 3;
 
   ModeThisComputer = 0;
@@ -840,6 +846,11 @@ begin
   if not IsOtzariaRepository(Repository) or not IsSafeName(Tag) or
      not IsSafeName(Name) then
     exit;
+#ifdef DevAssetBase
+  { פיתוח בלבד (/DDevAssetBase=<url/>): שרת מקומי שמדמה ניתוק או Range שאינו נתמך. }
+  Result := '{#DevAssetBase}' + Name;
+  exit;
+#endif
   Result := 'https://github.com/' + Repository + '/releases/download/' + Tag +
     '/' + Name;
 end;
@@ -1079,8 +1090,10 @@ begin
     if Result then
       WriteMarker(Name, Sha);
   end;
+  { כישלון מחזיר את הקובץ לשמו הקודם: ב-curl זה הקובץ החלקי המאומת. }
   if not Result then
-    DeleteFile(Staged);
+    if not RenameFile(Staged, TempPath) then
+      DeleteFile(Staged);
 end;
 
 { ========================= קריאת המניפסט ========================= }
@@ -2751,6 +2764,8 @@ end;
 
 { ============================== הורדה ============================== }
 
+#include "download_assistant_curl.iss"
+
 function RunDownloads(): Boolean;
 var
   I, Attempt: Integer;
@@ -2760,6 +2775,7 @@ begin
   Result := True;
   if GetArrayLength(QueueUrl) = 0 then
     exit;
+  CurlResetRun();
 
   ProgressTotal := 0;
   ProgressDone := 0;
@@ -2772,6 +2788,21 @@ begin
   try
     for I := 0 to GetArrayLength(QueueUrl) - 1 do
     begin
+      Started := NowMs();
+      case CurlDownloadItem(I) of
+        CurlDone:
+          begin
+            Log('DownloadAssistant: ' + QueueFile[I] + ' done by curl in ' +
+              IntToStr(NowMs() - Started) + ' ms');
+            ProgressDone := ProgressDone + QueueSize[I];
+            Continue;
+          end;
+        CurlFailed:
+          begin
+            Result := False;
+            exit;
+          end;
+      end;
       Attempt := 1;
       repeat
         if Attempt = 1 then
@@ -2831,6 +2862,7 @@ begin
         Result := False;
         exit;
       end;
+      CurlForgetItem(I);
     end;
   finally
     DownloadPage.Hide;

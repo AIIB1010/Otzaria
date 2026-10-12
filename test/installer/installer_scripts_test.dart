@@ -2922,11 +2922,11 @@ void main() {
         script.replaceAll(manifestConst, ''),
         isNot(contains('otzaria-')),
       );
-      // explorer.exe הוא תוכנית מערכת שפותחת את התוצאה, לא נכס של release.
-      final literals = script.replaceAll(
-        r"ExpandConstant('{win}\explorer.exe')",
-        '',
-      );
+      // explorer.exe ו-curl.exe הם תוכניות מערכת, לא נכסים של release.
+      final literals = script
+          .replaceAll(r"ExpandConstant('{win}\explorer.exe')", '')
+          .replaceAll(r"ExpandConstant('{win}\Sysnative\curl.exe')", '')
+          .replaceAll(r"ExpandConstant('{sys}\curl.exe')", '');
       expect(
         literals,
         isNot(matches(RegExp(r"'[^']+\.(exe|zip|tar\.zst)'"))),
@@ -3653,6 +3653,7 @@ void main() {
         'DevManifestFile',
         'DevSelectionDump',
         'DevApiBase',
+        'DevAssetBase',
       ]) {
         expect(workflow, isNot(contains(define)), reason: define);
         expect(script, contains('#ifdef $define'));
