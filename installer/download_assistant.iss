@@ -3425,7 +3425,7 @@ end;
 { משרשר את Src (בדיוק Expected בתים) לסוף Dest ומדווח התקדמות בבתים.
   שרשור בתים טהור — התוצאה זהה בית-בית למקור. }
 function AppendFileTo(const Dest, Src: String; Expected, DoneBefore,
-  Total: Int64; const Caption: String): Boolean;
+  Total: Int64; const Status: String): Boolean;
 var
   Output, Input: TFileStream;
   Start, Copied, Slice, Got, SliceStart: Int64;
@@ -3454,7 +3454,7 @@ begin
           if Got <> Slice then
             Break;
           Copied := Copied + Got;
-          WorkPage.SetText(Msg1('JoiningFiles', Caption),
+          WorkPage.SetText(Status,
             FmtMessage(CustomMessage('SizeOf'), [HumanSize(DoneBefore + Copied),
               HumanSize(Total)]) + ' · ' + PostEtaText());
           WorkPage.SetProgress(MegaBytes(DoneBefore + Copied), MegaBytes(Total));
@@ -3495,7 +3495,8 @@ begin
 end;
 
 { כל חלק נמחק מיד אחרי שנוסף: שיא הדיסק הוא הקובץ המורכב ועוד חלק אחד. }
-function AssembleAsset(AssetIndex: Integer; const Caption: String): Boolean;
+function AssembleAsset(AssetIndex: Integer; const Caption: String; Base,
+  Total: Int64): Boolean;
 var
   TmpPath, FinalPath, PartPath: String;
   Consumed, I, First: Integer;
@@ -3533,8 +3534,8 @@ begin
       exit;
     end;
     HoldShownEta(False);
-    if not AppendFileTo(TmpPath, PartPath, PartSize[First + I], Done,
-      AssetSize[AssetIndex], Caption) then
+    if not AppendFileTo(TmpPath, PartPath, PartSize[First + I], Base + Done, Total,
+      Msg1('JoiningFiles', Caption)) then
     begin
       LoadErrorMsg := CustomMessage('ErrorWriteJoined');
       exit;
@@ -3581,12 +3582,15 @@ begin
 end;
 
 { קישור קשיח חוסך העתקה של גיגה-בתים; נכשל בין כוננים ועל FAT32/exFAT, ואז
-  מעתיקים. }
-function CopyToOutput(const Name, Dir: String): Boolean;
+  מעתיקים בזרימה, כדי שהפס יתקדם גם באמצע קובץ ענק. }
+function CopyToOutput(const Name, Dir, Caption: String; Size, Done,
+  Total: Int64): Boolean;
 var
   Dest: String;
 begin
   Result := True;
+  WorkPage.SetText(Msg1('CopyingTo', Caption), Name);
+  WorkPage.SetProgress(MegaBytes(Done), MegaBytes(Total));
   if CompareText(Dir, CacheDir()) = 0 then
     exit;
   ForceDirectories(Dir);
@@ -3597,11 +3601,10 @@ begin
     Log('DownloadAssistant: linked ' + Name);
     exit;
   end;
-  Result := CopyFile(CachePath(Name), Dest, False);
+  Result := AppendFileTo(Dest, CachePath(Name), Size, Done, Total,
+    Msg1('CopyingTo', Caption));
   if Result then
-    Log('DownloadAssistant: copied ' + Name)
-  else
-    LoadErrorTech := 'copy failed: ' + Name;
+    Log('DownloadAssistant: copied ' + Name);
 end;
 
 { ==================== הרכבה והכנת תיקיית היעד ==================== }
@@ -3647,9 +3650,9 @@ end;
 
 function PrepareOutput(): Boolean;
 var
-  C, A, P, Total: Integer;
+  C, A, P, Produced: Integer;
   Notes, PartsNote, SingleName, JoinNote, FirstExe, Folder: String;
-  Produced: Integer;
+  Done, Total: Int64;
   OutputNotes: TArrayOfString;
 begin
   Result := False;
@@ -3659,10 +3662,11 @@ begin
   JoinNote := '';
   FirstExe := '';
   Produced := 0;
+  Done := 0;
   RunAfterExe := '';
   RevealPath := '';
   SetArrayLength(ResultCommands, 0);
-  Total := ProducedFileCount();
+  Total := UiSelectedSize();
 
   WorkPage.Show;
   try
@@ -3683,11 +3687,12 @@ begin
           if ShouldAssembleSingleFile(A) then
           begin
             if not AssembledIsReady(A) then
-              if not AssembleAsset(A, CompName[C]) then
+              if not AssembleAsset(A, CompName[C], Done, Total) then
                 exit;
             Notes := Notes + '• ' + DisplayLtr(Folder + AssetName[A]) + #13#10;
             SingleName := Folder + AssetName[A];
             Produced := Produced + 1;
+            Done := Done + AssetSize[A];
           end
           else
           begin
@@ -3696,9 +3701,8 @@ begin
             PartsNote := '';
             for P := AssetPartStart[A] to AssetPartStart[A] + AssetPartCount[A] - 1 do
             begin
-              WorkPage.SetText(Msg1('CopyingTo', CompName[C]), PartName[P]);
-              WorkPage.SetProgress(Produced, Total);
-              if not CopyToOutput(PartName[P], AssetOutputDir(A)) then
+              if not CopyToOutput(PartName[P], AssetOutputDir(A), CompName[C],
+                PartSize[P], Done, Total) then
               begin
                 LoadErrorMsg := CustomMessage('ErrorCopy');
                 exit;
@@ -3707,6 +3711,7 @@ begin
                 DisplayLtr(Folder + PartName[P]) + #13#10;
               SingleName := Folder + PartName[P];
               Produced := Produced + 1;
+              Done := Done + PartSize[P];
             end;
             Notes := Notes + PartsNote;
             if TargetPlatform <> 'windows' then
@@ -3718,9 +3723,8 @@ begin
         end
         else
         begin
-          WorkPage.SetText(Msg1('CopyingTo', CompName[C]), AssetName[A]);
-          WorkPage.SetProgress(Produced, Total);
-          if not CopyToOutput(AssetName[A], AssetOutputDir(A)) then
+          if not CopyToOutput(AssetName[A], AssetOutputDir(A), CompName[C],
+            AssetSize[A], Done, Total) then
           begin
             LoadErrorMsg := CustomMessage('ErrorCopy');
             exit;
@@ -3728,6 +3732,7 @@ begin
           Notes := Notes + '• ' + DisplayLtr(Folder + AssetName[A]) + #13#10;
           SingleName := Folder + AssetName[A];
           Produced := Produced + 1;
+          Done := Done + AssetSize[A];
         end;
         if IsExecutableName(AssetName[A]) and (FirstExe = '') and
            ((AssetKind[A] <> 'split') or ShouldAssembleSingleFile(A)) then

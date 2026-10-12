@@ -3163,7 +3163,10 @@ void main() {
       final copy = _routine(script, 'function CopyToOutput(');
       final link = copy.indexOf('CreateHardLink(Dest, CachePath(Name), 0)');
       expect(link, greaterThanOrEqualTo(0));
-      expect(copy.indexOf('CopyFile(CachePath(Name), Dest'), greaterThan(link));
+      expect(
+        copy.indexOf('AppendFileTo(Dest, CachePath(Name)'),
+        greaterThan(link),
+      );
     });
 
     test(
