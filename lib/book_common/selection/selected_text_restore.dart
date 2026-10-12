@@ -368,6 +368,17 @@ bool _isWhitespace(int codeUnit) =>
     codeUnit == 0x3000 ||
     codeUnit == 0xFEFF;
 
+/// ניקוד וטעמים אינם משתתפים בהתאמה: פלאטר משמיט לעתים סימן בסוף שורה.
+/// מקף, פסק, סוף פסוק ונון הפוכה הם פיסוק נראה ונשארים בהתאמה.
+bool _isWhitespaceOrMark(int codeUnit) =>
+    _isWhitespace(codeUnit) ||
+    (codeUnit >= 0x0591 &&
+        codeUnit <= 0x05C7 &&
+        !const {0x05BE, 0x05C0, 0x05C3, 0x05C6}.contains(codeUnit));
+
+bool _hasWhitespaceBetween(String text, int from, int to) =>
+    text.substring(from + 1, to).codeUnits.any(_isWhitespace);
+
 /// התאמה מדויקת על התווים שאינם רווח בלבד — בבחירה יש NBSP/רווח-דק ו-\n
 /// (מ-&nbsp;/<br>) שהשורות המרונדרות מכווצות לרווח רגיל.
 RestoredSelection? _restoreExact(
@@ -379,7 +390,7 @@ RestoredSelection? _restoreExact(
   final selectedIndexMap = <int>[];
   final selectedBuffer = StringBuffer();
   for (var i = 0; i < selectedText.length; i++) {
-    if (!_isWhitespace(selectedText.codeUnitAt(i))) {
+    if (!_isWhitespaceOrMark(selectedText.codeUnitAt(i))) {
       selectedBuffer.write(selectedText[i]);
       selectedIndexMap.add(i);
     }
@@ -402,7 +413,7 @@ RestoredSelection? _restoreExact(
   for (var lineIndex = 0; lineIndex < visibleLines.length; lineIndex++) {
     final line = visibleLines[lineIndex];
     for (var i = 0; i < line.length; i++) {
-      if (!_isWhitespace(line.codeUnitAt(i))) {
+      if (!_isWhitespaceOrMark(line.codeUnitAt(i))) {
         visibleBuffer.write(line[i]);
         lineOfChar.add(lineIndex);
         columnOfChar.add(i);
@@ -413,9 +424,16 @@ RestoredSelection? _restoreExact(
 
   // מאמת שקיום רווח בין תווים סמוכים זהה בבחירה ובתצוגה, כדי לא לשייך למופע
   // עם פיזור רווחים אחר. גבול שורות הוא wildcard — שם הבחירה חסרת רווח בדין.
-  bool selectedHasGap(int k) =>
-      selectedIndexMap[k] > selectedIndexMap[k - 1] + 1;
-  bool visibleHasGap(int pos) => columnOfChar[pos] > columnOfChar[pos - 1] + 1;
+  bool selectedHasGap(int k) => _hasWhitespaceBetween(
+    selectedText,
+    selectedIndexMap[k - 1],
+    selectedIndexMap[k],
+  );
+  bool visibleHasGap(int pos) => _hasWhitespaceBetween(
+    visibleLines[lineOfChar[pos]],
+    columnOfChar[pos - 1],
+    columnOfChar[pos],
+  );
 
   bool isConsistentAt(int start) {
     for (var k = 1; k < selectedCompact.length; k++) {

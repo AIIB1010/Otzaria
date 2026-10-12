@@ -225,6 +225,17 @@ void main() {
       expect(restored.startLine, 0);
       expect(restored.endLine, 10);
     });
+
+    test('מקף, פסק, סוף פסוק ונון הפוכה משתתפים בהתאמה', () {
+      for (final mark in const ['־', '׀', '׃', '׆']) {
+        final restored = restoreSelectedTextLineBreaksDetailed(
+          selectedText: 'הארץ$mark ויאמר',
+          visibleLines: ['את הארץ ויאמר', 'את הארץ$mark ויאמר'],
+        );
+
+        expect(restored.startLine, 1, reason: mark);
+      }
+    });
   });
 
   group('buildSelectionWindow', () {
