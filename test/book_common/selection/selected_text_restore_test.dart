@@ -183,6 +183,48 @@ void main() {
 
       expect(restored.replaceAll('\n', ''), 'אבגדהוזחט');
     });
+
+    test('בחירה בלי דגש בסוף שורה עדיין משוחזרת לשורות (#1908)', () {
+      // הלוח האמיתי: פלאטר משמיט את הדגש של "וּ" בסוף שורה מנוקדת.
+      final lines = [
+        for (final raw in const [
+          '<blockquote><p><strong>שכל</strong>: אָכֵן שְׁגָגָה הִיא זֹאת אֶל־עֵינֵינוּ</p></blockquote>',
+          '<blockquote><p>כִּי עֵין בְּשָׂרִים הֵמָּה,</p></blockquote>',
+          '<blockquote><p>עַל־כֵּן אֱמֶת בִּדְבַר־כָּזָב יָמִירוּ,</p></blockquote>',
+          '<blockquote><p>חֹשֶׁךְ לְאוֹר שָׂמִים וָאוֹר לַחֹשֶׁךְ.</p></blockquote>',
+          '<blockquote><p>הֵן בַּאֲשֶׁר יַשִּׂיגוּ</p></blockquote>',
+          '<blockquote><p>יִתְעוּ לְכָל־מִקְרֶה קָטֹן וָפֶגַע,</p></blockquote>',
+          '<blockquote><p>אַף כִּי בְּמֻפְלָא וּמְכֻסֶּה מֵהֵמָּה.</p></blockquote>',
+          '<blockquote><p>שׁוּר נָא קְצֵה מָשׁוֹט אֶל־תּוֹךְ הַמָּיִם,</p></blockquote>',
+          '<blockquote><p>הֵן רַק־מְעֻוָּת וּמְעֻקָּל תִּרְאֵהוּ,</p></blockquote>',
+          '<blockquote><p>וּלְבָבְךָ יוֹדֵעַ</p></blockquote>',
+          '<blockquote><p>כִּי בֶאֱמֶת יָשָׁר הִנֵּה הִנֵּהוּ.</p></blockquote>',
+        ])
+          renderSelectionLine(rawText: raw, settings: const RenderSettings()),
+      ];
+      const selectedLines = [
+        'כֵן שְׁגָגָה הִיא זֹאת אֶל־עֵינֵינו',
+        'כִּי עֵין בְּשָׂרִים הֵמָּה,',
+        'עַל־כֵּן אֱמֶת בִּדְבַר־כָּזָב יָמִירוּ,',
+        'חֹשֶׁךְ לְאוֹר שָׂמִים וָאוֹר לַחֹשֶׁךְ.',
+        'הֵן בַּאֲשֶׁר יַשִּׂיגו',
+        'יִתְעוּ לְכָל־מִקְרֶה קָטֹן וָפֶגַע,',
+        'אַף כִּי בְּמֻפְלָא וּמְכֻסֶּה מֵהֵמָּה.',
+        'שׁוּר נָא קְצֵה מָשׁוֹט אֶל־תּוֹךְ הַמָּיִם,',
+        'הֵן רַק־מְעֻוָּת וּמְעֻקָּל תִּרְאֵהוּ,',
+        'וּלְבָבְךָ יוֹדֵעַ',
+        'כִּי בֶאֱמֶת',
+      ];
+
+      final restored = restoreSelectedTextLineBreaksDetailed(
+        selectedText: selectedLines.join(),
+        visibleLines: lines,
+      );
+
+      expect(restored.text, selectedLines.join('\n'));
+      expect(restored.startLine, 0);
+      expect(restored.endLine, 10);
+    });
   });
 
   group('buildSelectionWindow', () {
