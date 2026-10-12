@@ -3166,6 +3166,36 @@ void main() {
       expect(copy.indexOf('CopyFile(CachePath(Name), Dest'), greaterThan(link));
     });
 
+    test(
+      '$_assistant: הכנת היעד מתקדמת לפי בתים, גם באמצע קובץ (issue #2429)',
+      () {
+        final script = _script(_assistant);
+        final prepare = _routine(script, 'function PrepareOutput()');
+        final copy = _routine(script, 'function CopyToOutput(');
+        // לפי מספר קבצים: 4 קבצים קטנים מתוך 7 = 57%, ושם נתקע על הקובץ הענק.
+        expect(prepare, contains('Total := UiSelectedSize();'));
+        expect(prepare, isNot(contains('SetProgress(Produced, Total)')));
+        expect(
+          copy,
+          contains('SetProgress(MegaBytes(Done), MegaBytes(Total))'),
+        );
+        expect(
+          copy,
+          isNot(contains('CopyFile(')),
+          reason: 'אינו מדווח עד סופו',
+        );
+        expect(
+          copy,
+          contains('AppendFileTo(Dest, CachePath(Name), Size, Done,'),
+        );
+        expect(
+          _routine(script, 'function AssembleAsset('),
+          contains('Base + Done, Total,'),
+          reason: 'גם ההרכבה נמדדת מול סך כל העבודה, כמו ב-macOS',
+        );
+      },
+    );
+
     test('$_assistant: פס ההורדה מציג מהירות וזמן, ואינו קופא בלי הסבר', () {
       final script = _script(_assistant);
       final progress = _routine(script, 'function OnDownloadProgress(');
