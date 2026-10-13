@@ -277,6 +277,7 @@ class IndexingRepository {
 
   /// המנוע רץ על אינדקס זמני (כשל בפתיחת אינדקס הדיסק) — אינדוקס במצב זה
   /// היה נכתב לתיקייה זמנית ונזרק בהפעלה הבאה. מדווח למשתמש ומחזיר true.
+  /// נבדק אחרי [requiresManualReindex]: אינדקס שדורש בנייה מחדש אינו כשל פתיחה.
   Future<bool> _blockIndexingOnTempFallback() async {
     // הדגל נקבע רק בסיום אתחול המנוע — בדיקה לפני ההמתנה הייתה מחמיצה
     // כשל פתיחה שמתרחש בזמן שהאתחול עוד רץ.
@@ -352,13 +353,6 @@ class IndexingRepository {
         indexedBooks: 0,
       );
     }
-    if (await _blockIndexingOnTempFallback()) {
-      return const IndexingRunResult.cancelled(
-        processedBooks: 0,
-        totalBooks: 0,
-        indexedBooks: 0,
-      );
-    }
 
     // מקור הספרים מ-dev (getIndexableBooks), והסינון דרך booksForIndexing
     // כדי שספר מוסתר לא ייכנס לאינדקס מלכתחילה (issue #1448).
@@ -377,6 +371,13 @@ class IndexingRepository {
       return IndexingRunResult.cancelled(
         processedBooks: 0,
         totalBooks: totalBooks,
+        indexedBooks: 0,
+      );
+    }
+    if (await _blockIndexingOnTempFallback()) {
+      return const IndexingRunResult.cancelled(
+        processedBooks: 0,
+        totalBooks: 0,
         indexedBooks: 0,
       );
     }
@@ -1793,7 +1794,8 @@ class IndexingRepository {
         indexedBooks: 0,
       );
     }
-    if (await _blockIndexingOnTempFallback()) {
+    if (await requiresManualReindex(library) ||
+        await _blockIndexingOnTempFallback()) {
       return IndexingRunResult.cancelled(
         processedBooks: 0,
         totalBooks: books.length,
@@ -1802,15 +1804,6 @@ class IndexingRepository {
     }
 
     _tantivyDataProvider.isIndexing.value = true;
-
-    if (await requiresManualReindex(library)) {
-      _tantivyDataProvider.isIndexing.value = false;
-      return IndexingRunResult.cancelled(
-        processedBooks: 0,
-        totalBooks: books.length,
-        indexedBooks: 0,
-      );
-    }
     IndexingCrashCanary.start(_tantivyDataProvider.activeIndexPath);
 
     // הספרייה המלאה, ולא רשימת הספרים שמאונדקסת, כדי שהסדר יהיה גלובלי.
@@ -2329,8 +2322,8 @@ class IndexingRepository {
         indexedBooks: 0,
       );
     }
-    if (await _blockIndexingOnTempFallback() ||
-        await requiresManualReindex(library)) {
+    if (await requiresManualReindex(library) ||
+        await _blockIndexingOnTempFallback()) {
       return const IndexingRunResult.cancelled(
         processedBooks: 0,
         totalBooks: 0,
