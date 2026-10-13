@@ -20,10 +20,10 @@ import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/view/tabbed_commentary_panel.dart';
-import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:otzaria_icons/otzaria_icons.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../../test_helpers/memory_cache_provider.dart';
+import '../../test_helpers/reading_toc.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -334,7 +334,7 @@ void main() {
         content: content,
         continuousReadingMode: true,
         supportsContinuousReadingMode: true,
-        readingSegments: buildReadingSegments(content, continuous: true),
+        tableOfContents: headerToc(content),
         scrollController: scroll,
       ),
     );

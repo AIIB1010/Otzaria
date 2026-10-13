@@ -225,9 +225,8 @@ class _BookPreviewPanelState extends State<BookPreviewPanel> {
         ),
       ),
     );
-    final targetIndex = state.readingSegments.isNotEmpty
-        ? segmentIndexForLine(state.readingSegments, index)
-        : index;
+    final layout = readingLayoutOf(state);
+    final targetIndex = layout.isEmpty ? index : layout.itemForLine(index);
     if (tab.scrollController.isAttached) {
       tab.scrollController.scrollTo(
         index: targetIndex,

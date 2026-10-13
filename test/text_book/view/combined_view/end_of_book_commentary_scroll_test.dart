@@ -121,6 +121,14 @@ void main() {
       ),
     );
     await tester.pump();
+    // כמו ה-bloc האמיתי: המצב הטעון נפלט פעם אחת, והגלילה הראשונית רצה לפני
+    // הקפיצה של הבדיקה.
+    bloc.emitForTest(
+      (bloc.state as TextBookLoaded).copyWith(
+        visibleIndices: [jumpIndex ?? _lastIndex],
+      ),
+    );
+    await tester.pumpAndSettle();
 
     // ברירת המחדל כמו Ctrl+End: הרשימה נעצרת בסוף הספר.
     tab.scrollController.jumpTo(
@@ -210,6 +218,8 @@ class _TextBookBloc extends Bloc<TextBookEvent, TextBookState>
     );
     on<TextBookEvent>((event, emit) {});
   }
+
+  void emitForTest(TextBookState state) => emit(state);
 
   @override
   late final TextBookRepository repository = _TextBookRepository();

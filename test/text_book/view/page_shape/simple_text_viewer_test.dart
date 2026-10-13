@@ -566,7 +566,11 @@ void main() {
   testWidgets('ריחוף על הסרגל בצורת הדף מציג תווית יעד מתוך labelForIndex', (
     tester,
   ) async {
-    final textBookBloc = _TestTextBookBloc(_loadedState());
+    // תוכן ארוך כדי שהסרגל הפנימי יוצג (יש מה לגלול).
+    final content = List<String>.generate(200, (i) => 'שורה $i');
+    final textBookBloc = _TestTextBookBloc(
+      _loadedState().copyWith(content: content),
+    );
     final personalNotesBloc = _TestPersonalNotesBloc(
       PersonalNotesState(
         isLoading: false,
@@ -579,9 +583,6 @@ void main() {
       ),
     );
     final settingsBloc = _TestSettingsBloc(SettingsState.initial());
-
-    // תוכן ארוך כדי שהסרגל הפנימי יוצג (יש מה לגלול).
-    final content = List<String>.generate(200, (i) => 'שורה $i');
 
     await tester.pumpWidget(
       MaterialApp(

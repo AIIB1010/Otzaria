@@ -23,6 +23,7 @@ import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/utils/dibburim_structure.dart';
 import 'package:otzaria/text_book/utils/inline_section_markers.dart';
 import 'package:otzaria/text_book/utils/reading_segment_navigation.dart';
+import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:otzaria/widgets/navigation/nav_panel_search.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
@@ -574,7 +575,7 @@ class _AltTocSidebarViewState extends State<AltTocSidebarView>
       scrollController: widget.scrollController,
       scrollOffsetController: state.scrollOffsetController,
       positionsListener: state.positionsListener,
-      segments: state.readingSegments,
+      segments: readingSegmentsOf(state),
       lineIndex: lineIndex,
       viewportExtent: context.size?.height ?? MediaQuery.sizeOf(context).height,
       duration: const Duration(milliseconds: 300),

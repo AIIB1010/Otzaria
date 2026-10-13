@@ -13,6 +13,7 @@ import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/utils/reading_segment_navigation.dart';
+import 'package:otzaria/text_book/utils/reading_segments.dart';
 
 import 'package:otzaria/utils/text/heading_slug.dart';
 import 'package:otzaria/utils/text/otzaria_markup.dart';
@@ -266,7 +267,7 @@ class HtmlLinkHandler {
         scrollController: state.scrollController,
         scrollOffsetController: state.scrollOffsetController,
         positionsListener: state.positionsListener,
-        segments: state.readingSegments,
+        segments: readingSegmentsOf(state),
         lineIndex: index,
         viewportExtent: viewportExtent,
         duration: const Duration(milliseconds: 250),
@@ -313,7 +314,7 @@ class HtmlLinkHandler {
           scrollController: state.scrollController,
           scrollOffsetController: state.scrollOffsetController,
           positionsListener: state.positionsListener,
-          segments: state.readingSegments,
+          segments: readingSegmentsOf(state),
           lineIndex: resolved.index!,
           viewportExtent: viewportExtent,
           duration: const Duration(milliseconds: 250),

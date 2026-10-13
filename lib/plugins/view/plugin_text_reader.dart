@@ -9,6 +9,7 @@ import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
+import 'package:otzaria/text_book/utils/reading_layout.dart';
 
 /// מחליף את תצוגת הטקסט בלבד; זהות הכרטיסייה וההיסטוריה נשמרות.
 class PluginTextReader extends StatefulWidget {
@@ -52,13 +53,12 @@ class _PluginTextReaderState extends State<PluginTextReader> {
     final state = widget.tab.bloc.state;
     final line =
         sourceLineIndex ??
-        (state is TextBookLoaded && state.readingSegments.isNotEmpty
-            ? state
-                  .readingSegments[index.clamp(
-                    0,
-                    state.readingSegments.length - 1,
-                  )]
-                  .startLineIndex
+        (state is TextBookLoaded && readingLayoutOf(state).isNotEmpty
+            ? readingLayoutOf(
+                state,
+              ).firstLineOf(
+                index.clamp(0, readingLayoutOf(state).itemCount - 1),
+              )
             : index);
     widget.tab.index = line;
     _lastIndex = line;

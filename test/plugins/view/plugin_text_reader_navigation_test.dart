@@ -76,20 +76,19 @@ void main() {
   ) async {
     final book = TextBook(title: 'ברכות');
     final tab = TextBookTab(book: book, index: 0);
-    final segments = buildReadingSegments([
-      'שורה ראשונה',
-      'שורה שנייה',
-      'שורה שלישית',
-    ], continuous: true);
-    expect(segments, hasLength(1));
     tab.bloc.emit(
       TextBookLoaded.initial(
         book: book,
         index: 0,
         showLeftPane: false,
         splitView: false,
-      ).copyWith(readingSegments: segments, continuousReadingMode: true),
+      ).copyWith(
+        content: const ['שורה ראשונה', 'שורה שנייה', 'שורה שלישית'],
+        continuousReadingMode: true,
+      ),
     );
+    final segments = readingSegmentsOf(tab.bloc.state as TextBookLoaded);
+    expect(segments, hasLength(1));
     await PluginTextReaderRegistry.instance.select(fixture.plugin(), false);
     await tester.pumpWidget(
       MultiBlocProvider(

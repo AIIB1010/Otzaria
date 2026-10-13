@@ -229,7 +229,7 @@ void main() {
             CommentatorGroup(title: 'ראשונים', commentators: ['רש"י']),
           ],
           linksByLine: _commentaryLinks(const ['רש"י'], lines: 3),
-        ),
+        ).copyWith(content: const ['שורה א', 'שורה ב', 'שורה ג']),
       );
       addTearDown(bloc.close);
 

@@ -20,7 +20,6 @@ import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
-import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:otzaria/text_book/view/combined_view/combined_book_screen.dart';
 import 'package:otzaria/text_book/view/widgets/continuous_reading_paragraph.dart';
 import 'package:otzaria/text_book/view/widgets/selection_gutter_painter.dart';
@@ -72,7 +71,6 @@ TextBookLoaded _continuousState({
     scrollController: ItemScrollController(),
     positionsListener: ItemPositionsListener.create(),
     continuousReadingMode: true,
-    readingSegments: buildReadingSegments(_content, continuous: true),
   );
 }
 
@@ -162,10 +160,6 @@ void main() {
         tester,
         _continuousState(selectedIndex: 1, linksByLine: const {}).copyWith(
           continuousReadingMode: continuous,
-          readingSegments: buildReadingSegments(
-            _content,
-            continuous: continuous,
-          ),
         ),
         simple: true,
       );

@@ -6,7 +6,6 @@ import 'package:otzaria/models/links.dart';
 import 'package:otzaria/search/models/search_configuration.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/utils/reader_build_policy.dart';
-import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:otzaria_search_engine/otzaria_search_engine.dart'
     show SearchScope;
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
@@ -183,7 +182,7 @@ void main() {
       expect(state.permanentHighlightLine, isNotNull);
       expect(state.selectedIndices, isNotEmpty);
       expect(state.selectedLinkTypes, isNotEmpty);
-      expect(state.readingSegments, isNotEmpty);
+      expect(state.loadedLineFlags, isNotNull);
       expect(state.visibleLinks, isNotEmpty);
     });
   });
@@ -476,14 +475,7 @@ TextBookLoaded _loaded() => TextBookLoaded(
   commentaryRemovePunctuationOverride: true,
   supportsContinuousReadingMode: true,
   continuousReadingMode: true,
-  readingSegments: const [
-    ReadingSegment(
-      text: 'שורה א',
-      sourceLineIndices: [0],
-      lineRanges: [ReadingLineRange(lineIndex: 0, start: 0, end: 6)],
-      isHeader: false,
-    ),
-  ],
+  loadedLineFlags: const [true, false, true],
   visibleIndices: const [1, 2],
   selectedIndex: 1,
   selectedIndices: const {1},

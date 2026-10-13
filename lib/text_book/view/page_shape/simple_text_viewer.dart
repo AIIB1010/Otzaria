@@ -85,6 +85,7 @@ import 'package:otzaria/text_book/utils/numbered_note_markers.dart';
 import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:otzaria/text_book/utils/reading_segment_navigation.dart';
 import 'package:otzaria/text_book/view/widgets/continuous_reading_paragraph.dart';
+import 'package:otzaria/text_book/view/widgets/unloaded_paragraph_placeholder.dart';
 import 'package:otzaria/text_display/text_display_exports.dart';
 import 'package:otzaria/theme/theme_exports.dart';
 import 'package:otzaria/utils/text/html_link_handler.dart';
@@ -1328,9 +1329,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     }
 
     _scrollController.jumpTo(
-      index: state.readingSegments.isNotEmpty
-          ? segmentIndexForLine(state.readingSegments, targetIndex)
-          : targetIndex,
+      index: readingLayoutOf(state).itemForLine(targetIndex),
     );
     return true;
   }
@@ -1369,7 +1368,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
         scrollController: _scrollController,
         scrollOffsetController: state.scrollOffsetController,
         positionsListener: _positionsListener,
-        segments: state.readingSegments,
+        segments: readingSegmentsOf(state),
         lineIndex: targetIndex,
         viewportExtent:
             context.size?.height ?? MediaQuery.sizeOf(context).height,
@@ -1393,15 +1392,13 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     }
 
     final state = context.read<TextBookBloc>().state;
-    if (state is! TextBookLoaded ||
-        !state.continuousReadingMode ||
-        state.readingSegments.isEmpty) {
+    if (state is! TextBookLoaded || !state.continuousReadingMode) {
       return positions.map((position) => position.index).toSet().toList()
         ..sort();
     }
 
     return sourceLineIndicesForSegmentViewports(
-      state.readingSegments,
+      readingSegmentsOf(state),
       positions.map(
         (position) => ReadingSegmentViewport(
           segmentIndex: position.index,
@@ -1415,10 +1412,9 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
   /// ממיר שורת מקור לאינדקס הסגמנט המתאים לגלילה.
   int _segmentIndexForSourceLine(int lineIndex) {
     final state = context.read<TextBookBloc>().state;
-    if (state is! TextBookLoaded || state.readingSegments.isEmpty) {
-      return lineIndex;
-    }
-    return segmentIndexForLine(state.readingSegments, lineIndex);
+    if (state is! TextBookLoaded) return lineIndex;
+    final layout = readingLayoutOf(state);
+    return layout.isEmpty ? lineIndex : layout.itemForLine(lineIndex);
   }
 
   /// היעד של הטור. טור מפרש אינו תנ"ך, ולכן חל עליו פרופיל המפרשים
@@ -2597,11 +2593,9 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
                   final continuous =
                       widget.isMainText && state.continuousReadingMode;
                   final segments = widget.isMainText
-                      ? state.readingSegments
-                      : const <ReadingSegment>[];
-                  final itemCount = segments.isNotEmpty
-                      ? segments.length
-                      : widget.content.length;
+                      ? readingSegmentsOf(state)
+                      : null;
+                  final itemCount = segments?.length ?? widget.content.length;
                   return RtlSelectionShortcuts(
                     child: SelectableRegion(
                       key: _selectionRegionKey,
@@ -2781,7 +2775,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     int index,
     TextBookLoaded state,
     Map<int, List<PersonalNote>> noteMap,
-    List<ReadingSegment> segments,
+    ReadingSegments? segments,
     bool continuous,
   ) {
     final line = _buildLine(
@@ -2789,7 +2783,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
       state,
       context,
       noteMap,
-      segments.isNotEmpty && index < segments.length ? segments[index] : null,
+      segments != null && index < segments.length ? segments[index] : null,
       continuous,
     );
     final sourceBannerKind = _sourceBannerKind;
@@ -2823,6 +2817,12 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
         segment != null &&
         !segment.isHeader &&
         segment.sourceLineIndices.length > 1;
+    if (isContinuousParagraph && !segment.isLoaded) {
+      return UnloadedParagraphPlaceholder(
+        lineCount: segment.sourceLineIndices.length,
+        fontSize: widget.fontSize,
+      );
+    }
     // ריבוי-בחירה: הקטע נחשב נבחר אם שורת מקור כלשהי שבו נמצאת ב-selectedIndices.
     final isSelected =
         widget.isMainText &&

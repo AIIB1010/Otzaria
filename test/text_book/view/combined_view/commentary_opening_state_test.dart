@@ -34,7 +34,6 @@ List<String> _content() => [
 Future<({_TextBookBloc bloc, TextBookTab tab})> _pumpView(
   WidgetTester tester,
   List<String> data, {
-  bool withSegments = false,
   bool below = true,
   bool notes = true,
   bool preview = false,
@@ -71,9 +70,6 @@ Future<({_TextBookBloc bloc, TextBookTab tab})> _pumpView(
       searchText: '',
       scrollController: ItemScrollController(),
       positionsListener: ItemPositionsListener.create(),
-      readingSegments: withSegments
-          ? buildReadingSegments(data, continuous: false)
-          : const [],
     ),
   );
   final notesBloc = _PersonalNotesBloc(const PersonalNotesState.initial());
@@ -454,7 +450,7 @@ void main() {
             '<div>פסקה$i <details><summary>פרטים</summary>תוכן</details></div>',
           ),
       ];
-      final h = await _pumpView(tester, data, withSegments: true);
+      final h = await _pumpView(tester, data);
       h.tab.scrollController.jumpTo(index: 23);
       await tester.pumpAndSettle();
       await _tap(tester, 22);
@@ -462,17 +458,16 @@ void main() {
       await tester.pump();
       expect(h.bloc.loaded.selectedIndex, 22);
       h.bloc.replace(
-        h.bloc.loaded.copyWith(
-          continuousReadingMode: true,
-          readingSegments: buildReadingSegments(data, continuous: true),
-        ),
+        h.bloc.loaded.copyWith(continuousReadingMode: true),
       );
       await _frames(tester, 20);
       expect(tester.takeException(), isNull);
       expect(
         _positions(
           h.tab,
-        ).keys.every((i) => i >= 0 && i < h.bloc.loaded.readingSegments.length),
+        ).keys.every(
+          (i) => i >= 0 && i < readingSegmentsOf(h.bloc.loaded).length,
+        ),
         isTrue,
       );
     },

@@ -26,10 +26,10 @@ import 'package:otzaria/text_book/view/combined_view/combined_book_screen.dart';
 import 'package:otzaria/text_book/view/error_report_dialog.dart';
 import 'package:otzaria/text_book/view/selection/selected_text_copy.dart';
 import 'package:otzaria/text_display/text_display_exports.dart';
-import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import '../../../test_helpers/memory_cache_provider.dart';
+import '../../../test_helpers/reading_toc.dart';
 
 const _lines = ['פסקה ראשונה', 'פסקה שניה', 'פסקה שלישית'];
 
@@ -529,13 +529,12 @@ TextBookLoaded _loadedState({
             for (final title in availableCommentators) _commentaryLink(title),
           ],
         },
-    tableOfContents: const [],
+    tableOfContents: headerToc(data),
     removeNikud: false,
     visibleIndices: List.generate(data.length, (index) => index),
     selectedIndex: selectedIndex,
     selectedIndices: selectedIndex == null ? const {} : {selectedIndex},
     continuousReadingMode: continuous,
-    readingSegments: buildReadingSegments(data, continuous: continuous),
     pinLeftPane: false,
     searchText: '',
     scrollController: ItemScrollController(),

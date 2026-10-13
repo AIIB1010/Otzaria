@@ -1,3 +1,4 @@
+// ignore_for_file: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
 import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_settings_screens/flutter_settings_screens.dart';
@@ -7,11 +8,24 @@ import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/data/repository/text_book_repository.dart';
+import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../../test_helpers/memory_cache_provider.dart';
 
 class _FakeTextBookRepository extends TextBookRepository {
   _FakeTextBookRepository() : super(fileSystem: FileSystemData.instance);
+
+  final requestedRanges = <({int startLine, int endLine})>[];
+
+  @override
+  Future<BookContentRange?> getBookContentRange(
+    TextBook book, {
+    required int startLine,
+    required int endLine,
+  }) async {
+    requestedRanges.add((startLine: startLine, endLine: endLine));
+    return null;
+  }
 }
 
 void main() {
@@ -19,6 +33,7 @@ void main() {
 
   late TextBookBloc bloc;
   late TextBook book;
+  late _FakeTextBookRepository repository;
 
   setUpAll(() async {
     await Settings.init(cacheProvider: MemoryCacheProvider());
@@ -26,8 +41,9 @@ void main() {
 
   setUp(() {
     book = TextBook(title: 'ספר בדיקה');
+    repository = _FakeTextBookRepository();
     bloc = TextBookBloc(
-      repository: _FakeTextBookRepository(),
+      repository: repository,
       initialState: TextBookInitial.named(book, 10, true, const []),
       scrollController: ItemScrollController(),
       positionsListener: ItemPositionsListener.create(),
@@ -133,23 +149,30 @@ void main() {
       ],
     );
 
-    blocTest<TextBookBloc, TextBookState>(
-      'מצב קריאה רציף אינו משוחרר בהסתרה — כיווץ הסגמנטים דורס את '
-      'מקום הקריאה ברשימה החיה של טאב הרקע (issue #912)',
-      build: () => bloc,
-      seed: () => buildLoadedState(
-        content: longContent,
-        visibleIndices: const [1000],
-        continuousReadingMode: true,
-      ),
-      act: (bloc) {
-        bloc.add(proveRangeLoading);
-        bloc.add(const SetTabVisibility(false));
-      },
-      expect: () => [
-        isA<TextBookLoaded>(), // החלת הטווח המוכיח בלבד — אין emission שחרור
-      ],
-    );
+    test('מצב קריאה רציף משוחרר בהסתרה ופריסת הקריאה אינה זזה', () async {
+      final toc = [
+        for (var line = 0; line < 3000; line += 100)
+          TocEntry(text: 'סימן $line', index: line),
+      ];
+      bloc.emit(
+        buildLoadedState(
+          content: longContent,
+          visibleIndices: const [1050],
+          continuousReadingMode: true,
+        ).copyWith(tableOfContents: toc),
+      );
+      bloc.add(proveRangeLoading);
+      final proven = await bloc.stream.first as TextBookLoaded;
+      final layout = readingLayoutOf(proven);
+      expect(layout.itemCount, 60);
+
+      bloc.add(const SetTabVisibility(false));
+      final released = await bloc.stream.first as TextBookLoaded;
+      expect(released.content.length, 3000);
+      expect(released.content[0], '');
+      expect(released.content[1050], 'שורה 1050');
+      expect(identical(readingLayoutOf(released), layout), isTrue);
+    });
 
     blocTest<TextBookBloc, TextBookState>(
       'ספר במסלול preview (ללא טעינת-טווחים) אינו משוחרר בהסתרה',
@@ -274,4 +297,36 @@ void main() {
           .having((state) => state.content[5], 'line 5', 'שורה 5'),
     ],
   );
+
+  test('פסקה רציפה שלא נטענה כולה מבקשת את כל טווח שורותיה', () async {
+    // פסקה אחת בשורות 1..1999 בין שתי כותרות; רק סביב שורה 1000 טעון.
+    const lineCount = 2100;
+    final flags = [
+      for (var i = 0; i < lineCount; i++) i >= 990 && i <= 1010,
+    ];
+    bloc.emit(
+      buildLoadedState(
+        content: [
+          for (var i = 0; i < lineCount; i++) flags[i] ? 'שורה $i' : '',
+        ],
+        visibleIndices: const [0],
+        continuousReadingMode: true,
+      ).copyWith(
+        loadedLineFlags: flags,
+        showLeftPane: false,
+        tableOfContents: [
+          TocEntry(text: 'פתיחה', index: 0),
+          TocEntry(text: 'סיום', index: 2000),
+        ],
+      ),
+    );
+    bloc.add(const UpdateVisibleIndecies([999, 1000, 1001]));
+    await bloc.stream.first;
+    await Future<void>.delayed(Duration.zero);
+
+    expect(repository.requestedRanges, isNotEmpty);
+    final requested = repository.requestedRanges.last;
+    expect(requested.startLine, lessThanOrEqualTo(1));
+    expect(requested.endLine, greaterThanOrEqualTo(1999));
+  });
 }

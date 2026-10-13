@@ -4,7 +4,6 @@ import 'package:otzaria/models/links.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:otzaria/book_common/models/commentator_group.dart';
-import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:otzaria/search/models/search_configuration.dart';
 import 'package:otzaria/text_display/text_display_exports.dart';
 
@@ -199,29 +198,17 @@ class TextBookLoaded extends TextBookState {
   final bool supportsContinuousReadingMode;
   final bool continuousReadingMode;
 
-  /// נגזר מ-[content] + [continuousReadingMode]. ה-bloc מחזיק אותו רק כדי
-  /// שהרינדור לא ייאלץ לחשב מחדש בכל build. **אסור** להזליג segmentIndex
-  /// אל ה-state הלוגי — selectedIndex/highlightedLine/searchText נשארים
-  /// ברמת שורות מקור.
-  final List<ReadingSegment> readingSegments;
+  /// אילו שורות של [content] נטענו; null = כולן. שורה לא טעונה מוחזקת
+  /// ב-[content] כמחרוזת ריקה.
+  final List<bool>? loadedLineFlags;
 
-  /// האם שורת המקור נטענה, גם כשהיא חלק מפסקה רציפה.
   /// בלי מידע על השורה, משמר את סריקת התוכן הרגילה.
   bool isContentLineLoaded(int lineIndex) {
-    var low = 0;
-    var high = readingSegments.length - 1;
-    while (low <= high) {
-      final middle = (low + high) >> 1;
-      final segment = readingSegments[middle];
-      if (lineIndex < segment.startLineIndex) {
-        high = middle - 1;
-      } else if (lineIndex > segment.endLineIndex) {
-        low = middle + 1;
-      } else {
-        return segment.isLoaded;
-      }
+    final flags = loadedLineFlags;
+    if (flags == null || lineIndex < 0 || lineIndex >= flags.length) {
+      return true;
     }
-    return true;
+    return flags[lineIndex];
   }
 
   final List<int> visibleIndices;
@@ -317,7 +304,7 @@ class TextBookLoaded extends TextBookState {
     TextDisplayPolicy? displayPolicy,
     this.supportsContinuousReadingMode = false,
     this.continuousReadingMode = false,
-    this.readingSegments = const [],
+    this.loadedLineFlags,
     required this.visibleIndices,
     this.selectedIndex,
     this.selectedIndices = const {},
@@ -395,7 +382,6 @@ class TextBookLoaded extends TextBookState {
       removeNikud: false,
       supportsContinuousReadingMode: false,
       continuousReadingMode: false,
-      readingSegments: const [],
       pinLeftPane: Settings.getValue<bool>('key-pin-sidebar') ?? false,
       searchText: '',
       scrollController: ItemScrollController(),
@@ -533,7 +519,7 @@ class TextBookLoaded extends TextBookState {
     TextDisplayPolicy? displayPolicy,
     bool? supportsContinuousReadingMode,
     bool? continuousReadingMode,
-    List<ReadingSegment>? readingSegments,
+    List<bool>? loadedLineFlags,
     int? selectedIndex,
     bool clearSelectedIndex = false,
     Set<int>? selectedIndices,
@@ -668,7 +654,7 @@ class TextBookLoaded extends TextBookState {
           supportsContinuousReadingMode ?? this.supportsContinuousReadingMode,
       continuousReadingMode:
           continuousReadingMode ?? this.continuousReadingMode,
-      readingSegments: readingSegments ?? this.readingSegments,
+      loadedLineFlags: loadedLineFlags ?? this.loadedLineFlags,
       visibleIndices: visibleIndices ?? this.visibleIndices,
       selectedIndex: clearSelectedIndex
           ? null
@@ -772,7 +758,6 @@ class TextBookLoaded extends TextBookState {
     displayPolicy,
     supportsContinuousReadingMode,
     continuousReadingMode,
-    readingSegments.length,
     visibleIndices,
     selectedIndex,
     selectedIndices,

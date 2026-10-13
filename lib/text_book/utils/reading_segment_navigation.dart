@@ -73,20 +73,20 @@ ItemPosition? _findPosition(ItemPositionsListener listener, int segmentIndex) {
 /// הנחיתה נמדדת ומתוקנת גם ליעד ללא דיוק תוך-שורתי (ניווט מכותרות/TOC):
 /// רה-פריסה תוך כדי האנימציה (טעינה הדרגתית) מסיטה את היעד, ובלי תיקון נשארים במקום.
 ///
-/// [latestSegments] פותר מחדש את היעד כשטעינת רקע מחליפה את הסגמנטים;
-/// בלעדיו משתמשים ב-[segments] לאורך כל הגלילה.
+/// [latestSegments] מחשב מחדש את מיקום השורה בפסקה כשתוכנה נטען תוך כדי
+/// הגלילה; בלעדיו משתמשים ב-[segments] לאורך כל הגלילה.
 Future<void> scrollToSourceLine({
   required ItemScrollController scrollController,
   required ScrollOffsetController? scrollOffsetController,
   required ItemPositionsListener? positionsListener,
-  required List<ReadingSegment> segments,
+  required ReadingSegments segments,
   required int lineIndex,
   required double viewportExtent,
   double alignment = kReadingAnchorAlignment,
   double intraLineFraction = 0,
   Duration duration = const Duration(milliseconds: 250),
   Curve curve = Curves.ease,
-  List<ReadingSegment> Function()? latestSegments,
+  ReadingSegments Function()? latestSegments,
 }) async {
   if (segments.isEmpty || !scrollController.isAttached) {
     return;
@@ -98,16 +98,10 @@ Future<void> scrollToSourceLine({
   var segmentIndex = -1;
   var fraction = 0.0;
   var safeLineIndex = lineIndex;
-  // היעד נפתר מול הרשימה העדכנית כי טעינת רקע משנה את מספור הסגמנטים.
   bool resolveTarget() {
     final current = latestSegments?.call() ?? segments;
     if (current.isEmpty) return false;
-    safeLineIndex = lineIndex
-        .clamp(
-          current.first.startLineIndex,
-          current.last.sourceLineIndices.last,
-        )
-        .toInt();
+    safeLineIndex = lineIndex.clamp(0, current.layout.lineCount - 1).toInt();
     segmentIndex = segmentIndexForLine(current, safeLineIndex);
     fraction = lineFractionWithinSegment(
       current[segmentIndex],
@@ -180,9 +174,10 @@ Future<void> scrollToSourceLine({
       return;
     }
     final previousIndex = segmentIndex;
+    final previousFraction = fraction;
     if (!resolveTarget()) return;
-    if (segmentIndex != previousIndex) {
-      // המרחק שנמדד מול הסגמנט הישן אינו רלוונטי אחרי החלפת הרשימה.
+    if (segmentIndex != previousIndex || fraction != previousFraction) {
+      // המרחק שנמדד מול היעד הקודם אינו רלוונטי אחרי שהפסקה נטענה.
       previousDistance = double.infinity;
       confirming = false;
     }

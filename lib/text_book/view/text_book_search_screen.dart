@@ -34,6 +34,7 @@ import 'package:otzaria/search/view/in_book_advanced_search_dialog.dart';
 import 'package:otzaria/search/models/search_configuration.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/text_book/utils/reading_segment_navigation.dart';
+import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:otzaria/text_book/utils/section_search_utils.dart';
 import 'package:otzaria/search/utils/search_query_sync.dart';
 import 'package:otzaria/utils/text/ref_helper.dart' show tocSectionAt;
@@ -744,7 +745,7 @@ class TextBookSearchViewState extends State<TextBookSearchView>
       scrollController: widget.scrollControler,
       scrollOffsetController: loadedState.scrollOffsetController,
       positionsListener: loadedState.positionsListener,
-      segments: loadedState.readingSegments,
+      segments: readingSegmentsOf(loadedState),
       lineIndex: result.index,
       viewportExtent: context.size?.height ?? MediaQuery.sizeOf(context).height,
       duration: const Duration(milliseconds: 250),

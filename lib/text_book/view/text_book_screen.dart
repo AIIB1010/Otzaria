@@ -39,6 +39,7 @@ import 'package:otzaria/text_display/view/text_display_bar_button.dart';
 import 'package:otzaria/text_book/utils/reader_build_policy.dart';
 import 'package:otzaria/text_book/utils/text_book_export_utils.dart';
 import 'package:otzaria/text_book/utils/visible_index.dart';
+import 'package:otzaria/text_book/utils/reading_layout.dart';
 import 'package:otzaria/text_display/text_display_exports.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
@@ -2362,9 +2363,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
       return;
     }
     if (state.positionsListener.itemPositions.value.isEmpty) return;
-    final lastIndex = state.readingSegments.isNotEmpty
-        ? state.readingSegments.length - 1
-        : state.content.length - 1;
+    final lastIndex = readingLayoutOf(state).itemCount - 1;
     final int target =
         ((_pendingSegmentTarget ?? _topmostVisibleIndex(state)) + delta).clamp(
           0,
@@ -3097,8 +3096,7 @@ int _topmostVisibleSourceLine(TextBookLoaded state) =>
     ? (state.visibleIndices.firstOrNull ?? 0)
     : resolveTopmostSourceLine(
         positions: state.positionsListener.itemPositions.value,
-        continuousReadingMode: state.continuousReadingMode,
-        readingSegments: state.readingSegments,
+        layout: readingLayoutOf(state),
       );
 
 /// [label] followed by the shortcut the user set for [settingKey], or the
@@ -3112,7 +3110,7 @@ String _withShortcut(String label, String settingKey) {
 int _itemIndexForSourceLine(TextBookLoaded state, int lineIndex) =>
     resolveItemIndexForSourceLine(
       lineIndex: lineIndex,
-      readingSegments: state.readingSegments,
+      layout: readingLayoutOf(state),
     );
 
 /// Steps the text size by 3 within 15 to 50 and saves it for the book.

@@ -247,9 +247,7 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
         currentState.visibleIndices,
       );
       _warmContentCacheInBackground(currentState.book);
-    } else if (!currentState.continuousReadingMode) {
-      // שחרור אסור במצב קריאה רציף: הוא מכווץ את רשימת הסגמנטים, וגם רשימת
-      // טאב רקע חיה (KeepAlive) — ה-clamp דורס את מקום הקריאה (issue #912).
+    } else {
       _releaseContentOutsideWindow(currentState, emit);
     }
   }
@@ -266,7 +264,10 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
       return;
     }
 
-    final window = _calculateContentWindow(currentState.visibleIndices);
+    final window = _calculateContentWindow(
+      currentState,
+      currentState.visibleIndices,
+    );
     final keepStart = window.startLine.clamp(0, content.length - 1);
     final keepEnd = window.endLine.clamp(0, content.length - 1);
 
@@ -300,11 +301,7 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
       currentState.copyWith(
         content: nextContent,
         contentVersion: currentState.contentVersion + 1,
-        readingSegments: buildReadingSegments(
-          nextContent,
-          continuous: currentState.continuousReadingMode,
-          loadedLineFlags: nextFlags,
-        ),
+        loadedLineFlags: _loadedContentFlags,
       ),
     );
   }
@@ -895,12 +892,6 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
         currentState: state,
         globalDefault: defaultContinuousReading,
       );
-      final readingSegments = buildReadingSegments(
-        contentLines,
-        continuous: effectiveContinuousReading,
-        loadedLineFlags: loadedLineFlags,
-      );
-
       const List<Link> emptyLinks = [];
       const List<Link> emptyVisibleLinks = [];
 
@@ -1024,7 +1015,7 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
         displayOverrides: displayOverrides,
         supportsContinuousReadingMode: supportsContinuousReading,
         continuousReadingMode: effectiveContinuousReading,
-        readingSegments: readingSegments,
+        loadedLineFlags: loadedLineFlags,
         // בלי בחירת מפרשים הקישורים נטענים רק אחרי שהבחירה נפתרה (ראה למטה),
         // והחלונית מציגה "טוען" עד אז ולא "לא נמצאו" (issue #1130).
         linksLoading: event.loadCommentators && commentators.isEmpty,
@@ -1276,7 +1267,7 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
             scrollController.scrollTo(
               index: resolveItemIndexForSourceLine(
                 lineIndex: currentState.selectedIndex!,
-                readingSegments: latestState.readingSegments,
+                layout: readingLayoutOf(latestState),
               ),
               duration: const Duration(milliseconds: 300),
             );
@@ -1461,11 +1452,6 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
     emit(
       currentState.copyWith(
         continuousReadingMode: effectiveEnabled,
-        readingSegments: buildReadingSegments(
-          currentState.content,
-          continuous: effectiveEnabled,
-          loadedLineFlags: _loadedContentFlags,
-        ),
       ),
     );
   }
@@ -1828,7 +1814,7 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
     // במצב רציף: ה-positions הם segmentIndex. ממירים בחזרה לשורות מקור
     // כדי ש-visibleIndices ב-state יישאר תמיד ברמת שורות.
     return sourceLineIndicesForSegmentViewports(
-      state.readingSegments,
+      readingSegmentsOf(state),
       itemPositions.map(
         (position) => ReadingSegmentViewport(
           segmentIndex: position.index,
@@ -1982,7 +1968,7 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
         scrollController.scrollTo(
           index: resolveItemIndexForSourceLine(
             lineIndex: scrollIndex,
-            readingSegments: currentState.readingSegments,
+            layout: readingLayoutOf(currentState),
           ),
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
@@ -2128,11 +2114,7 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
       currentState.copyWith(
         content: event.content,
         contentVersion: currentState.contentVersion + 1,
-        readingSegments: buildReadingSegments(
-          event.content,
-          continuous: currentState.continuousReadingMode,
-          loadedLineFlags: nextLoadedFlags,
-        ),
+        loadedLineFlags: _loadedContentFlags,
       ),
     );
     // אחרי שסרקנו את התוכן המלא, אין יותר טעם בסריקה נוספת על הרחבות
@@ -2250,35 +2232,12 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
     _setLoadedContentFlags(currentState.book, nextLoadedFlags);
     markAllRanges();
 
-    // מיזוג טווחים סמוכים/חופפים: עדכון הסגמנטים מעתיק את הרשימה המלאה לכל
-    // טווח, ואצוות חימום הן כמעט תמיד רצף אחד — כך נשארת העתקה אחת לאצווה.
-    var mergedRanges = const <({int startLine, int endLine})>[];
-    for (final range in applicable) {
-      mergedRanges = mergeLoadedContentRanges(
-        mergedRanges,
-        startLine: range.startLine,
-        endLine: range.startLine + range.lines.length - 1,
-      );
-    }
-
-    var readingSegments = currentState.readingSegments;
-    for (final range in mergedRanges) {
-      readingSegments = updateReadingSegmentsForRange(
-        readingSegments,
-        nextContent,
-        loadedLineFlags: nextLoadedFlags,
-        continuous: currentState.continuousReadingMode,
-        startLine: range.startLine,
-        endLine: range.endLine,
-      );
-    }
-
     emit(
       _withInlineNotesCommentator(
         currentState.copyWith(
           content: nextContent,
           contentVersion: currentState.contentVersion + 1,
-          readingSegments: readingSegments,
+          loadedLineFlags: _loadedContentFlags,
         ),
         // אופטימיזציה: לסרוק רק את השורות החדשות במקום את כל ה-content
         // המצטבר (מונע עבודה ריבועית במהלך warming הדרגתי של ספר ארוך).
@@ -2506,13 +2465,23 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
     );
   }
 
+  /// החלון כולל את כל שורות הפריטים הגלויים: פריט חלקי מוצג כמקום שמור
+  /// עד שכל שורותיו נטענות.
   ({int startLine, int endLine}) _calculateContentWindow(
+    TextBookLoaded? state,
     List<int> visibleIndices,
   ) {
-    final firstVisible = visibleIndices.isEmpty ? 0 : visibleIndices.first;
-    final lastVisible = visibleIndices.isEmpty
+    var firstVisible = visibleIndices.isEmpty ? 0 : visibleIndices.first;
+    var lastVisible = visibleIndices.isEmpty
         ? firstVisible
         : visibleIndices.last;
+    if (state != null) {
+      final layout = readingLayoutOf(state);
+      if (layout.isNotEmpty) {
+        firstVisible = layout.firstLineOf(layout.itemForLine(firstVisible));
+        lastVisible = layout.lastLineOf(layout.itemForLine(lastVisible));
+      }
+    }
 
     return (
       startLine: firstVisible - _contentLookBehindLines,
@@ -2527,7 +2496,13 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
   }) async {
     if (_requiresWholeBookContent(book)) return;
 
-    final window = _calculateContentWindow(visibleIndices);
+    final loadedState = state;
+    final window = _calculateContentWindow(
+      loadedState is TextBookLoaded && loadedState.book.title == book.title
+          ? loadedState
+          : null,
+      visibleIndices,
+    );
     if (!force &&
         _isContentWindowSufficient(book, window.startLine, window.endLine)) {
       return;

@@ -84,6 +84,7 @@ import 'package:otzaria/text_book/utils/section_search_utils.dart';
 import 'package:otzaria/text_display/text_display_exports.dart';
 import 'package:otzaria/text_book/utils/inline_section_markers.dart';
 import 'package:otzaria/text_book/view/widgets/continuous_reading_paragraph.dart';
+import 'package:otzaria/text_book/view/widgets/unloaded_paragraph_placeholder.dart';
 import 'package:otzaria/theme/theme_exports.dart';
 import 'package:otzaria/utils/text/html_link_handler.dart';
 
@@ -289,58 +290,6 @@ bool shouldRestoreScrollOnContinuousModeChange({
   required bool currentMode,
 }) {
   return previousMode != null && previousMode != currentMode;
-}
-
-/// שומר גובה של פריט שלא השתנה, או נקודת מקור בתוך פסקה שהתארכה.
-@visibleForTesting
-({int index, double alignment, double fraction, double estimatedExtent})?
-reflowAnchor({
-  required Iterable<ItemPosition> positions,
-  required List<ReadingSegment> previous,
-  required List<ReadingSegment> current,
-}) {
-  final visible =
-      positions
-          .where((p) => p.itemTrailingEdge > 0 && p.itemLeadingEdge < 1)
-          .toList()
-        ..sort((a, b) => a.itemLeadingEdge.compareTo(b.itemLeadingEdge));
-  ({int index, double alignment, double fraction, double estimatedExtent})?
-  fallback;
-  for (final position in visible) {
-    if (position.index < 0 || position.index >= previous.length) continue;
-    final old = previous[position.index];
-    if (!old.isLoaded) continue;
-    final nextIndex = segmentIndexForLine(current, old.startLineIndex);
-    if (nextIndex >= current.length) continue;
-    final next = current[nextIndex];
-    if (next.startLineIndex == old.startLineIndex &&
-        next.endLineIndex == old.endLineIndex) {
-      if (nextIndex == position.index && fallback == null) return null;
-      return (
-        index: nextIndex,
-        alignment: position.itemLeadingEdge,
-        fraction: 0,
-        estimatedExtent: 0,
-      );
-    }
-    final extent = position.itemTrailingEdge - position.itemLeadingEdge;
-    if (!next.isLoaded || !extent.isFinite || extent <= 0) continue;
-    final point = (-position.itemLeadingEdge / extent).clamp(0.0, 1.0);
-    final start = lineFractionWithinSegment(next, old.startLineIndex);
-    final end = lineFractionWithinSegment(
-      next,
-      old.endLineIndex,
-      intraLineFraction: 1,
-    );
-    if (end <= start) continue;
-    fallback ??= (
-      index: nextIndex,
-      alignment: position.itemLeadingEdge.clamp(0.0, 1.0),
-      fraction: start + point * (end - start),
-      estimatedExtent: extent / (end - start),
-    );
-  }
-  return fallback;
 }
 
 @visibleForTesting
@@ -775,10 +724,6 @@ class _CombinedViewState extends State<CombinedView> {
   // מצב הרצף האחרון שנצפה — לזיהוי החלפת מצב שמחייבת שחזור מיקום.
   bool? _lastContinuousReadingMode;
 
-  // רשימת הסגמנטים והמצב שהרשימה נבנתה מהם לאחרונה — לזיהוי שינוי במספור
-  // הפסקאות שמחייב עיגון מחדש (issue #1973).
-  ({List<ReadingSegment> segments, bool continuous})? _reflowBasis;
-
   // באנר קרדיט מקור המוצג מעל השורה הראשונה (נטען פעם אחת לכל ספר), אם קיים.
   BookSourceBannerKind? _sourceBannerKind;
 
@@ -810,10 +755,7 @@ class _CombinedViewState extends State<CombinedView> {
     setState(() {});
   }
 
-  int _scrollGeneration = 0;
-
   void _clearSelectionBeforeJump() {
-    _scrollGeneration++;
     if (_savedSelectedText.value == null) return;
     _selectionAreaKey.currentState?.selectableRegion.clearSelection();
   }
@@ -873,13 +815,6 @@ class _CombinedViewState extends State<CombinedView> {
     }
     // שמירת ה-BLoC מראש
     _textBookBloc = context.read<TextBookBloc>();
-    final initialBlocState = _textBookBloc.state;
-    if (initialBlocState is TextBookLoaded) {
-      _reflowBasis = (
-        segments: initialBlocState.readingSegments,
-        continuous: initialBlocState.continuousReadingMode,
-      );
-    }
 
     _siblingController = SiblingCommentariesController(
       loadSiblings: (sourceLink) {
@@ -1242,14 +1177,13 @@ class _CombinedViewState extends State<CombinedView> {
     final top = topVisible ?? first;
     if (top == null) return;
 
-    if (!state.continuousReadingMode || state.readingSegments.isEmpty) {
+    final layout = readingLayoutOf(state);
+    if (!layout.continuous) {
       widget.tab.index = top.index;
       return;
     }
-    // במצב רציף — translate segmentIndex לשורת מקור ראשונה
-    final segmentIndex = top.index;
-    if (segmentIndex >= 0 && segmentIndex < state.readingSegments.length) {
-      widget.tab.index = state.readingSegments[segmentIndex].startLineIndex;
+    if (top.index >= 0 && top.index < layout.itemCount) {
+      widget.tab.index = layout.firstLineOf(top.index);
     }
   }
 
@@ -1277,94 +1211,6 @@ class _CombinedViewState extends State<CombinedView> {
     });
   }
 
-  // המדידות שייכות לפריסה הקודמת; כמה emits לפני frame נבנים יחד.
-  void _keepPlaceAcrossSegmentReflow(TextBookLoaded state) {
-    final previous = _reflowBasis;
-    final current = state.readingSegments;
-    final basis = (segments: current, continuous: state.continuousReadingMode);
-    if (previous != null &&
-        identical(previous.segments, current) &&
-        previous.continuous == basis.continuous) {
-      return;
-    }
-    final anchor =
-        previous != null &&
-            previous.continuous == basis.continuous &&
-            basis.continuous &&
-            widget.tab.scrollController.isNativeAttached
-        ? reflowAnchor(
-            positions: widget.tab.positionsListener.itemPositions.value,
-            previous: previous.segments,
-            current: current,
-          )
-        : null;
-    var generation = _scrollGeneration;
-    final navigationGeneration =
-        widget.tab.scrollController.navigationGeneration;
-    bool isCurrent() {
-      final latest = _textBookBloc.state;
-      return mounted &&
-          generation == _scrollGeneration &&
-          navigationGeneration ==
-              widget.tab.scrollController.navigationGeneration &&
-          widget.tab.scrollController.isNativeAttached &&
-          latest is TextBookLoaded &&
-          latest.continuousReadingMode == basis.continuous &&
-          identical(latest.readingSegments, current);
-    }
-
-    // הרשימה מפרסמת מדידות ב-postFrame; משתמשים בהן אחרי כל ה-callbacks.
-    void afterLayout(VoidCallback action) {
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => scheduleMicrotask(action),
-      );
-    }
-
-    afterLayout(() {
-      if (!mounted) return;
-      _reflowBasis = basis;
-      if (anchor == null || !isCurrent()) return;
-      ItemPosition? measured() {
-        for (final position
-            in widget.tab.positionsListener.itemPositions.value) {
-          if (position.index == anchor.index) return position;
-        }
-        return null;
-      }
-
-      final position = measured();
-      final extent = position == null
-          ? anchor.estimatedExtent
-          : position.itemTrailingEdge - position.itemLeadingEdge;
-      final alignment = anchor.alignment - anchor.fraction * extent;
-      widget.tab.scrollController.jumpTo(
-        index: anchor.index,
-        alignment: alignment,
-      );
-      if (anchor.fraction == 0 || position != null) return;
-      generation = _scrollGeneration;
-      // יעד שלא נבנה מעוגן תחילה לפי גובהו המשוער, ואז לפי מדידתו.
-      afterLayout(() {
-        if (!isCurrent()) return;
-        final position = measured();
-        if (position == null ||
-            (position.itemLeadingEdge - alignment).abs() >
-                kAnchorLandingEpsilon) {
-          return;
-        }
-        final corrected =
-            anchor.alignment -
-            anchor.fraction *
-                (position.itemTrailingEdge - position.itemLeadingEdge);
-        if ((corrected - alignment).abs() <= kAnchorLandingEpsilon) return;
-        widget.tab.scrollController.jumpTo(
-          index: anchor.index,
-          alignment: corrected,
-        );
-      });
-    });
-  }
-
   Future<void> _scrollToSourceLine(
     TextBookLoaded state,
     int lineIndex, {
@@ -1376,13 +1222,11 @@ class _CombinedViewState extends State<CombinedView> {
       scrollController: widget.tab.scrollController,
       scrollOffsetController: widget.tab.mainOffsetController,
       positionsListener: widget.tab.positionsListener,
-      segments: state.readingSegments,
-      // טעינת רקע מחליפה את הרשימה תוך כדי הגלילה (issue #1973).
+      segments: readingSegmentsOf(state),
+      // טעינת התוכן תוך כדי הגלילה משנה את מיקום השורה בתוך הפסקה.
       latestSegments: () {
         final latest = _textBookBloc.state;
-        return latest is TextBookLoaded
-            ? latest.readingSegments
-            : state.readingSegments;
+        return readingSegmentsOf(latest is TextBookLoaded ? latest : state);
       },
       lineIndex: lineIndex,
       viewportExtent: _viewportHeight > 0
@@ -2018,7 +1862,6 @@ class _CombinedViewState extends State<CombinedView> {
         if (state is! TextBookLoaded) {
           return const Center(child: CircularProgressIndicator());
         }
-        _keepPlaceAcrossSegmentReflow(state);
         return LayoutBuilder(
           builder: (context, constraints) {
             // שומר את גובה הבלוק בפועל לשימוש בחישובי הגלילה
@@ -2033,10 +1876,7 @@ class _CombinedViewState extends State<CombinedView> {
               onCopy: _copyFormattedText,
               child: RtlSelectionShortcuts(
                 child: Listener(
-                  onPointerSignal: (_) => _scrollGeneration++,
-                  onPointerPanZoomStart: (_) => _scrollGeneration++,
                   onPointerDown: (event) {
-                    _scrollGeneration++;
                     if (event.buttons == kPrimaryMouseButton) {
                       _isSelectionPointerDown = true;
                     }
@@ -2238,22 +2078,16 @@ class _CombinedViewState extends State<CombinedView> {
                                     widget.tab.positionsListener,
                                 offsetController:
                                     widget.tab.mainOffsetController,
-                                itemCount: state.readingSegments.isNotEmpty
-                                    ? state.readingSegments.length
-                                    : widget.data.length,
+                                itemCount: readingLayoutOf(state).itemCount,
                                 labelForIndex: state.tableOfContents.isEmpty
                                     ? null
                                     : (index) {
-                                        // במצב קריאה רציף האינדקס הוא אינדקס
-                                        // סגמנט; ממירים לשורת המקור כדי שמיפוי
-                                        // ה-TOC (שמבוסס על מספרי שורות) יהיה נכון.
-                                        final segments = state.readingSegments;
-                                        final lineIndex = segments.isNotEmpty
-                                            ? (index >= 0 &&
-                                                      index < segments.length
-                                                  ? segments[index]
-                                                        .startLineIndex
-                                                  : index)
+                                        // מיפוי ה-TOC מבוסס על שורות מקור.
+                                        final layout = readingLayoutOf(state);
+                                        final lineIndex =
+                                            index >= 0 &&
+                                                index < layout.itemCount
+                                            ? layout.firstLineOf(index)
                                             : index;
                                         final ref = refFromTocList(
                                           lineIndex,
@@ -2341,14 +2175,11 @@ class _CombinedViewState extends State<CombinedView> {
   }
 
   Widget _buildPreviewList(TextBookLoaded state) {
-    final itemCount = state.readingSegments.isNotEmpty
-        ? state.readingSegments.length
-        : widget.data.length;
+    final layout = readingLayoutOf(state);
+    final itemCount = layout.itemCount;
     // כמו ב-buildOuterList: פתיחה במיקום הטאב (תצוגה מקדימה של תוצאת
     // חיפוש נפתחת בקטע שנמצא, לא בראש הספר).
-    final initialIndex = state.readingSegments.isNotEmpty
-        ? segmentIndexForLine(state.readingSegments, widget.tab.index)
-        : widget.tab.index;
+    final initialIndex = layout.itemForLine(widget.tab.index);
     final clampedInitial = itemCount == 0
         ? 0
         : initialIndex.clamp(0, itemCount - 1);
@@ -2379,8 +2210,9 @@ class _CombinedViewState extends State<CombinedView> {
 
   int? _selectedItemIndex(TextBookLoaded state) {
     final line = state.selectedIndex;
-    if (line == null || state.readingSegments.isEmpty) return line;
-    return segmentIndexForLine(state.readingSegments, line);
+    final layout = readingLayoutOf(state);
+    if (line == null || layout.isEmpty) return line;
+    return layout.itemForLine(line);
   }
 
   Widget buildOuterList(
@@ -2390,12 +2222,9 @@ class _CombinedViewState extends State<CombinedView> {
     // ה-ListView מאכלס itemCount=segments — במצב הרגיל זה 1:1 לשורות,
     // במצב רציף זה מספר הפסקאות. תרגום widget.tab.index (שורת מקור) →
     // segmentIndex לפני העברה ל-`initialScrollIndex`.
-    final initialIndex = state.readingSegments.isNotEmpty
-        ? segmentIndexForLine(state.readingSegments, widget.tab.index)
-        : widget.tab.index;
-    final itemCount = state.readingSegments.isNotEmpty
-        ? state.readingSegments.length
-        : widget.data.length;
+    final layout = readingLayoutOf(state);
+    final initialIndex = layout.itemForLine(widget.tab.index);
+    final itemCount = layout.itemCount;
     final clampedInitial = itemCount == 0
         ? 0
         : initialIndex.clamp(0, itemCount - 1);
@@ -2451,16 +2280,20 @@ class _CombinedViewState extends State<CombinedView> {
   ) {
     // [index] הוא segmentIndex; ה-segment הזה עשוי לעטוף כמה שורות מקור.
     // במצב הרגיל זה 1:1 (segment.startLineIndex == index, sourceLineIndices=[index]).
-    final segment =
-        state.readingSegments.isNotEmpty && index < state.readingSegments.length
-        ? state.readingSegments[index]
-        : null;
+    final segments = readingSegmentsOf(state);
+    final segment = index < segments.length ? segments[index] : null;
     final primaryLineIndex = segment?.startLineIndex ?? index;
     final isContinuousParagraph =
         state.continuousReadingMode &&
         segment != null &&
         !segment.isHeader &&
         segment.sourceLineIndices.length > 1;
+    if (isContinuousParagraph && !segment.isLoaded) {
+      return UnloadedParagraphPlaceholder(
+        lineCount: segment.sourceLineIndices.length,
+        fontSize: widget.textSize,
+      );
+    }
 
     // ריבוי-בחירה: הקטע נחשב נבחר אם שורת מקור כלשהי שבו נמצאת ב-selectedIndices.
     int? selectedLineInSegment;
@@ -2621,9 +2454,9 @@ class _CombinedViewState extends State<CombinedView> {
                           if (mounted &&
                               widget.tab.scrollController.isAttached) {
                             // הטקסט הבא ב-90% מגובה המסך, כך שהכרטיס (עד 75%) נראה כולו.
-                            final itemCount = state.readingSegments.isNotEmpty
-                                ? state.readingSegments.length
-                                : widget.data.length;
+                            final itemCount = readingLayoutOf(
+                              state,
+                            ).itemCount;
                             final hasNext = index + 1 < itemCount;
                             final next = widget
                                 .tab

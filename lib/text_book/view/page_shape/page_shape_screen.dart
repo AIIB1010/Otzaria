@@ -59,6 +59,7 @@ import 'package:otzaria/personal_notes/widgets/commentary_notes_section.dart';
 import 'package:otzaria/settings/settings_exports.dart';
 import 'package:otzaria/settings/services/per_book_settings_service.dart';
 import 'package:otzaria/text_book/utils/reading_segment_navigation.dart';
+import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:otzaria/widgets/controls/action_buttons.dart';
 import 'package:otzaria/text_book/view/selection/selection_sync_controller.dart';
 import 'package:otzaria/widgets/navigation/panel_tab_header.dart';
@@ -879,7 +880,7 @@ class _PageShapeScreenState extends State<PageShapeScreen> {
       scrollController: state.scrollController,
       scrollOffsetController: widget.scrollOffsetController,
       positionsListener: state.positionsListener,
-      segments: state.readingSegments,
+      segments: readingSegmentsOf(state),
       lineIndex: targetIndex,
       viewportExtent: context.size?.height ?? MediaQuery.sizeOf(context).height,
       alignment: 0.05,
@@ -951,11 +952,9 @@ class _PageShapeScreenState extends State<PageShapeScreen> {
   /// כתובת היעד לתווית הריחוף על סרגל הטקסט הראשי. ממיר אינדקס סגמנט
   /// (במצב קריאה רציף) לשורת המקור כדי שמיפוי ה-TOC יהיה נכון.
   String _mainTextLabelForIndex(int index, TextBookLoaded state) {
-    final segments = state.readingSegments;
-    final lineIndex = segments.isNotEmpty
-        ? (index >= 0 && index < segments.length
-              ? segments[index].startLineIndex
-              : index)
+    final layout = readingLayoutOf(state);
+    final lineIndex = index >= 0 && index < layout.itemCount
+        ? layout.firstLineOf(index)
         : index;
     final ref = refFromTocList(lineIndex, state.tableOfContents);
     return addBookTitleToRef(ref, state.book.title);

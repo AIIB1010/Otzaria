@@ -71,8 +71,7 @@ void main() {
       expect(
         resolveTopmostSourceLine(
           positions: [_pos(2), _pos(3)],
-          continuousReadingMode: false,
-          readingSegments: segments,
+          layout: segments.layout,
         ),
         2,
       );
@@ -90,8 +89,7 @@ void main() {
       expect(
         resolveTopmostSourceLine(
           positions: [_pos(1)],
-          continuousReadingMode: true,
-          readingSegments: segments,
+          layout: segments.layout,
         ),
         1,
       );
@@ -111,8 +109,7 @@ void main() {
       expect(
         resolveTopmostSourceLine(
           positions: [_pos(3)],
-          continuousReadingMode: true,
-          readingSegments: segments,
+          layout: segments.layout,
         ),
         3,
       );
@@ -122,8 +119,7 @@ void main() {
       expect(
         resolveTopmostSourceLine(
           positions: const <ItemPosition>[],
-          continuousReadingMode: true,
-          readingSegments: const [],
+          layout: ReadingLayout.continuous(lineCount: 0, breakLines: const []),
         ),
         0,
       );
@@ -134,8 +130,7 @@ void main() {
       expect(
         resolveTopmostSourceLine(
           positions: [_pos(5)],
-          continuousReadingMode: true,
-          readingSegments: const [],
+          layout: ReadingLayout.continuous(lineCount: 0, breakLines: const []),
         ),
         5,
       );
@@ -146,8 +141,7 @@ void main() {
       expect(
         resolveTopmostSourceLine(
           positions: [_pos(99)],
-          continuousReadingMode: true,
-          readingSegments: segments,
+          layout: segments.layout,
         ),
         0,
       );
@@ -163,8 +157,7 @@ void main() {
       expect(
         resolveTopmostSourceLine(
           positions: [_pos(1), _pos(0)],
-          continuousReadingMode: true,
-          readingSegments: segments,
+          layout: segments.layout,
         ),
         0,
       );
@@ -176,7 +169,7 @@ void main() {
       expect(
         resolveItemIndexForSourceLine(
           lineIndex: 7,
-          readingSegments: const [],
+          layout: const ReadingLayout.identity(0),
         ),
         7,
       );
@@ -187,7 +180,7 @@ void main() {
       expect(
         resolveItemIndexForSourceLine(
           lineIndex: 1,
-          readingSegments: segments,
+          layout: segments.layout,
         ),
         1,
       );
@@ -202,15 +195,15 @@ void main() {
         continuous: true,
       );
       expect(
-        resolveItemIndexForSourceLine(lineIndex: 1, readingSegments: segments),
+        resolveItemIndexForSourceLine(lineIndex: 1, layout: segments.layout),
         1,
       );
       expect(
-        resolveItemIndexForSourceLine(lineIndex: 2, readingSegments: segments),
+        resolveItemIndexForSourceLine(lineIndex: 2, layout: segments.layout),
         1,
       );
       expect(
-        resolveItemIndexForSourceLine(lineIndex: 3, readingSegments: segments),
+        resolveItemIndexForSourceLine(lineIndex: 3, layout: segments.layout),
         1,
       );
     });
@@ -221,7 +214,7 @@ void main() {
         continuous: true,
       );
       expect(
-        resolveItemIndexForSourceLine(lineIndex: 0, readingSegments: segments),
+        resolveItemIndexForSourceLine(lineIndex: 0, layout: segments.layout),
         0,
       );
     });

@@ -210,11 +210,10 @@ void main() {
   );
 
   testWidgets(
-    'scrollToSourceLine: החלפת הסגמנטים באמצע הגלילה — היעד נפתר מחדש ונוחת',
+    'scrollToSourceLine: טעינת תוכן לפני היעד באמצע הגלילה — היעד נוחת',
     (tester) async {
-      // issue #1973: במצב רציף טעינת רקע מכניסה פסקאות לפני היעד תוך כדי
-      // הגלילה אליו, ומספר הסגמנט שלו זז. בלי פתרון מחדש הלולאה מודדת פריט
-      // אחר, או עוצרת כשהפריט הישן אינו בנוי.
+      // issue #1973: טעינת רקע ממלאת פסקאות לפני היעד תוך כדי הגלילה אליו;
+      // מספור הפריטים יציב, והיעד נמדד מול התוכן העדכני.
       final itemScrollController = ItemScrollController();
       final scrollOffsetController = ScrollOffsetController();
       final positionsListener = ItemPositionsListener.create();
@@ -242,8 +241,8 @@ void main() {
         true,
         true,
       ];
-      // partial: [לא-טעון 0..2, כותרת 3, פסקה 4..6, כותרת 7, פסקה 8]
-      // full:    [כותרת 0, פסקה 1..2, כותרת 3, פסקה 4..6, כותרת 7, פסקה 8]
+      // [כותרת 0, פסקה 1..2, כותרת 3, פסקה 4..6, כותרת 7, פסקה 8]; בהתחלה
+      // רק הפרק הראשון אינו טעון.
       final partial = buildReadingSegments(
         [
           for (var i = 0; i < lines.length; i++)
@@ -251,8 +250,10 @@ void main() {
         ],
         continuous: true,
         loadedLineFlags: partialFlags,
+        breakLines: contentBreakLines(lines),
       );
       final full = buildReadingSegments(lines, continuous: true);
+      expect(full.length, partial.length);
       var segments = partial;
       late StateSetter setListState;
 
@@ -294,7 +295,7 @@ void main() {
         viewportExtent: 400,
         duration: const Duration(milliseconds: 250),
       );
-      // באמצע האנימציה הרשימה מוחלפת: שני פריטים נכנסים לפני היעד.
+      // באמצע האנימציה הפרק הראשון נטען.
       await tester.pump(const Duration(milliseconds: 60));
       setListState(() => segments = full);
       await tester.pumpAndSettle();
@@ -313,7 +314,7 @@ void main() {
       expect(
         targetEdge,
         closeTo(kReadingAnchorAlignment, kAnchorLandingEpsilon),
-        reason: 'השורה חייבת לנחות על קו העוגן גם אחרי שהרשימה הוחלפה',
+        reason: 'השורה חייבת לנחות על קו העוגן גם אחרי טעינת התוכן',
       );
     },
   );

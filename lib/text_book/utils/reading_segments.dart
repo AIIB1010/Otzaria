@@ -13,7 +13,11 @@
 library;
 
 import 'package:characters/characters.dart';
+import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/utils/inline_notes_utils.dart' as notes;
+import 'package:otzaria/text_book/utils/reading_layout.dart';
+
+export 'package:otzaria/text_book/utils/reading_layout.dart';
 
 class ReadingLineRange {
   final int lineIndex;
@@ -62,10 +66,156 @@ class ReadingSegmentViewport {
   });
 }
 
-final Expando<List<ReadingSegment>> _lineSegmentsCache =
-    Expando<List<ReadingSegment>>('lineReadingSegments');
-final Expando<List<ReadingSegment>> _continuousSegmentsCache =
-    Expando<List<ReadingSegment>>('continuousReadingSegments');
+/// פריטי הרינדור של [layout] מול התוכן הנוכחי. מספר הפריטים קבוע לפי
+/// הפריסה; פריט שחלק משורותיו לא נטען מסומן `isLoaded == false`.
+class ReadingSegments {
+  ReadingSegments({
+    required this.layout,
+    required this.content,
+    this.loadedLineFlags,
+  });
+
+  final ReadingLayout layout;
+  final List<String> content;
+
+  /// null = כל השורות טעונות.
+  final List<bool>? loadedLineFlags;
+
+  final Map<int, ReadingSegment> _built = {};
+
+  int get length => layout.itemCount;
+
+  bool get isEmpty => layout.isEmpty;
+
+  bool get isNotEmpty => layout.isNotEmpty;
+
+  ReadingSegment operator [](int item) {
+    RangeError.checkValidIndex(item, this, 'item', length);
+    return _built[item] ??= _buildSegment(item);
+  }
+
+  ReadingSegment get first => this[0];
+
+  ReadingSegment get last => this[length - 1];
+
+  List<ReadingSegment> toList() => [for (var i = 0; i < length; i++) this[i]];
+
+  bool _isLineLoaded(int line) {
+    final flags = loadedLineFlags;
+    if (flags == null) return true;
+    return line >= 0 && line < flags.length && flags[line];
+  }
+
+  ReadingSegment _buildSegment(int item) {
+    final first = layout.firstLineOf(item);
+    final last = layout.lastLineOf(item);
+    if (first == last) {
+      final isLoaded = _isLineLoaded(first);
+      final text = isLoaded ? content[first] : '';
+      return ReadingSegment(
+        text: text,
+        sourceLineIndices: [first],
+        lineRanges: isLoaded
+            ? [ReadingLineRange(lineIndex: first, start: 0, end: text.length)]
+            : const [],
+        isHeader: isLoaded && isReadingHeaderLine(text),
+        isLoaded: isLoaded,
+      );
+    }
+
+    final lineIndices = List<int>.unmodifiable(
+      List<int>.generate(last - first + 1, (offset) => first + offset),
+    );
+    for (var line = first; line <= last; line++) {
+      if (!_isLineLoaded(line)) {
+        return ReadingSegment(
+          text: '',
+          sourceLineIndices: lineIndices,
+          lineRanges: const [],
+          isHeader: false,
+          isLoaded: false,
+        );
+      }
+    }
+
+    final buffer = StringBuffer();
+    final ranges = <ReadingLineRange>[];
+    for (var line = first; line <= last; line++) {
+      if (buffer.isNotEmpty) buffer.write(' ');
+      final start = buffer.length;
+      buffer.write(content[line].trim());
+      ranges.add(
+        ReadingLineRange(lineIndex: line, start: start, end: buffer.length),
+      );
+    }
+    return ReadingSegment(
+      text: buffer.toString(),
+      sourceLineIndices: lineIndices,
+      lineRanges: List<ReadingLineRange>.unmodifiable(ranges),
+      isHeader: false,
+    );
+  }
+}
+
+/// שורות השבירה שנגזרות מהשורות עצמן (כותרות ובלוקים מיושרים טעונים) —
+/// למקור שאין לו TOC. הקורא משתמש ב-[readingSegmentsOf], שנשען על ה-TOC.
+Set<int> contentBreakLines(List<String> lines, {List<bool>? loadedLineFlags}) {
+  bool isLoaded(int line) =>
+      loadedLineFlags == null ||
+      (line < loadedLineFlags.length && loadedLineFlags[line]);
+  return {
+    for (var line = 0; line < lines.length; line++)
+      if (isLoaded(line) &&
+          (isReadingHeaderLine(lines[line]) || isAlignedBlockLine(lines[line])))
+        line,
+  };
+}
+
+/// סגמנטים מרשימת שורות; ללא [breakLines] השבירות נגזרות מהשורות עצמן.
+ReadingSegments buildReadingSegments(
+  List<String> lines, {
+  required bool continuous,
+  List<bool>? loadedLineFlags,
+  Iterable<int>? breakLines,
+}) {
+  final layout = continuous
+      ? ReadingLayout.continuous(
+          lineCount: lines.length,
+          breakLines:
+              breakLines ??
+              contentBreakLines(lines, loadedLineFlags: loadedLineFlags),
+        )
+      : ReadingLayout.identity(lines.length);
+  return ReadingSegments(
+    layout: layout,
+    content: lines,
+    loadedLineFlags: loadedLineFlags,
+  );
+}
+
+final Expando<ReadingSegments> _segmentsByContent = Expando<ReadingSegments>(
+  'readingSegments',
+);
+
+/// סגמנטי הרינדור של [state], לפי [readingLayoutOf]. נשמרים לפי זהות התוכן
+/// כדי ש-emit שאינו משנה תוכן (גלילה, בחירה) לא יבנה פסקאות מחדש.
+ReadingSegments readingSegmentsOf(TextBookLoaded state) {
+  final layout = readingLayoutOf(state);
+  final cached = _segmentsByContent[state.content];
+  if (cached != null &&
+      identical(cached.layout, layout) &&
+      identical(cached.loadedLineFlags, state.loadedLineFlags)) {
+    return cached;
+  }
+  final segments = ReadingSegments(
+    layout: layout,
+    content: state.content,
+    loadedLineFlags: state.loadedLineFlags,
+  );
+  _segmentsByContent[state.content] = segments;
+  return segments;
+}
+
 final Expando<List<double>> _lineBoundaryFractionsCache = Expando<List<double>>(
   'lineBoundaryFractions',
 );
@@ -147,437 +297,9 @@ int _firstIndexAtOrAbove(List<double> boundaries, double value) {
   return low;
 }
 
-/// מספר הרצות תבניות הכותרת/היישור; נספר רק במצב debug.
-int debugReadingTagPatternChecks = 0;
-
-/// מתחת ל-U+1680, `\s` של RegExp ב-Dart תופס רק תווים עד 0x20 ואת U+00A0.
-bool _mayBeRegExpSpace(int c) => c <= 0x20 || c == 0xA0 || c >= 0x1680;
-
-/// שתי התבניות דורשות `<` אחרי רווח מוביל, ולכן שורה שמתחילה באות נפסלת בלי RegExp.
-bool _matchesLeadingTag(RegExp pattern, String line) {
-  if (line.isEmpty) return false;
-  final c = line.codeUnitAt(0);
-  if (c != 0x3C && !_mayBeRegExpSpace(c)) return false;
-  assert(() {
-    debugReadingTagPatternChecks++;
-    return true;
-  }());
-  return pattern.hasMatch(line);
-}
-
-bool isReadingHeaderLine(String line) =>
-    _matchesLeadingTag(_headerPattern, line);
-
-final RegExp _headerPattern = RegExp(r'^\s*<h[1-6]', caseSensitive: false);
-
-/// שורה מיושרת במפורש (`text-align` / `<center>`) היא בלוק: בתוך פסקה רציפה
-/// היישור אובד. עוגנים ריקים ו-`<br>` בתחילתה אינם משנים זאת.
-bool isAlignedBlockLine(String line) =>
-    _matchesLeadingTag(_alignedBlockPattern, line);
-
-final RegExp _alignedBlockPattern = RegExp(
-  r'^\s*(?:(?:<a\b[^>]*>\s*</a>|<br\s*/?>)\s*)*'
-  r'<(?:center\b|div\b[^>]*\btext-align\s*:)',
-  caseSensitive: false,
-);
-
-bool _breaksReadingParagraph(String line) =>
-    isReadingHeaderLine(line) || isAlignedBlockLine(line);
-
-bool _isLineLoaded(List<bool>? loadedLineFlags, int index) {
-  if (loadedLineFlags == null) {
-    return true;
-  }
-  if (index < 0 || index >= loadedLineFlags.length) {
-    return false;
-  }
-  return loadedLineFlags[index];
-}
-
-ReadingSegment _buildNonContinuousSegment(
-  List<String> lines,
-  int index, {
-  List<bool>? loadedLineFlags,
-}) {
-  final isLoaded = _isLineLoaded(loadedLineFlags, index);
-  final text = isLoaded ? lines[index] : '';
-  return ReadingSegment(
-    text: text,
-    sourceLineIndices: [index],
-    lineRanges: isLoaded
-        ? [
-            ReadingLineRange(
-              lineIndex: index,
-              start: 0,
-              end: text.length,
-            ),
-          ]
-        : const [],
-    isHeader: isLoaded && isReadingHeaderLine(lines[index]),
-    isLoaded: isLoaded,
-  );
-}
-
-bool _isLoadedParagraphLine(
-  List<String> lines,
-  int index, {
-  List<bool>? loadedLineFlags,
-}) =>
-    _isLineLoaded(loadedLineFlags, index) &&
-    !_breaksReadingParagraph(lines[index]);
-
-ReadingSegment _buildLoadedParagraphSegment(
-  List<String> lines,
-  List<int> paragraphLines,
-) {
-  final buffer = StringBuffer();
-  final ranges = <ReadingLineRange>[];
-  for (final lineIndex in paragraphLines) {
-    final text = lines[lineIndex].trim();
-    if (buffer.isNotEmpty) {
-      buffer.write(' ');
-    }
-    final start = buffer.length;
-    buffer.write(text);
-    ranges.add(
-      ReadingLineRange(
-        lineIndex: lineIndex,
-        start: start,
-        end: buffer.length,
-      ),
-    );
-  }
-
-  return ReadingSegment(
-    text: buffer.toString(),
-    sourceLineIndices: List<int>.unmodifiable(paragraphLines),
-    lineRanges: List<ReadingLineRange>.unmodifiable(ranges),
-    isHeader: false,
-    isLoaded: true,
-  );
-}
-
-ReadingSegment _buildUnloadedRangeSegment(int startLine, int endLine) {
-  final lineCount = endLine - startLine + 1;
-  return ReadingSegment(
-    text: '',
-    sourceLineIndices: List<int>.unmodifiable(
-      List<int>.generate(lineCount, (offset) => startLine + offset),
-    ),
-    lineRanges: const [],
-    isHeader: false,
-    isLoaded: false,
-  );
-}
-
-List<ReadingSegment> _buildContinuousSegments(
-  List<String> lines, {
-  required int startIndex,
-  required int endIndex,
-  List<bool>? loadedLineFlags,
-}) {
-  if (lines.isEmpty || startIndex > endIndex) {
-    return const [];
-  }
-
-  final segments = <ReadingSegment>[];
-  final paragraphLines = <int>[];
-
-  void flushParagraph() {
-    if (paragraphLines.isEmpty) {
-      return;
-    }
-    segments.add(_buildLoadedParagraphSegment(lines, paragraphLines));
-    paragraphLines.clear();
-  }
-
-  var index = startIndex;
-  while (index <= endIndex) {
-    if (!_isLineLoaded(loadedLineFlags, index)) {
-      flushParagraph();
-      final unloadedStart = index;
-      while (index <= endIndex && !_isLineLoaded(loadedLineFlags, index)) {
-        index++;
-      }
-      segments.add(_buildUnloadedRangeSegment(unloadedStart, index - 1));
-      continue;
-    }
-
-    final line = lines[index];
-    if (_breaksReadingParagraph(line)) {
-      flushParagraph();
-      segments.add(
-        ReadingSegment(
-          text: line,
-          sourceLineIndices: [index],
-          lineRanges: [
-            ReadingLineRange(
-              lineIndex: index,
-              start: 0,
-              end: line.length,
-            ),
-          ],
-          isHeader: isReadingHeaderLine(line),
-          isLoaded: true,
-        ),
-      );
-      index++;
-      continue;
-    }
-
-    paragraphLines.add(index);
-    index++;
-  }
-
-  flushParagraph();
-  return segments;
-}
-
-/// מחשב את רשימת הסגמנטים לרינדור.
-///
-/// במצב הרגיל (`continuous: false`) — כל שורה היא סגמנט נפרד (זה גם
-/// מבטיח שהמיפוי שורה↔סגמנט הוא 1:1 ולא נדרשת המרה).
-///
-/// במצב רציף (`continuous: true`) — שורות עוקבות שאינן כותרת מתמזגות
-/// לפסקה אחת; כותרת (`<h1>`–`<h6>`) ושורה מיושרת שוברות פסקה.
-List<ReadingSegment> buildReadingSegments(
-  List<String> lines, {
-  required bool continuous,
-  List<bool>? loadedLineFlags,
-}) {
-  if (!continuous) {
-    if (loadedLineFlags == null) {
-      final cached = _lineSegmentsCache[lines];
-      if (cached != null) {
-        return cached;
-      }
-    }
-
-    final segments = [
-      for (var index = 0; index < lines.length; index++)
-        _buildNonContinuousSegment(
-          lines,
-          index,
-          loadedLineFlags: loadedLineFlags,
-        ),
-    ];
-    if (loadedLineFlags == null) {
-      _lineSegmentsCache[lines] = segments;
-    }
-    return segments;
-  }
-
-  if (loadedLineFlags == null) {
-    final cached = _continuousSegmentsCache[lines];
-    if (cached != null) {
-      return cached;
-    }
-  }
-
-  final segments = _buildContinuousSegments(
-    lines,
-    startIndex: 0,
-    endIndex: lines.length - 1,
-    loadedLineFlags: loadedLineFlags,
-  );
-  if (loadedLineFlags == null) {
-    _continuousSegmentsCache[lines] = segments;
-  }
-  return segments;
-}
-
-List<ReadingSegment> updateReadingSegmentsForRange(
-  List<ReadingSegment> currentSegments,
-  List<String> nextLines, {
-  required List<bool> loadedLineFlags,
-  required bool continuous,
-  required int startLine,
-  required int endLine,
-}) {
-  if (nextLines.isEmpty) {
-    return const [];
-  }
-
-  final normalizedStart = startLine < 0 ? 0 : startLine;
-  final normalizedEnd = endLine >= nextLines.length
-      ? nextLines.length - 1
-      : endLine;
-  if (normalizedStart > normalizedEnd) {
-    return currentSegments;
-  }
-
-  if (currentSegments.isEmpty) {
-    return buildReadingSegments(
-      nextLines,
-      continuous: continuous,
-      loadedLineFlags: loadedLineFlags,
-    );
-  }
-
-  if (!continuous) {
-    final nextSegments = List<ReadingSegment>.of(currentSegments);
-    if (nextSegments.length < nextLines.length) {
-      for (var index = nextSegments.length; index < nextLines.length; index++) {
-        nextSegments.add(
-          _buildNonContinuousSegment(
-            nextLines,
-            index,
-            loadedLineFlags: loadedLineFlags,
-          ),
-        );
-      }
-    }
-
-    for (var index = normalizedStart; index <= normalizedEnd; index++) {
-      nextSegments[index] = _buildNonContinuousSegment(
-        nextLines,
-        index,
-        loadedLineFlags: loadedLineFlags,
-      );
-    }
-    return nextSegments;
-  }
-
-  var windowStart = normalizedStart;
-  while (windowStart > 0 &&
-      _isLoadedParagraphLine(
-        nextLines,
-        windowStart - 1,
-        loadedLineFlags: loadedLineFlags,
-      ) &&
-      _isLoadedParagraphLine(
-        nextLines,
-        windowStart,
-        loadedLineFlags: loadedLineFlags,
-      )) {
-    windowStart--;
-  }
-
-  var windowEnd = normalizedEnd;
-  while (windowEnd + 1 < nextLines.length &&
-      _isLoadedParagraphLine(
-        nextLines,
-        windowEnd,
-        loadedLineFlags: loadedLineFlags,
-      ) &&
-      _isLoadedParagraphLine(
-        nextLines,
-        windowEnd + 1,
-        loadedLineFlags: loadedLineFlags,
-      )) {
-    windowEnd++;
-  }
-
-  final replaceStart = currentSegments.indexWhere(
-    (segment) => segment.endLineIndex >= windowStart,
-  );
-  if (replaceStart < 0) {
-    final lastSegment = currentSegments.last;
-    if (windowStart > lastSegment.endLineIndex) {
-      final appendStart = lastSegment.endLineIndex + 1;
-      final appendedSegments = _buildContinuousSegments(
-        nextLines,
-        startIndex: appendStart,
-        endIndex: windowEnd,
-        loadedLineFlags: loadedLineFlags,
-      );
-      if (appendedSegments.isEmpty) {
-        return currentSegments;
-      }
-      return List<ReadingSegment>.unmodifiable([
-        ...currentSegments,
-        ...appendedSegments,
-      ]);
-    }
-
-    return buildReadingSegments(
-      nextLines,
-      continuous: true,
-      loadedLineFlags: loadedLineFlags,
-    );
-  }
-
-  var replaceEnd = currentSegments.lastIndexWhere(
-    (segment) => segment.startLineIndex <= windowEnd,
-  );
-  if (replaceEnd < replaceStart) {
-    replaceEnd = replaceStart;
-  }
-
-  final replaceStartSegment = currentSegments[replaceStart];
-  final replaceEndSegment = currentSegments[replaceEnd];
-  final expandedWindowStart = replaceStartSegment.isLoaded
-      ? replaceStartSegment.startLineIndex
-      : windowStart;
-  final expandedWindowEnd = replaceEndSegment.isLoaded
-      ? replaceEndSegment.endLineIndex
-      : windowEnd;
-  final replacementSegments = _buildContinuousSegments(
-    nextLines,
-    startIndex: expandedWindowStart,
-    endIndex: expandedWindowEnd,
-    loadedLineFlags: loadedLineFlags,
-  );
-
-  final prefixSegments = <ReadingSegment>[];
-  if (!replaceStartSegment.isLoaded &&
-      replaceStartSegment.startLineIndex < expandedWindowStart) {
-    prefixSegments.add(
-      _buildUnloadedRangeSegment(
-        replaceStartSegment.startLineIndex,
-        expandedWindowStart - 1,
-      ),
-    );
-  }
-
-  final suffixSegments = <ReadingSegment>[];
-  if (!replaceEndSegment.isLoaded &&
-      expandedWindowEnd < replaceEndSegment.endLineIndex) {
-    suffixSegments.add(
-      _buildUnloadedRangeSegment(
-        expandedWindowEnd + 1,
-        replaceEndSegment.endLineIndex,
-      ),
-    );
-  }
-
-  final nextSegments = List<ReadingSegment>.of(currentSegments);
-  nextSegments.replaceRange(
-    replaceStart,
-    replaceEnd + 1,
-    [
-      ...prefixSegments,
-      ...replacementSegments,
-      ...suffixSegments,
-    ],
-  );
-  return nextSegments;
-}
-
-/// מאתר את האינדקס של הסגמנט שמכיל את שורת המקור [lineIndex].
-///
-/// משמש בכל אתר קריאה לגלילה (`scrollController.scrollTo(index: ...)`):
-/// השורה הלוגית מתורגמת לסגמנט שאליו צריך לגלול.
-int segmentIndexForLine(List<ReadingSegment> segments, int lineIndex) {
-  if (segments.isEmpty) {
-    return 0;
-  }
-  final exact = segments.indexWhere(
-    (segment) => segment.containsLine(lineIndex),
-  );
-  if (exact >= 0) {
-    return exact;
-  }
-  if (lineIndex <= segments.first.startLineIndex) {
-    return 0;
-  }
-  for (var index = segments.length - 1; index >= 0; index--) {
-    if (segments[index].startLineIndex <= lineIndex) {
-      return index;
-    }
-  }
-  return segments.length - 1;
-}
+/// אינדקס הפריט שמכיל את שורת המקור [lineIndex] — לפני `scrollTo(index:)`.
+int segmentIndexForLine(ReadingSegments segments, int lineIndex) =>
+    segments.layout.itemForLine(lineIndex);
 
 /// השבר היחסי של שורת [lineIndex] בתוך הסגמנט [segment] (0..1).
 ///
@@ -616,7 +338,7 @@ double lineFractionWithinSegment(
 /// דרך אותה פונקציה כדי ש-`_resolveVisibleSourceIndices` ב-bloc לא יצטרך
 /// להבדיל בין המצבים.
 List<int> sourceLineIndicesForSegmentViewports(
-  List<ReadingSegment> segments,
+  ReadingSegments segments,
   Iterable<ReadingSegmentViewport> viewports, {
   bool Function(double leadingEdge, double trailingEdge)? isLineRemnant,
 }) {

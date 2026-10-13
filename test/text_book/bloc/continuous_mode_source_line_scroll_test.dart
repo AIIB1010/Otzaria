@@ -12,6 +12,7 @@ import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import '../../test_helpers/memory_cache_provider.dart';
+import '../../test_helpers/reading_toc.dart';
 
 class _RecordingScrollController extends ItemScrollController {
   final List<int> scrolledTo = [];
@@ -46,14 +47,13 @@ const _content = [
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late List<ReadingSegment> segments;
+  late ReadingSegments segments;
   late _RecordingScrollController scroll;
   late TextBookBloc bloc;
 
   setUp(() async {
     await Settings.init(cacheProvider: MemoryCacheProvider());
     final book = TextBook(title: 'בראשית');
-    segments = buildReadingSegments(_content, continuous: true);
     scroll = _RecordingScrollController();
     final positions = ItemPositionsListener.create();
     bloc = TextBookBloc(
@@ -75,7 +75,7 @@ void main() {
         links: const [],
         visibleLinks: const [],
         linksByLine: const {},
-        tableOfContents: const [],
+        tableOfContents: headerToc(_content),
         removeNikud: false,
         visibleIndices: const [0],
         pinLeftPane: false,
@@ -84,7 +84,6 @@ void main() {
         positionsListener: positions,
         continuousReadingMode: true,
         supportsContinuousReadingMode: true,
-        readingSegments: segments,
         selectedIndex: 7,
         showPageShapeView: true,
       ),
@@ -94,6 +93,7 @@ void main() {
     );
     bloc.add(ApplyFullBookContent(bookTitle: book.title, content: _content));
     await contentApplied;
+    segments = readingSegmentsOf(bloc.state as TextBookLoaded);
   });
 
   tearDown(() => bloc.close());
@@ -126,10 +126,7 @@ void main() {
       if (continuous) {
         final initial = bloc.state as TextBookLoaded;
         bloc.emit(
-          initial.copyWith(
-            continuousReadingMode: false,
-            readingSegments: buildReadingSegments(_content, continuous: false),
-          ),
+          initial.copyWith(continuousReadingMode: false),
         );
       }
       bloc.add(const TogglePageShapeView(false));

@@ -47,7 +47,6 @@ import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/utils/book_versions_action.dart';
-import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:otzaria/widgets/lists/jump_aware_item_scroll_controller.dart';
 import 'package:otzaria/text_book/view/splited_view/splited_view_screen.dart';
 import 'package:otzaria/text_book/view/text_book_screen.dart';
@@ -99,11 +98,7 @@ void main() {
         final loaded = _loadedState(book).copyWith(
           scrollController: controller,
           continuousReadingMode: true,
-          readingSegments: buildReadingSegments([
-            'שורה א',
-            'שורה ב',
-            'שורה ג',
-          ], continuous: true),
+          content: const ['שורה א', 'שורה ב', 'שורה ג'],
           tableOfContents: [
             TocEntry(text: 'פרק ב', index: 2, level: 1),
           ],

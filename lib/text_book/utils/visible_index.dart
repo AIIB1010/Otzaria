@@ -2,7 +2,7 @@ import 'dart:math';
 
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
-import 'package:otzaria/text_book/utils/reading_segments.dart';
+import 'package:otzaria/text_book/utils/reading_layout.dart';
 
 /// אינדקס הפריט העליון הנראה.
 ///
@@ -28,16 +28,13 @@ int topmostVisibleIndex(Iterable<ItemPosition> positions) {
 /// [topmostVisibleIndex] הגולמי, כי "הסעיף הקודם" = "הפסקה הקודמת" במצב רצף.
 int resolveTopmostSourceLine({
   required Iterable<ItemPosition> positions,
-  required bool continuousReadingMode,
-  required List<ReadingSegment> readingSegments,
+  required ReadingLayout layout,
 }) {
   if (positions.isEmpty) return 0;
   final topmost = topmostVisibleIndex(positions);
-  if (!continuousReadingMode || readingSegments.isEmpty) {
-    return topmost;
-  }
-  if (topmost < 0 || topmost >= readingSegments.length) return 0;
-  return readingSegments[topmost].startLineIndex;
+  if (!layout.continuous || layout.isEmpty) return topmost;
+  if (topmost < 0 || topmost >= layout.itemCount) return 0;
+  return layout.firstLineOf(topmost);
 }
 
 /// השורה שהכותרת מציגה: [visibleIndices] (שורות מקור) כבר מסוננים משארית
@@ -49,8 +46,8 @@ int displayedSourceLine(List<int> visibleIndices, int topmostSourceLine) =>
 /// במצב הרגיל זה זהות; במצב רצף זה segmentIndex של הפסקה שמכילה את השורה.
 int resolveItemIndexForSourceLine({
   required int lineIndex,
-  required List<ReadingSegment> readingSegments,
+  required ReadingLayout layout,
 }) {
-  if (readingSegments.isEmpty) return lineIndex;
-  return segmentIndexForLine(readingSegments, lineIndex);
+  if (layout.isEmpty) return lineIndex;
+  return layout.itemForLine(lineIndex);
 }
