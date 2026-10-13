@@ -21,6 +21,7 @@ import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/view/combined_view/combined_book_screen.dart';
+import 'package:otzaria/text_book/view/reader_line/reader_line_render.dart';
 import 'package:otzaria/text_book/view/widgets/continuous_reading_paragraph.dart';
 import 'package:otzaria/text_book/view/widgets/selection_gutter_painter.dart';
 import '../../../test_helpers/memory_cache_provider.dart';
@@ -137,10 +138,28 @@ List<List<int>> _paragraphLineIndices(WidgetTester tester) => tester
 
 Finder _selectionMarkers() => find.byWidgetPredicate(
   (widget) =>
-      widget is CustomPaint &&
-      (widget.painter is SelectionGutterPainter ||
-          widget.foregroundPainter is SelectionGutterPainter),
+      (widget is CustomPaint &&
+          (widget.painter is SelectionGutterPainter ||
+              widget.foregroundPainter is SelectionGutterPainter)) ||
+      (widget is ReaderLineGutter && widget.selectedLines.isNotEmpty),
 );
+
+Rect _textRect(WidgetTester tester, String text) {
+  final paragraph = tester.allRenderObjects
+      .whereType<RenderParagraph>()
+      .firstWhere((p) => p.text.toPlainText().contains(text));
+  final offset = paragraph.text.toPlainText().indexOf(text);
+  final box = paragraph
+      .getBoxesForSelection(
+        TextSelection(baseOffset: offset, extentOffset: offset + text.length),
+      )
+      .first
+      .toRect();
+  return Rect.fromPoints(
+    paragraph.localToGlobal(box.topLeft),
+    paragraph.localToGlobal(box.bottomRight),
+  );
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -268,20 +287,30 @@ void main() {
     );
     final card = find.byKey(const ValueKey('commentary_card_1'));
     expect(card, findsOneWidget);
-    expect(
-      find.ancestor(of: card, matching: _selectionMarkers()),
-      findsNothing,
-    );
     final cardRect = tester.getRect(card);
-    final markers = _selectionMarkers();
-    expect(markers, findsNWidgets(2));
-    for (final element in markers.evaluate()) {
-      final markerRect = tester.getRect(
-        find.byElementPredicate((e) => e == element),
-      );
-      expect(markerRect.overlaps(cardRect), isFalse);
-      expect((element.widget as CustomPaint).foregroundPainter, isNull);
-    }
+    final gutterFinder = _selectionMarkers();
+    expect(gutterFinder, findsOneWidget);
+    // הסמן מצויר מתחת לטקסט ונמתח רק לאורך השורה הנבחרת — לא על הכרטיס.
+    expect(tester.widget<ReaderLineGutter>(gutterFinder).foreground, isFalse);
+    final gutter = tester.renderObject<RenderReaderLineGutter>(gutterFinder);
+    final bars = gutter
+        .barRects()
+        .map(
+          (rect) => Rect.fromPoints(
+            gutter.localToGlobal(rect.topLeft),
+            gutter.localToGlobal(rect.bottomRight),
+          ),
+        )
+        .toList();
+    expect(bars, hasLength(1));
+    expect(bars.single.overlaps(cardRect), isFalse);
+    final lineRect = _textRect(tester, 'שורה שניה');
+    expect(bars.single.top, lessThanOrEqualTo(lineRect.top + 0.5));
+    expect(bars.single.bottom, greaterThanOrEqualTo(lineRect.bottom - 0.5));
+    expect(
+      bars.single.contains(_textRect(tester, 'שורה ראשונה').center),
+      isFalse,
+    );
   });
 
   testWidgets('ללא בחירה — פסקה אחת שלמה ובלי כרטיס מפרשים', (tester) async {

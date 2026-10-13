@@ -296,13 +296,19 @@ void main() {
     ).copyWith(permanentHighlightLine: _targetLine);
     await _mount(tester, state, _targetLine);
 
-    final line = tester
+    final lines = tester
         .widgetList<ContinuousReadingParagraph>(
           find.byType(ContinuousReadingParagraph),
         )
-        .expand((paragraph) => paragraph.lines)
-        .singleWhere((line) => line.lineIndex == _targetLine);
-    expect(line.style.backgroundColor, AppColors.permanentHighlight);
+        .expand((paragraph) => paragraph.lines);
+    // הרקע מצויר בשכבה לפי טווח השורה, לא כ-backgroundColor של הספאנים.
+    expect(
+      lines.where((line) => line.background != null).map((l) => l.lineIndex),
+      [_targetLine],
+    );
+    final line = lines.singleWhere((line) => line.lineIndex == _targetLine);
+    expect(line.background, AppColors.permanentHighlight);
+    expect(line.style.backgroundColor, isNull);
   });
 }
 

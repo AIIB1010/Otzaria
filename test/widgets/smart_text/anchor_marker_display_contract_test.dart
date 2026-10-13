@@ -124,7 +124,6 @@ Future<void> _pumpContinuous(
                     ),
                 ],
                 baseStyle: _base,
-                onLineTap: (_) {},
                 onTapUrl: (_) async => true,
                 linkStyle: _linkStyle,
                 anchorActiveBackground: const Color(0xFFFFE082),

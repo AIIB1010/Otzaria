@@ -28,6 +28,7 @@ import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/view/combined_view/combined_book_screen.dart';
 import 'package:otzaria/user_content_import/repository/user_content_repository.dart';
 import 'package:otzaria/user_content_import/services/user_headings_builder.dart';
+import 'package:otzaria/text_book/view/reader_line/reader_line_render.dart';
 import 'package:otzaria/widgets/misc/app_context_menu.dart';
 
 import '../../../test_helpers/memory_cache_provider.dart';
@@ -127,6 +128,7 @@ void main() {
   Future<void> pumpBook(
     WidgetTester tester, {
     bool preview = false,
+    bool continuous = false,
     ValueChanged<String?>? onSelectionChanged,
   }) async {
     final book = TextBook(
@@ -156,6 +158,7 @@ void main() {
         selectedIndices: const {1},
         pinLeftPane: false,
         searchText: '',
+        continuousReadingMode: continuous,
       ),
     );
     final personalNotesBloc = _TestPersonalNotesBloc(
@@ -228,6 +231,41 @@ void main() {
       );
     },
   );
+
+  testWidgets('בפסקה רציפה הכותרת מוצגת בתוך הזרימה לפני השורה שלה', (
+    tester,
+  ) async {
+    await pumpBook(tester, continuous: true);
+    final paragraphs = tester.allRenderObjects
+        .whereType<RenderParagraph>()
+        .where((p) => p.text.toPlainText().contains('פרשת נח'))
+        .toList();
+    expect(paragraphs, hasLength(1));
+    final text = paragraphs.single.text.toPlainText();
+    expect(text, contains('ונח מצא חן'));
+    expect(
+      text.indexOf('פרשת נח'),
+      allOf(
+        greaterThan(text.indexOf('ונח מצא חן')),
+        lessThan(text.indexOf('אלה תולדת נח')),
+      ),
+    );
+    // הכותרת אינה חלק מטווח השורה: לחיצה עליה נזקפת לשורה שהיא פותחת.
+    final lines = tester.renderObject<RenderReaderParagraphLines>(
+      find.byType(ReaderParagraphLines),
+    );
+    expect(lines.rangeForLine(1)!.textInside(text), _content[1]);
+    final offset = text.indexOf('פרשת נח');
+    final box = paragraphs.single
+        .getBoxesForSelection(
+          TextSelection(baseOffset: offset, extentOffset: offset + 2),
+        )
+        .first
+        .toRect();
+    final hit = lines.locate(paragraphs.single.localToGlobal(box.center));
+    expect(hit?.lineIndex, 1);
+    expect(hit?.column, 0);
+  });
 
   for (final preview in [false, true]) {
     for (final cross in <bool?>[null, false, true]) {

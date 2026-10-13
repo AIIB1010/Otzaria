@@ -512,7 +512,6 @@ void main() {
                       ),
                     ],
                     baseStyle: base,
-                    onLineTap: (_) {},
                   ),
                 ),
               ),
@@ -1009,7 +1008,6 @@ void main() {
                       ),
                     ],
                     baseStyle: const TextStyle(fontSize: 20),
-                    onLineTap: (_) {},
                     onTapUrl: (url) async {
                       tapped.add(url);
                       return true;
