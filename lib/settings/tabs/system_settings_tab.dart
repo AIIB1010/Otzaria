@@ -380,6 +380,8 @@ class _SystemSettingsTabState extends State<SystemSettingsTab> {
   void initState() {
     super.initState();
     _loadVersionInfo();
+    _refreshLibraryChanges();
+    LibraryChangesNotes.instance.revision.addListener(_refreshLibraryChanges);
     _loadBackupStatus();
     _loadResolvedBackupPath();
     AppPaths.getDefaultBackupPath().then((p) {
@@ -415,17 +417,29 @@ class _SystemSettingsTabState extends State<SystemSettingsTab> {
       count = 0;
     }
 
-    final hasLibraryChanges = await LibraryChangesNotes.instance.store
-        .hasAny()
-        .catchError((_) => false);
-
     if (!mounted) return;
     setState(() {
       _appVersion = appReleaseVersion(packageInfo);
       _libraryVersion = libVersion;
       _bookCount = count;
-      _hasLibraryChanges = hasLibraryChanges;
     });
+  }
+
+  Future<void> _refreshLibraryChanges() async {
+    final has = await LibraryChangesNotes.instance.store.hasAny().catchError(
+      (_) => false,
+    );
+    if (mounted && has != _hasLibraryChanges) {
+      setState(() => _hasLibraryChanges = has);
+    }
+  }
+
+  @override
+  void dispose() {
+    LibraryChangesNotes.instance.revision.removeListener(
+      _refreshLibraryChanges,
+    );
+    super.dispose();
   }
 
   Future<void> _loadBackupStatus() async {

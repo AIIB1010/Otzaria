@@ -22,9 +22,14 @@ class LibraryChangesNote {
       LibraryUpdateDiscovery.parseVersionFromTag(releaseTag) ?? 0;
 
   /// החדש קודם: לפי גרסה, ובאותה גרסה לפי התג (שכולל חותמת זמן).
-  static int newestFirst(LibraryChangesNote a, LibraryChangesNote b) {
-    final byVersion = b.version.compareTo(a.version);
-    return byVersion != 0 ? byVersion : b.releaseTag.compareTo(a.releaseTag);
+  static int newestFirst(LibraryChangesNote a, LibraryChangesNote b) =>
+      newestTagFirst(a.releaseTag, b.releaseTag);
+
+  static int newestTagFirst(String a, String b) {
+    int version(String tag) =>
+        LibraryUpdateDiscovery.parseVersionFromTag(tag) ?? 0;
+    final byVersion = version(b).compareTo(version(a));
+    return byVersion != 0 ? byVersion : b.compareTo(a);
   }
 }
 
@@ -37,6 +42,7 @@ class LibraryChangesStore {
   static const pendingFolderName = 'pending_library_changes';
   static const seenFolderName = 'library_changes_seen';
   static const keepSeen = 10;
+  static const fetchQueueFileName = 'library_changes_fetch_queue.json';
 
   final Future<String> Function() _dataRoot;
 
@@ -80,8 +86,55 @@ class LibraryChangesStore {
       [...await readPending(), ...await readSeen()]
         ..sort(LibraryChangesNote.newestFirst);
 
-  Future<bool> hasAny() async =>
-      (await readPending()).isNotEmpty || (await readSeen()).isNotEmpty;
+  /// בודק רק קיום קובץ — בלי לקרוא תוכן.
+  Future<bool> hasAny() async {
+    for (final name in const [pendingFolderName, seenFolderName]) {
+      final dir = await _dir(name);
+      if (!await dir.exists()) continue;
+      final found = await dir.list().any(
+        (e) => e is File && p.extension(e.path) == '.md',
+      );
+      if (found) return true;
+    }
+    return false;
+  }
+
+  /// תגים שההערות שלהם עוד לא נמצאו (הקובץ מועלה רק אחרי פרסום ה-release),
+  /// עם מועד ההוספה — לניסיון חוזר בעלייה.
+  Future<Map<String, DateTime>> readFetchQueue() async {
+    final file = File(p.join(await _dataRoot(), fetchQueueFileName));
+    try {
+      if (!await file.exists()) return {};
+      final decoded = jsonDecode(await file.readAsString());
+      if (decoded is! Map) return {};
+      return {
+        for (final MapEntry(:key, :value) in decoded.entries)
+          if (key is String && isSafeTag(key) && value is String)
+            key: ?DateTime.tryParse(value),
+      };
+    } on FormatException {
+      return {};
+    }
+  }
+
+  Future<void> writeFetchQueue(Map<String, DateTime> queue) async {
+    final root = await _dataRoot();
+    final file = File(p.join(root, fetchQueueFileName));
+    if (queue.isEmpty) {
+      if (await file.exists()) await file.delete();
+      return;
+    }
+    await Directory(root).create(recursive: true);
+    final tmp = File('${file.path}.tmp');
+    await tmp.writeAsString(
+      jsonEncode({
+        for (final MapEntry(:key, :value) in queue.entries)
+          key: value.toUtc().toIso8601String(),
+      }),
+      flush: true,
+    );
+    await tmp.rename(file.path);
+  }
 
   Future<List<LibraryChangesNote>> _read(String folder) async {
     final dir = await _dir(folder);
@@ -93,7 +146,7 @@ class LibraryChangesStore {
       try {
         final bytes = await entity.readAsBytes();
         var text = utf8.decode(bytes, allowMalformed: true);
-        if (text.startsWith('﻿')) text = text.substring(1);
+        if (text.startsWith('\uFEFF')) text = text.substring(1);
         notes.add(
           LibraryChangesNote(
             releaseTag: tag,

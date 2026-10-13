@@ -666,6 +666,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
     _calendarCubit = CalendarCubit();
     _settingsScreenController = SettingsScreenController();
     _tourCubit = TourCubit();
+    LibraryChangesNotes.instance.beforeAutoShow = _tourFinished;
     _lastScreen = context.read<NavigationBloc>().state.currentScreen;
 
     // כשהמסך ההתחלתי אינו קריאה (אין טאבים שמורים) אין ספר להמתין לו, ולכן
@@ -1819,6 +1820,9 @@ class MainWindowScreenState extends State<MainWindowScreen>
     _externalActivationChannel.dispose();
     _calendarCubit.close();
     _removeTourOverlay();
+    if (LibraryChangesNotes.instance.beforeAutoShow == _tourFinished) {
+      LibraryChangesNotes.instance.beforeAutoShow = null;
+    }
     _tourCubit.close();
     _readerLocationTracker?.dispose();
     _semanticWorkStatusSub?.cancel();
@@ -2900,15 +2904,10 @@ class MainWindowScreenState extends State<MainWindowScreen>
                     requestIds: {requestId},
                   ),
                 );
-                final from = state.appliedFromVersion;
-                final to = state.appliedToVersion;
-                if (state.status == LibraryUpdateStatus.completed &&
-                    from != null &&
-                    to != null) {
+                if (state.appliedReleaseTags.isNotEmpty) {
                   unawaited(
                     LibraryChangesNotes.instance.afterLibraryUpdate(
-                      fromVersion: from,
-                      toVersion: to,
+                      state.appliedReleaseTags,
                     ),
                   );
                 }

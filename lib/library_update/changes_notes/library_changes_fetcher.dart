@@ -3,98 +3,106 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:seforim_library_updater/seforim_library_updater.dart';
 
 import 'library_changes_store.dart';
 
-/// מוריד את `library-changes.md` של ה-releases שהוחלו, best-effort: כשל רשת,
-/// 404 או timeout נבלעים — release בלי הקובץ (v32 ומטה) הוא מצב רגיל.
+/// מוריד את `library-changes.md` של releases שהוחלו, לפי התג ובלי פניית API.
+/// הקובץ מועלה רק אחרי פרסום ה-release, ולכן 404 הוא "עדיין לא" — התג נשאר בתור.
 class LibraryChangesFetcher {
   LibraryChangesFetcher({
-    required this.fetchReleases,
     required this.store,
     http.Client Function()? clientFactory,
+    DateTime Function()? now,
     this.timeout = const Duration(seconds: 15),
-  }) : _clientFactory = clientFactory ?? http.Client.new;
+  }) : _clientFactory = clientFactory ?? http.Client.new,
+       _now = now ?? DateTime.now;
 
   static const assetName = 'library-changes.md';
 
   /// עדכון שמדלג על יותר גרסאות מזה מציג רק את האחרונות.
   static const maxReleases = 10;
 
+  /// תג שההערות שלו לא הופיעו בזמן הזה יורד מהתור.
+  static const giveUpAfter = Duration(days: 14);
+
   // קובץ ההערות של עדכון ענק הוא מאות KB; גדול מזה אינו הקובץ הצפוי.
   static const _maxAssetBytes = 4 << 20;
 
-  final Future<List<LibraryRelease>> Function() fetchReleases;
   final LibraryChangesStore store;
   final http.Client Function() _clientFactory;
+  final DateTime Function() _now;
   final Duration timeout;
 
-  /// ה-releases היציבים בטווח ([fromVersion], [toVersion]] שיש להם קובץ הערות,
-  /// החדש קודם, לכל היותר [maxReleases].
-  @visibleForTesting
-  static List<(LibraryRelease, ReleaseAsset)> releasesInRange(
-    List<LibraryRelease> releases,
-    int fromVersion,
-    int toVersion,
-  ) {
-    final picked = <(LibraryRelease, ReleaseAsset, int)>[];
-    for (final release in releases) {
-      if (release.isDraft || release.isPrerelease) continue;
-      if (!LibraryChangesStore.isSafeTag(release.tag)) continue;
-      final version = LibraryUpdateDiscovery.parseVersionFromTag(release.tag);
-      if (version == null || version <= fromVersion || version > toVersion) {
+  static Uri assetUrl(String releaseTag) => Uri.parse(
+    'https://github.com/Otzaria/SeforimLibrary/releases/download/'
+    '${Uri.encodeComponent(releaseTag)}/$assetName',
+  );
+
+  /// מוסיף לתור את [releaseTags] שאין להם עדיין הערות.
+  Future<void> enqueue(Iterable<String> releaseTags) async {
+    final queue = await store.readFetchQueue();
+    final now = _now();
+    for (final tag in releaseTags) {
+      if (!LibraryChangesStore.isSafeTag(tag) || queue.containsKey(tag)) {
         continue;
       }
-      final asset = release.assetByName(assetName);
-      if (asset == null || asset.downloadUrl.isEmpty) continue;
-      picked.add((release, asset, version));
+      if (await store.contains(tag)) continue;
+      queue[tag] = now;
     }
-    picked.sort((a, b) {
-      final byVersion = b.$3.compareTo(a.$3);
-      return byVersion != 0 ? byVersion : b.$1.tag.compareTo(a.$1.tag);
+    final newest = queue.keys.toList()..sort(LibraryChangesNote.newestTagFirst);
+    await store.writeFetchQueue({
+      for (final tag in newest.take(maxReleases)) tag: queue[tag]!,
     });
-    return [for (final (r, a, _) in picked.take(maxReleases)) (r, a)];
   }
 
-  /// מוריד את ההערות לטווח ומחזיר כמה נשמרו. לעולם אינו זורק.
-  Future<int> fetch({required int fromVersion, required int toVersion}) async {
-    // גרסה מקומית לא ידועה (0) הייתה מציגה את כל ההיסטוריה.
-    if (fromVersion <= 0 || toVersion <= fromVersion) return 0;
-    final List<(LibraryRelease, ReleaseAsset)> wanted;
+  /// מנסה להוריד כל תג שבתור ומחזיר כמה נשמרו. לעולם אינו זורק.
+  Future<int> fetchQueued() async {
+    final Map<String, DateTime> queue;
     try {
-      wanted = releasesInRange(
-        await fetchReleases().timeout(timeout * 2),
-        fromVersion,
-        toVersion,
-      );
+      queue = await store.readFetchQueue();
     } catch (e) {
-      debugPrint('[LibraryChanges] release list failed: $e');
+      debugPrint('[LibraryChanges] queue read failed: $e');
       return 0;
     }
-    if (wanted.isEmpty) return 0;
+    if (queue.isEmpty) return 0;
+    final now = _now();
     var saved = 0;
     final client = _clientFactory();
     try {
-      for (final (release, asset) in wanted) {
+      for (final tag in queue.keys.toList()) {
+        if (now.difference(queue[tag]!) > giveUpAfter) {
+          queue.remove(tag);
+          continue;
+        }
         try {
-          if (await store.contains(release.tag)) continue;
-          if (asset.size > _maxAssetBytes) continue;
-          final response = await client
-              .get(Uri.parse(asset.downloadUrl))
-              .timeout(timeout);
+          if (await store.contains(tag)) {
+            queue.remove(tag);
+            continue;
+          }
+          final response = await client.get(assetUrl(tag)).timeout(timeout);
           if (response.statusCode != 200) continue;
-          if (response.bodyBytes.length > _maxAssetBytes) continue;
-          final text = utf8.decode(response.bodyBytes, allowMalformed: true);
-          if (text.trim().isEmpty) continue;
-          await store.writePending(release.tag, text);
-          saved++;
+          final bytes = response.bodyBytes;
+          if (bytes.length > _maxAssetBytes) {
+            queue.remove(tag);
+            continue;
+          }
+          final text = utf8.decode(bytes, allowMalformed: true);
+          if (text.trim().isNotEmpty) {
+            await store.writePending(tag, text);
+            saved++;
+          }
+          queue.remove(tag);
         } catch (e) {
-          debugPrint('[LibraryChanges] ${release.tag} failed: $e');
+          debugPrint('[LibraryChanges] $tag failed: $e');
         }
       }
     } finally {
       client.close();
+    }
+    try {
+      await store.writeFetchQueue(queue);
+    } catch (e) {
+      debugPrint('[LibraryChanges] queue write failed: $e');
     }
     return saved;
   }

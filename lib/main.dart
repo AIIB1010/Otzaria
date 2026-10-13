@@ -1186,9 +1186,8 @@ Future<void> _runDeferredStartupStability() async {
   }
 }
 
-/// סריקת תיקיות המסדים ובדיקת המסדים המצורפים (קובץ שנעלם, שהשתנה או
-/// שנוסף). שינוי משודר ל-AttachedLibrariesBloc, שמרענן את עץ הספרייה.
-/// "מה חדש בספרים" שממתין מעדכון קודם (גם מהמעדכן הלא-מקוון).
+/// "מה חדש בספרים" שממתין מעדכון קודם (גם מהמעדכן הלא-מקוון), וניסיון חוזר
+/// להערות שעוד לא פורסמו.
 Future<void> _runDeferredLibraryChangesNotes() async {
   // פר-תהליך: ההערות מוצגות פעם אחת, בחלון הראשי.
   if (WindowRole.isSecondary) return;
@@ -1200,12 +1199,14 @@ Future<void> _runDeferredLibraryChangesNotes() async {
     // ממשיכים בכל זאת — בלי Navigator ההערות פשוט נשארות לפעם הבאה.
   }
   try {
-    await LibraryChangesNotes.instance.showPending();
+    await LibraryChangesNotes.instance.onStartup();
   } catch (error, stackTrace) {
     _logNonFatalInitializationError('Library changes notes', error, stackTrace);
   }
 }
 
+/// סריקת תיקיות המסדים ובדיקת המסדים המצורפים (קובץ שנעלם, שהשתנה או
+/// שנוסף). שינוי משודר ל-AttachedLibrariesBloc, שמרענן את עץ הספרייה.
 Future<void> _runDeferredAttachedLibraries() async {
   // פר-תהליך: הסריקה שומרת את הרשימה בהגדרות; חלון משני קורא אותה בלבד.
   if (WindowRole.isSecondary) return;

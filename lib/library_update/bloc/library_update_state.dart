@@ -68,9 +68,9 @@ class LibraryUpdateState extends Equatable {
   /// שם החיווי נסגר מעצמו, וכפתור עדכון הספרייה נשאר כעוגן לניסיון חוזר.
   final bool isCheckFailure;
 
-  /// טווח הגרסאות שהוחל, (מ, עד], כשה-DB עודכן במלואו — ל"מה חדש בספרים".
-  final int? appliedFromVersion;
-  final int? appliedToVersion;
+  /// תגי ה-releases שהוחלו על ה-DB בריצה הזו (גם בעדכון חלקי) — ל"מה חדש
+  /// בספרים".
+  final List<String> appliedReleaseTags;
 
   const LibraryUpdateState({
     this.status = LibraryUpdateStatus.idle,
@@ -86,8 +86,7 @@ class LibraryUpdateState extends Equatable {
     this.requiresFullIndexRefresh = false,
     this.errorMessage,
     this.isCheckFailure = false,
-    this.appliedFromVersion,
-    this.appliedToVersion,
+    this.appliedReleaseTags = const [],
   });
 
   bool get isBusy =>
@@ -128,8 +127,7 @@ class LibraryUpdateState extends Equatable {
     bool? requiresFullIndexRefresh,
     String? errorMessage,
     bool? isCheckFailure,
-    int? appliedFromVersion,
-    int? appliedToVersion,
+    List<String>? appliedReleaseTags,
   }) {
     return LibraryUpdateState(
       status: status ?? this.status,
@@ -148,8 +146,7 @@ class LibraryUpdateState extends Equatable {
           requiresFullIndexRefresh ?? this.requiresFullIndexRefresh,
       errorMessage: errorMessage ?? this.errorMessage,
       isCheckFailure: isCheckFailure ?? this.isCheckFailure,
-      appliedFromVersion: appliedFromVersion ?? this.appliedFromVersion,
-      appliedToVersion: appliedToVersion ?? this.appliedToVersion,
+      appliedReleaseTags: appliedReleaseTags ?? this.appliedReleaseTags,
     );
   }
 
@@ -168,7 +165,6 @@ class LibraryUpdateState extends Equatable {
     requiresFullIndexRefresh,
     errorMessage,
     isCheckFailure,
-    appliedFromVersion,
-    appliedToVersion,
+    appliedReleaseTags,
   ];
 }

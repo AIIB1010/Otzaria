@@ -1,4 +1,8 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:otzaria/library/models/library.dart' show normalizeBookTitle;
 import 'package:otzaria/settings/l10n/settings_l10n_exports.dart';
 import 'package:otzaria/widgets/text/otzaria_search_field.dart';
 import 'package:otzaria/widgets/widgets_exports.dart';
@@ -9,14 +13,23 @@ import 'library_changes_store.dart';
 enum LibraryChangesLineKind { title, subtitle, section, item, text }
 
 class LibraryChangesLine {
-  const LibraryChangesLine(this.kind, this.text, {this.version});
+  LibraryChangesLine(this.kind, this.text, {this.version})
+    : searchKey = kind == LibraryChangesLineKind.item
+          ? normalizeBookTitle(text)
+          : '';
 
   final LibraryChangesLineKind kind;
   final String text;
 
   /// כותרת חלופית לקובץ שאין בו כותרת משלו — מוצגת כ"גרסת ספרייה N".
   final int? version;
+
+  /// הטקסט המנורמל של פריט, כך ש-" בחיפוש מוצא גם ״.
+  final String searchKey;
 }
+
+final _headingLine = RegExp(r'^(#{1,6})\s+(.*)$');
+final _itemLine = RegExp(r'^[*\-+]\s+(.*)$');
 
 /// מפרק את ה-Markdown של `library-changes.md` (כותרת, תאריך מודגש, כותרות
 /// סעיפים ופריטי רשימה) לשורות — רשימה של אלפי ספרים נבנית בעצלות.
@@ -26,7 +39,7 @@ List<LibraryChangesLine> parseLibraryChanges(LibraryChangesNote note) {
   for (final raw in note.markdown.split('\n')) {
     final line = raw.trim();
     if (line.isEmpty) continue;
-    final heading = RegExp(r'^(#{1,6})\s+(.*)$').firstMatch(line);
+    final heading = _headingLine.firstMatch(line);
     if (heading != null) {
       lines.add(
         LibraryChangesLine(
@@ -38,7 +51,7 @@ List<LibraryChangesLine> parseLibraryChanges(LibraryChangesNote note) {
       );
       continue;
     }
-    final item = RegExp(r'^[*\-+]\s+(.*)$').firstMatch(line);
+    final item = _itemLine.firstMatch(line);
     if (item != null) {
       lines.add(
         LibraryChangesLine(
@@ -70,6 +83,13 @@ List<LibraryChangesLine> parseLibraryChanges(LibraryChangesNote note) {
   return lines;
 }
 
+List<List<LibraryChangesLine>> _parseAll(List<LibraryChangesNote> notes) => [
+  for (final note in notes) parseLibraryChanges(note),
+];
+
+/// מעל הגודל הזה הפירוק רץ ב-isolate ולא בבנייה.
+const _parseInIsolateChars = 64 * 1024;
+
 String _stripEmphasis(String text) => text.replaceAll('**', '').trim();
 
 /// השורות של כל ההערות, ובחיפוש — רק פריטים שמכילים את [query] עם כותרות
@@ -79,7 +99,7 @@ List<LibraryChangesLine> filterLibraryChanges(
   List<List<LibraryChangesLine>> notes,
   String query,
 ) {
-  final q = query.trim();
+  final q = normalizeBookTitle(query);
   if (q.isEmpty) return [for (final note in notes) ...note];
   final result = <LibraryChangesLine>[];
   for (final note in notes) {
@@ -98,7 +118,7 @@ List<LibraryChangesLine> filterLibraryChanges(
         case LibraryChangesLineKind.text:
           break;
         case LibraryChangesLineKind.item:
-          if (!line.text.contains(q)) continue;
+          if (!line.searchKey.contains(q)) continue;
           if (!noteShown) {
             result.addAll(header);
             noteShown = true;
@@ -131,25 +151,51 @@ class LibraryChangesDialog extends StatefulWidget {
 
   final List<LibraryChangesNote> notes;
 
+  static const searchDebounce = Duration(milliseconds: 200);
+
   @override
   State<LibraryChangesDialog> createState() => _LibraryChangesDialogState();
 }
 
 class _LibraryChangesDialogState extends State<LibraryChangesDialog> {
   final _search = TextEditingController();
-  late final List<List<LibraryChangesLine>> _parsed = [
-    for (final note in widget.notes) parseLibraryChanges(note),
-  ];
-  late List<LibraryChangesLine> _visible = filterLibraryChanges(_parsed, '');
+  List<List<LibraryChangesLine>>? _parsed;
+  List<LibraryChangesLine> _visible = const [];
+  Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    final chars = widget.notes.fold<int>(0, (n, e) => n + e.markdown.length);
+    if (chars < _parseInIsolateChars) {
+      _setParsed(_parseAll(widget.notes));
+    } else {
+      final notes = widget.notes;
+      compute(_parseAll, notes).then((parsed) {
+        if (mounted) setState(() => _setParsed(parsed));
+      });
+    }
+  }
+
+  void _setParsed(List<List<LibraryChangesLine>> parsed) {
+    _parsed = parsed;
+    _visible = filterLibraryChanges(parsed, _search.text);
+  }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _search.dispose();
     super.dispose();
   }
 
-  void _onQueryChanged(String query) {
-    setState(() => _visible = filterLibraryChanges(_parsed, query));
+  void _onQueryChanged(String _) {
+    _debounce?.cancel();
+    _debounce = Timer(LibraryChangesDialog.searchDebounce, () {
+      final parsed = _parsed;
+      if (!mounted || parsed == null) return;
+      setState(() => _visible = filterLibraryChanges(parsed, _search.text));
+    });
   }
 
   @override
@@ -173,10 +219,10 @@ class _LibraryChangesDialogState extends State<LibraryChangesDialog> {
             ),
             const SizedBox(height: 8),
             Expanded(
-              child: _visible.isEmpty
-                  ? Center(
-                      child: Text(context.settingsText('לא נמצאו ספרים')),
-                    )
+              child: _parsed == null
+                  ? const Center(child: CircularProgressIndicator())
+                  : _visible.isEmpty
+                  ? Center(child: Text(context.settingsText('לא נמצאו ספרים')))
                   : ContentDirectionality(
                       child: Scrollbar(
                         child: ListView.builder(

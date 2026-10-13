@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:otzaria/library_update/changes_notes/library_changes_fetcher.dart';
 import 'package:otzaria/library_update/changes_notes/library_changes_notes.dart';
 import 'package:otzaria/library_update/changes_notes/library_changes_store.dart';
 import 'package:path/path.dart' as p;
@@ -48,7 +50,7 @@ void main() {
       await store.writePending('v9-20260101000000', '# 9');
       await store.writePending('v34-20261101000000', '# 34');
       await store.writePending('v33-20261020000000', '# 33');
-      pending('v35-20261201000000').writeAsStringSync('﻿# 35');
+      pending('v35-20261201000000').writeAsStringSync('\uFEFF# 35');
       File(
         '${pending('v36-20261201000000').path}.tmp',
       ).writeAsStringSync('partial');
@@ -116,5 +118,89 @@ void main() {
       expect(shown, isFalse);
       expect(await store.readPending(), hasLength(1));
     });
+
+    test('ממתין ל-beforeAutoShow (סיום הסיור) לפני ההצגה', () async {
+      await store.writePending('v33-20261020000000', '# 33');
+      final tour = Completer<void>();
+      var shown = false;
+      final notes = LibraryChangesNotes(
+        store: store,
+        contextProvider: () => _FakeContext(),
+        showDialog: (_, _) async => shown = true,
+      )..beforeAutoShow = () => tour.future;
+      final done = notes.showPending();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(shown, isFalse);
+      tour.complete();
+      await done;
+      expect(shown, isTrue);
+    });
+
+    test('showAll לא פותח דיאלוג שני מעל דיאלוג פתוח', () async {
+      await store.writePending('v33-20261020000000', '# 33');
+      final close = Completer<void>();
+      var dialogs = 0;
+      final notes = LibraryChangesNotes(
+        store: store,
+        contextProvider: () => _FakeContext(),
+        showDialog: (_, _) {
+          dialogs++;
+          return close.future;
+        },
+      );
+      final first = notes.showPending();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      await notes.showAll(_FakeContext());
+      expect(dialogs, 1);
+      close.complete();
+      await first;
+    });
+
+    test('במצב מנותק אין ניסיון הורדה בעלייה', () async {
+      var fetched = false;
+      final notes = LibraryChangesNotes(
+        store: store,
+        isOffline: () => true,
+        fetcher: _RecordingFetcher(store, () => fetched = true),
+        contextProvider: () => null,
+      );
+      await notes.onStartup();
+      expect(fetched, isFalse);
+    });
   });
+
+  test('hasAny ותור ההורדה', () async {
+    expect(await store.hasAny(), isFalse);
+    await store.writePending('v33-20261020000000', '# 33');
+    expect(await store.hasAny(), isTrue);
+
+    final at = DateTime.utc(2026, 10, 13);
+    await store.writeFetchQueue({'v34-t': at});
+    expect(await store.readFetchQueue(), {'v34-t': at});
+    await store.writeFetchQueue({});
+    expect(
+      File(
+        p.join(root.path, LibraryChangesStore.fetchQueueFileName),
+      ).existsSync(),
+      isFalse,
+    );
+  });
+}
+
+class _FakeContext extends Fake implements BuildContext {
+  @override
+  bool get mounted => true;
+}
+
+class _RecordingFetcher extends LibraryChangesFetcher {
+  _RecordingFetcher(LibraryChangesStore store, this.onFetch)
+    : super(store: store);
+
+  final void Function() onFetch;
+
+  @override
+  Future<int> fetchQueued() async {
+    onFetch();
+    return 0;
+  }
 }

@@ -78,6 +78,25 @@ void main() {
     expect(filterLibraryChanges(parsed, 'אין כזה'), isEmpty);
   });
 
+  test('חיפוש עם " מוצא גרשיים עבריים (״ ו-׳׳)', () {
+    final parsed = [
+      parseLibraryChanges(
+        _note(
+          'v34-1',
+          '# גרסת ספרייה 34\n* הלכה/שו\u05F4ע\n* הלכה/רמ\u05F3\u05F3א\n',
+        ),
+      ),
+    ];
+    expect(
+      filterLibraryChanges(parsed, 'שו"ע').map((l) => l.text),
+      contains('הלכה/שו\u05F4ע'),
+    );
+    expect(
+      filterLibraryChanges(parsed, 'רמ"א').map((l) => l.text),
+      contains('הלכה/רמ\u05F3\u05F3א'),
+    );
+  });
+
   testWidgets('RTL, רשימה ארוכה נגללת, חיפוש מסנן וסגירה', (tester) async {
     tester.view.physicalSize = const Size(1000, 800);
     tester.view.devicePixelRatio = 1;
@@ -89,7 +108,7 @@ void main() {
           builder: (context) => Center(
             child: TextButton(
               onPressed: () => showLibraryChangesDialog(context, [
-                _note('v35-1', _notes(35, 3000)),
+                _note('v35-1', _notes(35, 6000)),
                 _note('v34-1', _notes(34, 5)),
               ]),
               child: const Text('open'),
@@ -99,6 +118,12 @@ void main() {
       ),
     );
     await tester.tap(find.text('open'));
+    await tester.pump();
+    // מעל הסף הפירוק רץ ב-isolate — בינתיים מוצג חיווי טעינה.
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 500)),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('מה חדש בספרים'), findsOneWidget);
@@ -110,7 +135,7 @@ void main() {
       TextDirection.rtl,
     );
     // ListView עצל: אלפי הפריטים אינם נבנים מראש.
-    expect(find.text('• ספרות/הלכה/ספר 2999'), findsNothing);
+    expect(find.text('• ספרות/הלכה/ספר 5999'), findsNothing);
 
     await tester.dragUntilVisible(
       find.text('• ספרות/הלכה/ספר 200'),
@@ -120,9 +145,12 @@ void main() {
     expect(find.text('• ספרות/הלכה/ספר 200'), findsOneWidget);
     expect(find.text('• ספרות/הלכה/ספר 0'), findsNothing);
 
-    await tester.enterText(find.byType(EditableText), 'ספר 2999');
+    await tester.enterText(find.byType(EditableText), 'ספר 5999');
+    await tester.pump();
+    expect(find.text('• ספרות/הלכה/ספר 5999'), findsNothing);
+    await tester.pump(LibraryChangesDialog.searchDebounce);
     await tester.pumpAndSettle();
-    expect(find.text('• ספרות/הלכה/ספר 2999'), findsOneWidget);
+    expect(find.text('• ספרות/הלכה/ספר 5999'), findsOneWidget);
     expect(find.text('גרסת ספרייה 34'), findsNothing);
 
     await tester.tap(find.text('סגור'));
