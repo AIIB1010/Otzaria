@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -72,7 +73,7 @@ TextBookLoaded _continuousState({
   );
 }
 
-Future<void> _pumpContinuousView(
+Future<_TestTextBookBloc> _pumpContinuousView(
   WidgetTester tester,
   TextBookLoaded state, {
   bool simple = false,
@@ -125,6 +126,7 @@ Future<void> _pumpContinuousView(
     ),
   );
   await tester.pump();
+  return textBookBloc;
 }
 
 List<List<int>> _paragraphLineIndices(WidgetTester tester) => tester
@@ -313,6 +315,31 @@ void main() {
     );
   });
 
+  testWidgets('לחיצה בתוך כרטיס המפרשים אינה משנה את בחירת השורה', (
+    tester,
+  ) async {
+    final bloc = await _pumpContinuousView(
+      tester,
+      _continuousState(selectedIndex: 1),
+    );
+    final card = find.byKey(const ValueKey('commentary_card_1'));
+    expect(card, findsOneWidget);
+    final center = tester.getRect(card).center;
+    await tester.tapAt(center, kind: PointerDeviceKind.mouse);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tapAt(center, kind: PointerDeviceKind.mouse);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tapAt(center, kind: PointerDeviceKind.mouse);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.tapAt(center, kind: PointerDeviceKind.mouse);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(bloc.received.whereType<UpdateSelectedIndex>(), isEmpty);
+    expect(card, findsOneWidget);
+  });
+
   testWidgets('ללא בחירה — פסקה אחת שלמה ובלי כרטיס מפרשים', (tester) async {
     await _pumpContinuousView(tester, _continuousState(selectedIndex: null));
 
@@ -357,8 +384,10 @@ void main() {
 class _TestTextBookBloc extends Bloc<TextBookEvent, TextBookState>
     implements TextBookBloc {
   _TestTextBookBloc(super.initialState) {
-    on<TextBookEvent>((event, emit) {});
+    on<TextBookEvent>((event, emit) => received.add(event));
   }
+
+  final received = <TextBookEvent>[];
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

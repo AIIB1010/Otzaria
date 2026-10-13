@@ -2802,9 +2802,11 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
       return root == null ? null : readerLineAt(root, globalPosition);
     }
 
-    int lineAtPointer() {
+    // בפריט רב-שורתי: null כשהלחיצה מחוץ לשורות (למשל בכרטיס המפרשים).
+    int? lineAtPointer() {
       final line = _selectionPointerLineIndex;
-      return line != null && inItem(line) ? line : primaryLineIndex;
+      if (line != null && inItem(line)) return line;
+      return isMultiLine ? null : primaryLineIndex;
     }
 
     final Widget gutterChild = AnimatedContainer(
@@ -2858,6 +2860,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
         onSingleTap: widget.isMainText
             ? () {
                 final line = lineAtPointer();
+                if (line == null) return;
                 _requestKeyboardFocus('line-tap-$line');
                 // איפוס הטקסט השמור
                 setState(() {
@@ -2878,6 +2881,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
             ? () {
                 // Ctrl+Click → הוספה/הסרה של השורה מבחירה מרובה
                 final line = lineAtPointer();
+                if (line == null) return;
                 _requestKeyboardFocus('line-tap-$line');
                 context.read<TextBookBloc>().add(
                   UpdateSelectedIndex(line, additive: true),
@@ -2905,9 +2909,11 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
             _focusKeyboardAfterPointerDown();
             final hit = hitAt(itemContext, event.position);
             final root = context.findRenderObject();
-            _selectionPointerLineIndex = hit?.lineIndex ?? primaryLineIndex;
-            _selectionPointerColumn = hit != null
-                ? hit.column
+            _selectionPointerLineIndex = isMultiLine
+                ? hit?.lineIndex
+                : primaryLineIndex;
+            _selectionPointerColumn = hit != null || isMultiLine
+                ? hit?.column
                 : root == null
                 ? null
                 : renderedTextOffsetAtPosition(

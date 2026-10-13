@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/bookmarks/bloc/bookmark_bloc.dart';
 import 'package:otzaria/bookmarks/bloc/bookmark_state.dart';
 import 'package:otzaria/bookmarks/models/bookmark.dart';
+import 'package:otzaria/data/data_providers/sqlite_data_provider.dart';
 import 'package:otzaria/data/repository/text_book_repository.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/models/links.dart';
@@ -23,6 +24,7 @@ import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/view/combined_view/combined_book_screen.dart';
+import 'package:otzaria/text_book/view/error_report_dialog.dart';
 import 'package:otzaria/text_book/view/page_shape/simple_text_viewer.dart';
 import 'package:otzaria/text_book/view/reader_line/reader_line_render.dart';
 import 'package:otzaria/text_book/view/selection/selected_text_copy.dart';
@@ -116,29 +118,29 @@ void main() {
         },
       );
       final region = find.byType(AppContextMenuRegion).first;
-      Future<AppContextMenuEntry> linksEntryAt(Offset position) async {
-        tester
-            .widget<AppContextMenuRegion>(region)
-            .menuBuilder(
-              tester.element(region),
-              position,
-            );
-        await tester.runAsync(() => Future<void>.delayed(Duration.zero));
-        await tester.pump();
-        return tester
+      // טעינת הקישורים של השורה אסינכרונית; ממתינים עד שהפריט מגיע למצבו.
+      Future<bool> linksEnabledAt(
+        Offset position, {
+        required bool until,
+      }) async {
+        bool enabled() => tester
             .widget<AppContextMenuRegion>(region)
             .menuBuilder(tester.element(region), position)
-            .singleWhere((entry) => entry.label == 'קישורים');
+            .singleWhere((entry) => entry.label == 'קישורים')
+            .enabled;
+        await _pumpUntil(tester, () => enabled() == until);
+        return enabled();
       }
 
       expect(
-        (await linksEntryAt(
+        await linksEnabledAt(
           _textRect(tester, 'מילה', occurrence: 1).center,
-        )).enabled,
+          until: true,
+        ),
         isTrue,
       );
       expect(
-        (await linksEntryAt(_textRect(tester, 'מילה').center)).enabled,
+        await linksEnabledAt(_textRect(tester, 'מילה').center, until: false),
         isFalse,
       );
     });
@@ -147,8 +149,7 @@ void main() {
       final h = await _pump(tester, simple: simple, book: _NoTocBook());
       await _openMenuAt(tester, _textRect(tester, 'מילה', occurrence: 1));
       await tester.tap(find.text('הוסף סימניה לקטע זה'));
-      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
-      await tester.pump();
+      await _pumpUntil(tester, () => h.bookmarks.indices.isNotEmpty);
       expect(h.bookmarks.indices, [2]);
     });
 
@@ -305,12 +306,37 @@ void main() {
     expect(backgrounds.first[3], isNotNull);
   });
 
+  testWidgets('צורת הדף: דיווח טעות מהתפריט מכוון לשורה שנלחצה', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      simple: true,
+      book: TextBook(title: 'ספר בדיקה', id: 7),
+    );
+    await _openMenuAt(tester, _textRect(tester, 'מילה', occurrence: 1));
+    await tester.tap(find.text('דווח על טעות בספר'));
+    // פרטי הספר נקראים מהספרייה (I/O אמיתי) לפני פתיחת הדיאלוג.
+    await _pumpUntil(
+      tester,
+      () => find.byType(TabbedReportDialog).evaluate().isNotEmpty,
+      step: const Duration(milliseconds: 50),
+    );
+    final dialog = tester.widget<TabbedReportDialog>(
+      find.byType(TabbedReportDialog),
+    );
+    // מספור מ-1: שורה 2 בפסקה.
+    expect(dialog.currentLineNumber, 3);
+  });
+
   testWidgets('עיון: הערה מהתפריט נוצרת לשורה שנלחצה', (tester) async {
     final h = await _pump(tester, simple: false);
     await _openMenuAt(tester, _textRect(tester, 'מילה', occurrence: 1));
     await tester.tap(find.text('הערה'));
-    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
-    await tester.pump();
+    await _pumpUntil(
+      tester,
+      () => h.notes.received.whereType<StartCreatingPersonalNote>().isNotEmpty,
+    );
     expect(
       h.notes.received.whereType<StartCreatingPersonalNote>().single.lineNumber,
       3,
@@ -341,11 +367,7 @@ void main() {
     expect(find.text('הערה'), findsOneWidget);
     expect(h.selectedText?.trim(), 'רביעית');
     // התפריט אינו לוקח פוקוס; Ctrl+C מגיע לאזור הקריאה כשהוא פתוח.
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
-    await tester.pump();
+    await _pressCtrlC(tester, copied);
     expect(copied, ['רביעית']);
   });
 
@@ -369,7 +391,7 @@ void main() {
             _textRect(tester, 'ראשונה'),
             _textRect(tester, 'שלישית'),
           );
-          await _pressCtrlC(tester);
+          await _pressCtrlC(tester, copied);
           final separator = continuous ? ' ' : '\n';
           expect(copied, [
             ['ראשונה מילה', 'שורה שניה', 'שורה שלישית'].join(separator),
@@ -399,10 +421,7 @@ void main() {
       _textRect(tester, 'שניה'),
       _textRect(tester, 'רביעית'),
     );
-    await _pressCtrlC(tester);
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 50)),
-    );
+    await _pressCtrlC(tester, copied);
     expect(copied, ['שניה שורה שלישית מילה שורה רביעית (ספר בדיקה)']);
   });
 
@@ -550,6 +569,12 @@ Future<_Harness> _pump(
     ),
   );
   await tester.pump();
+  // אתחול ה-DB שבאנר המקור מתחיל חייב להסתיים בשעון אמיתי; אחרת הוא נשאר
+  // תקוע ותוקע את כל קריאות הספרייה בטסטים הבאים.
+  await _pumpUntil(
+    tester,
+    () => !SqliteDataProvider.instance.debugIsInitializing,
+  );
   return h;
 }
 
@@ -599,12 +624,24 @@ Future<void> _selectRange(WidgetTester tester, Rect from, Rect to) async {
   await tester.pump();
 }
 
-Future<void> _pressCtrlC(WidgetTester tester) async {
+/// Ctrl+C, וממתין עד שההעתקה (אסינכרונית) מגיעה ל-[copied].
+Future<void> _pressCtrlC(WidgetTester tester, List<String> copied) async {
   await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
   await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
   await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-  await tester.runAsync(() => Future<void>.delayed(Duration.zero));
-  await tester.pump();
+  await _pumpUntil(tester, () => copied.isNotEmpty);
+}
+
+/// מריץ את התור האמיתי ובונה פריימים עד ש-[condition] מתקיים (או עד חסם).
+Future<void> _pumpUntil(
+  WidgetTester tester,
+  bool Function() condition, {
+  Duration step = const Duration(milliseconds: 10),
+}) async {
+  for (var i = 0; i < 200 && !condition(); i++) {
+    await tester.runAsync(() => Future<void>.delayed(step));
+    await tester.pump();
+  }
 }
 
 Future<void> _openMenuAt(WidgetTester tester, Rect target) async {

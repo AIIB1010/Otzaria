@@ -57,7 +57,9 @@ int? renderedSelectionStartAtPosition({
   if (selectedSegment.isEmpty) return null;
   final paragraph = _findParagraphContaining(root, globalPosition);
   if (paragraph == null) return null;
-  final (:text, :base) = _paragraphText(paragraph, lineRange);
+  final paragraphText = _paragraphText(paragraph, lineRange);
+  if (paragraphText == null) return null;
+  final (:text, :base) = paragraphText;
   final occurrences = <int>[];
   for (var from = 0; ;) {
     final found = text.indexOf(selectedSegment, from);
@@ -93,7 +95,9 @@ int? renderedTextOffsetAtPosition({
   final offset = paragraph
       .getPositionForOffset(paragraph.globalToLocal(globalPosition))
       .offset;
-  final (:text, :base) = _paragraphText(paragraph, lineRange);
+  final paragraphText = _paragraphText(paragraph, lineRange);
+  if (paragraphText == null) return null;
+  final (:text, :base) = paragraphText;
   return (offset - base).clamp(0, text.length).toInt();
 }
 
@@ -125,7 +129,9 @@ bool? clickIsOnRenderedSelection({
   final paragraph = _findParagraphContaining(root, globalPosition);
   if (paragraph == null) return null;
 
-  final (text: pText, :base) = _paragraphText(paragraph, lineRange);
+  final paragraphText = _paragraphText(paragraph, lineRange);
+  if (paragraphText == null) return null;
+  final (text: pText, :base) = paragraphText;
   if (pText.isEmpty) return null;
 
   final int selStart;
@@ -246,7 +252,9 @@ bool? clickIsOnTextOccurrence({
   final paragraph = _findParagraphContaining(root, globalPosition);
   if (paragraph == null) return null;
 
-  final (text: pText, :base) = _paragraphText(paragraph, lineRange);
+  final paragraphText = _paragraphText(paragraph, lineRange);
+  if (paragraphText == null) return null;
+  final (text: pText, :base) = paragraphText;
   if (pText.isEmpty) return null;
 
   final starts = <int>[];
@@ -322,16 +330,17 @@ int _overlapLen(String a, String b, {required bool suffixOfFirst}) {
 }
 
 /// טקסט הפסקה, או רק השורה [lineRange] שבתוכה, עם אופסט תחילתה בפסקה.
-({String text, int base}) _paragraphText(
+/// null כש-[lineRange] אינו תואם לטקסט — אופסטים מהפסקה כולה היו שגויים.
+({String text, int base})? _paragraphText(
   RenderParagraph paragraph,
   TextRange? lineRange,
 ) {
   final text = paragraph.text.toPlainText(includeSemanticsLabels: false);
-  if (lineRange == null ||
-      !lineRange.isValid ||
+  if (lineRange == null) return (text: text, base: 0);
+  if (!lineRange.isValid ||
       !lineRange.isNormalized ||
       lineRange.end > text.length) {
-    return (text: text, base: 0);
+    return null;
   }
   return (text: lineRange.textInside(text), base: lineRange.start);
 }

@@ -77,11 +77,18 @@ final RegExp _blockMarkup = RegExp(
   caseSensitive: false,
 );
 
+final RegExp _leadingBlockElement = RegExp(
+  r'^\s*<(?:div|p|center|li)\b',
+  caseSensitive: false,
+);
+
 /// שורה שאינה ניתנת לייצוג כספאנים בתוך פסקה, ולכן מוצגת כבלוק משלה.
 bool isReaderBlockLine(String rawLine) =>
     isAlignedBlockLine(rawLine) ||
     rawLine.contains(kMarkdownBlockClass) ||
-    (rawLine.contains('<') && _blockMarkup.hasMatch(rawLine));
+    (rawLine.contains('<') &&
+        (_blockMarkup.hasMatch(rawLine) ||
+            _leadingBlockElement.hasMatch(rawLine)));
 
 /// טקסט כותרות הנושא שמוצג בתוך פסקה ממוזגת לפני השורה שהן פותחות.
 String? readerInlineHeading(List<String>? headings) =>

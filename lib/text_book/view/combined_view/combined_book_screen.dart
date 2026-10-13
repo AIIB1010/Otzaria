@@ -2240,9 +2240,11 @@ class _CombinedViewState extends State<CombinedView> {
       return root == null ? null : readerLineAt(root, globalPosition);
     }
 
-    int lineAtPointer() {
+    // בפריט רב-שורתי: null כשהלחיצה מחוץ לשורות (למשל בכרטיס המפרשים).
+    int? lineAtPointer() {
       final line = _selectionPointerLineIndex;
-      return line != null && inItem(line) ? line : primaryLineIndex;
+      if (line != null && inItem(line)) return line;
+      return isMultiLine ? null : primaryLineIndex;
     }
 
     final theme = Theme.of(context);
@@ -2289,10 +2291,11 @@ class _CombinedViewState extends State<CombinedView> {
                   if (event.buttons != kPrimaryMouseButton) return;
                   final hit = hitAt(itemContext, event.position);
                   final root = context.findRenderObject();
-                  _selectionPointerLineIndex =
-                      hit?.lineIndex ?? primaryLineIndex;
-                  _selectionPointerColumn = hit != null
-                      ? hit.column
+                  _selectionPointerLineIndex = isMultiLine
+                      ? hit?.lineIndex
+                      : primaryLineIndex;
+                  _selectionPointerColumn = hit != null || isMultiLine
+                      ? hit?.column
                       : root == null
                       ? null
                       : renderedTextOffsetAtPosition(
@@ -2304,8 +2307,9 @@ class _CombinedViewState extends State<CombinedView> {
                   behavior: HitTestBehavior.translucent,
                   onDragSelectionStart: () {
                     // כניסה למצב בחירה בגלל drag
-                    if (!_selectionManager.isInSelectionMode) {
-                      _selectionManager.setAnchor(lineAtPointer());
+                    final line = lineAtPointer();
+                    if (line != null && !_selectionManager.isInSelectionMode) {
+                      _selectionManager.setAnchor(line);
                     }
                   },
                   onSingleTap: () {
@@ -2314,6 +2318,7 @@ class _CombinedViewState extends State<CombinedView> {
                       return;
                     }
                     final line = lineAtPointer();
+                    if (line == null) return;
                     _focusNode.requestFocus();
                     // מאפס את הטקסט השמור כשלוחצים על הפסקה
                     if (mounted) {
@@ -2339,21 +2344,27 @@ class _CombinedViewState extends State<CombinedView> {
                   },
                   onDoubleTap: () {
                     // SelectionArea בוחר את המילה; כאן רק מצב הבחירה של השורה.
+                    final line = lineAtPointer();
+                    if (line == null) return;
                     _focusNode.requestFocus();
-                    _selectionManager.enterDoubleClickMode(lineAtPointer());
+                    _selectionManager.enterDoubleClickMode(line);
                   },
                   onShiftClick: () {
                     // Shift+Click → בחירת טווח; SelectionArea בוחר את הטקסט.
+                    final line = lineAtPointer();
+                    if (line == null) return;
                     _focusNode.requestFocus();
                     if (!_selectionManager.hasAnchor()) {
-                      _selectionManager.setAnchor(lineAtPointer());
+                      _selectionManager.setAnchor(line);
                     }
                   },
                   onCtrlClick: () {
                     // Ctrl+Click → הוספה/הסרה של השורה מבחירה מרובה
+                    final line = lineAtPointer();
+                    if (line == null) return;
                     _focusNode.requestFocus();
                     _addTextBookEventIfOpen(
-                      UpdateSelectedIndex(lineAtPointer(), additive: true),
+                      UpdateSelectedIndex(line, additive: true),
                     );
                   },
                   onSecondaryTapDown: (details) {

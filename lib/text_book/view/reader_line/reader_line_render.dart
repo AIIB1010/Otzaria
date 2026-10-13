@@ -130,8 +130,9 @@ class RenderReaderParagraphLines extends RenderProxyBox {
     return null;
   }
 
-  /// מלבני הטקסט של השורה במרחב של הפסקה הזו — בגובה שורת התצוגה המלא,
-  /// מלבן אחד לכל שורת תצוגה כדי שלא ייווצרו רווחים בין מקטעי הטקסט.
+  /// מלבני הטקסט של השורה במרחב של הפסקה הזו — בגובה שורת התצוגה המלא.
+  /// מקטעים סמוכים באותה שורת תצוגה מאוחדים; מקטעים מופרדים (טקסט דו-כיווני)
+  /// נשארים נפרדים, כדי לא לכסות את טקסט השורה השכנה.
   List<Rect> lineRects(int lineIndex) {
     final cached = _rects[lineIndex];
     if (cached != null) return cached;
@@ -153,7 +154,9 @@ class RenderReaderParagraphLines extends RenderProxyBox {
       final row = rows.indexWhere(
         (r) =>
             (r.top - rect.top).abs() < 0.5 &&
-            (r.bottom - rect.bottom).abs() < 0.5,
+            (r.bottom - rect.bottom).abs() < 0.5 &&
+            rect.left <= r.right + 0.5 &&
+            rect.right >= r.left - 0.5,
       );
       if (row < 0) {
         rows.add(rect);
@@ -214,15 +217,44 @@ class RenderReaderParagraphLines extends RenderProxyBox {
 
   @override
   void paint(PaintingContext context, Offset offset) {
+    final canvas = context.canvas;
     for (final line in _lines) {
       final color = line.background;
       if (color == null) continue;
       final paint = Paint()..color = color;
-      for (final rect in lineRects(line.lineIndex)) {
-        context.canvas.drawRect(rect.shift(offset), paint);
+      // סמן הבחירה שמצויר מתחת לטקסט נשאר גלוי מעל רקע השורה.
+      final bar = line.selected ? _gutterStrip() : null;
+      if (bar != null) {
+        canvas.save();
+        canvas.clipRect(bar.shift(offset), clipOp: ui.ClipOp.difference);
       }
+      for (final rect in lineRects(line.lineIndex)) {
+        canvas.drawRect(rect.shift(offset), paint);
+      }
+      if (bar != null) canvas.restore();
     }
     super.paint(context, offset);
+  }
+
+  /// רצועת הסמן של [RenderReaderLineGutter] שמעל, במרחב של הפסקה הזו.
+  Rect? _gutterStrip() {
+    RenderObject? node = parent;
+    while (node != null && node is! RenderReaderLineGutter) {
+      node = node.parent;
+    }
+    if (node is! RenderReaderLineGutter || node._foreground || !node.hasSize) {
+      return null;
+    }
+    final width = node.size.width;
+    return MatrixUtils.transformRect(
+      node.getTransformTo(this),
+      Rect.fromLTRB(
+        width - RenderReaderLineGutter.barWidth,
+        0,
+        width,
+        node.size.height,
+      ),
+    );
   }
 }
 
@@ -392,35 +424,25 @@ class RenderReaderLineGutter extends RenderProxyBox {
   }
 }
 
-/// שורת המקור שתחת [globalPosition] בתת-העץ של [root], או null כשהפריט
-/// אינו מכיל פסקה ממוזגת או בלוק שורה (פריט של שורה אחת).
-/// נקודה ברווח שבין חלקי הפריט נזקפת לחלק הקרוב אליה אנכית.
+/// שורת המקור שתחת [globalPosition] בתת-העץ של [root], או null כשהנקודה
+/// אינה בגובה של פסקה ממוזגת או של בלוק שורה (כרטיס מפרשים, כותרת, רווח).
 ReaderLineHit? readerLineAt(RenderObject root, Offset globalPosition) {
-  RenderBox? nearest;
-  var nearestDistance = double.infinity;
+  RenderBox? hit;
   void visit(RenderObject object) {
-    if (nearestDistance == 0) return;
+    if (hit != null) return;
     if (object is RenderReaderParagraphLines ||
         object is RenderReaderLineBlock) {
       final box = object as RenderBox;
       if (!box.attached || !box.hasSize) return;
-      final local = box.globalToLocal(globalPosition);
-      final distance = local.dy < 0
-          ? -local.dy
-          : local.dy > box.size.height
-          ? local.dy - box.size.height
-          : 0.0;
-      if (distance < nearestDistance) {
-        nearestDistance = distance;
-        nearest = box;
-      }
+      final dy = box.globalToLocal(globalPosition).dy;
+      if (dy >= 0 && dy <= box.size.height) hit = box;
       return;
     }
     object.visitChildren(visit);
   }
 
   visit(root);
-  final box = nearest;
+  final box = hit;
   if (box is RenderReaderParagraphLines) return box.locate(globalPosition);
   if (box is RenderReaderLineBlock) {
     return ReaderLineHit(
