@@ -11,6 +11,7 @@ import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import 'package:otzaria/text_book/utils/reading_position.dart';
 import 'package:otzaria/text_book/utils/reading_segment_navigation.dart';
 import 'package:otzaria/text_book/utils/reading_segments.dart';
+import 'package:otzaria/text_book/view/reader_line/reader_line_render.dart';
 import 'package:otzaria/widgets/lists/jump_aware_item_scroll_controller.dart';
 import 'package:otzaria/widgets/lists/scroll_position_reanchor.dart';
 
@@ -76,6 +77,10 @@ class LineScrollController {
   @internal
   final ScrollOffsetController offsetController = ScrollOffsetController();
 
+  /// פריטי הרשימה הבנויים — מיקום שורה בפסקה נמדד מהם ולא מוערך.
+  @internal
+  final ReaderItemBoxes itemBoxes = ReaderItemBoxes();
+
   final ValueNotifier<ReadingPosition?> _position = ValueNotifier(null);
 
   /// המיקום הנוכחי, או יעד הניווט מרגע שהתחיל ועד שנחת.
@@ -90,7 +95,9 @@ class LineScrollController {
   int _token = 0;
   int _navigating = 0;
   ReadingSegments? _measuredSegments;
-  List<ItemPosition> _measuredPositions = const [];
+
+  /// העוגן מהמדידה האחרונה — נשמר כמספר שורה, כי הפריסה עשויה להשתנות אחריה.
+  ReadingAnchor? _measuredAnchor;
   bool _userScrollActive = false;
   bool _disposed = false;
 
@@ -130,7 +137,7 @@ class LineScrollController {
     if (pending != null) {
       pending.waitForAttach = false;
     } else if (_measuredSegments != null) {
-      final anchor = _anchorFrom(_measuredSegments!, _measuredPositions);
+      final anchor = _measuredAnchor;
       if (anchor != null) _pending = _Target.anchor(anchor);
     }
     WidgetsBinding.instance.addPostFrameCallback((_) => _flushPending());
@@ -170,9 +177,7 @@ class LineScrollController {
       _forgetMeasured();
       _pending = null;
       _token++;
-      itemController
-        ..notifyBeforeJump()
-        ..beginNavigation();
+      itemController.notifyBeforeJump();
       return external(target.line);
     }
     if (!_nativeReady) {
@@ -213,7 +218,7 @@ class LineScrollController {
   /// המדידה האחרונה של הרשימה אינה המיקום עוד; בלי זה חיבור מחדש היה חוזר אליה.
   void _forgetMeasured() {
     _measuredSegments = null;
-    _measuredPositions = const [];
+    _measuredAnchor = null;
   }
 
   /// לעטיפת רשימת הקורא: מבחין בין גלילת משתמש לבין ניווט ושינויי גובה.
@@ -226,7 +231,9 @@ class LineScrollController {
   bool _onScrollNotification(ScrollNotification notification) {
     if (notification.depth != 0) return false;
     if (notification is ScrollStartNotification) {
-      _userScrollActive = _navigating == 0;
+      // גרירה של המשתמש מבטלת ניווט שבדרך, אחרת הדיוק היה מחזיר אליו.
+      if (notification.dragDetails != null && _navigating > 0) _cancelRun();
+      _userScrollActive = _navigating == 0 || notification.dragDetails != null;
     } else if (notification is ScrollEndNotification) {
       _userScrollActive = false;
     } else if (notification is ScrollUpdateNotification && _navigating == 0) {
@@ -234,6 +241,12 @@ class LineScrollController {
       _awaitingLoad = null;
     }
     return false;
+  }
+
+  void _cancelRun() {
+    _token++;
+    _pending = null;
+    _awaitingLoad = null;
   }
 
   /// הנקודה שעל קו העוגן עכשיו.
@@ -248,7 +261,11 @@ class LineScrollController {
               intraLineFraction: current.intraLineFraction,
             );
     }
-    return _anchorFrom(segments, positionsListener.itemPositions.value);
+    return readingAnchorFromItems(
+      segments,
+      positionsListener.itemPositions.value,
+      measure: itemBoxes.lineExtent,
+    );
   }
 
   /// לפני שינוי רוחב: קובע את הרשימה על הפריט העליון, ואחרי הפריסה מחזיר את
@@ -270,11 +287,6 @@ class LineScrollController {
       await _run(_Target.anchor(anchor));
     });
   }
-
-  ReadingAnchor? _anchorFrom(
-    ReadingSegments segments,
-    Iterable<ItemPosition> positions,
-  ) => readingAnchorFromItems(segments, positions);
 
   void _publish(ReadingPosition position) {
     if (_disposed || _position.value == position) return;
@@ -309,11 +321,18 @@ class LineScrollController {
         duration: target.duration,
         curve: target.curve,
         isCurrent: () => token == _token && !_disposed,
+        measure: itemBoxes.lineExtent,
       );
     } finally {
       _navigating--;
     }
-    if (token != _token || _disposed) return;
+    if (token != _token || _disposed) {
+      // ניווט שהמשתמש קטע: המיקום הוא מה שעל המסך עכשיו.
+      if (_navigating == 0 && _pending == null && _external == null) {
+        _measure();
+      }
+      return;
+    }
     final landed = _segments;
     if (landed != null && landed.isNotEmpty) {
       final item = landed.layout.itemForLine(target.line);
@@ -351,7 +370,7 @@ class LineScrollController {
     if (!_userScrollActive &&
         previousSegments != null &&
         !identical(previousSegments, segments)) {
-      final anchor = _anchorFrom(previousSegments, _measuredPositions);
+      final anchor = _measuredAnchor;
       if (anchor != null &&
           _relayoutMovesAnchor(previousSegments, segments, anchor)) {
         // לא מודדים: המיקום שנמדד לפני השינוי הוא שנשמר.
@@ -378,7 +397,12 @@ class LineScrollController {
     if (itemPosition == null) return false;
     final extent = _binding?.viewportExtent() ?? 0;
     if (extent <= 0) return true;
-    final edges = lineEdgesInViewport(after[item], anchor.line, itemPosition);
+    final edges = lineEdgesInViewport(
+      after,
+      anchor.line,
+      itemPosition,
+      measure: itemBoxes.lineExtent,
+    );
     final edge =
         edges.leading +
         anchor.intraLineFraction * (edges.trailing - edges.leading);
@@ -415,29 +439,44 @@ class LineScrollController {
     _measuredSegments = segments;
   }
 
-  /// [landed] הוא יעד שהניווט הסתיים בו. בראש הספר הוא נעצר מעל קו העוגן כי אין
-  /// לאן לגלול, ובכל זאת הוא המיקום — אחרת "הבא" היה נתקע בשורה 0.
+  /// [landed] — יעד שהניווט נחת בו הוא המיקום, גם כשנעצר מעל קו העוגן (ראש
+  /// הספר, שורה קצרה שיושרה ל-0) או חולק שורת תצוגה עם שורות קודמות.
   void _measure({_Target? landed}) {
     final segments = _segments;
     if (segments == null || segments.isEmpty) return;
     final positions = positionsListener.itemPositions.value.toList();
     _measuredSegments = segments;
-    _measuredPositions = positions;
-    var position = readingPositionFromItems(segments, positions);
-    if (position == null) return;
+    var position = readingPositionFromItems(
+      segments,
+      positions,
+      measure: itemBoxes.lineExtent,
+    );
+    if (position == null) {
+      _measuredAnchor = null;
+      return;
+    }
     if (landed != null &&
-        position.topLine < landed.line &&
-        _restsAtOrAbove(segments, landed)) {
+        position.topLine != landed.line &&
+        (_restsAt(segments, landed) ||
+            position.topLine < landed.line &&
+                _restsAtOrAbove(segments, landed))) {
       position = ReadingPosition(
         topLine: landed.line,
         intraLineFraction: landed.intraLineFraction,
-        visibleLines: List<int>.unmodifiable(
-          position.visibleLines.where((line) => line >= landed.line),
-        ),
+        visibleLines: List<int>.unmodifiable({
+          landed.line,
+          ...position.visibleLines.where((line) => line > landed.line),
+        }),
         windowFirstLine: position.windowFirstLine,
         windowLastLine: position.windowLastLine,
       );
     }
+    _measuredAnchor = readingAnchorAt(
+      segments,
+      positions,
+      position,
+      measure: itemBoxes.lineExtent,
+    );
     _publish(position);
   }
 
@@ -448,12 +487,26 @@ class LineScrollController {
     final itemPosition = _positionOf(item);
     if (itemPosition == null) return false;
     final edges = lineEdgesInViewport(
-      segments[item],
+      segments,
       target.line,
       itemPosition,
+      measure: itemBoxes.lineExtent,
     );
     return edges.leading >= 0 &&
         edges.leading <= target.alignment + kAnchorLandingEpsilon;
+  }
+
+  bool _restsAt(ReadingSegments segments, _Target target) {
+    final item = segments.layout.itemForLine(target.line);
+    final itemPosition = _positionOf(item);
+    if (itemPosition == null) return false;
+    final edges = lineEdgesInViewport(
+      segments,
+      target.line,
+      itemPosition,
+      measure: itemBoxes.lineExtent,
+    );
+    return (edges.leading - target.alignment).abs() <= kAnchorLandingEpsilon;
   }
 
   void dispose() {

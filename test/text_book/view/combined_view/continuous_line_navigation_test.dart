@@ -17,6 +17,8 @@ import 'package:otzaria/text_book/utils/reading_segment_navigation.dart';
 import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:otzaria/text_book/view/combined_view/combined_book_screen.dart';
 import 'package:otzaria/text_book/view/reading_viewport/line_scroll_controller.dart';
+import 'package:otzaria/text_book/view/widgets/continuous_reading_paragraph.dart';
+import 'package:otzaria/text_book/view/widgets/unloaded_paragraph_placeholder.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import '../../../test_helpers/memory_cache_provider.dart';
@@ -124,7 +126,12 @@ double? _lineEdge(_Fixture fixture, int line) {
       .where((p) => p.index == item)
       .firstOrNull;
   if (position == null) return null;
-  return lineEdgesInViewport(segments[item], line, position).leading;
+  return lineEdgesInViewport(
+    segments,
+    line,
+    position,
+    measure: fixture.lines.itemBoxes.lineExtent,
+  ).leading;
 }
 
 Matcher get _onAnchor => closeTo(kReadingAnchorAlignment, 0.01);
@@ -242,6 +249,32 @@ void main() {
       (_lineEdge(fixture, top)! - edgeBefore) * viewport.height,
       closeTo(0, 1),
     );
+  });
+
+  testWidgets('פסקה שטרם נטענה מוצגת כמקום שמור ומוחלפת במקומה כשהיא נטענת', (
+    tester,
+  ) async {
+    final fixture = await _mount(tester, _state(_window(0, _line(1, 0))));
+    int itemCount() => tester
+        .widget<ScrollablePositionedList>(find.byType(ScrollablePositionedList))
+        .itemCount;
+    final countBefore = itemCount();
+    final placeholder = find.byType(UnloadedParagraphPlaceholder);
+    expect(placeholder, findsWidgets);
+    final placeholderTop = tester.getTopLeft(placeholder.first).dy;
+
+    fixture.bloc.emitForTest(_state(_all));
+    await tester.pumpAndSettle();
+
+    expect(itemCount(), countBefore);
+    expect(placeholder, findsNothing);
+    final paragraph = find.byWidgetPredicate(
+      (widget) =>
+          widget is ContinuousReadingParagraph &&
+          widget.lines.first.lineIndex == _line(1, 1),
+    );
+    expect(paragraph, findsOneWidget);
+    expect(tester.getTopLeft(paragraph).dy, closeTo(placeholderTop, 4));
   });
 
   testWidgets('יציאה מצורת הדף ממקמת את השורה הנבחרת בתצוגה הבאה', (

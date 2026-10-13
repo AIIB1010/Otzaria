@@ -14,6 +14,7 @@ import 'package:otzaria/data/repository/text_book_repository.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/models/links.dart';
 import 'package:otzaria/personal_notes/bloc/personal_notes_bloc.dart';
+import 'package:otzaria/plugins/services/reader_section_sync_gate.dart';
 import 'package:otzaria/personal_notes/bloc/personal_notes_event.dart';
 import 'package:otzaria/personal_notes/bloc/personal_notes_state.dart';
 import 'package:otzaria/settings/engine/settings_bloc.dart';
@@ -28,6 +29,7 @@ import 'package:otzaria/text_book/view/error_report_dialog.dart';
 import 'package:otzaria/text_book/view/page_shape/simple_text_viewer.dart';
 import 'package:otzaria/text_book/view/reader_line/reader_line_render.dart';
 import 'package:otzaria/text_book/view/selection/selected_text_copy.dart';
+import 'package:otzaria/text_book/view/selection/text_selection_manager.dart';
 import 'package:otzaria/text_book/view/widgets/continuous_reading_paragraph.dart';
 import 'package:otzaria/theme/app_colors.dart';
 import 'package:otzaria/widgets/misc/app_menu_exports.dart';
@@ -50,6 +52,14 @@ final _referenceLink = Link(
   path2: 'ספר אחר',
   index2: 1,
   connectionType: 'reference',
+);
+
+final _rashiLink = Link(
+  heRef: 'רש"י על ספר בדיקה א',
+  index1: 3,
+  path2: 'commentary/רש"י.txt',
+  index2: 1,
+  connectionType: 'COMMENTARY',
 );
 
 void main() {
@@ -329,6 +339,83 @@ void main() {
     expect(dialog.currentLineNumber, 3);
   });
 
+  testWidgets('עיון: תפריט בכרטיס המפרשים שבתוך פסקה פועל על השורה הנבחרת', (
+    tester,
+  ) async {
+    final h = await _pump(
+      tester,
+      simple: false,
+      book: _NoTocBook(),
+      commentaryCards: true,
+      linksByLine: {
+        3: [_rashiLink],
+      },
+      adjust: (s) => s.copyWith(
+        selectedIndex: 2,
+        selectedIndices: {2},
+        activeCommentators: const ['רש"י'],
+      ),
+    );
+    final card = find.byKey(const ValueKey('commentary_card_2'));
+    expect(card, findsOneWidget);
+    final cardRect = tester.getRect(card);
+    await _openMenuAt(
+      tester,
+      Rect.fromLTWH(cardRect.right - 6, cardRect.top + 2, 4, 4),
+    );
+    await tester.tap(find.text('הוסף סימניה לקטע זה'));
+    await _pumpUntil(tester, () => h.bookmarks.indices.isNotEmpty);
+    expect(h.bookmarks.indices, [2]);
+  });
+
+  testWidgets('עיון: Shift+לחיצה בפסקה מעגנת את הבחירה בשורה שנלחצה', (
+    tester,
+  ) async {
+    final anchors = <int>[];
+    debugOnSelectionAnchor = anchors.add;
+    addTearDown(() => debugOnSelectionAnchor = null);
+    await _pump(tester, simple: false);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.tapAt(
+      _textRect(tester, 'רביעית').center,
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(anchors, isNotEmpty);
+    expect(anchors.first, 3);
+  });
+
+  testWidgets('שורה בתוך פסקה ממוזגת מסונכרנת לתוספים כקטע משלה', (
+    tester,
+  ) async {
+    ReaderSectionSyncGate.instance.clear();
+    await _pump(tester, simple: false, book: TextBook(title: 'ספר סנכרון'));
+    expect(find.byType(ContinuousReadingParagraph), findsOneWidget);
+    expect(ReaderSectionSyncGate.instance.trackedSections, _lines.length);
+    ReaderSectionSyncGate.instance.forget(
+      bookId: 'ספר סנכרון',
+      sectionIndex: 2,
+    );
+    expect(ReaderSectionSyncGate.instance.trackedSections, _lines.length - 1);
+  });
+
+  testWidgets('צורת הדף: לחיצה ימנית על בחירה בפסקה שומרת אותה', (
+    tester,
+  ) async {
+    final copied = <String>[];
+    debugSelectedTextCopyHandler = (content) => copied.add(content.plainText);
+    addTearDown(() => debugSelectedTextCopyHandler = null);
+    await _pump(tester, simple: true);
+    final word = _textRect(tester, 'רביעית');
+    await _selectWord(tester, word);
+    await _openMenuAt(tester, word);
+    await tester.pumpAndSettle();
+    expect(find.text('דווח על טעות בספר'), findsOneWidget);
+    await _pressCtrlC(tester, copied);
+    expect(copied.map((text) => text.trim()), ['רביעית']);
+  });
+
   testWidgets('עיון: הערה מהתפריט נוצרת לשורה שנלחצה', (tester) async {
     final h = await _pump(tester, simple: false);
     await _openMenuAt(tester, _textRect(tester, 'מילה', occurrence: 1));
@@ -491,6 +578,7 @@ Future<_Harness> _pump(
   Map<int, List<Link>> linksByLine = const {},
   List<TocEntry> toc = const [],
   SettingsState? settings,
+  bool commentaryCards = false,
   TextBookLoaded Function(TextBookLoaded state)? adjust,
 }) async {
   book ??= TextBook(title: 'ספר בדיקה');
@@ -556,7 +644,7 @@ Future<_Harness> _pump(
                   openBookCallback: (_) {},
                   openLeftPaneTab: (_, {searchText}) {},
                   textSize: 18,
-                  showCommentaryAsExpansionTiles: false,
+                  showCommentaryAsExpansionTiles: commentaryCards,
                   onOpenPersonalNotes: () {},
                   onSelectedTextChanged: (text, line, _) {
                     h.selectedText = text;

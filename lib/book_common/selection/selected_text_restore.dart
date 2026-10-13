@@ -239,9 +239,8 @@ String restoreSelectedTextLineBreaks({
   ).text;
 }
 
-/// שורות חלון הבחירה שהוצגו בפסקה ממוזגת (מצב רציף), לפי מיקומן בחלון.
-/// [joinsNext] — השורה והבאה באותה פסקה: הטקסט מחבר אותן ברווח, כמו בתצוגה.
-/// [headingAt] — כותרת שמוצגת בזרימה לפני השורה; אינה חלק מטקסט הבחירה.
+/// פסקאות ממוזגות בחלון הבחירה: [joinsNext] — השורה מחוברת לבאה ברווח, כמו
+/// בתצוגה; [headingAt] — כותרת בזרימה לפני השורה, שאינה חלק מטקסט הבחירה.
 typedef SelectionParagraphs = ({
   bool Function(int windowLine) joinsNext,
   String? Function(int windowLine) headingAt,

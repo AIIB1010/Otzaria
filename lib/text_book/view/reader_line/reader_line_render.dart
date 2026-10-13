@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:otzaria/book_common/selection/selection_hit_test.dart';
+import 'package:otzaria/text_book/utils/reading_layout.dart';
 
 /// שורת המקור שתחת נקודה בפריט קריאה.
 @immutable
@@ -130,9 +131,8 @@ class RenderReaderParagraphLines extends RenderProxyBox {
     return null;
   }
 
-  /// מלבני הטקסט של השורה במרחב של הפסקה הזו — בגובה שורת התצוגה המלא.
-  /// מקטעים סמוכים באותה שורת תצוגה מאוחדים; מקטעים מופרדים (טקסט דו-כיווני)
-  /// נשארים נפרדים, כדי לא לכסות את טקסט השורה השכנה.
+  /// מלבני השורה בגובה שורת התצוגה המלא, במרחב של הפסקה. מקטעים מופרדים
+  /// (טקסט דו-כיווני) נשארים נפרדים, כדי לא לכסות את טקסט השורה השכנה.
   List<Rect> lineRects(int lineIndex) {
     final cached = _rects[lineIndex];
     if (cached != null) return cached;
@@ -172,23 +172,54 @@ class RenderReaderParagraphLines extends RenderProxyBox {
     return result;
   }
 
-  /// הטווח האנכי של כל שורה נבחרת, במרחב של הפסקה הזו.
-  List<({double top, double bottom})> selectedExtents() {
-    final extents = <({double top, double bottom})>[];
-    for (final line in _lines) {
-      if (!line.selected) continue;
-      final rects = lineRects(line.lineIndex);
-      if (rects.isEmpty) continue;
-      var top = rects.first.top;
-      var bottom = rects.first.bottom;
-      for (final rect in rects.skip(1)) {
-        if (rect.top < top) top = rect.top;
-        if (rect.bottom > bottom) bottom = rect.bottom;
+  /// הטווח האנכי של [lineIndex] במרחב של הפסקה הזו; לשורה ריקה — שורת הסמן.
+  ({double top, double bottom})? lineExtent(int lineIndex) {
+    final rects = lineRects(lineIndex);
+    if (rects.isEmpty) {
+      final range = rangeForLine(lineIndex);
+      final paragraph = this.paragraph;
+      if (range == null || paragraph == null || !paragraph.hasSize) {
+        return null;
       }
-      extents.add((top: top, bottom: bottom));
+      final position = TextPosition(offset: range.start);
+      final caret = paragraph.getOffsetForCaret(position, Rect.zero);
+      final height = paragraph.getFullHeightForCaret(position);
+      final rect = MatrixUtils.transformRect(
+        paragraph.getTransformTo(this),
+        Rect.fromLTWH(caret.dx, caret.dy, 1, height),
+      );
+      return (top: rect.top, bottom: rect.bottom);
     }
-    return extents;
+    var top = rects.first.top;
+    var bottom = rects.first.bottom;
+    for (final rect in rects.skip(1)) {
+      if (rect.top < top) top = rect.top;
+      if (rect.bottom > bottom) bottom = rect.bottom;
+    }
+    return (top: top, bottom: bottom);
   }
+
+  /// כמו [lineExtent], אך נגמר בתחילת השורה הבאה בפסקה: שורת תצוגה משותפת
+  /// שייכת לשורה שמתחילה בה, כך שהשורות מחלקות את הגובה בלי חפיפה.
+  ({double top, double bottom})? flowExtent(int lineIndex) {
+    final extent = lineExtent(lineIndex);
+    if (extent == null) return null;
+    final at = _lines.indexWhere((line) => line.lineIndex == lineIndex);
+    if (at < 0 || at + 1 >= _lines.length) return extent;
+    final next = lineExtent(_lines[at + 1].lineIndex);
+    if (next == null || next.top >= extent.bottom) return extent;
+    return (
+      top: extent.top,
+      bottom: next.top < extent.top ? extent.top : next.top,
+    );
+  }
+
+  /// הטווח האנכי של כל שורה נבחרת, במרחב של הפסקה הזו.
+  List<({double top, double bottom})> selectedExtents() => [
+    for (final line in _lines)
+      if (line.selected && lineRects(line.lineIndex).isNotEmpty)
+        lineExtent(line.lineIndex)!,
+  ];
 
   /// השורה שתחת [globalPosition]; נקודה בכותרת המוזרקת שייכת לשורה שאחריה.
   ReaderLineHit? locate(Offset globalPosition) {
@@ -421,6 +452,121 @@ class RenderReaderLineGutter extends RenderProxyBox {
     if (!_foreground) _paintBars(context, offset);
     super.paint(context, offset);
     if (_foreground) _paintBars(context, offset);
+  }
+}
+
+/// פריטי הקריאה הבנויים של כמה שורות, למדידת הגובה האמיתי של שורה בתוכם.
+class ReaderItemBoxes {
+  final Map<int, RenderReaderItemBox> _boxes = {};
+
+  /// גבולות [line] בפריט [item] כחלק מגובהו; null כשהפריט או השורה לא בנויים.
+  ({double top, double bottom})? lineExtent(int item, int line) {
+    final box = _boxes[item];
+    if (box == null || !box.attached || !box.hasSize) return null;
+    final height = box.size.height;
+    if (height <= 0) return null;
+    final rect = _lineRect(box, line);
+    if (rect == null) return null;
+    return (top: rect.top / height, bottom: rect.bottom / height);
+  }
+
+  static Rect? _lineRect(RenderBox box, int line) {
+    Rect? found;
+    void visit(RenderObject object) {
+      if (found != null) return;
+      if (object is RenderReaderParagraphLines) {
+        if (object.hasSize && object.rangeForLine(line) != null) {
+          final extent = object.flowExtent(line);
+          if (extent != null) {
+            found = MatrixUtils.transformRect(
+              object.getTransformTo(box),
+              Rect.fromLTRB(0, extent.top, 1, extent.bottom),
+            );
+          }
+        }
+        return;
+      }
+      if (object is RenderReaderLineBlock) {
+        if (object.lineIndex == line && object.hasSize) {
+          found = MatrixUtils.transformRect(
+            object.getTransformTo(box),
+            Offset.zero & object.size,
+          );
+        }
+        return;
+      }
+      object.visitChildren(visit);
+    }
+
+    visit(box);
+    return found;
+  }
+}
+
+/// עוטף פריט של כמה שורות ברשימת הקורא — חייב להיות שורש הפריט, כי הגבולות
+/// נמדדים ביחס לגובה הפריט שהרשימה מדווחת.
+class ReaderItemBox extends SingleChildRenderObjectWidget {
+  const ReaderItemBox({
+    super.key,
+    required this.item,
+    required this.boxes,
+    required super.child,
+  });
+
+  final int item;
+  final ReaderItemBoxes boxes;
+
+  @override
+  RenderReaderItemBox createRenderObject(BuildContext context) =>
+      RenderReaderItemBox(item: item, boxes: boxes);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    RenderReaderItemBox renderObject,
+  ) {
+    renderObject.update(item: item, boxes: boxes);
+  }
+}
+
+/// פריט של כמה שורות נעטף ב-[ReaderItemBox]; שורה בודדת נשארת כמות שהיא.
+Widget wrapReaderItem({
+  required int item,
+  required ReadingLayout layout,
+  required ReaderItemBoxes boxes,
+  required Widget child,
+}) => layout.continuous && layout.lineCountOf(item) > 1
+    ? ReaderItemBox(item: item, boxes: boxes, child: child)
+    : child;
+
+class RenderReaderItemBox extends RenderProxyBox {
+  RenderReaderItemBox({required this._item, required this._boxes});
+
+  int _item;
+  ReaderItemBoxes _boxes;
+
+  void update({required int item, required ReaderItemBoxes boxes}) {
+    if (item == _item && identical(boxes, _boxes)) return;
+    _unregister();
+    _item = item;
+    _boxes = boxes;
+    if (attached) _boxes._boxes[_item] = this;
+  }
+
+  void _unregister() {
+    if (identical(_boxes._boxes[_item], this)) _boxes._boxes.remove(_item);
+  }
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    _boxes._boxes[_item] = this;
+  }
+
+  @override
+  void detach() {
+    _unregister();
+    super.detach();
   }
 }
 

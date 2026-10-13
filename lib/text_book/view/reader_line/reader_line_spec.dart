@@ -173,7 +173,6 @@ class ReaderLineSpec {
     required this.sourceText,
     required this.settings,
     required this.marks,
-    required this.isBlock,
     this.sectionHeadings,
   });
 
@@ -186,7 +185,9 @@ class ReaderLineSpec {
   final String sourceText;
   final RenderSettings settings;
   final ReaderLineMarks marks;
-  final bool isBlock;
+
+  /// נבדק רק בפריט של כמה שורות; בשורה בודדת אין לו משמעות.
+  bool get isBlock => isReaderBlockLine(sourceText);
   final List<String>? sectionHeadings;
 }
 
@@ -235,7 +236,6 @@ ReaderLineSpec buildReaderLineSpec(int lineIndex, ReaderLineContext ctx) {
       isMainText: main,
       isRelated: ctx.isRelated?.call(lineIndex) ?? false,
     ),
-    isBlock: isReaderBlockLine(raw),
     sectionHeadings: ctx.sectionHeadings[lineIndex],
   );
 }

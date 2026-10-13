@@ -78,14 +78,13 @@ import 'package:otzaria/text_book/utils/inline_notes_utils.dart'
     as inline_notes;
 import 'package:otzaria/book_common/utils/link_anchor_markers.dart';
 import 'package:otzaria/text_book/utils/link_preview_utils.dart';
-import 'package:otzaria/widgets/misc/inline_link_targets.dart';
 import 'package:otzaria/text_book/utils/numbered_note_markers.dart';
 import 'package:otzaria/text_book/utils/reading_segments.dart';
+import 'package:otzaria/text_book/view/reader_line/reader_line_item.dart';
 import 'package:otzaria/text_book/view/reader_line/reader_line_render.dart';
 import 'package:otzaria/text_book/view/reader_line/reader_line_spec.dart';
 import 'package:otzaria/text_book/view/widgets/unloaded_paragraph_placeholder.dart';
 import 'package:otzaria/text_display/text_display_exports.dart';
-import 'package:otzaria/utils/text/html_link_handler.dart';
 import 'package:otzaria/widgets/misc/link_preview_overlay.dart';
 import 'package:otzaria/text_book/view/reading_viewport/line_scroll_controller.dart';
 
@@ -1324,9 +1323,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
         final state = bloc.state;
         return state is TextBookLoaded ? readingSegmentsOf(state) : null;
       },
-      viewportExtent: () => _disposed
-          ? 0
-          : context.size?.height ?? MediaQuery.sizeOf(context).height,
+      viewportExtent: _viewportExtent,
     );
     _viewportBinding = binding;
     lines.attach(binding);
@@ -1341,8 +1338,12 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     if (target == null || target <= 0 || target >= widget.content.length) {
       return;
     }
-    unawaited(lines.jumpToLine(target));
+    unawaited(lines.jumpToLine(target, alignment: 0));
   }
+
+  /// נקרא רק בניווט, אחרי הפריסה — לא מתוך initState.
+  double _viewportExtent() =>
+      _disposed ? 0 : context.size?.height ?? MediaQuery.sizeOf(context).height;
 
   /// השורות הגלויות: בטקסט ראשי מהמיקום הנמדד, במפרש לפי פריטי הרשימה.
   List<int> _visibleSourceLines() {
@@ -2666,15 +2667,26 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
                                                 _offsetController,
                                             itemCount: itemCount,
                                             padding: const EdgeInsets.all(4),
-                                            itemBuilder: (context, index) =>
-                                                _buildLineItem(
-                                                  context,
-                                                  index,
-                                                  state,
-                                                  noteMap,
-                                                  segments,
-                                                  continuous,
-                                                ),
+                                            itemBuilder: (context, index) {
+                                              final item = _buildLineItem(
+                                                context,
+                                                index,
+                                                state,
+                                                noteMap,
+                                                segments,
+                                                continuous,
+                                              );
+                                              final lines = _lines;
+                                              return lines == null ||
+                                                      segments == null
+                                                  ? item
+                                                  : wrapReaderItem(
+                                                      item: index,
+                                                      layout: segments.layout,
+                                                      boxes: lines.itemBoxes,
+                                                      child: item,
+                                                    );
+                                            },
                                           ),
                                         ),
                                       ),
@@ -2796,18 +2808,15 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     final notesForLine =
         noteMap[primaryLineIndex + 1] ?? const <PersonalNote>[];
 
-    ReaderLineHit? hitAt(BuildContext itemContext, Offset globalPosition) {
-      if (!isMultiLine) return null;
-      final root = itemContext.findRenderObject();
-      return root == null ? null : readerLineAt(root, globalPosition);
-    }
+    ReaderLineHit? hitAt(BuildContext itemContext, Offset globalPosition) =>
+        readerItemHit(itemContext, globalPosition, isMultiLine: isMultiLine);
 
-    // בפריט רב-שורתי: null כשהלחיצה מחוץ לשורות (למשל בכרטיס המפרשים).
-    int? lineAtPointer() {
-      final line = _selectionPointerLineIndex;
-      if (line != null && inItem(line)) return line;
-      return isMultiLine ? null : primaryLineIndex;
-    }
+    int? lineAtPointer() => readerItemPointerLine(
+      pointerLine: _selectionPointerLineIndex,
+      inItem: inItem,
+      isMultiLine: isMultiLine,
+      primaryLine: primaryLineIndex,
+    );
 
     final Widget gutterChild = AnimatedContainer(
       duration: const Duration(milliseconds: 200),
@@ -3122,77 +3131,26 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     TextBookLoaded state,
     ReaderLineContext lineContext,
     Map<int, List<PersonalNote>> noteMap,
-  ) {
-    final specs = <int, ReaderLineSpec>{
-      for (final line in itemLines)
-        if (line >= 0 && line < widget.content.length)
-          line: buildReaderLineSpec(line, lineContext),
-    };
-    final colorScheme = Theme.of(context).colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (final part in readerItemParts(
-          specs.keys.toList(),
-          (line) => specs[line]!.isBlock,
-        ))
-          if (part.isBlock)
-            ReaderLineBlock(
-              lineIndex: part.lines.single,
-              selected: specs[part.lines.single]!.marks.isSelected,
-              child: ColoredBox(
-                color:
-                    readerLineBackgroundColor(
-                      specs[part.lines.single]!.marks.background,
-                      colorScheme,
-                    ) ??
-                    Colors.transparent,
-                child: _lineTextWidget(
-                  specs[part.lines.single]!,
-                  state,
-                  noteMap[part.lines.single + 1] ?? const <PersonalNote>[],
-                ),
-              ),
-            )
-          else
-            ReaderParagraphRun(
-              specs: [for (final line in part.lines) specs[line]!],
-              lineContext: lineContext,
-              onTapUrl: _onParagraphUrlTap,
-              onMiddleClickUrl: (url) =>
-                  HtmlLinkHandler.openLinkInBackground(context, url),
-              onAnchorHover: _handlePreviewHover,
-              onAnchorExit: _handlePreviewHoverExit,
-            ),
-      ],
-    );
-  }
-
-  Future<bool> _onParagraphUrlTap(String url) async {
-    final touchPosition = touchLinkTapPosition();
-    if (touchPosition != null && isTouchPreviewUrl(url)) {
-      _handleTouchPreview(url, touchPosition);
-      return true;
-    }
-    if (url.startsWith('otzaria://anchor')) {
-      return _handlePreviewTap(url);
-    }
-    if (url.startsWith('otzaria://book-note')) return true;
-    if (url.startsWith('otzaria://note-marker')) return true;
-    if (url.startsWith('otzaria://note')) {
-      final line = int.tryParse(
-        Uri.tryParse(url)?.queryParameters['line'] ?? '',
-      );
-      if (line != null) _onInlineNoteTap(line);
-      return true;
-    }
-    if (!mounted) return false;
-    return HtmlLinkHandler.handleLink(
+  ) => buildReaderMultiLineItem(
+    context,
+    itemLines: itemLines,
+    lineContext: lineContext,
+    blockText: (spec) => _lineTextWidget(
+      spec,
+      state,
+      noteMap[spec.lineIndex + 1] ?? const <PersonalNote>[],
+    ),
+    onTapUrl: (url) => handleReaderParagraphUrl(
       context,
       url,
-      (tab) => widget.openBookCallback(tab),
-    );
-  }
+      onTouchPreview: _handleTouchPreview,
+      onAnchorTap: _handlePreviewTap,
+      onNoteTap: _onInlineNoteTap,
+      openBook: (tab) => widget.openBookCallback(tab),
+    ),
+    onAnchorHover: _handlePreviewHover,
+    onAnchorExit: _handlePreviewHoverExit,
+  );
 
   /// בניית תפריט החלפת מפרש
   List<AppContextMenuEntry> _buildCommentatorSwitchMenu(TextBookLoaded state) {

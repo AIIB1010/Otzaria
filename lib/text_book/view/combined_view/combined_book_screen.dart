@@ -72,7 +72,6 @@ import 'package:otzaria/text_book/utils/inline_notes_utils.dart'
     as inline_notes;
 import 'package:otzaria/book_common/utils/link_anchor_markers.dart';
 import 'package:otzaria/text_book/utils/link_preview_utils.dart';
-import 'package:otzaria/widgets/misc/inline_link_targets.dart';
 import 'package:otzaria/text_book/utils/numbered_note_markers.dart';
 import 'package:otzaria/widgets/misc/link_preview_overlay.dart';
 import 'package:otzaria/text_book/utils/note_inline_render.dart';
@@ -81,11 +80,11 @@ import 'package:otzaria/text_book/utils/reading_segment_navigation.dart';
 import 'package:otzaria/text_book/utils/section_search_utils.dart';
 import 'package:otzaria/text_display/text_display_exports.dart';
 import 'package:otzaria/text_book/utils/inline_section_markers.dart';
+import 'package:otzaria/text_book/view/reader_line/reader_line_item.dart';
 import 'package:otzaria/text_book/view/reader_line/reader_line_render.dart';
 import 'package:otzaria/text_book/view/reader_line/reader_line_spec.dart';
 import 'package:otzaria/text_book/view/widgets/unloaded_paragraph_placeholder.dart';
 import 'package:otzaria/theme/theme_exports.dart';
-import 'package:otzaria/utils/text/html_link_handler.dart';
 
 class CombinedView extends StatefulWidget {
   const CombinedView({
@@ -2142,9 +2141,7 @@ class _CombinedViewState extends State<CombinedView> {
     TextBookLoaded state,
     Map<int, List<PersonalNote>> noteMap,
   ) {
-    // ה-ListView מאכלס itemCount=segments — במצב הרגיל זה 1:1 לשורות,
-    // במצב רציף זה מספר הפסקאות. תרגום widget.tab.index (שורת מקור) →
-    // segmentIndex לפני העברה ל-`initialScrollIndex`.
+    // פריט לכל שורה במצב רגיל ולכל פסקה במצב רציף; tab.index הוא שורת מקור.
     final layout = readingLayoutOf(state);
     final initialIndex = layout.itemForLine(widget.tab.index);
     final itemCount = layout.itemCount;
@@ -2176,22 +2173,27 @@ class _CombinedViewState extends State<CombinedView> {
           child: buildExpansiomTile(index, state, noteMap),
         );
         final sourceBannerKind = _sourceBannerKind;
-        if (index == 0 && sourceBannerKind != null) {
-          return ViewportAlignedSelectionContainer(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                BookSourceBanner(
-                  kind: sourceBannerKind,
-                  bookTitle: widget.tab.book.title,
-                  fontSize: widget.textSize,
-                ),
-                tile,
-              ],
-            ),
-          );
-        }
-        return ViewportAlignedSelectionContainer(child: tile);
+        final item = ViewportAlignedSelectionContainer(
+          child: index == 0 && sourceBannerKind != null
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    BookSourceBanner(
+                      kind: sourceBannerKind,
+                      bookTitle: widget.tab.book.title,
+                      fontSize: widget.textSize,
+                    ),
+                    tile,
+                  ],
+                )
+              : tile,
+        );
+        return wrapReaderItem(
+          item: index,
+          layout: readingSegmentsOf(state).layout,
+          boxes: widget.tab.lines.itemBoxes,
+          child: item,
+        );
       },
     );
     return widget.tab.lines.trackUserScroll(list);
@@ -2226,6 +2228,7 @@ class _CombinedViewState extends State<CombinedView> {
         if (inItem(selected)) selected,
     };
     final isSelected = selectedLines.isNotEmpty;
+    // גם השורה של לחיצה בפריט שלא פגעה בשורה — הכרטיס שבתוכו שייך לה.
     final selectedLineIndex = isSelected
         ? state.selectedIndices.firstWhere(inItem)
         : primaryLineIndex;
@@ -2233,19 +2236,15 @@ class _CombinedViewState extends State<CombinedView> {
     final notesForLine =
         noteMap[primaryLineIndex + 1] ?? const <PersonalNote>[];
 
-    // השורה שתחת הסמן בפריט; בפריט של שורה אחת — השורה עצמה.
-    ReaderLineHit? hitAt(BuildContext itemContext, Offset globalPosition) {
-      if (!isMultiLine) return null;
-      final root = itemContext.findRenderObject();
-      return root == null ? null : readerLineAt(root, globalPosition);
-    }
+    ReaderLineHit? hitAt(BuildContext itemContext, Offset globalPosition) =>
+        readerItemHit(itemContext, globalPosition, isMultiLine: isMultiLine);
 
-    // בפריט רב-שורתי: null כשהלחיצה מחוץ לשורות (למשל בכרטיס המפרשים).
-    int? lineAtPointer() {
-      final line = _selectionPointerLineIndex;
-      if (line != null && inItem(line)) return line;
-      return isMultiLine ? null : primaryLineIndex;
-    }
+    int? lineAtPointer() => readerItemPointerLine(
+      pointerLine: _selectionPointerLineIndex,
+      inItem: inItem,
+      isMultiLine: isMultiLine,
+      primaryLine: primaryLineIndex,
+    );
 
     final theme = Theme.of(context);
     // ברקע ובסמן של פריט רב-שורתי מטפלות השורות עצמן.
@@ -2372,7 +2371,7 @@ class _CombinedViewState extends State<CombinedView> {
                     if (!mounted) return;
                     final hit = hitAt(itemContext, details.globalPosition);
                     _currentSelectedIndex.value =
-                        hit?.lineIndex ?? primaryLineIndex;
+                        hit?.lineIndex ?? selectedLineIndex;
                     final root = hit?.root ?? context.findRenderObject();
                     final selectedText = _savedSelectedText.value;
                     final occurrenceStart = root == null || selectedText == null
@@ -2459,7 +2458,7 @@ class _CombinedViewState extends State<CombinedView> {
                               final hit = hitAt(itemContext, globalPosition);
                               return _shouldPreserveSelectionAt(
                                 globalPosition,
-                                hit?.lineIndex ?? primaryLineIndex,
+                                hit?.lineIndex ?? selectedLineIndex,
                                 context,
                                 hit: hit,
                               );
@@ -2473,7 +2472,7 @@ class _CombinedViewState extends State<CombinedView> {
                             ),
                             ..._buildContextMenuForIndex(
                               state,
-                              hit?.lineIndex ?? primaryLineIndex,
+                              hit?.lineIndex ?? selectedLineIndex,
                               menuCtx,
                               selectedText,
                               tapPos,
@@ -2735,92 +2734,30 @@ class _CombinedViewState extends State<CombinedView> {
     SettingsState settingsState,
     Map<int, List<PersonalNote>> noteMap, {
     int? commentaryAfter,
-  }) {
-    final specs = <int, ReaderLineSpec>{
-      for (final line in itemLines)
-        if (line >= 0 && line < widget.data.length)
-          line: buildReaderLineSpec(line, lineContext),
-    };
-    final colorScheme = Theme.of(context).colorScheme;
-    final children = <Widget>[];
-    for (final part in readerItemParts(
-      specs.keys.toList(),
-      (line) => specs[line]!.isBlock,
-      splitAfter: commentaryAfter,
-    )) {
-      if (part.isBlock) {
-        final spec = specs[part.lines.single]!;
-        final headings = spec.sectionHeadings;
-        if (headings != null) {
-          children.add(_sectionHeadingsText(state, settingsState, headings));
-        }
-        children.add(
-          ReaderLineBlock(
-            lineIndex: spec.lineIndex,
-            selected: spec.marks.isSelected,
-            child: ColoredBox(
-              color:
-                  readerLineBackgroundColor(
-                    spec.marks.background,
-                    colorScheme,
-                  ) ??
-                  Colors.transparent,
-              child: _lineTextWidget(
-                spec,
-                state,
-                noteMap[spec.lineIndex + 1] ?? const <PersonalNote>[],
-              ),
-            ),
-          ),
-        );
-      } else {
-        children.add(
-          ReaderParagraphRun(
-            specs: [for (final line in part.lines) specs[line]!],
-            lineContext: lineContext,
-            onTapUrl: _onParagraphUrlTap,
-            onMiddleClickUrl: (url) =>
-                HtmlLinkHandler.openLinkInBackground(context, url),
-            onAnchorHover: _handleAnchorHover,
-            onAnchorExit: _handleAnchorHoverExit,
-          ),
-        );
-      }
-      if (part.lines.last == commentaryAfter) {
-        children.add(_buildCommentaryCard(state, commentaryAfter!));
-      }
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: children,
-    );
-  }
-
-  Future<bool> _onParagraphUrlTap(String url) async {
-    final touchPosition = touchLinkTapPosition();
-    if (touchPosition != null && isTouchPreviewUrl(url)) {
-      _handleTouchPreview(url, touchPosition);
-      return true;
-    }
-    if (url.startsWith('otzaria://anchor')) {
-      return _handleAnchorTap(url);
-    }
-    if (url.startsWith('otzaria://book-note')) return true;
-    if (url.startsWith('otzaria://note-marker')) return true;
-    if (url.startsWith('otzaria://note')) {
-      final line = int.tryParse(
-        Uri.tryParse(url)?.queryParameters['line'] ?? '',
-      );
-      if (line != null) _onInlineNoteTap(line);
-      return true;
-    }
-    if (!mounted) return false;
-    return HtmlLinkHandler.handleLink(
+  }) => buildReaderMultiLineItem(
+    context,
+    itemLines: itemLines,
+    lineContext: lineContext,
+    blockText: (spec) => _lineTextWidget(
+      spec,
+      state,
+      noteMap[spec.lineIndex + 1] ?? const <PersonalNote>[],
+    ),
+    blockHeadings: (headings) =>
+        _sectionHeadingsText(state, settingsState, headings),
+    onTapUrl: (url) => handleReaderParagraphUrl(
       context,
       url,
-      (tab) => widget.openBookCallback(tab),
-    );
-  }
+      onTouchPreview: _handleTouchPreview,
+      onAnchorTap: _handleAnchorTap,
+      onNoteTap: _onInlineNoteTap,
+      openBook: (tab) => widget.openBookCallback(tab),
+    ),
+    onAnchorHover: _handleAnchorHover,
+    onAnchorExit: _handleAnchorHoverExit,
+    splitAfter: commentaryAfter,
+    belowSplit: (line) => _buildCommentaryCard(state, line),
+  );
 
   /// בדיקה אם יש מפרשים לאינדקס מסוים
   bool _hasCommentaries(TextBookLoaded state, int index) {

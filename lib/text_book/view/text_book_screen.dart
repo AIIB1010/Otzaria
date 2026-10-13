@@ -1554,8 +1554,8 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
               nextMinorTooltip: 'הקטע הבא',
               nextMajorTooltip: 'הדף/פרק הבא',
               onPrevMajor: () => _navigateToPreviousToc(state),
-              onPrevMinor: () => _scrollToPreviousSegment(state),
-              onNextMinor: () => _scrollToNextSegment(state),
+              onPrevMinor: () => _scrollToPreviousLine(state),
+              onNextMinor: () => _scrollToNextLine(state),
               onNextMajor: () => _navigateToNextToc(state),
             ),
       trailingItems: [
@@ -2341,20 +2341,18 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
     if (state is TextBookLoaded) action(state);
   }
 
-  void _onNavPreviousSegment() => _runNavigation(_scrollToPreviousSegment);
-  void _onNavNextSegment() => _runNavigation(_scrollToNextSegment);
+  void _onNavPreviousSegment() => _runNavigation(_scrollToPreviousLine);
+  void _onNavNextSegment() => _runNavigation(_scrollToNextLine);
   void _onNavPreviousToc() => _runNavigation(_navigateToPreviousToc);
   void _onNavNextToc() => _runNavigation(_navigateToNextToc);
 
-  void _scrollToPreviousSegment(TextBookLoaded state) =>
-      _scrollBySegments(state, -1);
+  void _scrollToPreviousLine(TextBookLoaded state) => _scrollByLines(state, -1);
 
-  void _scrollToNextSegment(TextBookLoaded state) =>
-      _scrollBySegments(state, 1);
+  void _scrollToNextLine(TextBookLoaded state) => _scrollByLines(state, 1);
 
   /// שורת מקור אחת בכל לחיצה, בשני המצבים. המיקום מתעדכן ליעד מיד, ולכן
   /// לחיצות רצופות ממשיכות ממנו גם לפני שהגלילה נחתה.
-  void _scrollBySegments(TextBookLoaded state, int delta) {
+  void _scrollByLines(TextBookLoaded state, int delta) {
     if (PluginTextReaderRegistry.instance.usesPlugin(widget.tab)) {
       PluginTextReaderRegistry.instance.command(
         widget.tab,
@@ -2370,6 +2368,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
     unawaited(
       widget.tab.lines.scrollToLine(
         target,
+        alignment: 0,
         duration: const Duration(milliseconds: 300),
       ),
     );

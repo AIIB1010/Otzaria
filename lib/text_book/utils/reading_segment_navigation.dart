@@ -1,5 +1,4 @@
 import 'package:flutter/widgets.dart';
-import 'package:otzaria/widgets/lists/jump_aware_item_scroll_controller.dart';
 import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
@@ -74,7 +73,8 @@ ItemPosition? _findPosition(ItemPositionsListener listener, int segmentIndex) {
 /// רה-פריסה תוך כדי האנימציה (טעינה הדרגתית) מסיטה את היעד, ובלי תיקון נשארים במקום.
 ///
 /// [latestSegments] מחשב מחדש את מיקום השורה בפסקה כשתוכנה נטען תוך כדי
-/// הגלילה; בלעדיו משתמשים ב-[segments] לאורך כל הגלילה.
+/// הגלילה; בלעדיו משתמשים ב-[segments] לאורך כל הגלילה. [measure] — גבולות
+/// השורה מהרינדור כשהפריט בנוי; בלעדיו לפי אורך הטקסט.
 Future<void> scrollToSourceLine({
   required ItemScrollController scrollController,
   required ScrollOffsetController? scrollOffsetController,
@@ -88,14 +88,12 @@ Future<void> scrollToSourceLine({
   Curve curve = Curves.ease,
   ReadingSegments Function()? latestSegments,
   bool Function()? isCurrent,
+  MeasuredLineExtent? measure,
 }) async {
   if (segments.isEmpty || !scrollController.isAttached) {
     return;
   }
 
-  if (scrollController is JumpAwareItemScrollController) {
-    scrollController.beginNavigation();
-  }
   var segmentIndex = -1;
   var fraction = 0.0;
   var safeLineIndex = lineIndex;
@@ -104,10 +102,12 @@ Future<void> scrollToSourceLine({
     if (current.isEmpty) return false;
     safeLineIndex = lineIndex.clamp(0, current.layout.lineCount - 1).toInt();
     segmentIndex = segmentIndexForLine(current, safeLineIndex);
-    fraction = lineFractionWithinSegment(
-      current[segmentIndex],
+    fraction = lineFractionInItem(
+      current,
+      segmentIndex,
       safeLineIndex,
       intraLineFraction: intraLineFraction,
+      measure: measure,
     );
     return true;
   }

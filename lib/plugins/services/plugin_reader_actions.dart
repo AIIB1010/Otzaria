@@ -83,6 +83,7 @@ class PluginReaderScrollService {
       unawaited(
         pane.lines.scrollToLine(
           sectionIndex,
+          alignment: 0,
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
         ),

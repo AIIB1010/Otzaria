@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+/// לבדיקות: נקרא בכל קביעת עוגן, עם השורה שנקבעה.
+@visibleForTesting
+void Function(int index)? debugOnSelectionAnchor;
+
 /// מנהל מצב בחירת טקסט זמני (Selection-only mode)
 /// מאפשר בחירת טקסט לצורך העתקה בלבד, ללא עריכה
 class TextSelectionManager extends ChangeNotifier {
@@ -13,6 +17,7 @@ class TextSelectionManager extends ChangeNotifier {
 
   /// קביעת anchor point (נקודת התחלה לבחירה)
   void setAnchor(int index) {
+    debugOnSelectionAnchor?.call(index);
     _anchorIndex = index;
     _isInSelectionMode = true;
     notifyListeners();

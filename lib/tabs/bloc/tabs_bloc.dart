@@ -566,6 +566,7 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
         unawaited(
           targetText.lines.scrollToLine(
             effectiveLine,
+            alignment: 0,
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeInOut,
           ),
@@ -716,6 +717,7 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
       // יעד שנקבע לפני שהקורא מחובר נשמר ומבוצע בחיבור; tab.index מתעדכן מיד.
       final navigation = targetText.lines.scrollToLine(
         targetIndex,
+        alignment: 0,
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
       );

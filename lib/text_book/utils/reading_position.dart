@@ -123,8 +123,9 @@ ReadingSegmentViewport _viewport(ItemPosition p) => ReadingSegmentViewport(
 /// המיקום שמתאר את [itemPositions] מול [segments]; null כשאין פריט גלוי.
 ReadingPosition? readingPositionFromItems(
   ReadingSegments segments,
-  Iterable<ItemPosition> itemPositions,
-) {
+  Iterable<ItemPosition> itemPositions, {
+  MeasuredLineExtent? measure,
+}) {
   if (segments.isEmpty) return null;
   final raw =
       itemPositions
@@ -138,11 +139,13 @@ ReadingPosition? readingPositionFromItems(
     ...sourceLineIndicesForSegmentViewports(
       segments,
       filtered.where(_atBookStart).map(_viewport),
+      measure: measure,
     ),
     ...sourceLineIndicesForSegmentViewports(
       segments,
       filtered.where((p) => !_atBookStart(p)).map(_viewport),
       isLineRemnant: isRemnantAbovePositionAnchor,
+      measure: measure,
     ),
   }.toList()..sort();
   if (visibleLines.isEmpty) return null;
@@ -159,7 +162,7 @@ ReadingPosition? readingPositionFromItems(
     topLine: topLine,
     intraLineFraction: itemPosition == null
         ? 0
-        : _fractionPastAnchor(segments[item], topLine, itemPosition),
+        : _fractionPastAnchor(segments, topLine, itemPosition, measure),
     visibleLines: List<int>.unmodifiable(visibleLines),
     windowFirstLine: layout.firstLineOf(window.first.index),
     windowLastLine: layout.lastLineOf(window.last.index),
@@ -168,15 +171,23 @@ ReadingPosition? readingPositionFromItems(
 
 /// גבולות [line] בתצוגה (חלקי viewport), לפי מיקום הפריט שמכיל אותה.
 ({double leading, double trailing}) lineEdgesInViewport(
-  ReadingSegment segment,
+  ReadingSegments segments,
   int line,
-  ItemPosition itemPosition,
-) {
+  ItemPosition itemPosition, {
+  MeasuredLineExtent? measure,
+}) {
+  final item = itemPosition.index;
   final extent = itemPosition.itemTrailingEdge - itemPosition.itemLeadingEdge;
-  final start = lineFractionWithinSegment(segment, line);
-  final end = segment.sourceLineIndices.length <= 1
+  final start = lineFractionInItem(segments, item, line, measure: measure);
+  final end = segments[item].sourceLineIndices.length <= 1
       ? 1.0
-      : lineFractionWithinSegment(segment, line, intraLineFraction: 1);
+      : lineFractionInItem(
+          segments,
+          item,
+          line,
+          intraLineFraction: 1,
+          measure: measure,
+        );
   return (
     leading: itemPosition.itemLeadingEdge + extent * start,
     trailing: itemPosition.itemLeadingEdge + extent * end,
@@ -184,11 +195,17 @@ ReadingPosition? readingPositionFromItems(
 }
 
 double _fractionPastAnchor(
-  ReadingSegment segment,
+  ReadingSegments segments,
   int line,
   ItemPosition itemPosition,
+  MeasuredLineExtent? measure,
 ) {
-  final edges = lineEdgesInViewport(segment, line, itemPosition);
+  final edges = lineEdgesInViewport(
+    segments,
+    line,
+    itemPosition,
+    measure: measure,
+  );
   final extent = edges.trailing - edges.leading;
   if (!extent.isFinite || extent <= 0) return 0;
   return ((kReadingAnchorAlignment - edges.leading) / extent).clamp(0.0, 1.0);
@@ -198,16 +215,39 @@ double _fractionPastAnchor(
 /// העוגן, או תחילת השורה כשהיא עוד מתחתיו (למשל בראש הספר).
 ReadingAnchor? readingAnchorFromItems(
   ReadingSegments segments,
+  Iterable<ItemPosition> itemPositions, {
+  MeasuredLineExtent? measure,
+}) {
+  final position = readingPositionFromItems(
+    segments,
+    itemPositions,
+    measure: measure,
+  );
+  return position == null
+      ? null
+      : readingAnchorAt(segments, itemPositions, position, measure: measure);
+}
+
+/// העוגן של [position] כפי שהוא מוצג ב-[itemPositions].
+ReadingAnchor readingAnchorAt(
+  ReadingSegments segments,
   Iterable<ItemPosition> itemPositions,
-) {
-  final position = readingPositionFromItems(segments, itemPositions);
-  if (position == null) return null;
+  ReadingPosition position, {
+  MeasuredLineExtent? measure,
+}) {
   final line = position.topLine;
   final item = segments.layout.itemForLine(line);
   final itemPosition = itemPositions.where((p) => p.index == item).firstOrNull;
   if (itemPosition == null) return ReadingAnchor(line: line);
-  final edges = lineEdgesInViewport(segments[item], line, itemPosition);
-  if (edges.leading >= kReadingAnchorAlignment) {
+  final edges = lineEdgesInViewport(
+    segments,
+    line,
+    itemPosition,
+    measure: measure,
+  );
+  // תחילת השורה מעל קו העוגן בלי חלק שעבר אותו: יעד שיושר מעליו (למשל ל-0).
+  if (edges.leading >= kReadingAnchorAlignment ||
+      position.intraLineFraction == 0) {
     return ReadingAnchor(line: line, alignment: edges.leading.clamp(0.0, 1.0));
   }
   return ReadingAnchor(

@@ -4,11 +4,7 @@
 /// highlightedLine, חיפוש, קישורים, פסיקות וכו') משתמש ב-**שורות מקור**
 /// כאינדקסים. הסגמנטים נחשבים רק כפריט-תצוגה ב-`ScrollablePositionedList`.
 ///
-/// תרגום:
-/// - שורה → סגמנט: [segmentIndexForLine] — לפני קריאת `scrollTo(index:)`.
-/// - viewport → שורות: [sourceLineIndicesForSegmentViewports] — אחרי
-///   `positionsListener` כדי לחשב מחדש visibleIndices ברמת שורות.
-///
+/// התרגום בין שורות לפריטים נעשה רק ב-`LineScrollController`.
 /// **אסור** להזליג segmentIndex אל ה-state של ה-bloc. הוא מקומי לרינדור.
 library;
 
@@ -259,7 +255,12 @@ int _firstIndexAtOrAbove(List<double> boundaries, double value) {
   return low;
 }
 
-/// אינדקס הפריט שמכיל את שורת המקור [lineIndex] — לפני `scrollTo(index:)`.
+/// גבולות [line] בפריט [item] (חלק 0..1 מגובה הפריט) כפי שנמדדו ברינדור;
+/// null כשהפריט אינו בנוי.
+typedef MeasuredLineExtent =
+    ({double top, double bottom})? Function(int item, int line);
+
+/// אינדקס הפריט שמכיל את שורת המקור [lineIndex].
 int segmentIndexForLine(ReadingSegments segments, int lineIndex) =>
     segments.layout.itemForLine(lineIndex);
 
@@ -294,15 +295,77 @@ double lineFractionWithinSegment(
   return ((lineOffset.clamp(0, lineCount - 1)) + within) / lineCount;
 }
 
-/// ממיר רשימת `ItemPosition` (במונחי segmentIndex) לרשימת שורות-מקור גלויות.
-///
-/// במצב הרגיל זה איזומורפי — segmentIndex == lineIndex, אבל ההמרה עוברת
-/// דרך אותה פונקציה כדי ש-`_resolveVisibleSourceIndices` ב-bloc לא יצטרך
-/// להבדיל בין המצבים.
+/// כמו [lineFractionWithinSegment], אך לפי הגובה שנמדד כשהפריט [item] בנוי.
+double lineFractionInItem(
+  ReadingSegments segments,
+  int item,
+  int lineIndex, {
+  double intraLineFraction = 0,
+  MeasuredLineExtent? measure,
+}) {
+  final segment = segments[item];
+  final measured = _measuredLines(segment, item, measure);
+  if (measured == null) {
+    return lineFractionWithinSegment(
+      segment,
+      lineIndex,
+      intraLineFraction: intraLineFraction,
+    );
+  }
+  final offset = (lineIndex - segment.startLineIndex)
+      .clamp(0, segment.sourceLineIndices.length - 1)
+      .toInt();
+  final extent = measured(offset);
+  return extent.top +
+      intraLineFraction.clamp(0.0, 1.0) * (extent.bottom - extent.top);
+}
+
+/// גבולות השורות של פריט בנוי לפי מיקום השורה בו; null — אין מדידה.
+({double top, double bottom}) Function(int offset)? _measuredLines(
+  ReadingSegment segment,
+  int item,
+  MeasuredLineExtent? measure,
+) {
+  final lineCount = segment.sourceLineIndices.length;
+  if (measure == null || !segment.isLoaded || lineCount <= 1) return null;
+  if (measure(item, segment.startLineIndex) == null) return null;
+  return (offset) =>
+      measure(item, segment.sourceLineIndices[offset]) ??
+      (
+        top: lineFractionWithinSegment(
+          segment,
+          segment.sourceLineIndices[offset],
+        ),
+        bottom: lineFractionWithinSegment(
+          segment,
+          segment.sourceLineIndices[offset],
+          intraLineFraction: 1,
+        ),
+      );
+}
+
+/// האינדקס הקטן ביותר ב-[0, count) שבו [test] מתקיים, בהנחה שהוא מונוטוני.
+int _firstOffsetWhere(int count, bool Function(int offset) test) {
+  var low = 0;
+  var high = count;
+  while (low < high) {
+    final mid = (low + high) >> 1;
+    if (test(mid)) {
+      high = mid;
+    } else {
+      low = mid + 1;
+    }
+  }
+  return low;
+}
+
+/// ממיר רשימת `ItemPosition` (במונחי segmentIndex) לרשימת שורות-מקור גלויות;
+/// במצב הרגיל segmentIndex == lineIndex.
 List<int> sourceLineIndicesForSegmentViewports(
   ReadingSegments segments,
   Iterable<ReadingSegmentViewport> viewports, {
   bool Function(double leadingEdge, double trailingEdge)? isLineRemnant,
+  MeasuredLineExtent? measure,
 }) {
   final sourceIndices = <int>{};
   for (final viewport in viewports) {
@@ -344,6 +407,32 @@ List<int> sourceLineIndicesForSegmentViewports(
 
     final startFraction = (-viewport.leadingEdge / extent).clamp(0.0, 1.0);
     final endFraction = ((1.0 - viewport.leadingEdge) / extent).clamp(0.0, 1.0);
+
+    final measured = _measuredLines(segment, viewport.segmentIndex, measure);
+    if (measured != null) {
+      var first = _firstOffsetWhere(
+        lineCount,
+        (offset) => measured(offset).bottom > startFraction,
+      ).clamp(0, lineCount - 1);
+      final end = _firstOffsetWhere(
+        lineCount,
+        (offset) => measured(offset).top >= endFraction,
+      ).clamp(first + 1, lineCount);
+      if (isLineRemnant != null) {
+        while (first < end - 1) {
+          final line = measured(first);
+          if (!isLineRemnant(
+            viewport.leadingEdge + extent * line.top,
+            viewport.leadingEdge + extent * line.bottom,
+          )) {
+            break;
+          }
+          first++;
+        }
+      }
+      sourceIndices.addAll(segment.sourceLineIndices.sublist(first, end));
+      continue;
+    }
 
     // גבולות השורות משוקללים לפי אורך הטקסט הנראה - חייב להיות זהה לשקלול
     // ב-lineFractionWithinSegment כדי שהנחיתה וההדגשה יצביעו על אותה שורה.

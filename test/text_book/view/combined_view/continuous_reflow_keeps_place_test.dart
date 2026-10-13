@@ -13,6 +13,7 @@ import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
+import 'package:otzaria/text_book/utils/reading_position.dart';
 import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:otzaria/text_book/utils/reading_segment_navigation.dart';
 import 'package:otzaria/text_book/view/combined_view/combined_book_screen.dart';
@@ -224,10 +225,12 @@ void main() {
     final item = readingLayoutOf(full).itemForLine(450);
     final position = fixture.tab.lines.positionsListener.itemPositions.value
         .singleWhere((p) => p.index == item);
-    final edge =
-        position.itemLeadingEdge +
-        lineFractionWithinSegment(readingSegmentsOf(full)[item], 450) *
-            (position.itemTrailingEdge - position.itemLeadingEdge);
+    final edge = lineEdgesInViewport(
+      readingSegmentsOf(full),
+      450,
+      position,
+      measure: fixture.tab.lines.itemBoxes.lineExtent,
+    ).leading;
     expect(edge, closeTo(kSearchResultAnchorAlignment, kAnchorLandingEpsilon));
   });
 
