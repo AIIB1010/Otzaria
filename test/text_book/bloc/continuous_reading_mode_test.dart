@@ -3,7 +3,6 @@ import 'package:otzaria/models/books.dart';
 import 'package:otzaria/search/models/search_configuration.dart';
 import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 /// טסטים ללוגיקה הטהורה של החלטות מצב-רצף ב-bloc. זרימת ה-state המלאה
 /// נבדקת ב-`text_book_bloc_test.dart`, והפריסה ב-`reading_layout_test.dart`.
@@ -164,7 +163,5 @@ TextBookLoaded _loaded({
     pinLeftPane: false,
     searchText: '',
     searchMode: SearchMode.exact,
-    scrollController: ItemScrollController(),
-    positionsListener: ItemPositionsListener.create(),
   );
 }

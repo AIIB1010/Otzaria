@@ -2,9 +2,9 @@ import 'package:otzaria/text_book/view/page_shape/utils/page_shape_default_comme
 import 'package:otzaria/library/hidden/hidden_library_store.dart';
 import 'package:otzaria/library/hidden/hidden_titles.dart';
 import 'dart:async';
+import 'dart:math';
 import 'package:otzaria/core/error_log_file.dart';
 import 'package:bloc_concurrency/bloc_concurrency.dart';
-import 'package:flutter/animation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:otzaria/models/book_source.dart';
 import 'package:otzaria/models/books.dart';
@@ -38,12 +38,10 @@ import 'package:otzaria/text_book/utils/link_processing.dart';
 import 'package:otzaria/text_book/utils/he_categories_enricher.dart';
 import 'package:otzaria/book_common/utils/commentator_group_builder.dart';
 import 'package:otzaria/text_book/utils/inline_notes_utils.dart' as notes;
-import 'package:otzaria/text_book/utils/reading_segment_navigation.dart';
+import 'package:otzaria/text_book/utils/reading_position.dart';
 import 'package:otzaria/text_book/utils/reading_segments.dart';
-import 'package:otzaria/text_book/utils/visible_index.dart';
 import 'package:otzaria/utils/file/toc_parser.dart';
 import 'package:otzaria/utils/file/markdown_to_otzaria.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
   // השאילתה עצמה רצה ב-Isolate, אבל כל טעינה גוררת פענוח התוצאה, מיזוג
@@ -71,13 +69,15 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
   /// ספר קצר מזה לא משוחרר במעבר לרקע — הרווח זניח והשחרור גורר rebuild.
   static const int _releaseContentMinLines = 2000;
   static const int _contentReloadThresholdLines = 60;
+
+  /// פסקה ארוכה מזה בפתיחה נטענת ברקע ולא לפני הציור הראשון.
+  static const int _initialItemLoadMaxLines = 2000;
   static const Duration _visibleIndicesDebounceDuration = Duration(
     milliseconds: 160,
   );
 
-  /// קצב מרבי לשידור מיידי של visibleIndices בזמן גלילה. במצב קריאה רציף
-  /// השורה הגלויה נגזרת משבר הגלילה בתוך פסקה ממוזגת ולכן משתנה כמעט בכל
-  /// פריים; בלי הגבלה זו כל פריים גורר emit ו-rebuild של הפסקה כולה.
+  /// קצב מרבי לשידור מיידי של visibleIndices בזמן גלילה; בלעדיו כל פריים
+  /// גלילה גורר emit ו-rebuild.
   static const Duration _visibleIndicesThrottleInterval = Duration(
     milliseconds: 100,
   );
@@ -93,14 +93,17 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
     BookSource preferSource,
   })
   _quickPreviewLoader;
-  final ItemScrollController scrollController;
-  final ItemPositionsListener positionsListener;
-  final ScrollOffsetController? scrollOffsetController;
+
+  /// המיקום הנמדד של הקורא; מקור ה-visibleIndices.
+  final ValueListenable<ReadingPosition?>? readingPosition;
+
+  /// מזהה הקורא לזיכרון הפריסה ([readingLayoutOf]).
+  final Object _readerIdentity = Object();
 
   Timer? _debounceTimer;
   Timer? _highlightTimer;
   DateTime? _lastVisibleIndicesDispatchAt;
-  VoidCallback? _positionListenerCallback;
+  bool _listeningToReadingPosition = false;
   int? _loadedLinksStart;
   int? _loadedLinksEnd;
   String? _loadedLinksBookTitle;
@@ -179,9 +182,7 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
     })?
     quickPreviewLoader,
     required TextBookInitial initialState,
-    required this.scrollController,
-    required this.positionsListener,
-    this.scrollOffsetController,
+    this.readingPosition,
   }) : _quickPreviewLoader =
            quickPreviewLoader ??
            SqliteDataProvider.instance.getBookQuickPreview,
@@ -349,11 +350,9 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
   @visibleForTesting
   static bool shouldDispatchVisibleIndicesNow({
     required Duration? sinceLastDispatch,
-    bool continuousReadingMode = true,
     Duration throttleInterval = _visibleIndicesThrottleInterval,
   }) {
-    return !continuousReadingMode ||
-        sinceLastDispatch == null ||
+    return sinceLastDispatch == null ||
         sinceLastDispatch.isNegative ||
         sinceLastDispatch >= throttleInterval;
   }
@@ -892,92 +891,22 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
         currentState: state,
         globalDefault: defaultContinuousReading,
       );
+      if (effectiveContinuousReading &&
+          _supportsContentRangeLoading &&
+          !(state is TextBookLoaded && event.preserveState) &&
+          visibleIndices.isNotEmpty) {
+        await _loadInitialItemRange(
+          book,
+          contentLines,
+          loadedLineFlags,
+          tableOfContents,
+          visibleIndices.first,
+        );
+      }
       const List<Link> emptyLinks = [];
       const List<Link> emptyVisibleLinks = [];
 
-      if (_positionListenerCallback != null) {
-        positionsListener.itemPositions.removeListener(
-          _positionListenerCallback!,
-        );
-      }
-
-      _positionListenerCallback = () {
-        final rawPositions = positionsListener.itemPositions.value.toList()
-          ..sort((a, b) => a.index.compareTo(b.index));
-        final currentState = state;
-        if (currentState is! TextBookLoaded) {
-          return;
-        }
-
-        final visibleIndicesNow = _resolveVisibleSourceIndices(
-          currentState,
-          rawPositions,
-        );
-        if (visibleIndicesNow.isEmpty) {
-          return;
-        }
-
-        if (!_hasMeaningfulVisibleIndicesChange(
-          currentState.visibleIndices,
-          visibleIndicesNow,
-        )) {
-          return;
-        }
-
-        final initialSyncClassification =
-            _classifyRawPositionsDuringInitialPageShapeVisibleSync(
-              awaitingInitialPageShapeVisibleSync:
-                  _awaitingInitialPageShapeVisibleSync,
-              showPageShapeView: currentState.showPageShapeView,
-              currentVisibleIndices: currentState.visibleIndices,
-              selectedIndex: currentState.selectedIndex,
-              nextVisibleIndices: visibleIndicesNow,
-            );
-        if (initialSyncClassification.shouldIgnore) {
-          return;
-        }
-        if (initialSyncClassification.shouldDispatchImmediately) {
-          _debounceTimer?.cancel();
-          _dispatchVisibleIndices(visibleIndicesNow);
-          return;
-        }
-
-        final lastDispatchAt = _lastVisibleIndicesDispatchAt;
-        if (shouldDispatchVisibleIndicesNow(
-          continuousReadingMode: currentState.continuousReadingMode,
-          sinceLastDispatch: lastDispatchAt == null
-              ? null
-              : DateTime.now().difference(lastDispatchAt),
-        )) {
-          _dispatchVisibleIndices(visibleIndicesNow);
-        }
-        _debounceTimer?.cancel();
-        _debounceTimer = Timer(_visibleIndicesDebounceDuration, () {
-          if (isClosed) {
-            return;
-          }
-
-          final debouncedRawPositions =
-              positionsListener.itemPositions.value.toList()
-                ..sort((a, b) => a.index.compareTo(b.index));
-          final latestState = state;
-          if (latestState is TextBookLoaded) {
-            final visibleIndicesNow = _resolveVisibleSourceIndices(
-              latestState,
-              debouncedRawPositions,
-            );
-            if (visibleIndicesNow.isNotEmpty &&
-                _hasMeaningfulVisibleIndicesChange(
-                  latestState.visibleIndices,
-                  visibleIndicesNow,
-                )) {
-              _dispatchVisibleIndices(visibleIndicesNow);
-            }
-          }
-        });
-      };
-
-      positionsListener.itemPositions.addListener(_positionListenerCallback!);
+      _listenToReadingPosition();
 
       _setAwaitingInitialPageShapeVisibleSync(initialShowPageShapeView);
 
@@ -1045,9 +974,7 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
           ),
         ),
         searchResultLines: searchResultLines,
-        scrollController: scrollController,
-        positionsListener: positionsListener,
-        scrollOffsetController: scrollOffsetController,
+        readerIdentity: _readerIdentity,
         currentTitle: currentTitle,
         visibleLinks: emptyVisibleLinks,
         selectedLinkTypes: _loadSelectedLinkTypes(),
@@ -1252,28 +1179,6 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
         updatedState.visibleIndices,
         force: true,
       );
-
-      if (!event.show && currentState.selectedIndex != null) {
-        Future.delayed(const Duration(milliseconds: 100), () {
-          final latestState = state;
-          if (isClosed ||
-              latestState is! TextBookLoaded ||
-              latestState.book != currentState.book ||
-              latestState.showPageShapeView ||
-              latestState.showTzuratHadafView) {
-            return;
-          }
-          if (scrollController.isAttached) {
-            scrollController.scrollTo(
-              index: resolveItemIndexForSourceLine(
-                lineIndex: currentState.selectedIndex!,
-                layout: readingLayoutOf(latestState),
-              ),
-              duration: const Duration(milliseconds: 300),
-            );
-          }
-        });
-      }
     }
   }
 
@@ -1770,6 +1675,68 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
 
   /// שידור עדכון `visibleIndices` תוך רישום מועד השידור, שעליו נשענת
   /// הגבלת הקצב ב-[shouldDispatchVisibleIndicesNow].
+  void _listenToReadingPosition() {
+    final source = readingPosition;
+    if (source == null || _listeningToReadingPosition) return;
+    _listeningToReadingPosition = true;
+    source.addListener(_onReadingPosition);
+  }
+
+  List<int> _currentVisibleLines() =>
+      readingPosition?.value?.visibleLines ?? const [];
+
+  void _onReadingPosition() {
+    final currentState = state;
+    if (currentState is! TextBookLoaded) return;
+    final visibleIndicesNow = _currentVisibleLines();
+    if (visibleIndicesNow.isEmpty ||
+        !_hasMeaningfulVisibleIndicesChange(
+          currentState.visibleIndices,
+          visibleIndicesNow,
+        )) {
+      return;
+    }
+
+    final initialSyncClassification =
+        _classifyRawPositionsDuringInitialPageShapeVisibleSync(
+          awaitingInitialPageShapeVisibleSync:
+              _awaitingInitialPageShapeVisibleSync,
+          showPageShapeView: currentState.showPageShapeView,
+          currentVisibleIndices: currentState.visibleIndices,
+          selectedIndex: currentState.selectedIndex,
+          nextVisibleIndices: visibleIndicesNow,
+        );
+    if (initialSyncClassification.shouldIgnore) return;
+    if (initialSyncClassification.shouldDispatchImmediately) {
+      _debounceTimer?.cancel();
+      _dispatchVisibleIndices(visibleIndicesNow);
+      return;
+    }
+
+    final lastDispatchAt = _lastVisibleIndicesDispatchAt;
+    if (shouldDispatchVisibleIndicesNow(
+      sinceLastDispatch: lastDispatchAt == null
+          ? null
+          : DateTime.now().difference(lastDispatchAt),
+    )) {
+      _dispatchVisibleIndices(visibleIndicesNow);
+    }
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(_visibleIndicesDebounceDuration, () {
+      if (isClosed) return;
+      final latestState = state;
+      final latest = _currentVisibleLines();
+      if (latestState is TextBookLoaded &&
+          latest.isNotEmpty &&
+          _hasMeaningfulVisibleIndicesChange(
+            latestState.visibleIndices,
+            latest,
+          )) {
+        _dispatchVisibleIndices(latest);
+      }
+    });
+  }
+
   void _dispatchVisibleIndices(List<int> visibleIndices) {
     _lastVisibleIndicesDispatchAt = DateTime.now();
     add(UpdateVisibleIndecies(visibleIndices));
@@ -1789,74 +1756,6 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
 
     return currentIndices.first != nextIndices.first ||
         currentIndices.last != nextIndices.last;
-  }
-
-  List<int> _resolveVisibleSourceIndices(
-    TextBookLoaded state,
-    Iterable<ItemPosition> visibleItemPositions,
-  ) {
-    final allItemPositions = visibleItemPositions.toList();
-    if (allItemPositions.isEmpty) {
-      return const [];
-    }
-
-    // גלילה ע"י ניווט משתמשת ב-alignment: 0.05, כך שהקטע הקודם נשאר גלוי
-    // ב-5% העליונים של ה-viewport. בלי סינון, visibleIndices.first נופל על
-    // השורה האחרונה של הקטע הקודם, וזיהוי הכותרת (currentTitle ו-
-    // closestTocEntryIndex) מצביע על הסעיף הקודם במקום על זה שאליו ניווטו.
-    final itemPositions = _filterBarelyVisiblePositions(allItemPositions);
-
-    if (!state.continuousReadingMode) {
-      return itemPositions.map((position) => position.index).toSet().toList()
-        ..sort();
-    }
-
-    // במצב רציף: ה-positions הם segmentIndex. ממירים בחזרה לשורות מקור
-    // כדי ש-visibleIndices ב-state יישאר תמיד ברמת שורות.
-    return sourceLineIndicesForSegmentViewports(
-      readingSegmentsOf(state),
-      itemPositions.map(
-        (position) => ReadingSegmentViewport(
-          segmentIndex: position.index,
-          leadingEdge: position.itemLeadingEdge,
-          trailingEdge: position.itemTrailingEdge,
-        ),
-      ),
-      isLineRemnant: isRemnantAbovePositionAnchor,
-    );
-  }
-
-  /// סינון item positions שאינם חלק מ"המיקום הנוכחי" בספר:
-  /// - קטע שנוכחותו מתחת לקו העוגן זניחה הוא שייר של הסעיף הקודם שאליו הניווט
-  ///   מיישר (isRemnantAbovePositionAnchor) - גם אם הוא שורה קצרה הגלויה
-  ///   במלואה סביב קו העוגן.
-  /// - קטע שגלוי פחות מ-15% מה-extent שלו, או מגובה ה-viewport כשהוא ארוך
-  ///   ממנו (שייר בתחתית ה-viewport).
-  ///
-  /// אם הסינון מותיר רשימה ריקה (לא צפוי בפועל), חוזרים לרשימה המקורית.
-  @visibleForTesting
-  static List<ItemPosition> filterBarelyVisiblePositionsForTesting(
-    List<ItemPosition> positions,
-  ) => _filterBarelyVisiblePositions(positions);
-
-  static List<ItemPosition> _filterBarelyVisiblePositions(
-    List<ItemPosition> positions,
-  ) {
-    if (positions.length <= 1) return positions;
-    final filtered = positions.where((p) {
-      final extent = p.itemTrailingEdge - p.itemLeadingEdge;
-      if (extent <= 0) return false;
-      if (isRemnantAbovePositionAnchor(p.itemLeadingEdge, p.itemTrailingEdge)) {
-        return false;
-      }
-      final visibleTop = p.itemLeadingEdge.clamp(0.0, 1.0);
-      final visibleBottom = p.itemTrailingEdge.clamp(0.0, 1.0);
-      final visiblePortion = visibleBottom - visibleTop;
-      if (visiblePortion <= 0) return false;
-      // קטע ארוך מהמסך נמדד מול המסך, אחרת בתחילתו ובסופו הוא נסנן (#2327).
-      return visiblePortion / extent.clamp(0.0, 1.0) >= 0.15;
-    }).toList();
-    return filtered.isEmpty ? positions : filtered;
   }
 
   void _onUpdateSelectedIndex(
@@ -1947,36 +1846,14 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
   ) {
     if (state is TextBookLoaded) {
       final currentState = state as TextBookLoaded;
-      final scrollIndex = event.scrollToIndex ?? event.permanentHighlightLine;
-      // ניווט deep-link לא נשען על ה-position listener של גלילת הטקסט (שנבלע
-      // כשהטאב ברקע וה-controller לא מחובר). מעדכנים ישירות את המיקום הגלוי
-      // וטוענים את קישורי חלון היעד, אחרת חלוניות המפרשים נשארות על המיקום הקודם.
-      final navigateCommentary =
-          scrollIndex != null &&
-          _shouldLoadLinksForVisibleIndicesChange(currentState);
       emit(
         currentState.copyWith(
           highlightText: event.highlightText,
           permanentHighlightLine: event.permanentHighlightLine,
           clearPermanentHighlight: event.permanentHighlightLine == null,
           searchText: '',
-          visibleIndices: navigateCommentary ? [scrollIndex] : null,
         ),
       );
-      // גלילה לסעיף המבוקש כדי שההדגשה תהיה גלויה
-      if (scrollIndex != null && scrollController.isAttached) {
-        scrollController.scrollTo(
-          index: resolveItemIndexForSourceLine(
-            lineIndex: scrollIndex,
-            layout: readingLayoutOf(currentState),
-          ),
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-        );
-      }
-      if (navigateCommentary) {
-        _loadLinksInBackground(currentState.book, [scrollIndex]);
-      }
     } else {
       // Initial או Loading — שומרים כ-pending, יוחל ב-_onLoadContent
       _pendingPinpoint = (
@@ -2357,11 +2234,7 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
     _highlightTimer?.cancel();
     final hiddenSelectionCancellation = _hiddenSelectionSubscription?.cancel();
 
-    if (_positionListenerCallback != null) {
-      positionsListener.itemPositions.removeListener(
-        _positionListenerCallback!,
-      );
-    }
+    readingPosition?.removeListener(_onReadingPosition);
 
     final blocClosure = super.close();
     await Future.wait<void>([
@@ -2379,6 +2252,50 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
       range.totalLines > range.endLine + 1
       ? range.totalLines
       : range.endLine + 1;
+
+  /// במצב רציף שורת הפתיחה מוצגת בתוך פסקה שלמה; טוענים את כל שורותיה לפני
+  /// הציור הראשון, כדי שהקורא ייפתח בשורה עצמה ולא במקום שמור.
+  Future<void> _loadInitialItemRange(
+    TextBook book,
+    List<String> content,
+    List<bool> loadedLineFlags,
+    List<TocEntry> tableOfContents,
+    int line,
+  ) async {
+    if (content.isEmpty || loadedLineFlags.length < content.length) return;
+    final layout = ReadingLayout.continuous(
+      lineCount: content.length,
+      breakLines: readingBreakLines(
+        tableOfContents: tableOfContents,
+        content: content,
+        loadedLineFlags: loadedLineFlags,
+      ),
+    );
+    final item = layout.itemForLine(line);
+    final first = layout.firstLineOf(item);
+    final last = layout.lastLineOf(item);
+    if (last - first + 1 > _initialItemLoadMaxLines) return;
+    if (!loadedLineFlags.sublist(first, last + 1).contains(false)) return;
+    final range = await repository.getBookContentRange(
+      book,
+      startLine: first,
+      endLine: last,
+    );
+    if (range == null) return;
+    for (var offset = 0; offset < range.lines.length; offset++) {
+      final target = range.startLine + offset;
+      if (target < 0 || target >= content.length) continue;
+      content[target] = range.lines[offset];
+      loadedLineFlags[target] = true;
+    }
+    _setLoadedContentFlags(book, loadedLineFlags);
+    _markLoadedContentRange(
+      book,
+      range.startLine,
+      range.endLine,
+      totalLines: range.totalLines,
+    );
+  }
 
   List<String> _contentWithAppliedRange(BookContentRange range) {
     final content = List<String>.filled(_fullContentLength(range), '');
@@ -2475,6 +2392,14 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
     var lastVisible = visibleIndices.isEmpty
         ? firstVisible
         : visibleIndices.last;
+    // פריט חלקי בשולי התצוגה מסונן מ-visibleIndices אך עדיין מוצג.
+    final measured = readingPosition?.value;
+    if (measured != null &&
+        visibleIndices.isNotEmpty &&
+        measured.topLine == firstVisible) {
+      firstVisible = min(firstVisible, measured.windowFirstLine);
+      lastVisible = max(lastVisible, measured.windowLastLine);
+    }
     if (state != null) {
       final layout = readingLayoutOf(state);
       if (layout.isNotEmpty) {

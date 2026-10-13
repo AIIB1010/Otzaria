@@ -26,7 +26,6 @@ import 'package:otzaria/data/repository/text_book_repository.dart';
 import 'package:otzaria/text_book/view/combined_view/combined_book_screen.dart';
 import 'package:otzaria/text_book/view/commentary_list_base.dart';
 import 'package:otzaria/widgets/lists/scroll_position_reanchor.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import '../../../test_helpers/memory_cache_provider.dart';
 
@@ -130,7 +129,7 @@ void main() {
     ScrollableState outerScrollable() => tester.state<ScrollableState>(
       find.descendant(of: reanchor, matching: find.byType(Scrollable)).first,
     );
-    final first = tab.positionsListener.itemPositions.value.firstWhere(
+    final first = tab.lines.positionsListener.itemPositions.value.firstWhere(
       (position) => position.index == 0,
     );
     final distance = first.itemTrailingEdge * 400 * cardLine - 20;
@@ -143,17 +142,17 @@ void main() {
     await tester.pump();
     await _settle(tester, ScrollPositionReanchor.idleDelay);
 
-    tab.scrollController.jumpTo(index: 50);
+    tab.lines.itemController.jumpTo(index: 50);
     await _settle(tester);
     expect(find.byType(CommentaryListBase), findsNothing);
     outerScrollable().position.jumpTo(450);
     await _settle(tester, ScrollPositionReanchor.idleDelay);
     final top = reanchorTargetPosition(
-      tab.positionsListener.itemPositions.value,
+      tab.lines.positionsListener.itemPositions.value,
     )!;
     settings.changeLineHeight(3);
     await _settle(tester);
-    final after = tab.positionsListener.itemPositions.value
+    final after = tab.lines.positionsListener.itemPositions.value
         .where((position) => position.index == top.index)
         .firstOrNull;
     expect(after, isNotNull, reason: 'פסקת הקריאה יצאה מהמסך');
@@ -280,8 +279,6 @@ TextBookLoaded _loadedState({
     selectedIndices: {cardLine},
     pinLeftPane: false,
     searchText: '',
-    scrollController: ItemScrollController(),
-    positionsListener: ItemPositionsListener.create(),
   );
 }
 

@@ -33,7 +33,6 @@ import 'package:otzaria/tools/shamor_zachor/providers/shamor_zachor_data_provide
 import 'package:otzaria/tools/shamor_zachor/providers/shamor_zachor_progress_provider.dart';
 import 'package:otzaria/tour/bloc/tour_cubit.dart';
 import 'package:provider/provider.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -155,8 +154,6 @@ void main() {
         searchMode: SearchMode.exact,
         showPageShapeView: false,
       ),
-      scrollController: ItemScrollController(),
-      positionsListener: ItemPositionsListener.create(),
     );
     addTearDown(bloc.close);
 
@@ -208,8 +205,6 @@ TextBookLoaded _loadedState(TextBook book, {required double fontSize}) {
     pinLeftPane: false,
     searchText: '',
     currentTitle: 'סימן א',
-    scrollController: ItemScrollController(),
-    positionsListener: ItemPositionsListener.create(),
     searchMode: SearchMode.exact,
   );
 }

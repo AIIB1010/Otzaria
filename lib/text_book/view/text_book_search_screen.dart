@@ -34,12 +34,12 @@ import 'package:otzaria/search/view/in_book_advanced_search_dialog.dart';
 import 'package:otzaria/search/models/search_configuration.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/text_book/utils/reading_segment_navigation.dart';
-import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:otzaria/text_book/utils/section_search_utils.dart';
 import 'package:otzaria/search/utils/search_query_sync.dart';
 import 'package:otzaria/utils/text/ref_helper.dart' show tocSectionAt;
 import 'package:otzaria/widgets/text/otzaria_search_field.dart';
 import 'package:otzaria/widgets/navigation/search_result_nav_button.dart';
+import 'package:otzaria/text_book/view/reading_viewport/line_scroll_controller.dart';
 
 class _GroupedResultItem {
   final String? header;
@@ -57,7 +57,7 @@ class TextBookSearchView extends StatefulWidget {
   /// טוען את תוכן הספר המלא (שורות) לפי דרישה — רק כשחיפוש פשוט רץ בפועל.
   /// כך החיפוש אינו תלוי ב-state.content, שיכול להיות חלקי או משוחרר.
   final Future<List<String>> Function() contentLoader;
-  final ItemScrollController scrollControler;
+  final LineScrollController lines;
   final FocusNode focusNode;
   final void Function() closeLeftPaneCallback;
   final String initialQuery;
@@ -79,7 +79,7 @@ class TextBookSearchView extends StatefulWidget {
   const TextBookSearchView({
     super.key,
     required this.contentLoader,
-    required this.scrollControler,
+    required this.lines,
     required this.focusNode,
     required this.closeLeftPaneCallback,
     required this.initialQuery,
@@ -102,7 +102,6 @@ class TextBookSearchViewState extends State<TextBookSearchView>
   TextEditingController searchTextController = TextEditingController();
   List<TextSearchResult> searchResults = [];
   bool _resultsTruncated = false;
-  late ItemScrollController scrollControler;
   bool _isSearching = false;
 
   /// הודעת שגיאה אחרונה בחיפוש (כשל מנוע/FFI). ראו doc ב-[SearchPaneBase].
@@ -242,8 +241,6 @@ class TextBookSearchViewState extends State<TextBookSearchView>
       _settings = InBookSearchSettings.savedDefaults();
     }
     _syncBlocSearchTextState();
-
-    scrollControler = widget.scrollControler;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -741,13 +738,8 @@ class TextBookSearchViewState extends State<TextBookSearchView>
             searchDistance: _searchDistance,
             matchPolicy: _matchPolicy,
           );
-    final navigation = scrollToSourceLine(
-      scrollController: widget.scrollControler,
-      scrollOffsetController: loadedState.scrollOffsetController,
-      positionsListener: loadedState.positionsListener,
-      segments: readingSegmentsOf(loadedState),
-      lineIndex: result.index,
-      viewportExtent: context.size?.height ?? MediaQuery.sizeOf(context).height,
+    final navigation = widget.lines.scrollToLine(
+      result.index,
       duration: const Duration(milliseconds: 250),
       curve: Curves.ease,
       alignment: kSearchResultAnchorAlignment,

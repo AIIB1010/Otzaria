@@ -87,6 +87,7 @@ Future<void> scrollToSourceLine({
   Duration duration = const Duration(milliseconds: 250),
   Curve curve = Curves.ease,
   ReadingSegments Function()? latestSegments,
+  bool Function()? isCurrent,
 }) async {
   if (segments.isEmpty || !scrollController.isAttached) {
     return;
@@ -112,17 +113,6 @@ Future<void> scrollToSourceLine({
   }
 
   if (!resolveTarget()) return;
-  if (scrollController is JumpAwareItemScrollController &&
-      scrollController.externalScroll != null) {
-    await scrollController.scrollTo(
-      index: segmentIndex,
-      sourceLineIndex: safeLineIndex,
-      alignment: alignment,
-      duration: duration,
-      curve: curve,
-    );
-    return;
-  }
 
   Future<void> scrollToSegment() async {
     if (duration == Duration.zero) {
@@ -145,11 +135,9 @@ Future<void> scrollToSourceLine({
     return;
   }
 
-  // משך הגלילה היחסית. `animateScroll` עוטף את `ScrollController.animateTo`,
-  // שזורק assert על `Duration.zero`; לכן מצב מיידי מתורגם לדיוק עדין קצר.
-  final fineDuration = duration == Duration.zero
-      ? const Duration(milliseconds: 120)
-      : duration;
+  // `animateScroll` זורק assert על `Duration.zero`; מצב מיידי נוחת בפריים אחד.
+  final instant = duration == Duration.zero;
+  final fineDuration = instant ? _instantStep : duration;
 
   // הסגמנט אינו גלוי — קפיצה ולא גלילה מונפשת: המעבר בין שתי הרשימות של
   // החבילה דורש 2 מסכי גלילה, ונעצר על יעד שגוי כששורות שטרם נטענו בגובה ~0.
@@ -168,9 +156,7 @@ Future<void> scrollToSourceLine({
   for (var attempt = 0; attempt < 5; attempt++) {
     // הרשימה יורדת מהעץ באמצע האנימציה (מעבר כרטיסיה, סגירתה, העברתה לחלון
     // אחר), או מוחלפת בקורא חיצוני — מדידות ישנות אינן מעידות שהרשימה חיה.
-    if (!scrollController.isAttached ||
-        (scrollController is JumpAwareItemScrollController &&
-            !scrollController.isNativeAttached)) {
+    if (!scrollController.isAttached || !(isCurrent?.call() ?? true)) {
       return;
     }
     final previousIndex = segmentIndex;
@@ -221,6 +207,8 @@ Future<void> scrollToSourceLine({
       curve: attempt == 0 ? curve : Curves.easeOut,
     );
     await WidgetsBinding.instance.endOfFrame;
-    stepDuration = const Duration(milliseconds: 120);
+    stepDuration = instant ? _instantStep : const Duration(milliseconds: 120);
   }
 }
+
+const Duration _instantStep = Duration(milliseconds: 1);

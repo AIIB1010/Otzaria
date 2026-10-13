@@ -198,7 +198,7 @@ class _LayoutMemo {
       continuous == state.continuousReadingMode;
 }
 
-/// ה-controller נשמר לאורך כל ה-states של אותו קורא, ולכן משמש מפתח לזיכרון.
+/// [TextBookLoaded.readerIdentity] קבוע לאורך כל ה-states של הקורא — מפתח לזיכרון.
 /// משבצת לכל מצב, כדי ש-state ישן שנקרא אחרי החלפת מצב לא ידרוס את הפריסה.
 final Expando<List<_LayoutMemo?>> _layoutMemos = Expando<List<_LayoutMemo?>>(
   'readingLayout',
@@ -207,7 +207,7 @@ final Expando<List<_LayoutMemo?>> _layoutMemos = Expando<List<_LayoutMemo?>>(
 /// הפריסה של [state]. נבנית מחדש רק כשהספר, אורכו, ה-TOC או מצב הרצף
 /// משתנים — טעינת תוכן או שחרורו מחזירים את אותו מופע.
 ReadingLayout readingLayoutOf(TextBookLoaded state) {
-  final slots = _layoutMemos[state.scrollController] ??= [null, null];
+  final slots = _layoutMemos[state.readerIdentity] ??= [null, null];
   final slot = state.continuousReadingMode ? 1 : 0;
   final memo = slots[slot];
   if (memo != null && memo.matches(state)) return memo.layout;

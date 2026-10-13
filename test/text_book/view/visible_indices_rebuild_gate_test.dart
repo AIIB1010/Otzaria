@@ -8,7 +8,6 @@ import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/utils/reader_build_policy.dart';
 import 'package:otzaria_search_engine/otzaria_search_engine.dart'
     show SearchScope;
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 /// שער הבנייה מחדש של עץ תצוגת הספר.
 ///
@@ -494,8 +493,6 @@ TextBookLoaded _loaded() => TextBookLoaded(
     proximityScope: SearchScope.sameParagraph,
   ),
   searchResultLines: const {2},
-  scrollController: ItemScrollController(),
-  positionsListener: ItemPositionsListener.create(),
   currentTitle: 'סימן א',
   selectedTextForNote: 'טקסט',
   selectedTextSectionIndex: 1,

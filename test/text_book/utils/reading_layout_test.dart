@@ -2,7 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/utils/reading_segments.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 // 3 פרקים: כותרת ואחריה 9 פסוקים.
 final List<String> _lines = [
@@ -34,8 +33,9 @@ TextBookLoaded _state({
   List<bool>? loadedLineFlags,
   List<TocEntry>? tableOfContents,
   bool continuous = true,
-  ItemScrollController? scrollController,
+  Object? readerIdentity,
 }) => TextBookLoaded(
+  readerIdentity: readerIdentity,
   book: TextBook(title: 'ספר בדיקה'),
   showLeftPane: false,
   content: content,
@@ -50,8 +50,6 @@ TextBookLoaded _state({
   visibleIndices: const [0],
   pinLeftPane: false,
   searchText: '',
-  scrollController: scrollController ?? ItemScrollController(),
-  positionsListener: ItemPositionsListener.create(),
   supportsContinuousReadingMode: true,
   continuousReadingMode: continuous,
   loadedLineFlags: loadedLineFlags,
@@ -143,12 +141,12 @@ void main() {
 
   group('יציבות הפריסה מול טעינת תוכן', () {
     test('טעינת טווח, תוכן מלא ושחרור מחזירים את אותה פריסה', () {
-      final controller = ItemScrollController();
+      final controller = Object();
       final partialFlags = _window(11, 15);
       final partial = _state(
         content: _contentLoaded(partialFlags),
         loadedLineFlags: partialFlags,
-        scrollController: controller,
+        readerIdentity: controller,
       );
       final layout = readingLayoutOf(partial);
       expect(layout.itemCount, 6);
@@ -177,12 +175,12 @@ void main() {
     });
 
     test('הסגמנטים מתמלאים במקום בלי לשנות את מספור הפריטים', () {
-      final controller = ItemScrollController();
+      final controller = Object();
       final partialFlags = _window(11, 15);
       final partial = _state(
         content: _contentLoaded(partialFlags),
         loadedLineFlags: partialFlags,
-        scrollController: controller,
+        readerIdentity: controller,
       );
       final before = readingSegmentsOf(partial);
       expect(before[3].isLoaded, isFalse);
@@ -200,8 +198,8 @@ void main() {
     });
 
     test('הפריסה נבנית מחדש בהחלפת מצב רציף', () {
-      final controller = ItemScrollController();
-      final continuous = _state(content: _lines, scrollController: controller);
+      final controller = Object();
+      final continuous = _state(content: _lines, readerIdentity: controller);
       final normal = continuous.copyWith(continuousReadingMode: false);
       expect(readingLayoutOf(continuous).itemCount, 6);
       expect(readingLayoutOf(normal).itemCount, _lines.length);

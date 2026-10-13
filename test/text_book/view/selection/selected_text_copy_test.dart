@@ -9,7 +9,6 @@ import 'package:otzaria/utils/file/toc_parser.dart';
 import 'package:otzaria/text_book/view/selection/selected_text_copy.dart';
 import 'package:otzaria/text_display/text_display_exports.dart';
 import 'package:otzaria/widgets/smart_text/render_settings.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 void main() {
   group('resolveHtmlTextForSelection', () {
@@ -350,8 +349,6 @@ TextBookLoaded _state(String line, Link link, TextDisplayPatch copy) {
     selectedIndex: 0,
     pinLeftPane: false,
     searchText: '',
-    scrollController: ItemScrollController(),
-    positionsListener: ItemPositionsListener.create(),
     displayPolicy: TextDisplayPolicy.empty.merged(
       TextDisplayBookClass.general,
       const TextDisplaySlot(

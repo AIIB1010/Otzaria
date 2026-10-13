@@ -20,7 +20,6 @@ import 'package:otzaria/data/repository/text_book_repository.dart';
 import 'package:otzaria/text_book/view/page_shape/simple_text_viewer.dart';
 import 'package:otzaria/text_book/view/tabbed_commentary_panel.dart';
 import 'package:otzaria/widgets/misc/app_context_menu.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import '../../../test_helpers/memory_cache_provider.dart';
 
@@ -536,8 +535,6 @@ TextBookLoaded _loadedState({
   selectedIndex: 0,
   pinLeftPane: false,
   searchText: '',
-  scrollController: ItemScrollController(),
-  positionsListener: ItemPositionsListener.create(),
 );
 
 class _RecordingTextBookBloc extends Bloc<TextBookEvent, TextBookState>

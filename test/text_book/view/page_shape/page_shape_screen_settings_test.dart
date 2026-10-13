@@ -29,7 +29,6 @@ import 'package:otzaria/text_book/view/page_shape/utils/page_shape_settings_mana
 import 'package:otzaria/widgets/layout/context_overlay_panel.dart';
 import 'package:otzaria/widgets/layout/floating_panel.dart';
 import 'package:otzaria/widgets/misc/app_menu_exports.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import '../../../test_helpers/memory_cache_provider.dart';
 
@@ -730,8 +729,6 @@ TextBookLoaded _loadedState({
     selectedIndex: 0,
     pinLeftPane: false,
     searchText: '',
-    scrollController: ItemScrollController(),
-    positionsListener: ItemPositionsListener.create(),
   );
 }
 

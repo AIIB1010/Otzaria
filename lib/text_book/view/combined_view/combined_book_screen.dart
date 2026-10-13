@@ -11,7 +11,8 @@ import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier;
 import 'package:flutter/gestures.dart' show kPrimaryMouseButton;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:otzaria/text_book/utils/visible_index.dart';
+import 'package:otzaria/text_book/view/reading_viewport/line_scroll_controller.dart';
+import 'package:otzaria/text_book/view/reading_viewport/reading_scrollbar_label.dart';
 
 import 'package:flutter/services.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
@@ -46,7 +47,6 @@ import 'package:otzaria/personal_notes/personal_notes_system.dart';
 import 'package:otzaria/bookmarks/utils/section_bookmark.dart';
 import 'package:otzaria/core/messages/text_book_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
-import 'package:otzaria/utils/text/ref_helper.dart';
 import 'package:otzaria/search/models/search_configuration.dart';
 import 'package:otzaria/widgets/feedback/scrollable_positioned_list_scrollbar.dart';
 import 'package:otzaria/widgets/layout/reading_area_width.dart';
@@ -281,16 +281,6 @@ String applyDisplayTextPreferences({
   required String text,
   required TextDisplayProfile profile,
 }) => applyTextDisplayProfile(text, profile);
-
-/// האם שינוי במצב הקריאה הרציף מחייב שחזור גלילה לשורת המקור הנוכחית.
-/// `previousMode == null` פירושו ה-state הראשון שנצפה — אין ממה לשחזר.
-@visibleForTesting
-bool shouldRestoreScrollOnContinuousModeChange({
-  required bool? previousMode,
-  required bool currentMode,
-}) {
-  return previousMode != null && previousMode != currentMode;
-}
 
 @visibleForTesting
 bool shouldHandleCommentaryScrollTarget({
@@ -721,8 +711,15 @@ class _CombinedViewState extends State<CombinedView> {
     LinkPreviewOverlay.scheduleHide();
   }
 
-  // מצב הרצף האחרון שנצפה — לזיהוי החלפת מצב שמחייבת שחזור מיקום.
-  bool? _lastContinuousReadingMode;
+  late final ReadingViewportBinding _viewportBinding = ReadingViewportBinding(
+    segments: () {
+      final state = _textBookBloc.state;
+      return state is TextBookLoaded ? readingSegmentsOf(state) : null;
+    },
+    viewportExtent: () => _viewportHeight > 0
+        ? _viewportHeight
+        : (_disposed ? 0 : MediaQuery.sizeOf(context).height),
+  );
 
   // באנר קרדיט מקור המוצג מעל השורה הראשונה (נטען פעם אחת לכל ספר), אם קיים.
   BookSourceBannerKind? _sourceBannerKind;
@@ -854,54 +851,18 @@ class _CombinedViewState extends State<CombinedView> {
       );
     });
 
-    // האזנה לשינויים במיקומי הפריטים כדי לאפס את הבחירה בגלילה
-    widget.tab.positionsListener.itemPositions.addListener(_onScroll);
-    widget.tab.scrollController.addBeforeJumpListener(
-      _clearSelectionBeforeJump,
-    );
-    // עדכון האינדקס ב-tab בזמן אמת
-    widget.tab.positionsListener.itemPositions.addListener(_updateTabIndex);
+    // האזנה לשינויים במיקום כדי לאפס את הבחירה בגלילה
+    widget.tab.lines.position.addListener(_onScroll);
+    widget.tab.lines.addBeforeJumpListener(_clearSelectionBeforeJump);
+    widget.tab.lines.attach(_viewportBinding);
     widget.tab.dynamicCopyRequestNotifier.addListener(_onDynamicCopyRequest);
 
-    // האזנה לשינויים ב-state כדי לגלול למיקום הנכון בפעם הראשונה
+    final initialState = _textBookBloc.state;
+    if (initialState is TextBookLoaded) {
+      _scrollToInitialPosition(initialState);
+    }
     _textBookSubscription = _textBookBloc.stream.listen((state) {
-      if (state is! TextBookLoaded) return;
-      if (!_hasScrolledToInitialPosition && state.visibleIndices.isNotEmpty) {
-        _hasScrolledToInitialPosition = true;
-        final initialIndex = state.visibleIndices.first;
-        // פתיחה מחיפוש: גלילה למילה שנמצאה בתוך הקטע ולא רק לתחילתו, וממוקמת
-        // סביב מרכז התצוגה — בעקביות עם ניווט מסרגל תוצאות החיפוש שבתוך הספר.
-        final isFromSearch =
-            state.searchText.isNotEmpty && initialIndex < state.content.length;
-        final intraLineFraction = isFromSearch
-            ? matchFractionInLine(
-                state.content[initialIndex],
-                state.searchText,
-                wholeWord: state.searchWholeWord,
-                searchOptions: state.searchOptions,
-                alternativeWords: state.alternativeWords,
-                spacingValues: state.spacingValues,
-                isFuzzy: state.searchMode == SearchMode.fuzzy,
-                searchDistance: state.searchDistance,
-                matchPolicy: state.matchPolicy,
-              )
-            : 0.0;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && widget.tab.scrollController.isAttached) {
-            unawaited(
-              _scrollToSourceLine(
-                state,
-                initialIndex,
-                intraLineFraction: intraLineFraction,
-                alignment: isFromSearch
-                    ? kSearchResultAnchorAlignment
-                    : kReadingAnchorAlignment,
-              ),
-            );
-          }
-        });
-      }
-      _restorePositionOnContinuousModeChange(state);
+      if (state is TextBookLoaded) _scrollToInitialPosition(state);
     });
 
     // מוודא שהפוקוס מגיע לאזור הקריאה מיד אחרי פתיחת ספר
@@ -922,6 +883,48 @@ class _CombinedViewState extends State<CombinedView> {
     });
   }
 
+  /// פתיחה מחיפוש: יעד המילה שנמצאה, סביב מרכז התצוגה — בעקביות עם סרגל
+  /// תוצאות החיפוש. יעד שכבר ממתין (ניווט, החלפת תצוגה) קודם.
+  void _scrollToInitialPosition(TextBookLoaded state) {
+    if (_hasScrolledToInitialPosition) return;
+    _hasScrolledToInitialPosition = true;
+    final lines = widget.tab.lines;
+    if (lines.hasPendingTarget) return;
+    final initialIndex = widget.tab.index;
+    final isFromSearch =
+        state.searchText.isNotEmpty && initialIndex < state.content.length;
+    // הרשימה נפתחת על הפריט של השורה; רק שורה באמצע פסקה צריכה דיוק.
+    final layout = readingLayoutOf(state);
+    if (!isFromSearch &&
+        (layout.isEmpty ||
+            layout.firstLineOf(layout.itemForLine(initialIndex)) ==
+                initialIndex)) {
+      return;
+    }
+    final intraLineFraction = isFromSearch
+        ? matchFractionInLine(
+            state.content[initialIndex],
+            state.searchText,
+            wholeWord: state.searchWholeWord,
+            searchOptions: state.searchOptions,
+            alternativeWords: state.alternativeWords,
+            spacingValues: state.spacingValues,
+            isFuzzy: state.searchMode == SearchMode.fuzzy,
+            searchDistance: state.searchDistance,
+            matchPolicy: state.matchPolicy,
+          )
+        : 0.0;
+    unawaited(
+      lines.jumpToLine(
+        initialIndex,
+        intraLineFraction: intraLineFraction,
+        alignment: isFromSearch
+            ? kSearchResultAnchorAlignment
+            : kReadingAnchorAlignment,
+      ),
+    );
+  }
+
   void _handlePluginHighlightReveal() {
     final highlight = PluginHighlightRevealService.instance.highlight;
     if (!mounted ||
@@ -930,17 +933,13 @@ class _CombinedViewState extends State<CombinedView> {
       return;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !widget.tab.scrollController.isAttached) {
-        return;
-      }
-      final state = context.read<TextBookBloc>().state;
-      if (state is! TextBookLoaded) return;
+      if (!mounted) return;
       unawaited(
-        _scrollToSourceLine(
-          state,
+        widget.tab.lines.scrollToLine(
           highlight.sectionIndex,
           alignment: .35,
           duration: const Duration(milliseconds: 450),
+          curve: Curves.easeInOut,
         ),
       );
     });
@@ -1046,11 +1045,9 @@ class _CombinedViewState extends State<CombinedView> {
     _disposed = true;
     _cancelPendingAnchorHover();
     LinkPreviewOverlay.dismiss();
-    widget.tab.positionsListener.itemPositions.removeListener(_onScroll);
-    widget.tab.scrollController.removeBeforeJumpListener(
-      _clearSelectionBeforeJump,
-    );
-    widget.tab.positionsListener.itemPositions.removeListener(_updateTabIndex);
+    widget.tab.lines.position.removeListener(_onScroll);
+    widget.tab.lines.removeBeforeJumpListener(_clearSelectionBeforeJump);
+    widget.tab.lines.detach(_viewportBinding);
     _savedSelectedText.dispose();
     _savedSelectedIndex.dispose();
     _currentSelectedIndex.dispose();
@@ -1154,89 +1151,6 @@ class _CombinedViewState extends State<CombinedView> {
       segmentStartHint: _selectionStartColumn,
     );
     return onSelection ?? true; // לא הוכרע — סלחני
-  }
-
-  // עדכון האינדקס הנוכחי ב-tab — חייב להמיר segmentIndex לשורת מקור.
-  void _updateTabIndex() {
-    final state = _textBookBloc.state;
-    if (state is! TextBookLoaded) return;
-
-    // רץ בכל פריים של גלילה, ולכן מעבר יחיד במקום מיון; בשוויון נשאר הראשון.
-    ItemPosition? first;
-    ItemPosition? topVisible;
-    for (final position in widget.tab.positionsListener.itemPositions.value) {
-      first ??= position;
-      if (position.itemTrailingEdge <= 0 || position.itemLeadingEdge >= 1) {
-        continue;
-      }
-      if (topVisible == null ||
-          position.itemLeadingEdge < topVisible.itemLeadingEdge) {
-        topVisible = position;
-      }
-    }
-    final top = topVisible ?? first;
-    if (top == null) return;
-
-    final layout = readingLayoutOf(state);
-    if (!layout.continuous) {
-      widget.tab.index = top.index;
-      return;
-    }
-    if (top.index >= 0 && top.index < layout.itemCount) {
-      widget.tab.index = layout.firstLineOf(top.index);
-    }
-  }
-
-  /// בהחלפת מצב רציף הרשימה נוצרת מחדש (key תלוי-מצב) כבר בתחילת הסגמנט
-  /// הנכון; כאן רק מדייקים אל שורת המקור עצמה בתוך פסקה ממוזגת.
-  void _restorePositionOnContinuousModeChange(TextBookLoaded state) {
-    final previousMode = _lastContinuousReadingMode;
-    _lastContinuousReadingMode = state.continuousReadingMode;
-    if (!shouldRestoreScrollOnContinuousModeChange(
-      previousMode: previousMode,
-      currentMode: state.continuousReadingMode,
-    )) {
-      return;
-    }
-
-    // לוכדים את השורה לפני ה-rebuild — אחריו widget.tab.index יידרס
-    // בתחילת הסגמנט ותאבד השורה המדויקת בתוך פסקה ממוזגת.
-    final lineIndex = widget.tab.index;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && widget.tab.scrollController.isAttached) {
-        unawaited(
-          _scrollToSourceLine(state, lineIndex, duration: Duration.zero),
-        );
-      }
-    });
-  }
-
-  Future<void> _scrollToSourceLine(
-    TextBookLoaded state,
-    int lineIndex, {
-    Duration duration = const Duration(milliseconds: 300),
-    double intraLineFraction = 0,
-    double alignment = kReadingAnchorAlignment,
-  }) {
-    return scrollToSourceLine(
-      scrollController: widget.tab.scrollController,
-      scrollOffsetController: widget.tab.mainOffsetController,
-      positionsListener: widget.tab.positionsListener,
-      segments: readingSegmentsOf(state),
-      // טעינת התוכן תוך כדי הגלילה משנה את מיקום השורה בתוך הפסקה.
-      latestSegments: () {
-        final latest = _textBookBloc.state;
-        return readingSegmentsOf(latest is TextBookLoaded ? latest : state);
-      },
-      lineIndex: lineIndex,
-      viewportExtent: _viewportHeight > 0
-          ? _viewportHeight
-          : (context.size?.height ?? MediaQuery.sizeOf(context).height),
-      alignment: alignment,
-      intraLineFraction: intraLineFraction,
-      duration: duration,
-      curve: Curves.easeInOut,
-    );
   }
 
   void _addTextBookEventIfOpen(TextBookEvent event) {
@@ -1910,11 +1824,7 @@ class _CombinedViewState extends State<CombinedView> {
                       // כניסה למצב בחירה כשיש טקסט נבחר
                       if (!_selectionManager.isInSelectionMode) {
                         // שימוש באינדקס העליון הנראה במקום 0
-                        _selectionManager.setAnchor(
-                          topmostVisibleIndex(
-                            widget.tab.positionsListener.itemPositions.value,
-                          ),
-                        );
+                        _selectionManager.setAnchor(widget.tab.index);
                       }
 
                       // חשוב: כדי ש-Ctrl+C יעבוד מיד אחרי סימון טקסט עם העכבר
@@ -2073,40 +1983,26 @@ class _CombinedViewState extends State<CombinedView> {
                         child: widget.isPreviewMode
                             ? _buildPreviewList(state)
                             : ScrollablePositionedListScrollbar(
-                                scrollController: widget.tab.scrollController,
+                                scrollController:
+                                    widget.tab.lines.itemController,
                                 itemPositionsListener:
-                                    widget.tab.positionsListener,
+                                    widget.tab.lines.positionsListener,
                                 offsetController:
-                                    widget.tab.mainOffsetController,
+                                    widget.tab.lines.offsetController,
                                 itemCount: readingLayoutOf(state).itemCount,
                                 labelForIndex: state.tableOfContents.isEmpty
                                     ? null
-                                    : (index) {
-                                        // מיפוי ה-TOC מבוסס על שורות מקור.
-                                        final layout = readingLayoutOf(state);
-                                        final lineIndex =
-                                            index >= 0 &&
-                                                index < layout.itemCount
-                                            ? layout.firstLineOf(index)
-                                            : index;
-                                        final ref = refFromTocList(
-                                          lineIndex,
-                                          state.tableOfContents,
-                                        );
-                                        return addBookTitleToRef(
-                                          ref,
-                                          state.book.title,
-                                        );
-                                      },
+                                    : (index) =>
+                                          readingScrollbarLabel(state, index),
                                 child: ProgressiveScroll(
                                   focusNode: _focusNode,
                                   maxSpeed: 10000.0,
                                   curve: 10.0,
                                   accelerationFactor: 5,
                                   scrollController:
-                                      widget.tab.mainOffsetController,
+                                      widget.tab.lines.offsetController,
                                   itemScrollController:
-                                      widget.tab.scrollController,
+                                      widget.tab.lines.itemController,
                                   child:
                                       BlocBuilder<
                                         PersonalNotesBloc,
@@ -2146,9 +2042,11 @@ class _CombinedViewState extends State<CombinedView> {
                                                         ),
                                                     scrollController: widget
                                                         .tab
-                                                        .scrollController,
+                                                        .lines
+                                                        .itemController,
                                                     positionsListener: widget
                                                         .tab
+                                                        .lines
                                                         .positionsListener,
                                                     child: list!,
                                                   ),
@@ -2185,16 +2083,16 @@ class _CombinedViewState extends State<CombinedView> {
         : initialIndex.clamp(0, itemCount - 1);
 
     return ScrollablePositionedListScrollbar(
-      scrollController: widget.tab.scrollController,
-      itemPositionsListener: widget.tab.positionsListener,
-      offsetController: widget.tab.mainOffsetController,
+      scrollController: widget.tab.lines.itemController,
+      itemPositionsListener: widget.tab.lines.positionsListener,
+      offsetController: widget.tab.lines.offsetController,
       itemCount: itemCount,
       child: SmoothWheelScroll(
         child: ScrollablePositionedList.builder(
           initialScrollIndex: clampedInitial,
-          itemScrollController: widget.tab.scrollController,
-          itemPositionsListener: widget.tab.positionsListener,
-          scrollOffsetController: widget.tab.mainOffsetController,
+          itemScrollController: widget.tab.lines.itemController,
+          itemPositionsListener: widget.tab.lines.positionsListener,
+          scrollOffsetController: widget.tab.lines.offsetController,
           itemCount: itemCount,
           itemBuilder: (context, index) => RepaintBoundary(
             child: buildExpansiomTile(
@@ -2242,9 +2140,9 @@ class _CombinedViewState extends State<CombinedView> {
       padding: const EdgeInsetsDirectional.only(
         end: ScrollablePositionedListScrollbar.trackWidth,
       ).resolve(Directionality.of(context)),
-      itemPositionsListener: widget.tab.positionsListener,
-      itemScrollController: widget.tab.scrollController,
-      scrollOffsetController: widget.tab.mainOffsetController,
+      itemPositionsListener: widget.tab.lines.positionsListener,
+      itemScrollController: widget.tab.lines.itemController,
+      scrollOffsetController: widget.tab.lines.offsetController,
       itemCount: itemCount,
       itemBuilder: (context, index) {
         // מבודד את שכבת הצביעה של כל פריט - rebuild של פריט בודד (בחירה/
@@ -2433,6 +2331,7 @@ class _CombinedViewState extends State<CombinedView> {
                         _hasCommentaries(state, primaryLineIndex)) {
                       final tapped = widget
                           .tab
+                          .lines
                           .positionsListener
                           .itemPositions
                           .value
@@ -2443,7 +2342,7 @@ class _CombinedViewState extends State<CombinedView> {
                       // עיגון על הפסקה בגובה הנוכחי (התצוגה לא זזה): הכרטיס נפתח
                       // כלפי מטה גם כשעוגן הרשימה מתחתיה, ולא דוחף אותה מהמסך.
                       if (tapped != null) {
-                        widget.tab.scrollController.jumpTo(
+                        widget.tab.lines.itemController.jumpTo(
                           index: index,
                           alignment: tapped.itemLeadingEdge,
                         );
@@ -2452,7 +2351,7 @@ class _CombinedViewState extends State<CombinedView> {
                       WidgetsBinding.instance.addPostFrameCallback((_) {
                         Future.delayed(const Duration(milliseconds: 300), () {
                           if (mounted &&
-                              widget.tab.scrollController.isAttached) {
+                              widget.tab.lines.itemController.isAttached) {
                             // הטקסט הבא ב-90% מגובה המסך, כך שהכרטיס (עד 75%) נראה כולו.
                             final itemCount = readingLayoutOf(
                               state,
@@ -2460,6 +2359,7 @@ class _CombinedViewState extends State<CombinedView> {
                             final hasNext = index + 1 < itemCount;
                             final next = widget
                                 .tab
+                                .lines
                                 .positionsListener
                                 .itemPositions
                                 .value
@@ -2472,7 +2372,7 @@ class _CombinedViewState extends State<CombinedView> {
                                 next.itemLeadingEdge <= 0.9) {
                               return;
                             }
-                            widget.tab.scrollController.scrollTo(
+                            widget.tab.lines.itemController.scrollTo(
                               // לפסקה האחרונה אין טקסט הבא — מעלים אותה ככל שסוף הספר מאפשר.
                               index: hasNext ? index + 1 : index,
                               alignment: hasNext ? 0.9 : 0,

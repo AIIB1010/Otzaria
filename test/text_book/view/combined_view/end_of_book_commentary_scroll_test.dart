@@ -84,8 +84,6 @@ void main() {
         selectedIndex: null,
         pinLeftPane: false,
         searchText: '',
-        scrollController: ItemScrollController(),
-        positionsListener: ItemPositionsListener.create(),
       ),
     );
     final notesBloc = _PersonalNotesBloc(const PersonalNotesState.initial());
@@ -131,14 +129,15 @@ void main() {
     await tester.pumpAndSettle();
 
     // ברירת המחדל כמו Ctrl+End: הרשימה נעצרת בסוף הספר.
-    tab.scrollController.jumpTo(
+    tab.lines.itemController.jumpTo(
       index: jumpIndex ?? _lastIndex,
       alignment: alignment,
     );
     await tester.pumpAndSettle();
 
     Map<int, ItemPosition> positions() => {
-      for (final p in tab.positionsListener.itemPositions.value) p.index: p,
+      for (final p in tab.lines.positionsListener.itemPositions.value)
+        p.index: p,
     };
     final before = positions();
     if (jumpIndex == null) {

@@ -42,9 +42,9 @@ import 'package:otzaria/text_book/view/text_book_search_screen.dart';
 import 'package:otzaria/widgets/text/rtl_text_field.dart';
 import 'package:otzaria_search_engine/otzaria_search_engine.dart';
 import 'package:pdfrx/pdfrx.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../support/search_engine_test_init.dart';
 import '../test_helpers/memory_cache_provider.dart';
+import 'package:otzaria/text_book/view/reading_viewport/line_scroll_controller.dart';
 
 Future<void> main() async {
   final engineReady = await tryInitSearchEngine();
@@ -381,7 +381,7 @@ Future<void> _pumpSearchView(
         )
       : TextBookSearchView(
           contentLoader: () async => ['שלום עולם'],
-          scrollControler: ItemScrollController(),
+          lines: LineScrollController(),
           focusNode: focus,
           closeLeftPaneCallback: () {},
           initialQuery: 'שלום עולם',
@@ -466,8 +466,6 @@ TextBookLoaded _textState() => TextBookLoaded(
   selectedIndex: 0,
   pinLeftPane: false,
   searchText: '',
-  scrollController: ItemScrollController(),
-  positionsListener: ItemPositionsListener.create(),
 );
 
 class _EmptySearchRepository extends SearchRepository {

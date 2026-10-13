@@ -8,8 +8,6 @@ import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/utils/reader_build_policy.dart';
-import 'package:otzaria/text_book/utils/visible_index.dart';
-import 'package:otzaria/text_book/utils/reading_layout.dart';
 import 'package:otzaria/text_book/view/selected_line_links_view.dart';
 import 'package:otzaria/personal_notes/widgets/personal_notes_sidebar.dart';
 import 'package:otzaria/personal_notes/utils/personal_notes_book_key.dart';
@@ -27,6 +25,7 @@ import 'package:otzaria/models/links.dart';
 import 'package:otzaria/text_book/models/commentary_scroll_request.dart';
 import 'package:otzaria/text_book/widgets/text_book_state_builder.dart';
 import 'package:otzaria/widgets/navigation/panel_tab_header.dart';
+import 'package:otzaria/text_book/view/reading_viewport/line_scroll_controller.dart';
 
 /// אינדקסי הלשוניות ב-[TabbedCommentaryPanel]
 const int kCommentaryTabIndex = 0;
@@ -304,12 +303,9 @@ class _TabbedCommentaryPanelState extends State<TabbedCommentaryPanel>
 
     final targetIndex = (lineNumber - 1).clamp(0, state.content.length - 1);
 
-    await state.scrollController.scrollTo(
-      index: resolveItemIndexForSourceLine(
-        lineIndex: targetIndex,
-        layout: readingLayoutOf(state),
-      ),
-      alignment: 0.05,
+    final lines = widget.tab?.lines ?? LineScrollScope.maybeOf(context);
+    await lines?.scrollToLine(
+      targetIndex,
       duration: const Duration(milliseconds: 350),
       curve: Curves.easeInOut,
     );

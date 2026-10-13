@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:otzaria/pdf_book/utils/pdf_font_fallback.dart';
 import 'package:otzaria/theme/app_tokens.dart';
@@ -19,8 +20,6 @@ import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/text_book/view/combined_view/combined_book_screen.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
-import 'package:otzaria/text_book/utils/reading_segment_navigation.dart';
-import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:otzaria/settings/settings_exports.dart' hide UpdateFontSize;
 import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:pdfrx/pdfrx.dart';
@@ -216,7 +215,6 @@ class _BookPreviewPanelState extends State<BookPreviewPanel> {
       _createNewTab();
       return;
     }
-    tab.index = index;
     tab.bloc.add(
       UpdateSearchResultLines(
         searchResultLinesFor(
@@ -225,16 +223,13 @@ class _BookPreviewPanelState extends State<BookPreviewPanel> {
         ),
       ),
     );
-    final layout = readingLayoutOf(state);
-    final targetIndex = layout.isEmpty ? index : layout.itemForLine(index);
-    if (tab.scrollController.isAttached) {
-      tab.scrollController.scrollTo(
-        index: targetIndex,
+    unawaited(
+      tab.lines.scrollToLine(
+        index,
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeInOut,
-        alignment: kReadingAnchorAlignment,
-      );
-    }
+      ),
+    );
   }
 
   @override

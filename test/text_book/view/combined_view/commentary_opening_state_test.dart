@@ -68,8 +68,6 @@ Future<({_TextBookBloc bloc, TextBookTab tab})> _pumpView(
       selectedIndex: null,
       pinLeftPane: false,
       searchText: '',
-      scrollController: ItemScrollController(),
-      positionsListener: ItemPositionsListener.create(),
     ),
   );
   final notesBloc = _PersonalNotesBloc(const PersonalNotesState.initial());
@@ -132,7 +130,7 @@ Future<void> _frames(WidgetTester tester, int count) async {
 }
 
 Map<int, ItemPosition> _positions(TextBookTab tab) => {
-  for (final p in tab.positionsListener.itemPositions.value) p.index: p,
+  for (final p in tab.lines.positionsListener.itemPositions.value) p.index: p,
 };
 
 Future<void> _tap(WidgetTester tester, int index) async {
@@ -154,7 +152,7 @@ void main() {
         '<div>פסקה22 <details><summary>הצג טקסט מוסתר</summary>PAYLOAD_VISIBLE</details> המשך הפסקה</div>',
       );
       final h = await _pumpView(tester, data);
-      h.tab.scrollController.jumpTo(index: 23);
+      h.tab.lines.itemController.jumpTo(index: 23);
       await tester.pumpAndSettle();
       final summary = find.textContaining('הצג טקסט מוסתר', findRichText: true);
       final payload = find.textContaining(
@@ -191,7 +189,7 @@ void main() {
       );
     }
     final h = await _pumpView(tester, data);
-    h.tab.scrollController.jumpTo(index: 23);
+    h.tab.lines.itemController.jumpTo(index: 23);
     await tester.pumpAndSettle();
     Finder paragraph(int index) =>
         find.byKey(ValueKey('html_${_title}_$index'), skipOffstage: false);
@@ -254,7 +252,7 @@ void main() {
         ),
     ];
     final h = await _pumpView(tester, data, notes: false);
-    h.tab.scrollController.jumpTo(index: 23);
+    h.tab.lines.itemController.jumpTo(index: 23);
     await tester.pumpAndSettle();
     final key =
         tester
@@ -274,7 +272,7 @@ void main() {
     expect(key.currentContext, isNotNull);
     var sawOverlap = false;
     for (final index in [12, 60, 0, 79]) {
-      final scrolling = h.tab.scrollController.scrollTo(
+      final scrolling = h.tab.lines.itemController.scrollTo(
         index: index,
         duration: const Duration(seconds: 1),
       );
@@ -314,7 +312,7 @@ void main() {
       '${List.filled(12, 'תוכן פתוח ארוך').join('<br>')}</details> סוף</div>',
     );
     final h = await _pumpView(tester, data);
-    h.tab.scrollController.jumpTo(index: 23);
+    h.tab.lines.itemController.jumpTo(index: 23);
     await tester.pumpAndSettle();
     await tester.tap(
       find.textContaining('טקסט מוסתר ארוך', findRichText: true),
@@ -343,7 +341,7 @@ void main() {
     ];
     final h = await _pumpView(tester, data, notes: false, preview: true);
     for (final index in [23, 10, 60, 0]) {
-      final scrolling = h.tab.scrollController.scrollTo(
+      final scrolling = h.tab.lines.itemController.scrollTo(
         index: index,
         duration: const Duration(seconds: 1),
       );
@@ -398,7 +396,7 @@ void main() {
     tester,
   ) async {
     final h = await _pumpView(tester, _content());
-    h.tab.scrollController.jumpTo(index: 23);
+    h.tab.lines.itemController.jumpTo(index: 23);
     await tester.pumpAndSettle();
     await _tap(tester, 23);
     await _frames(tester, 20);
@@ -412,7 +410,7 @@ void main() {
     'גלילה במהלך השהיית הלחיצה אינה יוצרת עיגון לא תקין',
     (tester) async {
       final h = await _pumpView(tester, _content());
-      h.tab.scrollController.jumpTo(index: 10, alignment: .2);
+      h.tab.lines.itemController.jumpTo(index: 10, alignment: .2);
       await tester.pumpAndSettle();
       await _tap(tester, 10);
       final outer = tester.state<ScrollableState>(
@@ -429,7 +427,7 @@ void main() {
     tester,
   ) async {
     final h = await _pumpView(tester, _content());
-    h.tab.scrollController.jumpTo(index: 23);
+    h.tab.lines.itemController.jumpTo(index: 23);
     await tester.pumpAndSettle();
     await _tap(tester, 22);
     await tester.pump(const Duration(milliseconds: 310));
@@ -451,7 +449,7 @@ void main() {
           ),
       ];
       final h = await _pumpView(tester, data);
-      h.tab.scrollController.jumpTo(index: 23);
+      h.tab.lines.itemController.jumpTo(index: 23);
       await tester.pumpAndSettle();
       await _tap(tester, 22);
       await tester.pump(const Duration(milliseconds: 310));
@@ -477,7 +475,7 @@ void main() {
     'קיצור תוכן במהלך ההשהיה שומר אינדקסים תקינים',
     (tester) async {
       final h = await _pumpView(tester, _content());
-      h.tab.scrollController.jumpTo(index: 23);
+      h.tab.lines.itemController.jumpTo(index: 23);
       await tester.pumpAndSettle();
       await _tap(tester, 22);
       await tester.pump(const Duration(milliseconds: 310));
@@ -500,7 +498,7 @@ void main() {
     tester,
   ) async {
     final h = await _pumpView(tester, _content(), notes: false);
-    h.tab.scrollController.jumpTo(index: 23);
+    h.tab.lines.itemController.jumpTo(index: 23);
     await tester.pumpAndSettle();
     final before = _positions(h.tab)[22]!.itemLeadingEdge;
     await _tap(tester, 22);
@@ -516,7 +514,7 @@ void main() {
     tester,
   ) async {
     final h = await _pumpView(tester, _content());
-    h.tab.scrollController.jumpTo(index: 23);
+    h.tab.lines.itemController.jumpTo(index: 23);
     await tester.pumpAndSettle();
     await _tap(tester, 22);
     await tester.pump(const Duration(milliseconds: 310));

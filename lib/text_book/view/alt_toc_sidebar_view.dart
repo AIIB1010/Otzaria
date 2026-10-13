@@ -23,9 +23,9 @@ import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/utils/dibburim_structure.dart';
 import 'package:otzaria/text_book/utils/inline_section_markers.dart';
 import 'package:otzaria/text_book/utils/reading_segment_navigation.dart';
-import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:otzaria/widgets/navigation/nav_panel_search.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+import 'package:otzaria/text_book/view/reading_viewport/line_scroll_controller.dart';
 
 /// "הלכות וסימנים" (`SimanNames`) ראשון — המבנה הראשון המתאים למיקום הוא
 /// שנפתח מעצמו; שאר המבנים בסדר המסד.
@@ -45,7 +45,7 @@ String altTocEntryMatchText(AltTocEntry entry) =>
 class AltTocSidebarView extends StatefulWidget {
   final TextBook book;
   final void Function() closeLeftPaneCallback;
-  final ItemScrollController scrollController;
+  final LineScrollController lines;
 
   /// פוקוס-נוד לשדה החיפוש של הכותרות, מנוהל ע"י המסך האב כדי לאפשר
   /// פוקוס אוטומטי בפתיחת הפאנל ובמעבר ללשונית 'כותרות'.
@@ -60,7 +60,7 @@ class AltTocSidebarView extends StatefulWidget {
     super.key,
     required this.book,
     required this.closeLeftPaneCallback,
-    required this.scrollController,
+    required this.lines,
     this.focusNode,
     this.dibburim = const {},
     this.tableOfContents = const [],
@@ -571,13 +571,8 @@ class _AltTocSidebarViewState extends State<AltTocSidebarView>
     if (state is! TextBookLoaded) {
       return;
     }
-    final navigation = scrollToSourceLine(
-      scrollController: widget.scrollController,
-      scrollOffsetController: state.scrollOffsetController,
-      positionsListener: state.positionsListener,
-      segments: readingSegmentsOf(state),
-      lineIndex: lineIndex,
-      viewportExtent: context.size?.height ?? MediaQuery.sizeOf(context).height,
+    final navigation = widget.lines.scrollToLine(
+      lineIndex,
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOut,
     );

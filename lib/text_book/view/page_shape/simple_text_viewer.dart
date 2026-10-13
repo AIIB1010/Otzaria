@@ -83,13 +83,13 @@ import 'package:otzaria/text_book/utils/link_preview_utils.dart';
 import 'package:otzaria/widgets/misc/inline_link_targets.dart';
 import 'package:otzaria/text_book/utils/numbered_note_markers.dart';
 import 'package:otzaria/text_book/utils/reading_segments.dart';
-import 'package:otzaria/text_book/utils/reading_segment_navigation.dart';
 import 'package:otzaria/text_book/view/widgets/continuous_reading_paragraph.dart';
 import 'package:otzaria/text_book/view/widgets/unloaded_paragraph_placeholder.dart';
 import 'package:otzaria/text_display/text_display_exports.dart';
 import 'package:otzaria/theme/theme_exports.dart';
 import 'package:otzaria/utils/text/html_link_handler.dart';
 import 'package:otzaria/widgets/misc/link_preview_overlay.dart';
+import 'package:otzaria/text_book/view/reading_viewport/line_scroll_controller.dart';
 
 /// מחזירה האם אירוע המקלדת צריך להניע גלילה/ניווט שורה בצורת הדף.
 ///
@@ -364,11 +364,15 @@ class SimpleTextViewer extends StatefulWidget {
   final double fontSize;
   final String? fontFamily;
   final Function(OpenedTab) openBookCallback;
+
+  /// גלילה ומיקום של טקסט ראשי, בשורות מקור. בלעדיו נוצר אחד פנימי.
+  final LineScrollController? lines;
+
+  /// בקרי הרשימה של מפרש; לטקסט ראשי הם באים מ-[lines].
   final ItemScrollController? scrollController;
   final ItemPositionsListener? positionsListener;
 
-  /// גלילה יחסית בפיקסלים. הטקסט הראשי לוקח אותו מה-state; מפרש שמסונכרן
-  /// ברציפות מקבל כאן controller משלו, ובלעדיו הסנכרון נופל לקפיצות.
+  /// גלילה יחסית בפיקסלים של מפרש; בלעדיו הסנכרון הרציף נופל לקפיצות.
   final ScrollOffsetController? scrollOffsetController;
   final bool isMainText; // האם זה הטקסט המרכזי או מפרש
   final String? title; // כותרת (לכותרת עליונה)
@@ -422,6 +426,7 @@ class SimpleTextViewer extends StatefulWidget {
     required this.fontSize,
     this.fontFamily,
     required this.openBookCallback,
+    this.lines,
     this.scrollController,
     this.positionsListener,
     this.scrollOffsetController,
@@ -475,6 +480,13 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
 
   late final ItemScrollController _scrollController;
   late final ItemPositionsListener _positionsListener;
+  ScrollOffsetController? _offsetController;
+  LineScrollController? _ownedLines;
+  ReadingViewportBinding? _viewportBinding;
+
+  /// קיים לטקסט ראשי בלבד.
+  LineScrollController? get _lines =>
+      widget.isMainText ? (widget.lines ?? _ownedLines) : null;
   FocusNode? _keyboardFocusNode;
   bool _shouldPreserveKeyboardFocus = false;
 
@@ -504,9 +516,6 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
   int? _selectionStartColumn;
   int? _selectionPointerColumn;
   int? _selectionPointerLineIndex;
-  int _initialScrollRestoreAttempts = 0;
-  bool? _lastContinuousReadingMode;
-  int? _pendingDisplayModeRestoreLineIndex;
   final DictionaryLookupRepository _dictionaryLookupRepository =
       DictionaryLookupRepository.instance;
   final ParagraphCommentatorsCache _paragraphCommentatorsCache =
@@ -979,9 +988,17 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
   @override
   void initState() {
     super.initState();
-    _scrollController = widget.scrollController ?? ItemScrollController();
-    _positionsListener =
-        widget.positionsListener ?? ItemPositionsListener.create();
+    if (widget.isMainText) {
+      final lines = widget.lines ?? (_ownedLines = LineScrollController());
+      _scrollController = lines.itemController;
+      _positionsListener = lines.positionsListener;
+      _offsetController = lines.offsetController;
+    } else {
+      _scrollController = widget.scrollController ?? ItemScrollController();
+      _positionsListener =
+          widget.positionsListener ?? ItemPositionsListener.create();
+      _offsetController = widget.scrollOffsetController;
+    }
     _selectionFocusNode = FocusNode(debugLabel: 'SelectionAreaFocus');
     _resolvedKeyboardFocusNode;
     final dynamicTab = widget.tab;
@@ -1027,7 +1044,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
           () => _requestKeyboardFocus('tab-content-focus'),
         );
       }
-      _scheduleInitialScrollRestore();
+      _attachViewport();
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) {
@@ -1065,15 +1082,17 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
         highlight.bookId != tab.book.title) {
       return;
     }
+    final lines = _lines;
+    if (lines == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scrollController.isAttached) {
-        return;
-      }
-      _scrollController.scrollTo(
-        index: _segmentIndexForSourceLine(highlight.sectionIndex),
-        alignment: .35,
-        duration: const Duration(milliseconds: 450),
-        curve: Curves.easeInOut,
+      if (!mounted) return;
+      unawaited(
+        lines.scrollToLine(
+          highlight.sectionIndex,
+          alignment: .35,
+          duration: const Duration(milliseconds: 450),
+          curve: Curves.easeInOut,
+        ),
       );
     });
   }
@@ -1153,6 +1172,9 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
       );
     }
     _cancelPendingPreview();
+    final binding = _viewportBinding;
+    if (binding != null) _lines?.detach(binding);
+    _ownedLines?.dispose();
     if (widget.isMainText) LinkPreviewOverlay.dismiss();
     widget.selectionSyncController?.removeListener(
       _handleExternalSelectionChange,
@@ -1292,129 +1314,42 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     }
   }
 
-  void _scheduleInitialScrollRestore() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-
-      final restored = _scrollToCurrentPosition();
-      if (restored) {
-        return;
-      }
-      if (_initialScrollRestoreAttempts >= 10) {
-        return;
-      }
-
-      _initialScrollRestoreAttempts++;
-      Future.delayed(
-        const Duration(milliseconds: 50),
-        _scheduleInitialScrollRestore,
-      );
-    });
-  }
-
-  /// גלילה למיקום הנוכחי (visibleIndices או selectedIndex)
-  bool _scrollToCurrentPosition() {
+  /// מחבר את הטקסט הראשי ל-[LineScrollController] וממקם אותו בשורה הנוכחית.
+  void _attachViewport() {
+    final lines = _lines;
+    if (lines == null) return;
     final bloc = context.read<TextBookBloc>();
+    final binding = ReadingViewportBinding(
+      segments: () {
+        final state = bloc.state;
+        return state is TextBookLoaded ? readingSegmentsOf(state) : null;
+      },
+      viewportExtent: () => _disposed
+          ? 0
+          : context.size?.height ?? MediaQuery.sizeOf(context).height,
+    );
+    _viewportBinding = binding;
+    lines.attach(binding);
+    if (lines.hasPendingTarget) return;
     final state = bloc.state;
-    if (state is! TextBookLoaded || !_scrollController.isAttached) {
-      return false;
-    }
-
-    final targetIndex = state.visibleIndices.isNotEmpty
-        ? state.visibleIndices.first
-        : state.selectedIndex;
-
-    if (targetIndex == null || targetIndex >= widget.content.length) {
-      return false;
-    }
-
-    _scrollController.jumpTo(
-      index: readingLayoutOf(state).itemForLine(targetIndex),
-    );
-    return true;
-  }
-
-  /// שומר את המיקום (שורת מקור) בעת מעבר בין מצב רגיל לרציף ולהפך.
-  void _preserveScrollAfterDisplayModeChange(TextBookLoaded state) {
-    final continuous = state.continuousReadingMode;
-    final previousContinuous = _lastContinuousReadingMode;
-    _lastContinuousReadingMode = continuous;
-
-    if (!widget.isMainText ||
-        !widget.useInternalScroll ||
-        previousContinuous == null ||
-        previousContinuous == continuous) {
+    if (state is! TextBookLoaded) return;
+    final target = state.visibleIndices.firstOrNull ?? state.selectedIndex;
+    // הרשימה נפתחת בראש הספר; רק יעד אחר דורש קפיצה.
+    if (target == null || target <= 0 || target >= widget.content.length) {
       return;
     }
-
-    final targetIndex = state.visibleIndices.isNotEmpty
-        ? state.visibleIndices.first
-        : state.selectedIndex;
-    if (targetIndex == null ||
-        targetIndex < 0 ||
-        targetIndex >= widget.content.length) {
-      return;
-    }
-
-    _pendingDisplayModeRestoreLineIndex = targetIndex;
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted ||
-          _pendingDisplayModeRestoreLineIndex != targetIndex ||
-          !_scrollController.isAttached) {
-        return;
-      }
-
-      await scrollToSourceLine(
-        scrollController: _scrollController,
-        scrollOffsetController: state.scrollOffsetController,
-        positionsListener: _positionsListener,
-        segments: readingSegmentsOf(state),
-        lineIndex: targetIndex,
-        viewportExtent:
-            context.size?.height ?? MediaQuery.sizeOf(context).height,
-        duration: Duration.zero,
-      );
-
-      if (mounted && _pendingDisplayModeRestoreLineIndex == targetIndex) {
-        _pendingDisplayModeRestoreLineIndex = null;
-      }
-    });
+    unawaited(lines.jumpToLine(target));
   }
 
-  List<int> _sourceIndicesForVisiblePositions(
-    Iterable<ItemPosition> itemPositions,
-  ) {
-    final positions = itemPositions.toList();
-    if (!widget.isMainText) {
-      // מפרשים אינם משתמשים במצב רציף.
-      return positions.map((position) => position.index).toSet().toList()
-        ..sort();
-    }
-
-    final state = context.read<TextBookBloc>().state;
-    if (state is! TextBookLoaded || !state.continuousReadingMode) {
-      return positions.map((position) => position.index).toSet().toList()
-        ..sort();
-    }
-
-    return sourceLineIndicesForSegmentViewports(
-      readingSegmentsOf(state),
-      positions.map(
-        (position) => ReadingSegmentViewport(
-          segmentIndex: position.index,
-          leadingEdge: position.itemLeadingEdge,
-          trailingEdge: position.itemTrailingEdge,
-        ),
-      ),
-    );
-  }
-
-  /// ממיר שורת מקור לאינדקס הסגמנט המתאים לגלילה.
-  int _segmentIndexForSourceLine(int lineIndex) {
-    final state = context.read<TextBookBloc>().state;
-    if (state is! TextBookLoaded) return lineIndex;
-    final layout = readingLayoutOf(state);
-    return layout.isEmpty ? lineIndex : layout.itemForLine(lineIndex);
+  /// השורות הגלויות: בטקסט ראשי מהמיקום הנמדד, במפרש לפי פריטי הרשימה.
+  List<int> _visibleSourceLines() {
+    final lines = _lines;
+    if (lines != null) return lines.position.value?.visibleLines ?? const [];
+    return _positionsListener.itemPositions.value
+        .map((position) => position.index)
+        .toSet()
+        .toList()
+      ..sort();
   }
 
   /// היעד של הטור. טור מפרש אינו תנ"ך, ולכן חל עליו פרופיל המפרשים
@@ -1455,11 +1390,8 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
   }
 
   List<int> _selectionSourceIndices() {
-    final visiblePositions = _positionsListener.itemPositions.value.toList();
-
-    if (visiblePositions.isNotEmpty) {
-      return _sourceIndicesForVisiblePositions(visiblePositions);
-    }
+    final visible = _visibleSourceLines();
+    if (visible.isNotEmpty) return visible;
 
     return List<int>.generate(widget.content.length, (index) => index);
   }
@@ -1707,9 +1639,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
       return false;
     }
 
-    final liveVisibleIndices = _sourceIndicesForVisiblePositions(
-      _positionsListener.itemPositions.value,
-    );
+    final liveVisibleIndices = _visibleSourceLines();
     final currentIndex = resolvePageShapeNavigationBaseIndex(
       selectedIndex: state.selectedIndex,
       liveVisibleIndices: liveVisibleIndices,
@@ -1722,13 +1652,13 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
         return true;
       }
       context.read<TextBookBloc>().add(UpdateSelectedIndex(nextIndex));
-      if (_scrollController.isAttached) {
-        _scrollController.scrollTo(
-          index: _segmentIndexForSourceLine(nextIndex),
+      unawaited(
+        _lines?.scrollToLine(
+          nextIndex,
           duration: const Duration(milliseconds: 200),
           alignment: 0.5,
-        );
-      }
+        ),
+      );
       _requestKeyboardFocusAfterFrame('navigation-arrow-down');
       return true;
     }
@@ -1739,13 +1669,13 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
         return true;
       }
       context.read<TextBookBloc>().add(UpdateSelectedIndex(prevIndex));
-      if (_scrollController.isAttached) {
-        _scrollController.scrollTo(
-          index: _segmentIndexForSourceLine(prevIndex),
+      unawaited(
+        _lines?.scrollToLine(
+          prevIndex,
           duration: const Duration(milliseconds: 200),
           alignment: 0.5,
-        );
-      }
+        ),
+      );
       _requestKeyboardFocusAfterFrame('navigation-arrow-up');
       return true;
     }
@@ -1753,13 +1683,13 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     if (logicalKey == LogicalKeyboardKey.pageDown) {
       final nextIndex = (currentIndex + 10).clamp(0, widget.content.length - 1);
       context.read<TextBookBloc>().add(UpdateSelectedIndex(nextIndex));
-      if (_scrollController.isAttached) {
-        _scrollController.scrollTo(
-          index: _segmentIndexForSourceLine(nextIndex),
+      unawaited(
+        _lines?.scrollToLine(
+          nextIndex,
           duration: const Duration(milliseconds: 300),
           alignment: 0.5,
-        );
-      }
+        ),
+      );
       _requestKeyboardFocusAfterFrame('navigation-page-down');
       return true;
     }
@@ -1767,25 +1697,20 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     if (logicalKey == LogicalKeyboardKey.pageUp) {
       final prevIndex = (currentIndex - 10).clamp(0, widget.content.length - 1);
       context.read<TextBookBloc>().add(UpdateSelectedIndex(prevIndex));
-      if (_scrollController.isAttached) {
-        _scrollController.scrollTo(
-          index: _segmentIndexForSourceLine(prevIndex),
+      unawaited(
+        _lines?.scrollToLine(
+          prevIndex,
           duration: const Duration(milliseconds: 300),
           alignment: 0.5,
-        );
-      }
+        ),
+      );
       _requestKeyboardFocusAfterFrame('navigation-page-up');
       return true;
     }
 
     if (logicalKey == LogicalKeyboardKey.home && isControlPressed) {
       context.read<TextBookBloc>().add(const UpdateSelectedIndex(0));
-      if (_scrollController.isAttached) {
-        _scrollController.scrollTo(
-          index: _segmentIndexForSourceLine(0),
-          duration: const Duration(milliseconds: 300),
-        );
-      }
+      unawaited(_lines?.jumpToLine(0));
       _requestKeyboardFocusAfterFrame('navigation-home');
       return true;
     }
@@ -1793,20 +1718,13 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     if (logicalKey == LogicalKeyboardKey.end && isControlPressed) {
       final lastIndex = widget.content.length - 1;
       context.read<TextBookBloc>().add(UpdateSelectedIndex(lastIndex));
-      if (_scrollController.isAttached) {
-        _scrollController.scrollTo(
-          index: _segmentIndexForSourceLine(lastIndex),
-          duration: const Duration(milliseconds: 300),
-        );
-      }
+      unawaited(_lines?.jumpToLine(lastIndex));
       _requestKeyboardFocusAfterFrame('navigation-end');
       return true;
     }
 
     if (logicalKey == LogicalKeyboardKey.space) {
-      final visibleSourceIndices = _sourceIndicesForVisiblePositions(
-        _positionsListener.itemPositions.value,
-      );
+      final visibleSourceIndices = _visibleSourceLines();
       final pageSize = visibleSourceIndices.isNotEmpty
           ? visibleSourceIndices.length
           : 10;
@@ -1817,13 +1735,13 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
       );
       if (targetIndex == currentIndex) return true;
       context.read<TextBookBloc>().add(UpdateSelectedIndex(targetIndex));
-      if (_scrollController.isAttached) {
-        _scrollController.scrollTo(
-          index: _segmentIndexForSourceLine(targetIndex),
+      unawaited(
+        _lines?.scrollToLine(
+          targetIndex,
           duration: const Duration(milliseconds: 300),
           alignment: 0.0,
-        );
-      }
+        ),
+      );
       _requestKeyboardFocusAfterFrame('navigation-space');
       return true;
     }
@@ -2589,7 +2507,6 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
                       noteMap.putIfAbsent(line, () => []).add(note);
                     }
                   }
-                  _preserveScrollAfterDisplayModeChange(state);
                   final continuous =
                       widget.isMainText && state.continuousReadingMode;
                   final segments = widget.isMainText
@@ -2704,9 +2621,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
                                 ? ScrollablePositionedListScrollbar(
                                     scrollController: _scrollController,
                                     itemPositionsListener: _positionsListener,
-                                    offsetController: widget.isMainText
-                                        ? state.scrollOffsetController
-                                        : widget.scrollOffsetController,
+                                    offsetController: _offsetController,
                                     itemCount: itemCount,
                                     labelForIndex: widget.labelForIndex,
                                     child: SmoothWheelScroll(
@@ -2721,9 +2636,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
                                           itemPositionsListener:
                                               _positionsListener,
                                           scrollOffsetController:
-                                              widget.isMainText
-                                              ? state.scrollOffsetController
-                                              : widget.scrollOffsetController,
+                                              _offsetController,
                                           itemCount: itemCount,
                                           padding: const EdgeInsets.all(4),
                                           itemBuilder: (context, index) =>

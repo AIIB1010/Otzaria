@@ -18,7 +18,6 @@ import 'package:otzaria/text_book/utils/reading_segment_navigation.dart';
 import 'package:otzaria/text_book/view/combined_view/combined_book_screen.dart';
 import 'package:otzaria/text_book/view/widgets/continuous_reading_paragraph.dart';
 import 'package:otzaria/theme/app_colors.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../../../test_helpers/memory_cache_provider.dart';
 import '../../../test_helpers/reading_toc.dart';
 
@@ -74,8 +73,6 @@ TextBookLoaded _state(
     visibleIndices: const [_targetLine],
     pinLeftPane: false,
     searchText: searchText,
-    scrollController: ItemScrollController(),
-    positionsListener: ItemPositionsListener.create(),
     supportsContinuousReadingMode: true,
     continuousReadingMode: true,
     loadedLineFlags: loaded,
@@ -212,15 +209,8 @@ void main() {
   testWidgets('ניווט פעיל נוחת ביעד כשהפסקה נטענת ברקע', (tester) async {
     final partial = _state(_longWindow(420, 510), lines: _longLines);
     final fixture = await _mount(tester, partial, 450);
-    final navigation = scrollToSourceLine(
-      scrollController: fixture.tab.scrollController,
-      scrollOffsetController: fixture.tab.mainOffsetController,
-      positionsListener: fixture.tab.positionsListener,
-      segments: readingSegmentsOf(partial),
-      latestSegments: () =>
-          readingSegmentsOf(fixture.bloc.state as TextBookLoaded),
-      lineIndex: 450,
-      viewportExtent: tester.getSize(find.byType(CombinedView)).height,
+    final navigation = fixture.tab.lines.scrollToLine(
+      450,
       alignment: kSearchResultAnchorAlignment,
     );
     await tester.pump(const Duration(milliseconds: 60));
@@ -231,7 +221,7 @@ void main() {
     fixture.bloc.emitForTest(full);
     await tester.pumpAndSettle();
     await navigation;
-    final position = fixture.tab.positionsListener.itemPositions.value
+    final position = fixture.tab.lines.positionsListener.itemPositions.value
         .singleWhere((p) => p.index == 3);
     final edge =
         position.itemLeadingEdge +
@@ -249,11 +239,10 @@ void main() {
     await tester.idle();
     await tester.pump();
     final navigations = <int>[];
-    fixture.tab.scrollController.externalScroll =
-        (index, {sourceLineIndex}) async => navigations.add(index);
+    fixture.tab.lines.externalNavigator = (line) async => navigations.add(line);
     await tester.pumpAndSettle();
     expect(navigations, isEmpty);
-    fixture.tab.scrollController.externalScroll = null;
+    fixture.tab.lines.externalNavigator = null;
   });
 
   testWidgets('החלפת מצב אחרי עדכון תוכן משמרת את יעד החלפת המצב', (
@@ -270,7 +259,7 @@ void main() {
       warmed.copyWith(continuousReadingMode: false),
     );
     await tester.pumpAndSettle();
-    final position = fixture.tab.positionsListener.itemPositions.value
+    final position = fixture.tab.lines.positionsListener.itemPositions.value
         .singleWhere((p) => p.index == target);
     expect(
       position.itemLeadingEdge,

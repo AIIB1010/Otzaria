@@ -9,13 +9,12 @@ import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/data/repository/text_book_repository.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+import 'package:otzaria/text_book/utils/reading_position.dart';
 
-/// הגבלת קצב לעדכוני `visibleIndices`.
+/// הגבלת קצב לעדכוני `visibleIndices`, זהה בשני מצבי הקריאה.
 ///
-/// במצב קריאה רציף השורה הגלויה נגזרת משבר הגלילה בתוך פסקה ממוזגת, ולכן
-/// משתנה כמעט בכל פריים. בלי הגבלה כל פריים גורר emit ו-rebuild של הפסקה
-/// כולה. הבדיקה הקריטית כאן היא שהדילוג בטוח: המיקום הסופי חייב תמיד להגיע.
+/// בלי הגבלה כל פריים גלילה גורר emit ו-rebuild. הבדיקה הקריטית כאן היא
+/// שהדילוג בטוח: המיקום הסופי חייב תמיד להגיע.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -134,22 +133,11 @@ void main() {
         isTrue,
       );
     });
-
-    test('גלילה רגילה אינה נחסמת', () {
-      expect(
-        TextBookBloc.shouldDispatchVisibleIndicesNow(
-          sinceLastDispatch: Duration.zero,
-          continuousReadingMode: false,
-          throttleInterval: interval,
-        ),
-        isTrue,
-      );
-    });
   });
 
   group('התנהגות ה-bloc בגלילה', () {
-    test('רצף מהיר של אירועי גלילה רגילה משדר כל שינוי', () async {
-      final positionsListener = ItemPositionsListener.create();
+    test('רצף מהיר של אירועי גלילה מוגבל, והמיקום הסופי מגיע', () async {
+      final positionsListener = ValueNotifier<ReadingPosition?>(null);
       final bloc = await _loadedBloc(positionsListener);
 
       final emittedVisibleIndices = <List<int>>[];
@@ -169,9 +157,10 @@ void main() {
 
       expect(
         emittedVisibleIndices.length,
-        30,
-        reason: 'גלילה רגילה אינה כפופה להגבלת הקצב',
+        lessThan(30),
+        reason: 'גם גלילה רגילה כפופה להגבלת הקצב',
       );
+      expect(emittedVisibleIndices.last.first, 5 + 29 % 20);
       expect(
         emittedVisibleIndices,
         isNotEmpty,
@@ -182,7 +171,7 @@ void main() {
     });
 
     test('המיקום הסופי תמיד מגיע גם כשהשידור המיידי דולג', () async {
-      final positionsListener = ItemPositionsListener.create();
+      final positionsListener = ValueNotifier<ReadingPosition?>(null);
       final bloc = await _loadedBloc(positionsListener);
 
       // שני אירועים צמודים: השני נופל בתוך חלון החסימה ולכן ידולג
@@ -205,7 +194,7 @@ void main() {
     });
 
     test('אירוע הגלילה הראשון משודר מיד, בלי השהיה', () async {
-      final positionsListener = ItemPositionsListener.create();
+      final positionsListener = ValueNotifier<ReadingPosition?>(null);
       final bloc = await _loadedBloc(positionsListener);
 
       _pushSingleVisibleSegment(positionsListener, index: 25);
@@ -225,8 +214,8 @@ void main() {
       await bloc.close();
     });
 
-    test('גלילה רגילה מעדכנת גם בתוך חלון ההגבלה', () async {
-      final positionsListener = ItemPositionsListener.create();
+    test('עדכון בתוך חלון ההגבלה מגיע בשידור הנגרר', () async {
+      final positionsListener = ValueNotifier<ReadingPosition?>(null);
       final bloc = await _loadedBloc(positionsListener);
 
       _pushSingleVisibleSegment(positionsListener, index: 12);
@@ -244,15 +233,15 @@ void main() {
           final state = bloc.state;
           return state is TextBookLoaded && state.visibleIndices.first == 20;
         },
-        timeout: const Duration(milliseconds: 120),
-        description: 'המיקום השני (20) משודר מיידית במצב רגיל',
+        timeout: const Duration(milliseconds: 400),
+        description: 'המיקום השני (20) משודר בשידור הנגרר',
       );
 
       await bloc.close();
     });
 
     test('גלילה איטית מהחלון לא נחסמת כלל', () async {
-      final positionsListener = ItemPositionsListener.create();
+      final positionsListener = ValueNotifier<ReadingPosition?>(null);
       final bloc = await _loadedBloc(positionsListener);
 
       for (final index in [11, 17, 23]) {
@@ -274,7 +263,7 @@ void main() {
     });
 
     test('currentTitle עוקב אחרי הגלילה גם עם הגבלת הקצב', () async {
-      final positionsListener = ItemPositionsListener.create();
+      final positionsListener = ValueNotifier<ReadingPosition?>(null);
       final bloc = await _loadedBloc(positionsListener);
 
       // גלילה אחורה בכמה אירועים צמודים. כל האינדקסים בטווח "סעיף א"
@@ -298,8 +287,8 @@ void main() {
       await bloc.close();
     });
 
-    test('כל פרץ גלילה רגילה משדר את כל האירועים', () async {
-      final positionsListener = ItemPositionsListener.create();
+    test('כל פרץ גלילה מסתיים במיקום האחרון שלו', () async {
+      final positionsListener = ValueNotifier<ReadingPosition?>(null);
       final bloc = await _loadedBloc(positionsListener);
 
       final seen = <int>[];
@@ -332,17 +321,13 @@ void main() {
         );
       }
       expect(seen.last, 27, reason: 'המיקום הסופי חייב להגיע');
-      expect(
-        seen.length,
-        bursts.expand((b) => b).length,
-        reason: 'גלילה רגילה אינה כפופה להגבלת הקצב',
-      );
+      expect(seen.length, lessThan(bursts.expand((b) => b).length));
 
       await bloc.close();
     });
 
     test('אירוע בודד משודר ולא נבלע בחסימה', () async {
-      final positionsListener = ItemPositionsListener.create();
+      final positionsListener = ValueNotifier<ReadingPosition?>(null);
       final bloc = await _loadedBloc(positionsListener);
 
       _pushSingleVisibleSegment(positionsListener, index: 8);
@@ -360,7 +345,7 @@ void main() {
     });
 
     test('חזרה למיקום המקורי בתוך פרץ לא משאירה state שגוי', () async {
-      final positionsListener = ItemPositionsListener.create();
+      final positionsListener = ValueNotifier<ReadingPosition?>(null);
       final bloc = await _loadedBloc(positionsListener);
 
       _pushSingleVisibleSegment(positionsListener, index: 10);
@@ -388,7 +373,7 @@ void main() {
     });
 
     test('גלילה ארוכה מסתיימת במיקום הנכון', () async {
-      final positionsListener = ItemPositionsListener.create();
+      final positionsListener = ValueNotifier<ReadingPosition?>(null);
       final bloc = await _loadedBloc(positionsListener);
 
       for (var index = 2; index <= 30; index++) {
@@ -410,7 +395,7 @@ void main() {
     });
 
     test('סגירת ה-bloc בזמן חסימה לא מפילה את הטיימר הנגרר', () async {
-      final positionsListener = ItemPositionsListener.create();
+      final positionsListener = ValueNotifier<ReadingPosition?>(null);
       final bloc = await _loadedBloc(positionsListener);
 
       _pushSingleVisibleSegment(positionsListener, index: 14);
@@ -424,19 +409,16 @@ void main() {
   });
 }
 
-/// דוחף position יחיד שממלא את המסך — הצורה הפשוטה ביותר שעוברת את
-/// `_filterBarelyVisiblePositions`.
+/// מיקום נמדד ששורתו העליונה היא [index].
 void _pushSingleVisibleSegment(
-  ItemPositionsListener listener, {
+  ValueNotifier<ReadingPosition?> listener, {
   required int index,
 }) {
-  (listener.itemPositions as ValueNotifier<Iterable<ItemPosition>>).value = [
-    ItemPosition(index: index, itemLeadingEdge: 0, itemTrailingEdge: 0.95),
-  ];
+  listener.value = ReadingPosition(topLine: index, visibleLines: [index]);
 }
 
 Future<TextBookBloc> _loadedBloc(
-  ItemPositionsListener positionsListener,
+  ValueNotifier<ReadingPosition?> positionsListener,
 ) async {
   final bloc = TextBookBloc(
     repository: _TwoSectionRepository(),
@@ -448,8 +430,7 @@ Future<TextBookBloc> _loadedBloc(
       searchMode: SearchMode.exact,
       showPageShapeView: false,
     ),
-    scrollController: ItemScrollController(),
-    positionsListener: positionsListener,
+    readingPosition: positionsListener,
   );
 
   bloc.add(
