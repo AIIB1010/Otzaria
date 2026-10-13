@@ -95,6 +95,7 @@ import 'package:otzaria/library_update/library_update_work_status.dart';
 import 'package:otzaria/library_update/changes_notes/library_changes_notes.dart';
 import 'package:otzaria/library_update/services/external_update_notice.dart';
 import 'package:otzaria/plugins/services/plugin_install_results_log.dart';
+import 'package:otzaria/plugins/services/plugin_install_report_service.dart';
 import 'package:otzaria/data/constants/database_constants.dart';
 import 'package:otzaria/theme/app_surfaces.dart';
 import 'package:otzaria/utils/ui/fullscreen_helper.dart';
@@ -1662,6 +1663,20 @@ class MainWindowScreenState extends State<MainWindowScreen>
       case OpenPdfBookAction():
         return await _openPdfBookByExternalId(action);
       case InstallPluginAction(:final request):
+        if (!await verifySaferModePassword(context)) {
+          final report = request.reportContext;
+          if (report != null) {
+            unawaited(
+              PluginInstallReportService.report(
+                report,
+                success: false,
+                errorMessage: 'ההתקנה נחסמה במצב סייפר',
+              ),
+            );
+          }
+          return false;
+        }
+        if (!mounted) return false;
         context.read<PluginSystemBloc>().add(
           InstallRemotePluginRequested(
             request.downloadUri.toString(),
@@ -1671,6 +1686,16 @@ class MainWindowScreenState extends State<MainWindowScreen>
         );
         return true;
       case InstallLocalPluginAction(:final archivePath):
+        if (!await verifySaferModePassword(context)) {
+          // מי שמסר את הקובץ (המעדכן הלא-מקוון) ממתין לתוצאה.
+          await PluginInstallResultsLog.instance.append(
+            path: archivePath,
+            outcome: PluginInstallOutcome.cancelled,
+            message: 'ההתקנה נחסמה במצב סייפר',
+          );
+          return false;
+        }
+        if (!mounted) return false;
         context.read<PluginSystemBloc>().add(
           InstallPluginRequested(archivePath, recordsResult: true),
         );
