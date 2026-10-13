@@ -27,6 +27,8 @@ import 'package:otzaria/search/view/search_dialog.dart';
 import 'package:otzaria/settings/engine/settings_bloc.dart';
 import 'package:otzaria/settings/engine/settings_event.dart';
 import 'package:otzaria/settings/engine/settings_state.dart';
+import 'package:otzaria/shortcuts/dynamic/dynamic_shortcut.dart';
+import 'package:otzaria/shortcuts/dynamic/dynamic_shortcut_registry.dart';
 import 'package:otzaria/shortcuts/keyboard_shortcuts.dart';
 import 'package:otzaria/shortcuts/shortcut_helper.dart';
 import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
@@ -42,6 +44,7 @@ import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/widgets/text/rtl_text_field.dart';
+import 'package:otzaria/widgets/text/selection_copy_shortcuts.dart';
 import 'package:provider/provider.dart';
 import '../helpers/memory_settings_cache.dart';
 
@@ -86,14 +89,15 @@ class _StubNavigationBloc extends Bloc<NavigationEvent, NavigationState>
 
 class _StubTextBookBloc extends Bloc<TextBookEvent, TextBookState>
     implements TextBookBloc {
-  _StubTextBookBloc()
+  _StubTextBookBloc([TextBookState? state])
     : super(
-        TextBookInitial.named(
-          TextBook(title: 'ספר בדיקה'),
-          0,
-          false,
-          const [],
-        ),
+        state ??
+            TextBookInitial.named(
+              TextBook(title: 'ספר בדיקה'),
+              0,
+              false,
+              const [],
+            ),
       ) {
     on<TextBookEvent>((_, _) {});
   }
@@ -1123,6 +1127,71 @@ void main() {
         // לא אמור לזרוק ולא להשפיע — מאומת דרך היעדר חריגה.
         await sendAlt(tester, LogicalKeyboardKey.arrowUp);
         expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'Ctrl+C שהוגדר כקיצור דינמי גובר על ההעתקה המובנית (issue #2380)',
+      (tester) async {
+        final tab = TextBookTab(
+          book: TextBook(title: 'ספר בדיקה'),
+          index: 0,
+          blocOverride: _StubTextBookBloc(
+            TextBookLoaded.initial(
+              book: TextBook(title: 'ספר בדיקה'),
+              index: 0,
+              showLeftPane: false,
+              splitView: false,
+            ),
+          ),
+        );
+        addTearDown(tab.dispose);
+        var builtInCopies = 0;
+        final selectionFocus = FocusNode();
+        addTearDown(selectionFocus.dispose);
+        // אותו מיירט Ctrl+C שעוטף את הבחירה בגוף הספר ובחלונית המפרשים.
+        await pumpWithTab(
+          tester,
+          tab,
+          child: SelectionCopyShortcuts(
+            onCopy: () => builtInCopies++,
+            child: SelectionArea(
+              focusNode: selectionFocus,
+              child: const Text('טקסט'),
+            ),
+          ),
+        );
+        selectionFocus.requestFocus();
+        await tester.pump();
+        Future<void> pressCtrlC({bool hold = false}) async {
+          await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+          await tester.sendKeyDownEvent(LogicalKeyboardKey.keyC);
+          if (hold) await tester.sendKeyRepeatEvent(LogicalKeyboardKey.keyC);
+          await tester.sendKeyUpEvent(LogicalKeyboardKey.keyC);
+          await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+          await tester.pump();
+        }
+
+        await pressCtrlC();
+        expect(builtInCopies, 1, reason: 'בלי קיצור דינמי נשארת ההעתקה הרגילה');
+
+        DynamicShortcutRegistry.instance.put(
+          const DynamicShortcut(
+            id: 'issue2380',
+            key: 'ctrl+c',
+            kind: DynamicShortcutKind.copySelectionWith,
+            change: DynamicDisplayChange(nikud: DynamicMarkChange.hide),
+            plainTextOnly: true,
+          ),
+        );
+        addTearDown(() => DynamicShortcutRegistry.instance.remove('issue2380'));
+        // גם החזרות של מקש מוחזק אינן מגיעות להעתקה המובנית.
+        await pressCtrlC(hold: true);
+
+        expect(builtInCopies, 1);
+        final request = tab.dynamicCopyRequestNotifier.value;
+        expect(request?.profile.removeNikud, isTrue);
+        expect(request?.plainTextOnly, isTrue);
       },
     );
   });
