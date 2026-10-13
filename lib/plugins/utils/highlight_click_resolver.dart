@@ -16,6 +16,7 @@ List<PluginHighlight> resolveClickedHighlights({
   required String rawText,
   required RenderSettings settings,
   String? bookUid,
+  TextRange? lineRange,
 }) {
   final highlights = PluginHighlightRegistry.instance.getAllHighlights(
     bookId: bookId,
@@ -61,6 +62,7 @@ List<PluginHighlight> resolveClickedHighlights({
       text: displayText,
       occurrenceIndex: occurrence?.index,
       occurrenceCount: occurrence?.count,
+      lineRange: lineRange,
     );
     if (hit == true) result.add(highlight);
   }
