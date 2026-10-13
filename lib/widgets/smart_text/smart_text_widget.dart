@@ -211,6 +211,15 @@ class SmartTextWidget extends StatelessWidget {
         if (simpleSpan.toPlainText().isEmpty) {
           return const SizedBox.shrink();
         }
+        final ltr = TextRendererService.startsLeftToRight(processedHtml);
+        final Widget line = SelectionFillText.rich(
+          simpleSpan,
+          style: lineStyle,
+          strutStyle: exactLineHeightStrut(lineStyle, simpleSpan),
+          textAlign: settings.justifyText && !ltr
+              ? TextAlign.justify
+              : TextAlign.right,
+        );
         // רוחב מלא כמו <div> בלוק ב-HtmlWidget - אחרת מסכים שעוטפים שורה
         // ב-Center (הגבלת רוחב קריאה) ימרכזו שורות קצרות בטעות.
         return _withPluginFrames(
@@ -222,14 +231,12 @@ class SmartTextWidget extends StatelessWidget {
             SizedBox(
               key: widgetKey,
               width: double.infinity,
-              child: SelectionFillText.rich(
-                simpleSpan,
-                style: lineStyle,
-                strutStyle: exactLineHeightStrut(lineStyle, simpleSpan),
-                textAlign: settings.justifyText
-                    ? TextAlign.justify
-                    : TextAlign.right,
-              ),
+              child: ltr
+                  ? Directionality(
+                      textDirection: TextDirection.ltr,
+                      child: line,
+                    )
+                  : line,
             ),
           ),
         );
