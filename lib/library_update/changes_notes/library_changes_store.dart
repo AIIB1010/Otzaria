@@ -52,15 +52,25 @@ class LibraryChangesStore {
   static bool isSafeTag(String tag) =>
       _safeTag.hasMatch(tag) && !tag.contains('..');
 
-  Future<Directory> _dir(String name) async =>
-      Directory(p.join(await _dataRoot(), name));
+  // נתיב מפורש מקבוע: כך backup_storage_coverage_test מזהה את מקום השמירה.
+  Future<Directory> _pendingDir() async =>
+      Directory(p.join(await _dataRoot(), pendingFolderName));
+
+  Future<Directory> _seenDir() async =>
+      Directory(p.join(await _dataRoot(), seenFolderName));
+
+  Future<Directory> _dir(String folder) =>
+      folder == pendingFolderName ? _pendingDir() : _seenDir();
+
+  Future<File> _fetchQueueFile() async =>
+      File(p.join(await _dataRoot(), fetchQueueFileName));
 
   /// כותב אטומית (tmp + rename) את ההערות של [releaseTag] לתיקיית ה-pending.
   Future<void> writePending(String releaseTag, String markdown) async {
     if (!isSafeTag(releaseTag)) {
       throw ArgumentError.value(releaseTag, 'releaseTag');
     }
-    final dir = await _dir(pendingFolderName);
+    final dir = await _pendingDir();
     await dir.create(recursive: true);
     final target = p.join(dir.path, '$releaseTag.md');
     final tmp = File('$target.tmp');
@@ -102,7 +112,7 @@ class LibraryChangesStore {
   /// תגים שההערות שלהם עוד לא נמצאו (הקובץ מועלה רק אחרי פרסום ה-release),
   /// עם מועד ההוספה — לניסיון חוזר בעלייה.
   Future<Map<String, DateTime>> readFetchQueue() async {
-    final file = File(p.join(await _dataRoot(), fetchQueueFileName));
+    final file = await _fetchQueueFile();
     try {
       if (!await file.exists()) return {};
       final decoded = jsonDecode(await file.readAsString());
@@ -164,8 +174,8 @@ class LibraryChangesStore {
   /// מעביר את [notes] שבתיקיית ה-pending לתיקיית ה-seen, ומשאיר שם רק את
   /// [keepSeen] החדשות.
   Future<void> markSeen(List<LibraryChangesNote> notes) async {
-    final pendingDir = await _dir(pendingFolderName);
-    final seenDir = await _dir(seenFolderName);
+    final pendingDir = await _pendingDir();
+    final seenDir = await _seenDir();
     await seenDir.create(recursive: true);
     for (final note in notes) {
       if (!p.equals(p.dirname(note.path), pendingDir.path)) continue;
