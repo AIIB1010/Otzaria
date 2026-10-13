@@ -31,7 +31,37 @@ void main() {
     expect(heartbeat, isNot(contains('RefreshModules')));
     expect(heartbeat, isNot(contains('GetMappedFileName')));
     expect(heartbeat, isNot(contains('VirtualQuery')));
-    expect(heartbeat, contains('RequestStop()'));
+    expect(heartbeat, contains('kMaxLifetimeMs'));
+    expect(heartbeat, contains('EnterRuntimeMode()'));
+
+    final runtimeStart = source.indexOf('void EnterRuntimeMode()');
+    expect(runtimeStart, greaterThanOrEqualTo(0));
+    final runtime = source.substring(
+      runtimeStart,
+      source.indexOf('\n}', runtimeStart),
+    );
+    expect(runtime, isNot(contains('RefreshModules')));
+    expect(runtime, isNot(contains('EnumProcessModules')));
+    expect(runtime, isNot(contains('GetMappedFileName')));
+    expect(runtime, isNot(contains('VirtualQuery')));
+  });
+
+  test('ניטור הקיפאון אחרי החשיפה חסום ושקט, ונעצר ב-debug', () {
+    final runtimeStart = source.indexOf('void EnterRuntimeMode()');
+    final runtime = source.substring(
+      runtimeStart,
+      source.indexOf('\n}', runtimeStart),
+    );
+    final debugStop = runtime.indexOf('RequestStop();');
+    expect(runtime.indexOf('#ifdef _DEBUG'), inInclusiveRange(0, debugStop));
+    expect(debugStop, lessThan(runtime.indexOf('#else')));
+    expect(runtime, contains('if (g_timer == 0) RequestStop();'));
+
+    final watcher = source.substring(source.indexOf('void WatcherLoop()'));
+    expect(watcher, contains('gap < kFreezeThresholdMs'));
+    expect(watcher, contains('freezes >= kMaxFreezes'));
+    expect(watcher, contains('::IsDebuggerPresent()'));
+    expect(watcher, contains('!freeze_second_captured'));
   });
 
   test('DLL מאוחר מזוהה ממיפוי רק אחרי חידוש ה-thread הראשי', () {
@@ -54,10 +84,25 @@ void main() {
     expect(capture, isNot(contains('GetMappedFileName')));
     expect(capture, isNot(contains('VirtualQuery')));
 
-    final watcher = source.substring(source.indexOf('void WatcherLoop()'));
+    final framesStart = source.indexOf(
+      'std::vector<ULONG_PTR> CaptureFrames()',
+    );
+    expect(framesStart, greaterThanOrEqualTo(0));
+    final frames = source.substring(
+      framesStart,
+      source.indexOf('\n}', framesStart),
+    );
     expect(
-      watcher.indexOf('ReportStall('),
-      greaterThan(watcher.indexOf('CaptureMainThreadStack(&frames);')),
+      frames.indexOf('frames.reserve(kMaxFrames);'),
+      inInclusiveRange(0, frames.indexOf('CaptureMainThreadStack(&frames);')),
+    );
+    final watcher = source.substring(source.indexOf('void WatcherLoop()'));
+    expect(watcher, isNot(contains('CaptureMainThreadStack(')));
+    expect(
+      watcher,
+      contains(
+        'ReportStall(captures, gap, now - g_start_tick, CaptureFrames())',
+      ),
     );
     expect(RegExp(r'\bDescribeAddress\(').allMatches(source), hasLength(2));
   });
@@ -71,8 +116,9 @@ void main() {
     expect(watcher, greaterThan(failed));
   });
 
-  test('חשיפה מבקשת עצירה והיציאה משלימה join', () {
-    expect(windowSource, contains('startup_watchdog::RequestStop();'));
+  test('חשיפה עוברת לניטור בלי join והיציאה משלימה join', () {
+    expect(windowSource, contains('startup_watchdog::EnterRuntimeMode();'));
+    expect(windowSource, isNot(contains('startup_watchdog::Stop();')));
     final stop = source.substring(source.indexOf('void Stop()'));
     expect(stop, contains('RequestStop();'));
     expect(stop, contains('g_watcher.joinable()'));

@@ -237,8 +237,8 @@ is not cosmetic; marking it trusted is.
 
 When Dart-side marks show nothing, use the native stall detector in
 `windows/runner/startup_watchdog.cpp`. It suspends the main thread, unwinds it without dbghelp, and
-appends `=== Startup stall` with module+RVA frames to `errors.txt`. It stops itself at reveal and
-is silent on a healthy launch. That is how #1192 was found after three rounds of Dart instrumentation
+appends `=== Startup stall` with module+RVA frames to `errors.txt`. At reveal it switches to a slow
+runtime mode that records `=== UI freeze` (stopping instead in debug builds), and it is silent on a healthy launch. That is how #1192 was found after three rounds of Dart instrumentation
 missed it.
 
 ## Developer diagnostics (measuring the real app)
