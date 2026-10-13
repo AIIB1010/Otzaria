@@ -221,11 +221,12 @@ void main() {
     fixture.bloc.emitForTest(full);
     await tester.pumpAndSettle();
     await navigation;
+    final item = readingLayoutOf(full).itemForLine(450);
     final position = fixture.tab.lines.positionsListener.itemPositions.value
-        .singleWhere((p) => p.index == 3);
+        .singleWhere((p) => p.index == item);
     final edge =
         position.itemLeadingEdge +
-        lineFractionWithinSegment(readingSegmentsOf(full)[3], 450) *
+        lineFractionWithinSegment(readingSegmentsOf(full)[item], 450) *
             (position.itemTrailingEdge - position.itemLeadingEdge);
     expect(edge, closeTo(kSearchResultAnchorAlignment, kAnchorLandingEpsilon));
   });

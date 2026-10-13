@@ -11,10 +11,10 @@ import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/data/repository/text_book_repository.dart';
 import 'package:otzaria/text_book/utils/reading_position.dart';
 
-/// הגבלת קצב לעדכוני `visibleIndices`, זהה בשני מצבי הקריאה.
+/// הגבלת קצב לעדכוני `visibleIndices` — במצב רציף בלבד.
 ///
-/// בלי הגבלה כל פריים גלילה גורר emit ו-rebuild. הבדיקה הקריטית כאן היא
-/// שהדילוג בטוח: המיקום הסופי חייב תמיד להגיע.
+/// במצב רציף כל פריים גלילה בתוך פסקה ממוזגת משנה את השורה הגלויה וגורר
+/// rebuild של הפסקה כולה. הבדיקה הקריטית: הדילוג בטוח והמיקום הסופי מגיע.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -133,10 +133,36 @@ void main() {
         isTrue,
       );
     });
+
+    test('גלילה רגילה אינה נחסמת', () {
+      expect(
+        TextBookBloc.shouldDispatchVisibleIndicesNow(
+          sinceLastDispatch: Duration.zero,
+          continuousReadingMode: false,
+          throttleInterval: interval,
+        ),
+        isTrue,
+      );
+    });
+  });
+
+  test('מיקום שפורסם לפני סיום הטעינה משודר אחריה', () async {
+    final positionsListener = ValueNotifier<ReadingPosition?>(null);
+    _pushSingleVisibleSegment(positionsListener, index: 30);
+    final bloc = await _loadedBloc(positionsListener);
+    await _waitFor(
+      () {
+        final state = bloc.state;
+        return state is TextBookLoaded && state.visibleIndices.first == 30;
+      },
+      timeout: const Duration(milliseconds: 500),
+      description: 'visibleIndices מתעדכן למיקום שפורסם מראש',
+    );
+    await bloc.close();
   });
 
   group('התנהגות ה-bloc בגלילה', () {
-    test('רצף מהיר של אירועי גלילה מוגבל, והמיקום הסופי מגיע', () async {
+    test('רצף מהיר של אירועי גלילה רגילה משדר כל שינוי', () async {
       final positionsListener = ValueNotifier<ReadingPosition?>(null);
       final bloc = await _loadedBloc(positionsListener);
 
@@ -157,10 +183,9 @@ void main() {
 
       expect(
         emittedVisibleIndices.length,
-        lessThan(30),
-        reason: 'גם גלילה רגילה כפופה להגבלת הקצב',
+        30,
+        reason: 'גלילה רגילה אינה כפופה להגבלת הקצב',
       );
-      expect(emittedVisibleIndices.last.first, 5 + 29 % 20);
       expect(
         emittedVisibleIndices,
         isNotEmpty,
@@ -214,7 +239,7 @@ void main() {
       await bloc.close();
     });
 
-    test('עדכון בתוך חלון ההגבלה מגיע בשידור הנגרר', () async {
+    test('גלילה רגילה מעדכנת גם בתוך חלון ההגבלה', () async {
       final positionsListener = ValueNotifier<ReadingPosition?>(null);
       final bloc = await _loadedBloc(positionsListener);
 
@@ -233,8 +258,8 @@ void main() {
           final state = bloc.state;
           return state is TextBookLoaded && state.visibleIndices.first == 20;
         },
-        timeout: const Duration(milliseconds: 400),
-        description: 'המיקום השני (20) משודר בשידור הנגרר',
+        timeout: const Duration(milliseconds: 120),
+        description: 'המיקום השני (20) משודר מיידית במצב רגיל',
       );
 
       await bloc.close();
@@ -287,7 +312,7 @@ void main() {
       await bloc.close();
     });
 
-    test('כל פרץ גלילה מסתיים במיקום האחרון שלו', () async {
+    test('כל פרץ גלילה רגילה משדר את כל האירועים', () async {
       final positionsListener = ValueNotifier<ReadingPosition?>(null);
       final bloc = await _loadedBloc(positionsListener);
 
@@ -321,7 +346,11 @@ void main() {
         );
       }
       expect(seen.last, 27, reason: 'המיקום הסופי חייב להגיע');
-      expect(seen.length, lessThan(bursts.expand((b) => b).length));
+      expect(
+        seen.length,
+        bursts.expand((b) => b).length,
+        reason: 'גלילה רגילה אינה כפופה להגבלת הקצב',
+      );
 
       await bloc.close();
     });

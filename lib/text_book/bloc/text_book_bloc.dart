@@ -70,14 +70,12 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
   static const int _releaseContentMinLines = 2000;
   static const int _contentReloadThresholdLines = 60;
 
-  /// פסקה ארוכה מזה בפתיחה נטענת ברקע ולא לפני הציור הראשון.
-  static const int _initialItemLoadMaxLines = 2000;
   static const Duration _visibleIndicesDebounceDuration = Duration(
     milliseconds: 160,
   );
 
-  /// קצב מרבי לשידור מיידי של visibleIndices בזמן גלילה; בלעדיו כל פריים
-  /// גלילה גורר emit ו-rebuild.
+  /// קצב מרבי לשידור visibleIndices במצב רציף, שבו כמעט כל פריים משנה את
+  /// השורה הגלויה בפסקה ממוזגת וגורר rebuild שלה. במצב רגיל אין הגבלה.
   static const Duration _visibleIndicesThrottleInterval = Duration(
     milliseconds: 100,
   );
@@ -350,9 +348,11 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
   @visibleForTesting
   static bool shouldDispatchVisibleIndicesNow({
     required Duration? sinceLastDispatch,
+    bool continuousReadingMode = true,
     Duration throttleInterval = _visibleIndicesThrottleInterval,
   }) {
-    return sinceLastDispatch == null ||
+    return !continuousReadingMode ||
+        sinceLastDispatch == null ||
         sinceLastDispatch.isNegative ||
         sinceLastDispatch >= throttleInterval;
   }
@@ -1004,6 +1004,8 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
       }
 
       emit(loadedState);
+      // מיקום שפורסם לפני הטעינה (ניווט לטאב באמצע LoadContent) לא שודר.
+      _onReadingPosition();
 
       _pendingPinpoint = null;
       _pendingFontSize = null;
@@ -1673,8 +1675,6 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
     return true;
   }
 
-  /// שידור עדכון `visibleIndices` תוך רישום מועד השידור, שעליו נשענת
-  /// הגבלת הקצב ב-[shouldDispatchVisibleIndicesNow].
   void _listenToReadingPosition() {
     final source = readingPosition;
     if (source == null || _listeningToReadingPosition) return;
@@ -1715,6 +1715,7 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
 
     final lastDispatchAt = _lastVisibleIndicesDispatchAt;
     if (shouldDispatchVisibleIndicesNow(
+      continuousReadingMode: currentState.continuousReadingMode,
       sinceLastDispatch: lastDispatchAt == null
           ? null
           : DateTime.now().difference(lastDispatchAt),
@@ -1737,6 +1738,8 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
     });
   }
 
+  /// שידור עדכון `visibleIndices` תוך רישום מועד השידור, שעליו נשענת
+  /// הגבלת הקצב ב-[shouldDispatchVisibleIndicesNow].
   void _dispatchVisibleIndices(List<int> visibleIndices) {
     _lastVisibleIndicesDispatchAt = DateTime.now();
     add(UpdateVisibleIndecies(visibleIndices));
@@ -2263,24 +2266,30 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
     int line,
   ) async {
     if (content.isEmpty || loadedLineFlags.length < content.length) return;
-    final layout = ReadingLayout.continuous(
+    final layout = continuousReadingLayout(
       lineCount: content.length,
-      breakLines: readingBreakLines(
-        tableOfContents: tableOfContents,
-        content: content,
-        loadedLineFlags: loadedLineFlags,
-      ),
+      tableOfContents: tableOfContents,
     );
     final item = layout.itemForLine(line);
     final first = layout.firstLineOf(item);
     final last = layout.lastLineOf(item);
-    if (last - first + 1 > _initialItemLoadMaxLines) return;
     if (!loadedLineFlags.sublist(first, last + 1).contains(false)) return;
-    final range = await repository.getBookContentRange(
-      book,
-      startLine: first,
-      endLine: last,
-    );
+    // כישלון כאן אינו מכשיל את הפתיחה: הפסקה תיטען כמו כל פריט שלא נטען.
+    final BookContentRange? range;
+    try {
+      range = await repository.getBookContentRange(
+        book,
+        startLine: first,
+        endLine: last,
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint(
+          '⚠️ TextBookBloc::loadInitialItemRange failed for ${book.title}: $e',
+        );
+      }
+      return;
+    }
     if (range == null) return;
     for (var offset = 0; offset < range.lines.length; offset++) {
       final target = range.startLine + offset;

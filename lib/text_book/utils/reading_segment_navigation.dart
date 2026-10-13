@@ -139,10 +139,19 @@ Future<void> scrollToSourceLine({
   final instant = duration == Duration.zero;
   final fineDuration = instant ? _instantStep : duration;
 
-  // הסגמנט אינו גלוי — קפיצה ולא גלילה מונפשת: המעבר בין שתי הרשימות של
-  // החבילה דורש 2 מסכי גלילה, ונעצר על יעד שגוי כששורות שטרם נטענו בגובה ~0.
+  // יעד רחוק במצב רציף: קפיצה — המעבר המונפש בין שתי הרשימות של החבילה נעצר
+  // על יעד שגוי כשפסקאות שטרם נטענו בגובה משוער. במצב רגיל: גלילה מונפשת.
   if (_findPosition(positionsListener, segmentIndex) == null) {
-    scrollController.jumpTo(index: segmentIndex, alignment: alignment);
+    if (instant || segments.layout.continuous) {
+      scrollController.jumpTo(index: segmentIndex, alignment: alignment);
+    } else {
+      await scrollController.scrollTo(
+        index: segmentIndex,
+        alignment: alignment,
+        duration: duration,
+        curve: curve,
+      );
+    }
     await WidgetsBinding.instance.endOfFrame;
   }
 

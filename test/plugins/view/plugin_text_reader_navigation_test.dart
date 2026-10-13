@@ -16,6 +16,7 @@ import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:otzaria/text_book/view/reading_viewport/line_scroll_controller.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../../test_helpers/memory_cache_provider.dart';
+import '../../test_helpers/reading_toc.dart';
 
 class _FakeTabsBloc extends Mock implements TabsBloc {
   @override

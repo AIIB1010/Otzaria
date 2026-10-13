@@ -1647,28 +1647,36 @@ void main() {
       expect(tab.index, 39);
     });
 
-    testWidgets('Ctrl+End ו-Ctrl+Home במצב רציף מגיעים לקצות הספר', (
-      tester,
-    ) async {
-      final (tab, _) = await pumpLongBook(tester, continuous: true);
-      await tester.tap(find.byType(ScrollablePositionedList));
-      await tester.pump(kDoubleTapTimeout);
-      final modifier = Platform.isMacOS
-          ? LogicalKeyboardKey.metaLeft
-          : LogicalKeyboardKey.controlLeft;
+    for (final continuous in [false, true]) {
+      testWidgets(
+        'Ctrl+End ו-Ctrl+Home גוללים לקצות הספר '
+        '(${continuous ? 'רציף' : 'רגיל'})',
+        (tester) async {
+          final (tab, _) = await pumpLongBook(tester, continuous: continuous);
+          await tester.tap(find.byType(ScrollablePositionedList));
+          await tester.pump(kDoubleTapTimeout);
+          final modifier = Platform.isMacOS
+              ? LogicalKeyboardKey.metaLeft
+              : LogicalKeyboardKey.controlLeft;
 
-      await tester.sendKeyDownEvent(modifier);
-      await tester.sendKeyEvent(LogicalKeyboardKey.end);
-      await tester.sendKeyUpEvent(modifier);
-      await tester.pumpAndSettle();
-      expect(tab.lines.position.value?.visibleLines, contains(199));
+          await tester.sendKeyDownEvent(modifier);
+          await tester.sendKeyEvent(LogicalKeyboardKey.end);
+          await tester.sendKeyUpEvent(modifier);
+          // גלילה מונפשת של 300ms נמשכת פריימים רבים; קפיצה מתייצבת מיד.
+          final frames = await tester.pumpAndSettle(
+            const Duration(milliseconds: 20),
+          );
+          expect(frames, greaterThanOrEqualTo(10));
+          expect(tab.lines.position.value?.visibleLines, contains(199));
 
-      await tester.sendKeyDownEvent(modifier);
-      await tester.sendKeyEvent(LogicalKeyboardKey.home);
-      await tester.sendKeyUpEvent(modifier);
-      await tester.pumpAndSettle();
-      expect(tab.index, 0);
-    });
+          await tester.sendKeyDownEvent(modifier);
+          await tester.sendKeyEvent(LogicalKeyboardKey.home);
+          await tester.sendKeyUpEvent(modifier);
+          await tester.pumpAndSettle();
+          expect(tab.index, 0);
+        },
+      );
+    }
 
     testWidgets('גלילה ידנית מבטלת יעד ניווט ממתין', (tester) async {
       final (tab, state) = await pumpLongBook(tester);

@@ -1314,6 +1314,8 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     }
   }
 
+  Widget _trackUserScroll(Widget list) => _lines?.trackUserScroll(list) ?? list;
+
   /// מחבר את הטקסט הראשי ל-[LineScrollController] וממקם אותו בשורה הנוכחית.
   void _attachViewport() {
     final lines = _lines;
@@ -1333,7 +1335,10 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     if (lines.hasPendingTarget) return;
     final state = bloc.state;
     if (state is! TextBookLoaded) return;
-    final target = state.visibleIndices.firstOrNull ?? state.selectedIndex;
+    final tab = widget.tab;
+    final target = tab is TextBookTab
+        ? tab.index
+        : state.visibleIndices.firstOrNull ?? state.selectedIndex;
     // הרשימה נפתחת בראש הספר; רק יעד אחר דורש קפיצה.
     if (target == null || target <= 0 || target >= widget.content.length) {
       return;
@@ -1710,7 +1715,13 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
 
     if (logicalKey == LogicalKeyboardKey.home && isControlPressed) {
       context.read<TextBookBloc>().add(const UpdateSelectedIndex(0));
-      unawaited(_lines?.jumpToLine(0));
+      unawaited(
+        _lines?.scrollToLine(
+          0,
+          alignment: 0,
+          duration: const Duration(milliseconds: 300),
+        ),
+      );
       _requestKeyboardFocusAfterFrame('navigation-home');
       return true;
     }
@@ -1718,7 +1729,13 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     if (logicalKey == LogicalKeyboardKey.end && isControlPressed) {
       final lastIndex = widget.content.length - 1;
       context.read<TextBookBloc>().add(UpdateSelectedIndex(lastIndex));
-      unawaited(_lines?.jumpToLine(lastIndex));
+      unawaited(
+        _lines?.scrollToLine(
+          lastIndex,
+          alignment: 0,
+          duration: const Duration(milliseconds: 300),
+        ),
+      );
       _requestKeyboardFocusAfterFrame('navigation-end');
       return true;
     }
@@ -2630,24 +2647,26 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
                                         enabled: _savedSelectedText == null,
                                         scrollController: _scrollController,
                                         positionsListener: _positionsListener,
-                                        child: ScrollablePositionedList.builder(
-                                          itemScrollController:
-                                              _scrollController,
-                                          itemPositionsListener:
-                                              _positionsListener,
-                                          scrollOffsetController:
-                                              _offsetController,
-                                          itemCount: itemCount,
-                                          padding: const EdgeInsets.all(4),
-                                          itemBuilder: (context, index) =>
-                                              _buildLineItem(
-                                                context,
-                                                index,
-                                                state,
-                                                noteMap,
-                                                segments,
-                                                continuous,
-                                              ),
+                                        child: _trackUserScroll(
+                                          ScrollablePositionedList.builder(
+                                            itemScrollController:
+                                                _scrollController,
+                                            itemPositionsListener:
+                                                _positionsListener,
+                                            scrollOffsetController:
+                                                _offsetController,
+                                            itemCount: itemCount,
+                                            padding: const EdgeInsets.all(4),
+                                            itemBuilder: (context, index) =>
+                                                _buildLineItem(
+                                                  context,
+                                                  index,
+                                                  state,
+                                                  noteMap,
+                                                  segments,
+                                                  continuous,
+                                                ),
+                                          ),
                                         ),
                                       ),
                                     ),

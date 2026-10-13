@@ -1,7 +1,5 @@
-/// פריסת הקריאה: מיפוי שורות מקור לפריטי `ScrollablePositionedList`.
-///
-/// הפריסה נגזרת ממבנה הספר בלבד (מספר השורות, שורות ה-TOC ומצב הרצף) ולא
-/// מהתוכן שנטען, ולכן מספור הפריטים אינו זז בטעינת טווחים או בשחרור תוכן.
+/// מיפוי שורות מקור לפריטי הרשימה, מתוך מבנה הספר בלבד (אורך, TOC, מצב)
+/// ולא מהתוכן שנטען — כך שטעינה או שחרור אינם מזיזים את המספור.
 library;
 
 import 'package:flutter/foundation.dart';
@@ -31,8 +29,8 @@ bool isReadingHeaderLine(String line) =>
 
 final RegExp _headerPattern = RegExp(r'^\s*<h[1-6]', caseSensitive: false);
 
-/// שורה מיושרת במפורש (`text-align` / `<center>`) היא בלוק: בתוך פסקה רציפה
-/// היישור אובד. עוגנים ריקים ו-`<br>` בתחילתה אינם משנים זאת.
+/// שורה מיושרת במפורש (`text-align` / `<center>`); עוגנים ריקים ו-`<br>`
+/// בתחילתה אינם משנים זאת. אינה שוברת פריסה — תלויה בתוכן שנטען.
 bool isAlignedBlockLine(String line) =>
     _matchesLeadingTag(_alignedBlockPattern, line);
 
@@ -42,21 +40,21 @@ final RegExp _alignedBlockPattern = RegExp(
   caseSensitive: false,
 );
 
+/// רצף שורות ללא שבירה נחתך לפריטים באורך זה לכל היותר — לספר בלי TOC
+/// ולפסקאות חריגות. החיתוך לפי אינדקס בלבד, ולכן יציב.
+const int kMaxReadingParagraphLines = 200;
+
 /// פריסה בלתי-משתנה: במצב רגיל פריט לכל שורה; במצב רציף כל שורת שבירה
-/// היא פריט לבדה, וכל רצף מרבי של שורות אחרות הוא פסקה אחת.
+/// היא פריט לבדה, וכל רצף שורות אחרות הוא פסקה (חתוכה ל-[kMaxReadingParagraphLines]).
 @immutable
 class ReadingLayout {
   /// מצב רגיל — פריט לכל שורה.
   const ReadingLayout.identity(this.lineCount)
     : continuous = false,
-      _starts = null,
-      _breakItems = null;
+      _starts = null;
 
-  const ReadingLayout._continuous(
-    this.lineCount,
-    this._starts,
-    this._breakItems,
-  ) : continuous = true;
+  const ReadingLayout._continuous(this.lineCount, this._starts)
+    : continuous = true;
 
   /// [breakLines] מחוץ לטווח השורות מתעלמים מהן.
   factory ReadingLayout.continuous({
@@ -70,32 +68,25 @@ class ReadingLayout {
             .toList()
           ..sort();
     final starts = <int>[];
-    final breakItems = <bool>[];
+    void addRun(int from, int to) {
+      for (var start = from; start < to; start += kMaxReadingParagraphLines) {
+        starts.add(start);
+      }
+    }
+
     var cursor = 0;
     for (final line in breaks) {
-      if (line > cursor) {
-        starts.add(cursor);
-        breakItems.add(false);
-      }
+      addRun(cursor, line);
       starts.add(line);
-      breakItems.add(true);
       cursor = line + 1;
     }
-    if (cursor < lineCount) {
-      starts.add(cursor);
-      breakItems.add(false);
-    }
-    return ReadingLayout._continuous(
-      lineCount,
-      Int32List.fromList(starts),
-      List<bool>.unmodifiable(breakItems),
-    );
+    addRun(cursor, lineCount);
+    return ReadingLayout._continuous(lineCount, Int32List.fromList(starts));
   }
 
   final int lineCount;
   final bool continuous;
   final Int32List? _starts;
-  final List<bool>? _breakItems;
 
   int get itemCount => _starts?.length ?? lineCount;
 
@@ -138,9 +129,6 @@ class ReadingLayout {
 
   int lineCountOf(int item) => lastLineOf(item) - firstLineOf(item) + 1;
 
-  /// פריט של שורת שבירה (כותרת TOC או בלוק מיושר) במצב רציף.
-  bool isBreakItem(int item) => _breakItems?[item] ?? false;
-
   bool hasSameStructure(ReadingLayout other) {
     if (identical(this, other)) return true;
     if (lineCount != other.lineCount || continuous != other.continuous) {
@@ -151,51 +139,37 @@ class ReadingLayout {
     if (starts == null || otherStarts == null) {
       return starts == otherStarts;
     }
-    return listEquals(starts, otherStarts) &&
-        listEquals(_breakItems, other._breakItems);
+    return listEquals(starts, otherStarts);
   }
 }
 
-/// שורות השבירה של ספר במצב רציף: שורות ה-TOC, ובלוקים מיושרים רק כשכל
-/// התוכן כבר טעון (אחרת היו מופיעים באמצע הקריאה ומזיזים את המספור).
-Set<int> readingBreakLines({
+/// שורות השבירה של ספר במצב רציף: שורות ה-TOC בלבד.
+List<int> readingBreakLines(List<TocEntry> tableOfContents) => [
+  for (final entry in flattenToc(tableOfContents)) entry.index,
+];
+
+/// הפריסה הרציפה של ספר באורך [lineCount] עם [tableOfContents].
+ReadingLayout continuousReadingLayout({
+  required int lineCount,
   required List<TocEntry> tableOfContents,
-  required List<String> content,
-  List<bool>? loadedLineFlags,
-}) {
-  final breaks = <int>{
-    for (final entry in flattenToc(tableOfContents)) entry.index,
-  };
-  final allLoaded = loadedLineFlags == null
-      ? true
-      : loadedLineFlags.length >= content.length &&
-            !loadedLineFlags.take(content.length).contains(false);
-  if (allLoaded) {
-    for (var line = 0; line < content.length; line++) {
-      if (isAlignedBlockLine(content[line])) breaks.add(line);
-    }
-  }
-  return breaks;
-}
+}) => ReadingLayout.continuous(
+  lineCount: lineCount,
+  breakLines: readingBreakLines(tableOfContents),
+);
 
 class _LayoutMemo {
-  _LayoutMemo(TextBookLoaded state, this.layout)
+  _LayoutMemo(TextBookLoaded state, this.breakLines, this.layout)
     : bookTitle = state.book.title,
       lineCount = state.content.length,
-      tableOfContents = state.tableOfContents,
-      continuous = state.continuousReadingMode;
+      tableOfContents = state.tableOfContents;
 
   final String bookTitle;
   final int lineCount;
   final List<TocEntry> tableOfContents;
-  final bool continuous;
-  final ReadingLayout layout;
 
-  bool matches(TextBookLoaded state) =>
-      bookTitle == state.book.title &&
-      lineCount == state.content.length &&
-      identical(tableOfContents, state.tableOfContents) &&
-      continuous == state.continuousReadingMode;
+  /// null במצב רגיל, שבו ה-TOC אינו משפיע.
+  final List<int>? breakLines;
+  final ReadingLayout layout;
 }
 
 /// [TextBookLoaded.readerIdentity] קבוע לאורך כל ה-states של הקורא — מפתח לזיכרון.
@@ -204,27 +178,39 @@ final Expando<List<_LayoutMemo?>> _layoutMemos = Expando<List<_LayoutMemo?>>(
   'readingLayout',
 );
 
-/// הפריסה של [state]. נבנית מחדש רק כשהספר, אורכו, ה-TOC או מצב הרצף
-/// משתנים — טעינת תוכן או שחרורו מחזירים את אותו מופע.
+/// הפריסה של [state]. מופע חדש רק כשהספר, אורכו, שורות ה-TOC או מצב הרצף
+/// משתנים; TOC שונה כמופע אך זהה בתוכנו מחזיר את אותו מופע.
 ReadingLayout readingLayoutOf(TextBookLoaded state) {
   final slots = _layoutMemos[state.readerIdentity] ??= [null, null];
-  final slot = state.continuousReadingMode ? 1 : 0;
+  final continuous = state.continuousReadingMode;
+  final slot = continuous ? 1 : 0;
   final memo = slots[slot];
-  if (memo != null && memo.matches(state)) return memo.layout;
+  final sameBook =
+      memo != null &&
+      memo.bookTitle == state.book.title &&
+      memo.lineCount == state.content.length;
+  if (sameBook &&
+      (!continuous || identical(memo.tableOfContents, state.tableOfContents))) {
+    return memo.layout;
+  }
 
-  final built = state.continuousReadingMode
+  final breakLines = continuous
+      ? readingBreakLines(state.tableOfContents)
+      : null;
+  if (sameBook && listEquals(memo.breakLines, breakLines)) {
+    slots[slot] = _LayoutMemo(state, breakLines, memo.layout);
+    return memo.layout;
+  }
+
+  final built = breakLines != null
       ? ReadingLayout.continuous(
           lineCount: state.content.length,
-          breakLines: readingBreakLines(
-            tableOfContents: state.tableOfContents,
-            content: state.content,
-            loadedLineFlags: state.loadedLineFlags,
-          ),
+          breakLines: breakLines,
         )
       : ReadingLayout.identity(state.content.length);
   final layout = memo != null && memo.layout.hasSameStructure(built)
       ? memo.layout
       : built;
-  slots[slot] = _LayoutMemo(state, layout);
+  slots[slot] = _LayoutMemo(state, breakLines, layout);
   return layout;
 }

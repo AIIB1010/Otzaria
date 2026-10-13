@@ -915,8 +915,9 @@ class _CombinedViewState extends State<CombinedView> {
           )
         : 0.0;
     unawaited(
-      lines.jumpToLine(
+      lines.scrollToLine(
         initialIndex,
+        duration: const Duration(milliseconds: 300),
         intraLineFraction: intraLineFraction,
         alignment: isFromSearch
             ? kSearchResultAnchorAlignment
@@ -2088,17 +2089,19 @@ class _CombinedViewState extends State<CombinedView> {
       offsetController: widget.tab.lines.offsetController,
       itemCount: itemCount,
       child: SmoothWheelScroll(
-        child: ScrollablePositionedList.builder(
-          initialScrollIndex: clampedInitial,
-          itemScrollController: widget.tab.lines.itemController,
-          itemPositionsListener: widget.tab.lines.positionsListener,
-          scrollOffsetController: widget.tab.lines.offsetController,
-          itemCount: itemCount,
-          itemBuilder: (context, index) => RepaintBoundary(
-            child: buildExpansiomTile(
-              index,
-              state,
-              const <int, List<PersonalNote>>{},
+        child: widget.tab.lines.trackUserScroll(
+          ScrollablePositionedList.builder(
+            initialScrollIndex: clampedInitial,
+            itemScrollController: widget.tab.lines.itemController,
+            itemPositionsListener: widget.tab.lines.positionsListener,
+            scrollOffsetController: widget.tab.lines.offsetController,
+            itemCount: itemCount,
+            itemBuilder: (context, index) => RepaintBoundary(
+              child: buildExpansiomTile(
+                index,
+                state,
+                const <int, List<PersonalNote>>{},
+              ),
             ),
           ),
         ),
@@ -2129,7 +2132,7 @@ class _CombinedViewState extends State<CombinedView> {
 
     // המצב ב-key מאלץ יצירת רשימה חדשה בהחלפת מצב רציף, כך שהפריים הראשון
     // כבר מצויר ב-initialScrollIndex הנכון — בלי הבזק של מיקום שגוי.
-    return ScrollablePositionedList.builder(
+    final list = ScrollablePositionedList.builder(
       key: ValueKey(
         'combined-${widget.tab.book.title}-${state.continuousReadingMode}',
       ),
@@ -2169,6 +2172,7 @@ class _CombinedViewState extends State<CombinedView> {
         return ViewportAlignedSelectionContainer(child: tile);
       },
     );
+    return widget.tab.lines.trackUserScroll(list);
   }
 
   Widget buildExpansiomTile(
@@ -3047,7 +3051,11 @@ class _CombinedViewState extends State<CombinedView> {
 
   @override
   Widget build(BuildContext context) {
-    return buildKeyboardListener();
+    // קישורים פנימיים מנווטים דרך ה-scope — גם בתצוגה המקדימה, שאינה בתוך הקורא.
+    return LineScrollScope(
+      controller: widget.tab.lines,
+      child: buildKeyboardListener(),
+    );
   }
 
   // [EDITING DISABLED]

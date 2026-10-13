@@ -6,6 +6,8 @@ import 'package:otzaria/text_book/utils/reading_segment_navigation.dart';
 import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
+import '../../test_helpers/reading_toc.dart';
+
 void main() {
   group('isRemnantAbovePositionAnchor', () {
     test('קטע שנגמר בקו העוגן ומתחיל מעליו - שייר', () {
@@ -250,7 +252,7 @@ void main() {
         ],
         continuous: true,
         loadedLineFlags: partialFlags,
-        breakLines: contentBreakLines(lines),
+        breakLines: readingBreakLines(headerToc(lines)),
       );
       final full = buildReadingSegments(lines, continuous: true);
       expect(full.length, partial.length);

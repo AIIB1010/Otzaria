@@ -98,8 +98,6 @@ class ReadingSegments {
 
   ReadingSegment get last => this[length - 1];
 
-  List<ReadingSegment> toList() => [for (var i = 0; i < length; i++) this[i]];
-
   bool _isLineLoaded(int line) {
     final flags = loadedLineFlags;
     if (flags == null) return true;
@@ -155,42 +153,6 @@ class ReadingSegments {
       isHeader: false,
     );
   }
-}
-
-/// שורות השבירה שנגזרות מהשורות עצמן (כותרות ובלוקים מיושרים טעונים) —
-/// למקור שאין לו TOC. הקורא משתמש ב-[readingSegmentsOf], שנשען על ה-TOC.
-Set<int> contentBreakLines(List<String> lines, {List<bool>? loadedLineFlags}) {
-  bool isLoaded(int line) =>
-      loadedLineFlags == null ||
-      (line < loadedLineFlags.length && loadedLineFlags[line]);
-  return {
-    for (var line = 0; line < lines.length; line++)
-      if (isLoaded(line) &&
-          (isReadingHeaderLine(lines[line]) || isAlignedBlockLine(lines[line])))
-        line,
-  };
-}
-
-/// סגמנטים מרשימת שורות; ללא [breakLines] השבירות נגזרות מהשורות עצמן.
-ReadingSegments buildReadingSegments(
-  List<String> lines, {
-  required bool continuous,
-  List<bool>? loadedLineFlags,
-  Iterable<int>? breakLines,
-}) {
-  final layout = continuous
-      ? ReadingLayout.continuous(
-          lineCount: lines.length,
-          breakLines:
-              breakLines ??
-              contentBreakLines(lines, loadedLineFlags: loadedLineFlags),
-        )
-      : ReadingLayout.identity(lines.length);
-  return ReadingSegments(
-    layout: layout,
-    content: lines,
-    loadedLineFlags: loadedLineFlags,
-  );
 }
 
 final Expando<ReadingSegments> _segmentsByContent = Expando<ReadingSegments>(

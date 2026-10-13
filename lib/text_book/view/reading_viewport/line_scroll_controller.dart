@@ -87,14 +87,12 @@ class LineScrollController {
 
   /// יעד שנחת על פריט שטרם נטען: ממתינים לטעינתו ומדייקים שוב.
   _Target? _awaitingLoad;
-  ItemPosition? _awaitingItemPosition;
   int _token = 0;
   int _navigating = 0;
   ReadingSegments? _measuredSegments;
   List<ItemPosition> _measuredPositions = const [];
+  bool _userScrollActive = false;
   bool _disposed = false;
-
-  int get navigationGeneration => itemController.navigationGeneration;
 
   bool get isAttached => _external != null || _nativeReady;
 
@@ -111,6 +109,7 @@ class LineScrollController {
 
   set externalNavigator(ExternalLineNavigator? navigator) {
     _external = navigator;
+    if (navigator != null) _forgetMeasured();
     final pending = _pending;
     if (navigator != null && pending != null) {
       _pending = null;
@@ -168,6 +167,7 @@ class LineScrollController {
     );
     final external = _external;
     if (external != null) {
+      _forgetMeasured();
       _pending = null;
       _token++;
       itemController
@@ -206,7 +206,34 @@ class LineScrollController {
   /// מיקום שדווח מקורא חיצוני.
   void reportExternalLine(int line) {
     if (line < 0) return;
+    _forgetMeasured();
     _publish(ReadingPosition.target(line));
+  }
+
+  /// המדידה האחרונה של הרשימה אינה המיקום עוד; בלי זה חיבור מחדש היה חוזר אליה.
+  void _forgetMeasured() {
+    _measuredSegments = null;
+    _measuredPositions = const [];
+  }
+
+  /// לעטיפת רשימת הקורא: מבחין בין גלילת משתמש לבין ניווט ושינויי גובה.
+  Widget trackUserScroll(Widget list) =>
+      NotificationListener<ScrollNotification>(
+        onNotification: _onScrollNotification,
+        child: list,
+      );
+
+  bool _onScrollNotification(ScrollNotification notification) {
+    if (notification.depth != 0) return false;
+    if (notification is ScrollStartNotification) {
+      _userScrollActive = _navigating == 0;
+    } else if (notification is ScrollEndNotification) {
+      _userScrollActive = false;
+    } else if (notification is ScrollUpdateNotification && _navigating == 0) {
+      // רק גלילה של המשתמש מוותרת על דיוק ממתין; שינוי גובה אינו גולל.
+      _awaitingLoad = null;
+    }
+    return false;
   }
 
   /// הנקודה שעל קו העוגן עכשיו.
@@ -222,16 +249,6 @@ class LineScrollController {
             );
     }
     return _anchorFrom(segments, positionsListener.itemPositions.value);
-  }
-
-  Future<void> restoreAnchor(ReadingAnchor anchor) {
-    if (!_nativeReady) {
-      _token++;
-      _pending = _Target.anchor(anchor);
-      return Future.value();
-    }
-    _pending = null;
-    return _run(_Target.anchor(anchor));
   }
 
   /// לפני שינוי רוחב: קובע את הרשימה על הפריט העליון, ואחרי הפריסה מחזיר את
@@ -302,7 +319,6 @@ class LineScrollController {
       final item = landed.layout.itemForLine(target.line);
       if (!landed[item].isLoaded) {
         _awaitingLoad = target.instant;
-        _awaitingItemPosition = _positionOf(item);
         return;
       }
     }
@@ -319,7 +335,8 @@ class LineScrollController {
     if (segments == null || segments.isEmpty) return;
     final previousSegments = _measuredSegments;
 
-    if (_pending != null) {
+    final pending = _pending;
+    if (pending != null && !pending.waitForAttach) {
       _flushPending();
       return;
     }
@@ -327,11 +344,13 @@ class LineScrollController {
 
     final awaiting = _awaitingLoad;
     if (awaiting != null) {
-      _onPositionsWhileAwaitingLoad(awaiting, segments, previousSegments);
+      _onPositionsWhileAwaitingLoad(awaiting, segments);
       return;
     }
 
-    if (previousSegments != null && !identical(previousSegments, segments)) {
+    if (!_userScrollActive &&
+        previousSegments != null &&
+        !identical(previousSegments, segments)) {
       final anchor = _anchorFrom(previousSegments, _measuredPositions);
       if (anchor != null &&
           _relayoutMovesAnchor(previousSegments, segments, anchor)) {
@@ -355,8 +374,10 @@ class LineScrollController {
     if (!_loadedChangedUpTo(before, after, anchor.line)) return false;
     final item = after.layout.itemForLine(anchor.line);
     final itemPosition = _positionOf(item);
+    // העוגן מחוץ לתצוגה: המשתמש כבר במקום אחר (למשל קפיצה בפס הגלילה).
+    if (itemPosition == null) return false;
     final extent = _binding?.viewportExtent() ?? 0;
-    if (itemPosition == null || extent <= 0) return true;
+    if (extent <= 0) return true;
     final edges = lineEdgesInViewport(after[item], anchor.line, itemPosition);
     final edge =
         edges.leading +
@@ -383,7 +404,6 @@ class LineScrollController {
   void _onPositionsWhileAwaitingLoad(
     _Target awaiting,
     ReadingSegments segments,
-    ReadingSegments? previousSegments,
   ) {
     final item = segments.layout.itemForLine(awaiting.line);
     if (segments[item].isLoaded) {
@@ -392,21 +412,7 @@ class LineScrollController {
       unawaited(_run(awaiting));
       return;
     }
-    final now = _positionOf(item);
-    final before = _awaitingItemPosition;
-    _awaitingItemPosition = now;
-    // תזוזה בלי שינוי תוכן היא גלילה של המשתמש — מוותרים על הדיוק.
-    final contentChanged =
-        previousSegments != null && !identical(previousSegments, segments);
-    final moved =
-        before == null ||
-        now == null ||
-        (now.itemLeadingEdge - before.itemLeadingEdge).abs() > 0.0005;
     _measuredSegments = segments;
-    if (moved && !contentChanged) {
-      _awaitingLoad = null;
-      _measure();
-    }
   }
 
   /// [landed] הוא יעד שהניווט הסתיים בו. בראש הספר הוא נעצר מעל קו העוגן כי אין

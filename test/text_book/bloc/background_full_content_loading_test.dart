@@ -290,8 +290,17 @@ void main() {
   );
 
   test('פסקה רציפה שלא נטענה כולה מבקשת את כל טווח שורותיה', () async {
-    // פסקה אחת בשורות 1..1999 בין שתי כותרות; רק סביב שורה 1000 טעון.
+    // שורות 1..1999 בין שתי כותרות (נחתכות לפריטים); רק סביב שורה 1000 טעון.
     const lineCount = 2100;
+    final toc = [
+      TocEntry(text: 'פתיחה', index: 0),
+      TocEntry(text: 'סיום', index: 2000),
+    ];
+    final layout = continuousReadingLayout(
+      lineCount: lineCount,
+      tableOfContents: toc,
+    );
+    final item = layout.itemForLine(1000);
     final flags = [
       for (var i = 0; i < lineCount; i++) i >= 990 && i <= 1010,
     ];
@@ -305,10 +314,7 @@ void main() {
       ).copyWith(
         loadedLineFlags: flags,
         showLeftPane: false,
-        tableOfContents: [
-          TocEntry(text: 'פתיחה', index: 0),
-          TocEntry(text: 'סיום', index: 2000),
-        ],
+        tableOfContents: toc,
       ),
     );
     bloc.add(const UpdateVisibleIndecies([999, 1000, 1001]));
@@ -317,7 +323,8 @@ void main() {
 
     expect(repository.requestedRanges, isNotEmpty);
     final requested = repository.requestedRanges.last;
-    expect(requested.startLine, lessThanOrEqualTo(1));
-    expect(requested.endLine, greaterThanOrEqualTo(1999));
+    expect(layout.lineCountOf(item), greaterThan(21));
+    expect(requested.startLine, lessThanOrEqualTo(layout.firstLineOf(item)));
+    expect(requested.endLine, greaterThanOrEqualTo(layout.lastLineOf(item)));
   });
 }

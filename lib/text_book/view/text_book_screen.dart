@@ -3353,13 +3353,25 @@ bool _handleGlobalKeyEvent(
     switch (event.logicalKey) {
       // Ctrl+Home - תחילת הספר
       case LogicalKeyboardKey.home:
-        unawaited(tab.lines.jumpToLine(0));
+        unawaited(
+          tab.lines.scrollToLine(
+            0,
+            alignment: 0,
+            duration: const Duration(milliseconds: 300),
+          ),
+        );
         return true;
 
       // Ctrl+End - סוף הספר
       case LogicalKeyboardKey.end:
         if (state.content.isNotEmpty) {
-          unawaited(tab.lines.jumpToLine(state.content.length - 1));
+          unawaited(
+            tab.lines.scrollToLine(
+              state.content.length - 1,
+              alignment: 0,
+              duration: const Duration(milliseconds: 300),
+            ),
+          );
         }
         return true;
     }

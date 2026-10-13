@@ -36,7 +36,7 @@ Future<Bookmark?> bookmarkFromReadingTab(
   if (tab is CommentatorsTab) {
     final blocState = tab.bloc.state;
     if (blocState is TextBookLoaded && blocState.visibleIndices.isNotEmpty) {
-      final index = blocState.visibleIndices.first;
+      final index = tab.currentIndex;
       final ref = await _lineRef(
         blocState.book,
         index,

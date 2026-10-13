@@ -2,6 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/text_book/utils/reading_segment_navigation.dart';
 import 'package:otzaria/text_book/utils/reading_segments.dart';
 
+import '../../test_helpers/reading_toc.dart';
+
 void main() {
   group('isReadingHeaderLine', () {
     test('מזהה תגי כותרת h1–h6', () {
@@ -68,11 +70,14 @@ void main() {
       ];
       for (final continuous in [false, true]) {
         debugReadingTagPatternChecks = 0;
-        buildReadingSegments(
+        final segments = buildReadingSegments(
           lines,
           continuous: continuous,
           loadedLineFlags: List<bool>.filled(lines.length, true),
-        ).toList();
+        );
+        for (var i = 0; i < segments.length; i++) {
+          segments[i];
+        }
         expect(debugReadingTagPatternChecks, inInclusiveRange(2, 6));
       }
     });
@@ -165,26 +170,6 @@ void main() {
       expect(segments[1].sourceLineIndices, [1]);
       expect(segments[2].sourceLineIndices, [2]);
     });
-
-    test(
-      'שורה מיושרת שוברת פסקה ונשארת קטע נפרד שאינו כותרת (issue #1293)',
-      () {
-        final lines = [
-          'שורה לפני',
-          '<div style="text-align: center;"><b>כותרת קבוצה</b></div>',
-          'שורה אחרי',
-          'עוד שורה',
-        ];
-        final segments = buildReadingSegments(lines, continuous: true);
-
-        expect(segments, hasLength(3));
-        expect(segments[0].sourceLineIndices, [0]);
-        expect(segments[1].sourceLineIndices, [1]);
-        expect(segments[1].isHeader, isFalse);
-        expect(segments[1].text, lines[1]);
-        expect(segments[2].sourceLineIndices, [2, 3]);
-      },
-    );
 
     test('lineRanges פסקאיים מצביעים על מיקום מדויק בטקסט המאוחד', () {
       final lines = ['אאא', 'בבב'];

@@ -297,8 +297,8 @@ class HtmlLinkHandler {
           : await _findHeaderPath(state.book, segments);
 
       if (resolved.index != null) {
-        // ניווט לאינדקס שנמצא
-        await lines?.scrollToLine(resolved.index!);
+        if (lines == null) return;
+        await lines.scrollToLine(resolved.index!);
 
         if (context.mounted) {
           UiSnack.show(

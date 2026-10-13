@@ -71,10 +71,8 @@ void main() {
       expect(layout.itemCount, 6);
       for (var chapter = 0; chapter < 3; chapter++) {
         final header = chapter * 2;
-        expect(layout.isBreakItem(header), isTrue);
         expect(layout.firstLineOf(header), chapter * 10);
         expect(layout.lastLineOf(header), chapter * 10);
-        expect(layout.isBreakItem(header + 1), isFalse);
         expect(layout.firstLineOf(header + 1), chapter * 10 + 1);
         expect(layout.lastLineOf(header + 1), chapter * 10 + 9);
       }
@@ -96,25 +94,34 @@ void main() {
       expect(layout.itemForLine(1000), layout.itemCount - 1);
     });
 
-    test('שורה מיושרת שאינה ב-TOC נשברת רק כשכל התוכן טעון', () {
+    test('שורה מיושרת אינה משנה את הפריסה, טעונה או לא (issue #1293)', () {
+      final controller = Object();
       final lines = [
         'פתיחה',
         '<center>הדרן</center>',
         'המשך',
       ];
-      final loaded = readingLayoutOf(
-        _state(content: lines, tableOfContents: const []),
+      final partial = _state(
+        content: const ['פתיחה', '', ''],
+        tableOfContents: const [],
+        loadedLineFlags: const [true, false, false],
+        readerIdentity: controller,
       );
-      expect(loaded.itemCount, 3);
+      final layout = readingLayoutOf(partial);
+      expect(layout.itemCount, 1);
 
-      final partial = readingLayoutOf(
-        _state(
-          content: lines,
-          tableOfContents: const [],
-          loadedLineFlags: const [true, true, false],
-        ),
+      final full = partial.copyWith(
+        content: lines,
+        loadedLineFlags: const [true, true, true],
       );
-      expect(partial.itemCount, 1);
+      expect(identical(readingLayoutOf(full), layout), isTrue);
+      expect(
+        readingLayoutOf(
+          _state(content: lines, tableOfContents: const []),
+        ).itemCount,
+        1,
+      );
+      expect(readingSegmentsOf(full)[0].text, contains('הדרן'));
     });
 
     test('ספר בלי TOC במצב רציף הוא פריט אחד', () {
@@ -123,6 +130,37 @@ void main() {
       );
       expect(layout.itemCount, 1);
       expect(layout.lastLineOf(0), _lines.length - 1);
+    });
+
+    test('רצף ארוך בלי שבירה נחתך כל $kMaxReadingParagraphLines שורות', () {
+      const max = kMaxReadingParagraphLines;
+      final noToc = ReadingLayout.continuous(
+        lineCount: max * 2 + 50,
+        breakLines: const [],
+      );
+      expect(noToc.itemCount, 3);
+      expect(noToc.firstLineOf(1), max);
+      expect(noToc.firstLineOf(2), max * 2);
+      expect(noToc.lastLineOf(2), max * 2 + 49);
+
+      // החיתוך נמדד מתחילת הרצף, אחרי שורת השבירה.
+      final withBreak = ReadingLayout.continuous(
+        lineCount: 10 + max + 5,
+        breakLines: const [9],
+      );
+      expect(
+        [
+          for (var i = 0; i < withBreak.itemCount; i++)
+            (withBreak.firstLineOf(i), withBreak.lastLineOf(i)),
+        ],
+        [(0, 8), (9, 9), (10, 10 + max - 1), (10 + max, 10 + max + 4)],
+      );
+
+      final exact = ReadingLayout.continuous(
+        lineCount: max,
+        breakLines: const [],
+      );
+      expect(exact.itemCount, 1);
     });
 
     test('מצב רגיל הוא זהות: פריט לכל שורה', () {
@@ -195,6 +233,21 @@ void main() {
       expect(after[3].isLoaded, isTrue);
       expect(after[3].sourceLineIndices, before[3].sourceLineIndices);
       expect(after[3].text, startsWith('פסוק 1 בפרק 2 פסוק 2 בפרק 2'));
+    });
+
+    test('TOC חדש כמופע וזהה בתוכנו מחזיר את אותה פריסה', () {
+      final controller = Object();
+      final state = _state(content: _lines, readerIdentity: controller);
+      final layout = readingLayoutOf(state);
+      final sameToc = state.copyWith(tableOfContents: _chapterToc());
+      expect(identical(readingLayoutOf(sameToc), layout), isTrue);
+      // state ישן אחרי החדש לא בונה מחדש.
+      expect(identical(readingLayoutOf(state), layout), isTrue);
+
+      final otherToc = state.copyWith(
+        tableOfContents: [TocEntry(text: 'פרק', index: 5)],
+      );
+      expect(readingLayoutOf(otherToc).itemCount, 3);
     });
 
     test('הפריסה נבנית מחדש בהחלפת מצב רציף', () {
