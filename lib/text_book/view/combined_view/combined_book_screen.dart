@@ -1662,7 +1662,7 @@ class _CombinedViewState extends State<CombinedView> {
         clickedIndex ??
         _savedSelectedIndex.value ??
         state.selectedIndex ??
-        (state.visibleIndices.isNotEmpty ? state.visibleIndices.first : 0);
+        widget.tab.index;
 
     // קבלת הטקסט המזהה של השורה - אם יש טקסט נבחר, משתמשים בו (אחרי הסרת ניקוד), אחרת בטקסט המזהה (כמו שיוצג ככותרת)
     final referenceText = selectedText?.trim().isNotEmpty == true
@@ -1740,7 +1740,11 @@ class _CombinedViewState extends State<CombinedView> {
     );
   }
 
-  ({SelectionWindow window, SelectionLine Function(int) lineAt})
+  ({
+    SelectionWindow window,
+    SelectionLine Function(int) lineAt,
+    SelectionParagraphs? paragraphs,
+  })
   _buildSelectionWindow(
     TextBookLoaded state,
     SettingsState settingsState,
@@ -1764,7 +1768,17 @@ class _CombinedViewState extends State<CombinedView> {
       selectionLength: selectionLength,
       renderLine: (index) => lineAt(index).text,
     );
-    return (window: window, lineAt: lineAt);
+    final paragraphs = readerSelectionParagraphs(
+      layout: readingLayoutOf(state),
+      lines: widget.data,
+      baseIndex: window.baseIndex,
+      sectionHeadings: _sectionHeadingsByLine,
+      splitsAfter: (line) =>
+          widget.showCommentaryAsExpansionTiles &&
+          state.selectedIndices.contains(line) &&
+          _hasCommentaries(state, line),
+    );
+    return (window: window, lineAt: lineAt, paragraphs: paragraphs);
   }
 
   final _selectionLineCache = SelectionLineCache();
@@ -1849,7 +1863,11 @@ class _CombinedViewState extends State<CombinedView> {
                         final settingsState = context
                             .read<SettingsBloc>()
                             .state;
-                        final (:window, :lineAt) = _buildSelectionWindow(
+                        final (
+                          :window,
+                          :lineAt,
+                          :paragraphs,
+                        ) = _buildSelectionWindow(
                           loadedState,
                           settingsState,
                           plain!.length,
@@ -1866,6 +1884,7 @@ class _CombinedViewState extends State<CombinedView> {
                           preferredLine: previousIndex == null
                               ? null
                               : previousIndex - baseIndex,
+                          paragraphs: paragraphs,
                         );
                         fixedPlain = restored.text;
 

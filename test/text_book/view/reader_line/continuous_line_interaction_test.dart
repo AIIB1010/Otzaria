@@ -349,6 +349,63 @@ void main() {
     expect(copied, ['רביעית']);
   });
 
+  for (final simple in [false, true]) {
+    final screen = simple ? 'צורת הדף' : 'עיון';
+    for (final continuous in [true, false]) {
+      testWidgets(
+        '$screen: העתקת בחירה על פני שורות — continuous=$continuous',
+        (tester) async {
+          final copied = <String>[];
+          debugSelectedTextCopyHandler = (content) =>
+              copied.add(content.plainText);
+          addTearDown(() => debugSelectedTextCopyHandler = null);
+          await _pump(
+            tester,
+            simple: simple,
+            adjust: (s) => s.copyWith(continuousReadingMode: continuous),
+          );
+          await _selectRange(
+            tester,
+            _textRect(tester, 'ראשונה'),
+            _textRect(tester, 'שלישית'),
+          );
+          await _pressCtrlC(tester);
+          final separator = continuous ? ' ' : '\n';
+          expect(copied, [
+            ['ראשונה מילה', 'שורה שניה', 'שורה שלישית'].join(separator),
+          ]);
+        },
+      );
+    }
+  }
+
+  testWidgets('עיון: העתקה עם שם הספר במצב רציף נשארת פסקה אחת', (
+    tester,
+  ) async {
+    final copied = <String>[];
+    debugSelectedTextCopyHandler = (content) => copied.add(content.plainText);
+    addTearDown(() => debugSelectedTextCopyHandler = null);
+    await _pump(
+      tester,
+      simple: false,
+      book: _NoTocBook(),
+      settings: SettingsState.initial().copyWith(
+        copyWithHeaders: 'book_name',
+        copyHeaderFormat: 'same_line_after_brackets',
+      ),
+    );
+    await _selectRange(
+      tester,
+      _textRect(tester, 'שניה'),
+      _textRect(tester, 'רביעית'),
+    );
+    await _pressCtrlC(tester);
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    expect(copied, ['שניה שורה שלישית מילה שורה רביעית (ספר בדיקה)']);
+  });
+
   testWidgets('עיון: הדגשת ?mark אינה זולגת לפריט שמספרו כמספר השורה', (
     tester,
   ) async {
@@ -526,6 +583,27 @@ Future<void> _selectWord(WidgetTester tester, Rect word) async {
   await gesture.moveTo(Offset(word.left + 1, word.center.dy));
   await tester.pump();
   await gesture.up();
+  await tester.pump();
+}
+
+/// גרירה מתחילת [from] עד סוף [to] (מימין לשמאל).
+Future<void> _selectRange(WidgetTester tester, Rect from, Rect to) async {
+  final gesture = await tester.startGesture(
+    Offset(from.right - 1, from.center.dy),
+    kind: PointerDeviceKind.mouse,
+  );
+  await tester.pump();
+  await gesture.moveTo(Offset(to.left + 1, to.center.dy));
+  await tester.pump();
+  await gesture.up();
+  await tester.pump();
+}
+
+Future<void> _pressCtrlC(WidgetTester tester) async {
+  await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+  await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
+  await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+  await tester.runAsync(() => Future<void>.delayed(Duration.zero));
   await tester.pump();
 }
 

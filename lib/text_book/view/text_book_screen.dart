@@ -1136,12 +1136,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
         if (settings.commentatorsBelow != null) {
           textBookBloc.add(ToggleSplitView(!settings.commentatorsBelow!));
         }
-        // ניקוד/פיסוק/טעמים נטענים כשכבת ספר בתוך LoadContent, לא כאן.
-        if (settings.continuousReadingMode != null) {
-          textBookBloc.add(
-            ToggleContinuousReadingMode(settings.continuousReadingMode!),
-          );
-        }
+        // ניקוד/פיסוק/טעמים ומצב רציף נטענים בתוך LoadContent, לפני הבנייה.
         break;
       }
     }

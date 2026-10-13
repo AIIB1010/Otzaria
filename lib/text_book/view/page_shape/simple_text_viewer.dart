@@ -1472,6 +1472,13 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
       selectedText: persistedText,
       visibleLines: renderedLines,
       preferredLine: previousIndex == null ? null : previousIndex - baseIndex,
+      paragraphs: widget.isMainText
+          ? readerSelectionParagraphs(
+              layout: readingLayoutOf(textBookState),
+              lines: widget.content,
+              baseIndex: baseIndex,
+            )
+          : null,
     );
     final restoredText = restored.text;
 

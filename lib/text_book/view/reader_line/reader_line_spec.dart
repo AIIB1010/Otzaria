@@ -3,6 +3,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:otzaria/book_common/selection/selected_text_restore.dart';
 import 'package:otzaria/plugins/models/plugin_book_identity.dart';
 import 'package:otzaria/plugins/services/plugin_highlight_registry.dart';
 import 'package:otzaria/plugins/services/plugin_highlight_renderer.dart';
@@ -81,6 +82,49 @@ bool isReaderBlockLine(String rawLine) =>
     isAlignedBlockLine(rawLine) ||
     rawLine.contains(kMarkdownBlockClass) ||
     (rawLine.contains('<') && _blockMarkup.hasMatch(rawLine));
+
+/// טקסט כותרות הנושא שמוצג בתוך פסקה ממוזגת לפני השורה שהן פותחות.
+String? readerInlineHeading(List<String>? headings) =>
+    headings == null || headings.isEmpty ? null : headings.join(' · ');
+
+/// האם [line] מוצגת בתוך פסקה ממוזגת ולא כפריט או כבלוק משלה.
+bool readerLineInParagraph(
+  ReadingLayout layout,
+  List<String> lines,
+  int line,
+) =>
+    layout.continuous &&
+    line >= 0 &&
+    line < lines.length &&
+    layout.lineCountOf(layout.itemForLine(line)) > 1 &&
+    !isReaderBlockLine(lines[line]);
+
+/// מבנה הפסקאות של חלון בחירה שמתחיל בשורה [baseIndex]; null במצב רגיל.
+/// [splitsAfter] — שורה שאחריה הפסקה נחתכת (כרטיס מפרשים מתחתיה).
+SelectionParagraphs? readerSelectionParagraphs({
+  required ReadingLayout layout,
+  required List<String> lines,
+  required int baseIndex,
+  Map<int, List<String>> sectionHeadings = const {},
+  bool Function(int line)? splitsAfter,
+}) {
+  if (!layout.continuous) return null;
+  return (
+    joinsNext: (windowLine) {
+      final line = baseIndex + windowLine;
+      return readerLineInParagraph(layout, lines, line) &&
+          readerLineInParagraph(layout, lines, line + 1) &&
+          layout.itemForLine(line) == layout.itemForLine(line + 1) &&
+          !(splitsAfter?.call(line) ?? false);
+    },
+    headingAt: (windowLine) {
+      final line = baseIndex + windowLine;
+      return readerLineInParagraph(layout, lines, line)
+          ? readerInlineHeading(sectionHeadings[line])
+          : null;
+    },
+  );
+}
 
 /// מה שמשתנה בין המסכים: מקור השורות, הזרקות ה-HTML שלהם וגופן הטור.
 @immutable
@@ -263,7 +307,6 @@ ContinuousReadingParagraphLine readerParagraphLine(
     ];
   }
   html = html.trim();
-  final headings = spec.sectionHeadings;
   return ContinuousReadingParagraphLine(
     lineIndex: spec.lineIndex,
     htmlText: html,
@@ -271,7 +314,7 @@ ContinuousReadingParagraphLine readerParagraphLine(
     frameRanges: ranges,
     background: readerLineBackgroundColor(spec.marks.background, colorScheme),
     selected: spec.marks.isSelected,
-    heading: headings == null || headings.isEmpty ? null : headings.join(' · '),
+    heading: readerInlineHeading(spec.sectionHeadings),
   );
 }
 

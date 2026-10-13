@@ -321,20 +321,21 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
   /// - ספר שלא תומך → תמיד false.
   /// - אם הדגל [preserveFlag] פעיל ו-currentState הוא Loaded → שומרים
   ///   את הערך הקודם של המשתמש.
-  /// - אחרת — ברירת המחדל הגלובלית [globalDefault]. זה גם המסלול של
-  ///   `_resetPerBookSettings` (חוזר לברירת המחדל) ושל פתיחת ספר חדש.
+  /// - אחרת — הגדרת הספר [perBookValue], ובלעדיה ברירת המחדל הגלובלית
+  ///   [globalDefault]: כך כבר ה-Loaded הראשון בונה את הפריסה הנכונה.
   @visibleForTesting
   static bool resolvePreservedContinuousReadingMode({
     required bool supportsContinuous,
     required bool preserveFlag,
     required TextBookState? currentState,
     bool globalDefault = false,
+    bool? perBookValue,
   }) {
     if (!supportsContinuous) return false;
     if (preserveFlag && currentState is TextBookLoaded) {
       return currentState.continuousReadingMode;
     }
-    return globalDefault;
+    return perBookValue ?? globalDefault;
   }
 
   /// האם לשדר עכשיו עדכון `visibleIndices`, או לדלג ולהשאיר את השידור
@@ -854,10 +855,11 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
             SettingsRepository.keyEnablePerBookSettings,
           ) ??
           false;
-      final bookDisplayLayer = perBookSettingsEnabled
-          ? (await TextBookPerBookSettings.load(book))?.effectiveDisplayLayer ??
-                TextDisplayLayer.empty
-          : TextDisplayLayer.empty;
+      final perBookSettings = perBookSettingsEnabled
+          ? await TextBookPerBookSettings.load(book)
+          : null;
+      final bookDisplayLayer =
+          perBookSettings?.effectiveDisplayLayer ?? TextDisplayLayer.empty;
       // שינוי הגדרות ניקוד/פיסוק גלובלי מפיל את העקיפה הזמנית של הגוף באותו
       // שדה כדי שהערך החדש ייראה; שינוי גופן בלבד משמר את בחירת המשתמש.
       // עקיפות כרטיסיית המפרשים נשמרות תמיד.
@@ -871,18 +873,11 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
                   )
                 : patch,
           );
-      final supportsContinuousReading = await FileSystemData.instance
-          .supportsContinuousReadingMode(
-            book.title,
-            categoryId: book.categoryId,
-            fileType: book.fileType,
-          );
+      final supportsContinuousReading = await repository
+          .supportsContinuousReadingMode(book);
 
-      // מצב הרצף שומר את הערך הנוכחי רק כש-preserveContinuousReadingMode=true.
-      // הלוגיקה הזו מנופית ל-`resolvePreservedContinuousReadingMode` כדי
-      // שתוכל להיבדק טהורה: _resetPerBookSettings סומך על default=false,
-      // וה-listener על שינוי גופן/ניקוד מעביר preserveFlag=true כדי לא
-      // לכבות מצב רצף שהמשתמש בחר.
+      // טעינה מחדש בשינוי גופן/ניקוד (preserveFlag) שומרת את בחירת המשתמש;
+      // פתיחה ואיפוס הגדרות הספר — הגדרת הספר או ברירת המחדל.
       final defaultContinuousReading =
           Settings.getValue<bool>('key-continuous-reading-mode') ?? false;
       final effectiveContinuousReading = resolvePreservedContinuousReadingMode(
@@ -890,6 +885,7 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
         preserveFlag: event.preserveContinuousReadingMode,
         currentState: state,
         globalDefault: defaultContinuousReading,
+        perBookValue: perBookSettings?.continuousReadingMode,
       );
       if (effectiveContinuousReading &&
           _supportsContentRangeLoading &&

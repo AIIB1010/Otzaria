@@ -90,6 +90,28 @@ void main() {
       );
     });
 
+    test('הגדרת הספר גוברת על ברירת המחדל, ושימור גובר על שתיהן', () {
+      expect(
+        TextBookBloc.resolvePreservedContinuousReadingMode(
+          supportsContinuous: true,
+          preserveFlag: false,
+          currentState: null,
+          globalDefault: false,
+          perBookValue: true,
+        ),
+        isTrue,
+      );
+      expect(
+        TextBookBloc.resolvePreservedContinuousReadingMode(
+          supportsContinuous: true,
+          preserveFlag: true,
+          currentState: loadedFalse,
+          perBookValue: true,
+        ),
+        isFalse,
+      );
+    });
+
     test('preserveFlag=true + state.continuous=true → מחזיר true', () {
       // מסלול ה-listener על שינוי גופן/ניקוד: אסור לכבות את המצב.
       expect(
