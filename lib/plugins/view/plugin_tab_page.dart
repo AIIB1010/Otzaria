@@ -34,6 +34,7 @@ import 'package:otzaria/plugins/view/plugin_webview2_missing_view.dart';
 import 'package:otzaria/plugins/view/plugin_webview_failed_view.dart';
 import 'package:otzaria/plugins/services/windows_arch_info.dart';
 import 'package:otzaria/plugins/view/plugin_drop_guard_script.dart';
+import 'package:otzaria/plugins/view/plugin_webrtc_block_script.dart';
 import 'package:otzaria/plugins/view/plugin_sdk_scripts.dart';
 import 'package:otzaria/plugins/view/plugin_webview_host.dart';
 import 'package:otzaria/plugins/view/plugin_linkify_script.dart';
@@ -514,6 +515,7 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
           injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
         ),
         buildPluginDropGuardScript(),
+        buildPluginWebRtcBlockScript(),
         buildPluginLinkifyScript(auto: widget.plugin.manifest.autoLinkify),
       ]),
       onShowFileChooser: verifyPluginFileChooser,

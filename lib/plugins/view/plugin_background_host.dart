@@ -21,6 +21,7 @@ import 'package:otzaria/plugins/services/plugin_headless_shell.dart';
 import 'package:otzaria/plugins/services/plugin_lazy_activation_service.dart';
 import 'package:otzaria/plugins/storage/plugin_system_database.dart';
 import 'package:otzaria/plugins/view/plugin_drop_guard_script.dart';
+import 'package:otzaria/plugins/view/plugin_webrtc_block_script.dart';
 import 'package:otzaria/plugins/view/plugin_sdk_scripts.dart';
 import 'package:otzaria/plugins/view/plugin_webview_host.dart';
 import 'package:otzaria/plugins/view/webview_environment_holder.dart';
@@ -433,6 +434,7 @@ class _BackgroundPluginRunnerState extends State<_BackgroundPluginRunner>
           injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
         ),
         buildPluginDropGuardScript(),
+        buildPluginWebRtcBlockScript(),
       ]),
       onShowFileChooser: verifyPluginFileChooser,
       onDownloadStarting: PluginDownloadHandler.onDownloadStarting,
