@@ -998,6 +998,15 @@ class PluginBridgeAdapter {
         if (uri.scheme != 'http' && uri.scheme != 'https') {
           throw Exception('error.forbidden: only http/https URLs are allowed');
         }
+        // הכתובת עצמה נושאת מידע לאתר. בלי אישור — רק יעד שהתוסף רשאי
+        // לפנות אליו ממילא ברשת, אחרת זה ערוץ שליחה שעוקף את רשימת ההיתר.
+        final allowed = await isPluginNetworkAccessAllowed(
+          uri: uri,
+          pluginId: plugin.pluginId,
+          manifest: plugin.manifest,
+          registry: _pluginRepo,
+        );
+        if (!allowed && !await _confirmOpenUrl(uri)) return false;
         final launched = await launchUrl(
           uri,
           mode: LaunchMode.externalApplication,
@@ -4041,6 +4050,26 @@ class PluginBridgeAdapter {
         );
       }
       return await action();
+    } finally {
+      _userDialogOpen = false;
+    }
+  }
+
+  /// דיאלוג אישור לפתיחת [uri] בדפדפן. אחד בכל רגע, כמו דיאלוגי המערכת.
+  Future<bool> _confirmOpenUrl(Uri uri) async {
+    if (_userDialogOpen) {
+      throw Exception('error.forbidden: A system dialog is already open');
+    }
+    _userDialogOpen = true;
+    try {
+      final url = uri.toString();
+      final shown = url.length > 300 ? '${url.substring(0, 300)}…' : url;
+      return await _dependencies.showConfirmDialog(
+        title: 'פתיחת קישור חיצוני',
+        content:
+            'התוסף "${plugin.name}" מבקש לפתוח בדפדפן כתובת באתר '
+            '${uri.host}:\n$shown\n\nהכתובת יכולה להעביר לאתר מידע מתוך התוסף.',
+      );
     } finally {
       _userDialogOpen = false;
     }

@@ -488,10 +488,12 @@ Otzaria.on('plugin.boot', async (payload) => {
 
 ```javascript
 await Otzaria.call('app.openUrl', { url: 'https://example.com' });
-// מחזיר true בהצלחה
+// מחזיר true כשהכתובת נפתחה, ו-false כשהמשתמש סירב
 ```
 
 מותרות אך ורק כתובות `http`/`https`. סכמות אחרות (`file://`, `javascript:`, פרוטוקולים מותאמים) נדחות עם `error.forbidden`.
+
+כתובת שהתוסף רשאי לפנות אליה ממילא ברשת (`network.allowlist` שאושר) נפתחת מיד. כל כתובת אחרת נפתחת רק אחרי שהמשתמש מאשר אותה בדיאלוג — הכתובת עצמה יכולה לשאת מידע לאתר. ממופע רקע, שאין לו דיאלוג, כתובת כזו אינה נפתחת.
 
 ### `app.registerShortcut` / `app.unregisterShortcut` / `app.updateShortcut`
 **הרשאה נדרשת:** `app.shortcuts`

