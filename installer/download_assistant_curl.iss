@@ -70,6 +70,13 @@ var
   SegFile: TArrayOfString;
   SegProc: array of THandle;
   SegMore: array of Boolean;
+  { בתים שירדו ברשת במשימה, מצטבר; SegNet — מה שכבר נספר מהניסיון הנוכחי של כל קטע. }
+  CurlNetBytes: Int64;
+  SegNet: TInt64Array;
+  { חיבור הקטעים שעוד צפוי לפריט, כחלק מ-JoinCopyLeft שבהערכת הזמן. }
+  CurlJoinPending: Int64;
+  { אחרי המתנה בין ניסיונות: זמן הנתונים האחרונים, כדי שהמתנה ארוכה תוצג כתקיעה. }
+  CurlActivityKeep: Int64;
 
 { "נסה שוב" מתחיל ריצה חדשה: כיבוי בגלל ניתוק אחד אינו נשאר לכל הסשן. }
 procedure CurlResetRun();
@@ -77,6 +84,8 @@ begin
   if CurlState < 0 then
     CurlState := 0;
   CurlProven := False;
+  CurlNetBytes := 0;
+  CurlJoinPending := 0;
 end;
 
 { קשור ל-sha256 שבמניפסט: שם הנכס חוזר בין גרסאות, ושארית של גרסה אחרת אינה המשך. }
@@ -419,7 +428,7 @@ end;
 function CurlAppend(const Dest, Src: String; AllowStop: Boolean): Integer;
 var
   Output, Input: TFileStream;
-  Start, Want, Copied, Slice: Int64;
+  Start, Want, Copied, Slice, Got, SliceStart: Int64;
 begin
   Result := CurlFailed;
   Want := CurlSize(Src);
@@ -442,7 +451,11 @@ begin
           Slice := Want - Copied;
           if Slice > AppendSliceSize then
             Slice := AppendSliceSize;
-          if Output.CopyFrom(Input, Slice, CopyChunkSize) <> Slice then
+          SliceStart := NowMs();
+          Got := Output.CopyFrom(Input, Slice, CopyChunkSize);
+          CopyMsMeasured := CopyMsMeasured + NowMs() - SliceStart;
+          CopyBytesMeasured := CopyBytesMeasured + Got;
+          if Got <> Slice then
             Break;
           Copied := Copied + Slice;
           DownloadPage.SetProgress(DownloadPage.ProgressBar.Position,
@@ -484,21 +497,57 @@ begin
       Result := SegStrikes[K];
 end;
 
+procedure CurlSetJoinPending(Bytes: Int64);
+begin
+  if Bytes < 0 then
+    Bytes := 0;
+  JoinCopyLeft := JoinCopyLeft - CurlJoinPending + Bytes;
+  CurlJoinPending := Bytes;
+end;
+
+{ מוסיף ל-CurlNetBytes את מה שקטע K הוריד מאז הספירה הקודמת. בתים שנמחקו
+  (33/416, .more שנזרק) אינם מורדים: המהירות סופרת רק בתים מהרשת. }
+procedure CurlCountNet(K: Integer);
+var
+  Got: Int64;
+begin
+  Got := CurlSegHave(K) - SegBefore[K];
+  if Got > SegNet[K] then
+    CurlNetBytes := CurlNetBytes + Got - SegNet[K];
+  SegNet[K] := Got;
+end;
+
+{ הפס והזמן הנותר לפי הבתים שעל הדיסק; המהירות — לפי הבתים מהרשת בלבד. }
 procedure CurlShowProgress(I: Integer);
 var
   K: Integer;
-  Done: Int64;
+  Done, Before: Int64;
 begin
-  Done := CurlItemHave();
+  Before := CurlNetBytes;
   for K := 0 to GetArrayLength(SegFile) - 1 do
-    if (SegState[K] = SegRunning) and (CurlSegHave(K) > SegBefore[K]) then
-    begin
-      CurlProven := True;
-      CurlGained := True;
-    end;
+    if SegState[K] = SegRunning then
+      CurlCountNet(K);
+  if CurlNetBytes > Before then
+  begin
+    CurlProven := True;
+    CurlGained := True;
+    CurlActivityKeep := -1;
+    AddSpeedSample(CurlNetBytes);
+  end
+  else if EstRebase and not EstPaused then
+  begin
+    { בסיס כבר בבדיקה הראשונה: בלעדיו חיבור שאינו מביא בתים לא היה מוצג כתקיעה. }
+    AddSpeedSample(CurlNetBytes);
+    EstNewData := False;
+    if CurlActivityKeep >= 0 then
+      EstActivityMs := CurlActivityKeep;
+    CurlActivityKeep := -1;
+  end;
+  Done := CurlItemHave();
+  CurrentProgress := Done;
   DownloadPage.SetProgress(Done div 1024, QueueSize[I] div 1024);
   if Done < QueueSize[I] then
-    OnDownloadProgress(QueueUrl[I], QueueFile[I], Done, QueueSize[I]);
+    ShowDownloadStatus();
 end;
 
 procedure CurlSetCaption(I: Integer; Retry: Boolean);
@@ -532,6 +581,7 @@ var
 begin
   Have := CurlSize(SegFile[K]);
   SegBefore[K] := Have;
+  SegNet[K] := 0;
   SegMore[K] := (GetArrayLength(SegFile) > 1) and (Have > 0);
   if GetArrayLength(SegFile) = 1 then
   begin
@@ -620,6 +670,7 @@ var
 begin
   Result := CurlDone;
   Code := CurlExitCode(SegProc[K]);
+  CurlCountNet(K);
   Output := SegFile[K];
   if SegMore[K] then
     Output := Output + '.more';
@@ -717,6 +768,7 @@ begin
     if SegState[K] = SegRunning then
     begin
       CurlKill(SegProc[K]);
+      CurlCountNet(K);
       if SegMore[K] then
         CurlTakeError(SegFile[K] + '.more')
       else
@@ -731,15 +783,17 @@ end;
 function CurlRunSegments(I: Integer): Integer;
 var
   K, N: Integer;
-  Open, Retry: Boolean;
+  Open, Retry, Running: Boolean;
   LastShown: Int64;
 begin
   Result := CurlDone;
   N := GetArrayLength(SegFile);
   LastShown := 0;
   Retry := False;
-  ResetSpeed();
+  VerifyStartTick := 0;
+  CurlActivityKeep := -1;
   CurlSetCaption(I, False);
+  SpeedResume();
   try
     while True do
     begin
@@ -780,6 +834,19 @@ begin
       end;
       if not Open then
         exit;
+      { כל הקטעים ממתינים לניסיון הבא: אין רשת, והזמן הזה אינו נמדד כמהירות. }
+      Running := False;
+      for K := 0 to N - 1 do
+        if SegState[K] = SegRunning then
+          Running := True;
+      if not Running and not EstPaused then
+      begin
+        if CurlActivityKeep < 0 then
+          CurlActivityKeep := EstActivityMs;
+        SpeedPause();
+      end
+      else if Running and EstPaused then
+        SpeedResume();
       if NowMs() - LastShown >= 250 then
       begin
         CurlShowProgress(I);
@@ -791,6 +858,7 @@ begin
     end;
   finally
     CurlKillSegments(I);
+    SpeedPause();
   end;
 end;
 
@@ -879,6 +947,7 @@ begin
   SetArrayLength(SegFile, M);
   SetArrayLength(SegProc, M);
   SetArrayLength(SegMore, M);
+  SetArrayLength(SegNet, M);
   for K := 0 to M - 1 do
   begin
     if K = 0 then
@@ -907,7 +976,9 @@ begin
       DeleteFile(SegFile[K]);
     SegBest[K] := CurlSize(SegFile[K]);
     SegBefore[K] := SegBest[K];
+    SegNet[K] := 0;
   end;
+  CurlSetJoinPending(QueueSize[I] - CurlSegLen(0));
   if M > 1 then
     Log('DownloadAssistant: ' + QueueFile[I] + ' in ' + IntToStr(M) + ' segments, ' +
       IntToStr(CurlItemHave()) + ' bytes already here');
@@ -936,6 +1007,7 @@ begin
     Result := CurlAppend(SegFile[0], SegFile[K], True);
     if Result <> CurlDone then
       exit;
+    CurlSetJoinPending(CurlJoinPending - CurlSegLen(K));
   end;
 end;
 
@@ -990,6 +1062,7 @@ var
   Whole: String;
   N, Outcome, Range, Probes: Integer;
   Restarted, ForceSingle, HashOk: Boolean;
+  Started: Int64;
 begin
   Whole := CurlWholePath(I);
   CurlDropPartials(QueueFile[I], ExtractFileName(CurlBase(I)) + '.');
@@ -1069,7 +1142,10 @@ begin
       exit;
     end;
 
-    DownloadPage.SetText(CustomMessage('CheckingDownloadedFile'), DownloadStatus);
+    { החיבור וה-hash נכללים בהערכה; בזמנם מוצג רק שם השלב, כי ה-hash חוסם את התצוגה. }
+    VerifyStartTick := NowMs();
+    CurrentProgress := QueueSize[I];
+    ShowDownloadStatus();
     Log('DownloadAssistant: ' + QueueFile[I] + ' received by curl, joining and verifying');
     Outcome := CurlJoinSegments();
     if Outcome = CurlStoppedByUser then
@@ -1084,7 +1160,18 @@ begin
       Result := CurlFailed;
       exit;
     end;
-    HashOk := (CurlSize(Whole) = QueueSize[I]) and (HashFile(Whole) = Lowercase(QueueSha[I]));
+    HashOk := CurlSize(Whole) = QueueSize[I];
+    if HashOk then
+    begin
+      UiUpdateProgress();
+      WizardForm.Update;
+      Started := NowMs();
+      HashOk := HashFile(Whole) = Lowercase(QueueSha[I]);
+      HashMsMeasured := HashMsMeasured + NowMs() - Started;
+      HashBytesMeasured := HashBytesMeasured + QueueSize[I];
+    end;
+    HoldShownEta(True);
+    VerifyStartTick := 0;
     { עצירה שנלחצה בזמן ה-hash מגיעה רק כשהחלון מעבד הודעות שוב. }
     DownloadPage.SetProgress(DownloadPage.ProgressBar.Position, DownloadPage.ProgressBar.Max);
     if HashOk then
@@ -1136,6 +1223,10 @@ begin
     exit;
   ForceDirectories(CacheDir());
   CurlGained := False;
+  { נעילה, בדיקת Range והכנת הקטעים אינם רשת: המעריך מושהה עד שהקטעים רצים. }
+  SpeedPause();
+  CurrentProgress := 0;
+  CurrentFileSize := QueueSize[I];
   DownloadPage.SetProgress(0, QueueSize[I] div 1024);
   Waiting := False;
   Lock := CurlTryLock(I);
@@ -1178,5 +1269,8 @@ begin
     end;
   finally
     CurlUnlock();
+    CurlSetJoinPending(0);
+    CurrentProgress := 0;
+    VerifyStartTick := 0;
   end;
 end;

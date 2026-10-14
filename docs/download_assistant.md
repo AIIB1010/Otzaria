@@ -866,6 +866,9 @@ ISCC /DDevManifestFile=C:\...\fixtures\release-manifest.json `
 * **שני מסייעים**: `<…>.partial.lock` נפתח בלי שיתוף ו-`FILE_FLAG_DELETE_ON_CLOSE`
   לכל משך הפריט. רק sharing violation גורם להמתנה ("מסייע הורדה אחר מוריד…");
   שגיאה אחרת — Inno. אחרי ההמתנה משתמשים בקובץ שהראשון הכניס למטמון.
+* **הערכת הזמן**: מעריך אחד לכל המשימה (ResetSpeed רק ב-RunDownloads). המהירות נמדדת
+  מבתים שירדו ברשת בלבד, לא מקבצים חלקיים שכבר במטמון; נעילה, בדיקת Range והמתנה בין
+  ניסיונות מושהות, וחיבור הקטעים וה-hash נכללים בזמן הנותר.
 * `DevAssetBase` (פיתוח בלבד) מפנה את הנכסים לשרת מקומי, לבדיקת קטיעה ו-Range.
 * `test/installer/download_assistant_curl_test.dart` מריץ ב-Windows את curl של
   המערכת עם הדגלים של `CurlArgs` מול שרת מקומי, ומקבע את ההנחות האלה.

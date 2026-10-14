@@ -174,6 +174,7 @@ void main() {
       expect(append, contains('SetEndOfFile(Output.Handle);'));
       final fetch = _routine(curl, 'function CurlFetchLocked(');
       final hash = fetch.indexOf('HashFile(Whole) = Lowercase(QueueSha[I])');
+      expect(hash, isNonNegative);
       expect(fetch.indexOf('CurlJoinSegments()'), lessThan(hash));
       expect(
         fetch.indexOf('PromoteToCache(Whole, QueueFile[I]'),
@@ -220,8 +221,108 @@ void main() {
       expect(run, contains('CurlKillSegments(I);'));
       expect(run, contains('StopRequested or DownloadPage.AbortedByUser'));
       expect(run, contains('CurlWaitForSingleObject(SegProc[K], 0)'));
-      expect(run, contains('ResetSpeed();'));
       expect(_routine(curl, 'function CurlStopped('), contains('Log('));
+    });
+
+    test('הערכת הזמן: מעריך אחד למשימה, ומהירות רק מבתים שירדו ברשת', () {
+      final run = _routine(curl, 'function CurlRunSegments(');
+      expect(
+        curl,
+        isNot(contains('ResetSpeed();')),
+        reason: 'ResetSpeed רק ב-RunDownloads — לא לכל קובץ או ניסיון',
+      );
+      expect(
+        run.indexOf('SpeedResume();'),
+        lessThan(run.indexOf('while True do')),
+      );
+      expect(
+        run.indexOf('SpeedPause();', run.indexOf('finally')),
+        greaterThan(run.indexOf('CurlKillSegments(I);')),
+      );
+      // המתנה בין ניסיונות כשאף קטע אינו רץ אינה רשת.
+      expect(run, contains('if not Running and not EstPaused then'));
+      expect(run, contains('else if Running and EstPaused then'));
+
+      final show = _routine(curl, 'procedure CurlShowProgress(');
+      expect(show, contains('AddSpeedSample(CurlNetBytes);'));
+      expect(
+        show,
+        isNot(contains('OnDownloadProgress(')),
+        reason:
+            'OnDownloadProgress דוגם את הבתים שעל הדיסק, כולל ההמשך מהמטמון',
+      );
+      expect(show, contains('CurrentProgress := Done;'));
+      expect(show, contains('Done := CurlItemHave();'));
+      // בתים שנמחקו (33/416, .more שנזרק) אינם מורידים את המונה.
+      final count = _routine(curl, 'procedure CurlCountNet(');
+      expect(count, contains('if Got > SegNet[K] then'));
+      expect(count, contains('Got := CurlSegHave(K) - SegBefore[K];'));
+      expect(
+        _routine(curl, 'function CurlStartSegment('),
+        contains('SegNet[K] := 0;'),
+      );
+      final finish = _routine(curl, 'function CurlFinishSegment(');
+      expect(
+        finish.indexOf('CurlCountNet(K);'),
+        lessThan(finish.indexOf('CurlSettle(I, K, Known, ReplyOk)')),
+        reason: 'הבתים האחרונים של ניסיון נספרים לפני שה-.more מצורף או נזרק',
+      );
+      expect(
+        _routine(curl, 'procedure CurlKillSegments('),
+        contains('CurlCountNet(K);'),
+      );
+      expect(
+        _routine(curl, 'procedure CurlResetRun('),
+        contains('CurlNetBytes := 0;'),
+      );
+
+      final item = _routine(curl, 'function CurlDownloadItem(');
+      expect(
+        item.indexOf('SpeedPause();'),
+        lessThan(item.indexOf('CurlTryLock(I)')),
+        reason: 'נעילה, בדיקת Range והכנה אינן רשת',
+      );
+      final cleanup = item.substring(item.lastIndexOf('finally'));
+      expect(cleanup, contains('CurlSetJoinPending(0);'));
+      expect(cleanup, contains('CurrentProgress := 0;'));
+      expect(cleanup, contains('VerifyStartTick := 0;'));
+    });
+
+    test('החיבור וה-hash של curl נכללים בהערכה, ובזמנם מוצג שם השלב', () {
+      expect(
+        _routine(curl, 'procedure CurlPlanSegments('),
+        contains('CurlSetJoinPending(QueueSize[I] - CurlSegLen(0));'),
+      );
+      expect(
+        _routine(curl, 'procedure CurlSetJoinPending('),
+        contains('JoinCopyLeft := JoinCopyLeft - CurlJoinPending + Bytes;'),
+      );
+      expect(
+        _routine(curl, 'function CurlJoinSegments('),
+        contains('CurlSetJoinPending(CurlJoinPending - CurlSegLen(K));'),
+      );
+      final append = _routine(curl, 'function CurlAppend(');
+      expect(
+        append,
+        contains('CopyMsMeasured := CopyMsMeasured + NowMs() - SliceStart;'),
+      );
+      expect(append, contains('CopyBytesMeasured := CopyBytesMeasured + Got;'));
+
+      final fetch = _routine(curl, 'function CurlFetchLocked(');
+      final verify = fetch.indexOf('VerifyStartTick := NowMs();');
+      final join = fetch.indexOf('Outcome := CurlJoinSegments();');
+      final hash = fetch.indexOf('HashFile(Whole)');
+      expect(verify, greaterThanOrEqualTo(0));
+      expect(fetch.indexOf('ShowDownloadStatus();', verify), lessThan(join));
+      // GetSHA256OfFile חוסם את החלון: שם השלב מצויר לפניו.
+      expect(fetch.indexOf('WizardForm.Update;', join), lessThan(hash));
+      final hold = fetch.indexOf('HoldShownEta(True);');
+      expect(hold, greaterThan(hash));
+      expect(fetch.indexOf('VerifyStartTick := 0;', hash), greaterThan(hold));
+      expect(
+        fetch,
+        contains('HashBytesMeasured := HashBytesMeasured + QueueSize[I];'),
+      );
     });
 
     test('שני מסייעים אינם כותבים לאותם קבצים חלקיים', () {
