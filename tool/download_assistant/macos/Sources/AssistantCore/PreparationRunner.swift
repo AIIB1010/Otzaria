@@ -16,11 +16,12 @@ public struct PreparationStatus: Equatable {
     public var doneBytes: Int64
     public var totalBytes: Int64
     public var bytesPerSecond: Double?
-    public var secondsRemaining: TimeInterval?
+    /// nil — בלי שורת זמן (בדיקת מטמון, בדיקת החלק שכבר ירד).
+    public var eta: EtaReading?
 
     public init(
         phase: PreparationPhase, title: String, detail: String, doneBytes: Int64, totalBytes: Int64,
-        bytesPerSecond: Double? = nil, secondsRemaining: TimeInterval? = nil
+        bytesPerSecond: Double? = nil, eta: EtaReading? = nil
     ) {
         self.phase = phase
         self.title = title
@@ -28,7 +29,7 @@ public struct PreparationStatus: Equatable {
         self.doneBytes = doneBytes
         self.totalBytes = totalBytes
         self.bytesPerSecond = bytesPerSecond
-        self.secondsRemaining = secondsRemaining
+        self.eta = eta
     }
 
     public var fraction: Double {
@@ -87,11 +88,25 @@ public final class PreparationRunner {
     private let cancelLock = NSLock()
     private var cancelledFlag = false
     private var update: ((PreparationStatus) -> Void)?
+    private let clock: () -> TimeInterval
+    // ההורדה מעדכנת מה-main thread וההרכבה מתור העבודה.
+    private let etaLock = NSLock()
+    private var eta = DownloadEta()
+    private var phases: [String: EtaPhase] = [:]
+    // main thread בלבד.
+    private var userPaused = false
+    private var lastStatus: PreparationStatus?
+    private var refreshTimer: DispatchSourceTimer?
+    private var runFinished = false
 
-    public init(plan: PreparationPlan, outputBase: URL, cache: CacheStore = CacheStore(directory: CacheStore.defaultDirectory())) {
+    public init(
+        plan: PreparationPlan, outputBase: URL, cache: CacheStore = CacheStore(directory: CacheStore.defaultDirectory()),
+        clock: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+    ) {
         self.plan = plan
         self.outputBase = outputBase
         self.cache = cache
+        self.clock = clock
     }
 
     public var outputDirectory: URL {
@@ -120,8 +135,12 @@ public final class PreparationRunner {
     ) {
         self.update = update
         let finish: (Result<PreparationResult, Error>) -> Void = { result in
-            DispatchQueue.main.async { completion(result) }
+            DispatchQueue.main.async {
+                self.stopRefreshTimer()
+                completion(result)
+            }
         }
+        DispatchQueue.main.async { self.startRefreshTimer() }
         work.async {
             do {
                 let downloads = try self.checkCache()
@@ -133,8 +152,10 @@ public final class PreparationRunner {
     }
 
     private func post(_ status: PreparationStatus) {
-        let update = self.update
-        DispatchQueue.main.async { update?(status) }
+        DispatchQueue.main.async {
+            self.lastStatus = status
+            self.update?(status)
+        }
     }
 
     // MARK: - מטמון
@@ -147,7 +168,12 @@ public final class PreparationRunner {
         } catch {
             throw AssistantError(AssistantError.copyFailed, technical: "\(error)")
         }
-        let skipped = alreadyAssembledParts()
+        let (skipped, joined) = alreadyAssembledParts()
+        let planned = EtaPhase.phases(
+            for: plan.actions, placeIsInstant: sameVolume(cache.directory, outputDirectory), alreadyJoined: joined
+        )
+        phases = Dictionary(uniqueKeysWithValues: planned.map { ($0.id, $0) })
+        withEta { eta, _ in eta.planPhases(planned) }
         var needed: [DownloadItem] = []
         let toHash = plan.downloads.filter { !skipped.contains($0.name) }
         let hashTotal = toHash.reduce(Int64(0)) { total, item in
@@ -192,17 +218,20 @@ public final class PreparationRunner {
         return needed
     }
 
-    /// חלקים שכבר נבלעו בהרכבה שנקטעה — נמחקו מהמטמון ואין להוריד אותם שוב.
-    private func alreadyAssembledParts() -> Set<String> {
+    /// חלקים שכבר נבלעו בהרכבה שנקטעה — נמחקו מהמטמון ואין להוריד אותם שוב —
+    /// והבתים שכבר חוברו לכל נכס.
+    private func alreadyAssembledParts() -> (parts: Set<String>, joinedBytes: [String: Int64]) {
         var names = Set<String>()
+        var joined: [String: Int64] = [:]
         for action in plan.actions {
             guard case let .assemble(name, _, sha256, _, parts, folder) = action else { continue }
             let working = directory(for: folder)
                 .appendingPathComponent(assemblyPartialName(name: name, sha256: sha256))
             let resume = assemblyResumePoint(partialSize: fileSize(working) ?? 0, partSizes: parts.map { $0.size })
             parts.prefix(resume.parts).forEach { names.insert($0.name) }
+            joined[name] = resume.keepBytes
         }
-        return names
+        return (names, joined)
     }
 
     // MARK: - הורדה
@@ -218,24 +247,14 @@ public final class PreparationRunner {
             finish(.failure(OperationCancelled()))
             return
         }
-        var meter = SpeedMeter()
         engine.run(items, progress: { progress in
-            meter.record(time: ProcessInfo.processInfo.systemUptime, bytes: progress.receivedBytes)
-            let verifying = progress.verifyingTotal > 0 && progress.activeCaptions.isEmpty
-            self.update?(PreparationStatus(
-                phase: .downloading,
-                title: verifying ? PreparationStatus.verifyingPartialTitle : PreparationStatus.downloadingTitle,
-                detail: progress.activeCaptions.joined(separator: ", "),
-                doneBytes: verifying ? progress.verifyingBytes : progress.presentBytes,
-                totalBytes: verifying ? progress.verifyingTotal : progress.totalBytes,
-                bytesPerSecond: verifying ? nil : meter.bytesPerSecond,
-                secondsRemaining: verifying ? nil : meter.secondsRemaining(progress.totalBytes - progress.presentBytes)
-            ))
+            self.reportDownload(progress)
         }, finish: { result in
             switch result {
             case .failure(let error):
                 finish(.failure(error))
             case .success:
+                self.withEta { eta, _ in eta.finishDownload() }
                 self.work.async {
                     do {
                         finish(.success(try self.produceOutput()))
@@ -245,6 +264,78 @@ public final class PreparationRunner {
                 }
             }
         })
+    }
+
+    private func withEta<T>(_ body: (inout DownloadEta, TimeInterval) -> T) -> T {
+        etaLock.lock()
+        defer { etaLock.unlock() }
+        return body(&eta, clock())
+    }
+
+    private func currentEta() -> EtaReading {
+        withEta { eta, now in eta.displayReading(now: now) }
+    }
+
+    /// main thread בלבד.
+    private func reportDownload(_ progress: DownloadProgress) {
+        let verifying = progress.verifyingTotal > 0 && progress.activeCaptions.isEmpty
+        let remaining = progress.totalBytes - progress.presentBytes
+        let paused = progress.activeCaptions.isEmpty || userPaused
+        let (reading, speed) = withEta { eta, now -> (EtaReading, Double?) in
+            if paused {
+                eta.pause(remainingBytes: remaining)
+            } else {
+                eta.report(receivedBytes: progress.receivedBytes, remainingBytes: remaining, now: now)
+            }
+            return (eta.displayReading(now: now), eta.displaySpeed)
+        }
+        let status = PreparationStatus(
+            phase: .downloading,
+            title: verifying ? PreparationStatus.verifyingPartialTitle : PreparationStatus.downloadingTitle,
+            detail: progress.activeCaptions.joined(separator: ", "),
+            doneBytes: verifying ? progress.verifyingBytes : progress.presentBytes,
+            totalBytes: verifying ? progress.verifyingTotal : progress.totalBytes,
+            bytesPerSecond: verifying ? nil : speed,
+            eta: reading
+        )
+        lastStatus = status
+        update?(status)
+    }
+
+    /// main thread בלבד. בלי נתונים חדשים אין דיווחים: הטיימר סופר לאחור ומזהה המתנה לחיבור.
+    private func refresh() {
+        guard var status = lastStatus, status.eta != nil else { return }
+        let showsSpeed = status.phase == .downloading && status.title == PreparationStatus.downloadingTitle
+        withEta { eta, now in
+            status.eta = eta.displayReading(now: now)
+            if showsSpeed { status.bytesPerSecond = eta.displaySpeed }
+        }
+        lastStatus = status
+        update?(status)
+    }
+
+    /// main thread בלבד. שאלה פתוחה בזמן הורדה משהה את האומדן.
+    public func setEstimatorPaused(_ paused: Bool) {
+        userPaused = paused
+        if paused { withEta { eta, _ in eta.pause() } }
+        refresh()
+    }
+
+    /// main thread בלבד. רץ עד סוף כל העבודה, כולל ההרכבה וההעתקה.
+    private func startRefreshTimer() {
+        guard refreshTimer == nil, !runFinished else { return }
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now() + 1, repeating: 1)
+        timer.setEventHandler { [weak self] in self?.refresh() }
+        refreshTimer = timer
+        timer.resume()
+    }
+
+    /// main thread בלבד.
+    private func stopRefreshTimer() {
+        runFinished = true
+        refreshTimer?.cancel()
+        refreshTimer = nil
     }
 
     // MARK: - תיקיית היעד
@@ -263,23 +354,28 @@ public final class PreparationRunner {
             }
         }
         var done: Int64 = 0
-        for action in plan.actions {
+        for (index, action) in plan.actions.enumerated() {
             if isCancelled { throw OperationCancelled() }
             switch action {
             case .place(let item, let folder):
                 try FileManager.default.createDirectory(at: self.directory(for: folder), withIntermediateDirectories: true)
                 let destination = self.directory(for: folder).appendingPathComponent(item.name)
                 let base = done
+                // קישור קשיח מיידי אינו שלב: ההתקדמות שלו לא תנפח את קצב ההעתקה.
+                let copyPhase = phases[EtaPhase.placeId(index)]
+                if let phase = copyPhase { withEta { eta, now in eta.startPhase(phase, now: now) } }
                 post(PreparationStatus(
                     phase: .copying, title: PreparationStatus.copyingTitle, detail: item.name,
-                    doneBytes: base, totalBytes: total
+                    doneBytes: base, totalBytes: total, eta: currentEta()
                 ))
                 try placeWithProgress(item, to: destination) { copied in
+                    if copyPhase != nil { self.withEta { eta, _ in eta.phaseProgress(copied) } }
                     self.post(PreparationStatus(
                         phase: .copying, title: PreparationStatus.copyingTitle, detail: item.name,
-                        doneBytes: base + copied, totalBytes: total
+                        doneBytes: base + copied, totalBytes: total, eta: self.currentEta()
                     ))
                 }
+                if copyPhase != nil { withEta { eta, now in eta.endPhase(now: now) } }
                 done += item.size
                 produced.append(destination)
             case .assemble(let name, let size, let sha256, let caption, let parts, let folder):
@@ -287,25 +383,36 @@ public final class PreparationRunner {
                 let destination = self.directory(for: folder).appendingPathComponent(name)
                 let base = done
                 var lastPost: Int64 = -1
+                let joinPhase = phases[EtaPhase.joinId(index)]
+                let verifyPhase = phases[EtaPhase.verifyId(index)]
+                let joinedBefore = joinPhase.map { size - $0.bytes } ?? 0
+                var verifying = false
+                if let phase = joinPhase { withEta { eta, now in eta.startPhase(phase, now: now) } }
                 do {
                     try assembleSplitAsset(
                         name: name, size: size, sha256: sha256, parts: parts, destination: destination,
                         partURL: { self.cache.fileURL($0.name) },
                         removePart: { self.cache.remove(name: $0.name) },
                         progress: { appended in
+                            self.withEta { eta, _ in eta.phaseProgress(max(0, appended - joinedBefore)) }
                             guard appended - lastPost >= 32 * 1024 * 1024 || appended == size else { return }
                             lastPost = appended
                             self.post(PreparationStatus(
                                 phase: .assembling, title: PreparationStatus.assemblingTitle, detail: caption,
-                                doneBytes: base + appended, totalBytes: total
+                                doneBytes: base + appended, totalBytes: total, eta: self.currentEta()
                             ))
                         },
                         verificationProgress: { verified in
+                            if !verifying {
+                                verifying = true
+                                if let phase = verifyPhase { self.withEta { eta, now in eta.startPhase(phase, now: now) } }
+                            }
+                            self.withEta { eta, _ in eta.phaseProgress(verified) }
                             guard verified == 0 || verified - lastPost >= 32 * 1024 * 1024 || verified == size else { return }
                             lastPost = verified
                             self.post(PreparationStatus(
                                 phase: .verifyingAssembly, title: PreparationStatus.verifyingAssemblyTitle, detail: caption,
-                                doneBytes: verified, totalBytes: size
+                                doneBytes: verified, totalBytes: size, eta: self.currentEta()
                             ))
                         },
                         isCancelled: { self.isCancelled }
@@ -320,6 +427,7 @@ public final class PreparationRunner {
                         technical: "\(name): \(error)"
                     )
                 }
+                withEta { eta, now in eta.endPhase(now: now) }
                 done += size
                 produced.append(destination)
             }
@@ -331,6 +439,15 @@ public final class PreparationRunner {
             keptSplitAssets: plan.keptSplitAssets,
             outputNotes: plan.outputNotes
         )
+    }
+
+    /// קישור קשיח מהמטמון מצליח רק באותו כונן; אחרת ההנחה היא העתקה.
+    private func sameVolume(_ first: URL, _ second: URL) -> Bool {
+        let keys: Set<URLResourceKey> = [.volumeIdentifierKey]
+        guard let a = (try? first.resourceValues(forKeys: keys))?.volumeIdentifier as? NSObject,
+              let b = (try? second.resourceValues(forKeys: keys))?.volumeIdentifier as? NSObject
+        else { return false }
+        return a.isEqual(b)
     }
 
     private func placeWithProgress(_ item: DownloadItem, to destination: URL, progress: @escaping (Int64) -> Void) throws {

@@ -3169,20 +3169,60 @@ void main() {
     test('$_assistant: פס ההורדה מציג מהירות וזמן, ואינו קופא בלי הסבר', () {
       final script = _script(_assistant);
       final progress = _routine(script, 'function OnDownloadProgress(');
-      expect(script, contains("external 'GetTickCount@kernel32.dll stdcall'"));
-      expect(script, contains('SpeedWindowMs = 5000'));
+      final status = _routine(script, 'procedure ShowDownloadStatus()');
+      // 32 סיביות מתאפסות אחרי 49 יום, והשוואות הזמן היו נשברות.
+      expect(
+        script,
+        contains("external 'GetTickCount64@kernel32.dll stdcall'"),
+      );
+      expect(_routine(script, 'function NowMs('), contains('GetTickCount64()'));
       expect(progress, contains('AddSpeedSample(Done)'));
-      expect(progress, contains('HumanRate(Speed)'));
-      expect(progress, contains('HumanDuration('));
+      expect(status, contains('HumanRate(Speed)'));
+      expect(status, contains('ShownEtaText()'));
       final atMax = progress.indexOf('(Progress >= ProgressMax)');
       expect(atMax, greaterThanOrEqualTo(0));
+      // ה-hash מתחיל מיד בחזרה וחוסם את טיימר התצוגה: שם השלב מצויר לפניו.
+      final verifyPaint = progress.indexOf('UiUpdateProgress();', atMax);
+      expect(verifyPaint, greaterThan(atMax));
       expect(
-        progress.indexOf("CustomMessage('CheckingDownloadedFile')"),
+        progress.indexOf('ShowDownloadStatus();', atMax),
+        lessThan(verifyPaint),
+      );
+      expect(progress.indexOf('WizardForm.Update;'), greaterThan(verifyPaint));
+      expect(
+        progress.indexOf('SpeedPause();'),
         greaterThan(atMax),
+        reason: 'ה-hash של Inno אינו רשת: אסור שייספר כמהירות נמוכה',
+      );
+      final hashing = status.indexOf('if VerifyStartTick > 0 then');
+      expect(hashing, greaterThanOrEqualTo(0));
+      expect(
+        status.indexOf("CustomMessage('CheckingDownloadedFile')"),
+        greaterThan(hashing),
         reason: 'Inno מחשב hash אחרי הבית האחרון בלי דיווח — הפס עומד על 100%',
       );
+      final verifying = status.substring(
+        hashing,
+        status.indexOf('else if not EstReported'),
+      );
+      expect(verifying, contains("CustomMessage('VerifyingDownloadedFile')"));
+      expect(
+        verifying,
+        isNot(contains('ShownEtaText()')),
+        reason: 'ה-hash של Inno חוסם את התצוגה: מספר היה קופא, ולכן רק שם השלב',
+      );
+      final assemble = _routine(script, 'function AssembleAsset(');
+      final joinedHash = assemble.indexOf('Hash := HashFile(TmpPath);');
+      expect(
+        assemble.substring(0, joinedHash),
+        isNot(contains("'VerifyingJoined') + ' · ' + PostEtaText()")),
+        reason: 'GetSHA256OfFile חוסם את התצוגה',
+      );
       // Inno כותב לתווית ההורדה גם את שם הקובץ; התצוגה קוראת את השורה שלנו.
-      expect(progress, contains('DownloadStatus := Status;'));
+      expect(
+        status,
+        contains('DownloadPage.SetText(Caption, DownloadStatus);'),
+      );
       expect(
         _routine(script, 'function UiAdapterProgress('),
         contains('Bytes := DownloadStatus;'),
@@ -3192,6 +3232,186 @@ void main() {
         contains('WorkPage.SetProgress('),
         reason: 'ההרכבה מדווחת התקדמות בבתים',
       );
+      expect(
+        _routine(script, 'function AppendFileTo('),
+        contains("' · ' + PostEtaText()"),
+        reason: 'גם לחיבור החלקים יש זמן משוער',
+      );
+    });
+
+    test('$_assistant: מעריך אחד לכל הריצה, עם השהיה בשלבים שקטים', () {
+      final script = _script(_assistant);
+      final run = _routine(script, 'function RunDownloads()');
+      final sample = _routine(script, 'procedure AddSpeedSample(');
+      final status = _routine(script, 'procedure ShowDownloadStatus()');
+      expect(script, isNot(contains('SpeedWindowMs')));
+      expect(script, contains('EtaTauSec = 8;'));
+      expect(script, contains('SpeedTauSec = 3;'));
+      // ב-Pascal Script אין Exp; τ/(τ+dt) מתרחק מ-e^(-dt/τ) בפערים של 5–30 שניות.
+      expect(script, isNot(contains('/ (EtaTauSec + Dt)')));
+      final exp = _routine(script, 'function ExpNeg(');
+      expect(exp, contains('while X >= 0.5 do'));
+      expect(exp, contains('for I := 1 to 8 do'));
+      expect(exp, contains('Sum := Sum * Sum;'));
+      expect(sample, contains('Decay := ExpNeg(Dt / EtaTauSec);'));
+      expect(sample, contains('EstSb := EstSb * Decay + Db;'));
+      expect(sample, contains('EstSt := EstSt * Decay + Dt;'));
+      expect(sample, contains('if Gap < 0.05 then'));
+      // מונה שחזר לאחור (ניסיון חוזר) קובע נקודת מוצא ואינו מאפס.
+      expect(sample, contains('(Bytes < EstLastBytes)'));
+      // דגימה בלי בתים אינה נספרת. תקיעה בודדת נספרת כ-2 שניות, ותקיעה שחוזרת
+      // בתוך 30 שניות משלימה את הפער של קודמתה; מ-30 שניות — חימום מחדש.
+      expect(sample, contains('if Delta = 0 then'));
+      expect(sample, contains('Dt := StallSampleSec;'));
+      expect(sample, contains('EstIsoDeficit := Gap - StallSampleSec;'));
+      expect(
+        sample,
+        contains('EstSt := EstSt + EstIsoDeficit * ExpNeg(Since / EtaTauSec);'),
+      );
+      final restart = sample.indexOf('if Gap * 1000 >= StallHideMs then');
+      expect(restart, greaterThanOrEqualTo(0));
+      expect(
+        sample.indexOf('exit;', restart),
+        lessThan(sample.indexOf('Dt := Gap;')),
+        reason: 'דגימת ההתאוששות אחרי 30 שניות רק קובעת בסיס',
+      );
+      expect(
+        RegExp(r'ResetSpeed\(\);').allMatches(run).length,
+        1,
+        reason: 'לא מאפסים בין קבצים או בין ניסיונות',
+      );
+      expect(
+        run.indexOf('ResetSpeed();'),
+        lessThan(run.indexOf('for I := 0 to')),
+      );
+      final download = run.indexOf('DownloadPage.Download;');
+      expect(run.lastIndexOf('SpeedResume();', download), greaterThan(0));
+      expect(run.indexOf('SpeedPause();', download), greaterThan(download));
+      // בלי טיימר אין מי שיגלה שהנתונים הפסיקו להגיע.
+      expect(run, contains('CreateCallback(@DownloadTick)'));
+      expect(run, contains('KillTimer(0, DownloadTimer);'));
+      final stallCheck = status.indexOf('(Tick - EstActivityMs >= StallMs)');
+      expect(stallCheck, greaterThanOrEqualTo(0));
+      final stall = status.substring(
+        stallCheck,
+        status.indexOf('    end\n    else', stallCheck),
+      );
+      expect(stall, contains("CustomMessage('WaitingForConnection')"));
+      expect(stall, contains('HoldShownEta(False);'));
+      expect(
+        stall,
+        isNot(contains('ShownEtaText()')),
+        reason: 'בהמתנה מוצג רק "ממתין לחיבור", כמו בשאר הפלטפורמות',
+      );
+      expect(status, contains("CustomMessage('EstimatingTime')"));
+      // חימום מותאם: זרם בפרצים ממתין לשלושה מחזורים (עד 15 שניות).
+      final rate = _routine(script, 'function DownloadRate(');
+      expect(rate, contains('Wait := 3 * EstMaxGap;'));
+      expect(rate, contains('if Wait > 15 then'));
+      expect(rate, contains('(EstWarmSamples < 3)'));
+      // החימום ננעל עד איפוס של 30 שניות: תקיעה בודדת אינה מחזירה "מחשב".
+      expect(rate, contains('if not EstWarmLatched and'));
+      expect(rate, contains('EstWarmLatched := True;'));
+      expect(
+        sample.substring(restart, sample.indexOf('Dt := Gap;')),
+        contains('EstWarmLatched := False;'),
+      );
+      expect(
+        _routine(script, 'function BlendRate('),
+        contains('else if Weight > 1 then'),
+      );
+      expect(
+        _routine(script, 'function PhaseRate('),
+        contains('if (Ms < 1000) or (Bytes <= 0) then'),
+      );
+      expect(
+        _routine(script, 'function CurrentSpeed('),
+        contains('if Rate >= 1 then'),
+        reason: 'לעולם לא "0 KB/s"',
+      );
+      // התצוגה מתקנת רק בנקודות תיקון: סוף פרץ או 2 שניות של זרימה רציפה.
+      expect(script, contains('DispFlowGapMs = 1000;'));
+      expect(script, contains('DispFlowMs = 2000;'));
+      final shown = _routine(script, 'procedure UpdateShownEta(');
+      expect(shown, contains('if Raw < 0 then'));
+      expect(shown, contains('Target := DispRawAtData;'));
+      expect(shown, contains('if Tick - DispFlowStartMs >= DispFlowMs then'));
+      expect(
+        shown.indexOf('if Target < Next * 0.5 then'),
+        greaterThan(shown.indexOf('if HasTarget then')),
+        reason: 'ירידה חדה מוצגת רק בנקודת תיקון',
+      );
+      expect(shown, contains('Next := Next + (1 - ExpNeg(Cdt / Tau)) * Diff;'));
+      // הניסוח מקבל את הערך הגולמי: 4.7 שניות הן "כמה שניות".
+      expect(
+        _routine(script, 'function ShownEtaText('),
+        contains('TimeLeftText(EtaShown)'),
+      );
+      // הפסקה ידועה שאינה שלב מוערך מקפיאה את הזמן המוצג, כמו תקיעה; ה-hash
+      // הוא שלב מוערך, ולכן הזמן שלו יורד.
+      expect(status, contains('Paused := EstPaused or EstRebase;'));
+      final frozen = status.indexOf('if Paused and (EtaShown >= 0) then');
+      expect(frozen, greaterThanOrEqualTo(0));
+      expect(
+        status.indexOf('HoldShownEta(False)', frozen),
+        greaterThan(frozen),
+      );
+      expect(
+        _routine(script, 'procedure SpeedResume('),
+        contains('HoldShownEta(False);'),
+      );
+      expect(
+        run.indexOf('HoldShownEta(VerifyStartTick > 0);'),
+        greaterThan(run.indexOf('SpeedPause();', download)),
+      );
+      final assemble = _routine(script, 'function AssembleAsset(');
+      expect(assemble, contains('HoldShownEta(False);'));
+      expect(
+        assemble.indexOf('HoldShownEta(True);'),
+        greaterThan(assemble.indexOf('Hash := HashFile(TmpPath);')),
+      );
+      // שאלה פתוחה אינה תקיעה, וגם בחיבור החלקים התצוגה קפואה בזמנה.
+      final release = _routine(script, 'procedure SpeedRelease(');
+      expect(
+        release.substring(release.indexOf('SpeedResume();')),
+        contains('HoldShownEta(False);'),
+      );
+      // Inno ממשיך להוריד בזמן השאלה: הדיווחים של חצי השנייה שאחריה נושאים את
+      // כל מה שהצטבר, ולכן רק קובעים בסיס.
+      expect(release, contains('EstSettleMs := NowMs() + 500;'));
+      expect(sample, contains('or (Tick < EstSettleMs) then'));
+      final click = _routine(script, 'procedure UiButtonClick(');
+      final hold = click.indexOf('WasPaused := SpeedHold();');
+      expect(hold, greaterThanOrEqualTo(0));
+      expect(click.indexOf("CustomMessage('StopTitle')"), greaterThan(hold));
+      expect(
+        click.indexOf('SpeedRelease(WasPaused);'),
+        greaterThan(click.indexOf("CustomMessage('StopTitle')")),
+      );
+      expect(
+        _routine(script, 'procedure UiRequestClose('),
+        contains('SpeedRelease(WasPaused);'),
+      );
+      expect(script, contains('DefaultHashRate = 150000000;'));
+      expect(script, contains('DefaultCopyRate = 100000000;'));
+      expect(run, contains('HashMsMeasured := HashMsMeasured +'));
+    });
+
+    test('$_assistant: הזמן שנותר — עיגול לפי הסדר, ודקדוק "כ"/"כ-"', () {
+      final script = _script(_assistant);
+      final round = _routine(script, 'procedure RoundDuration(');
+      expect(round, contains('Secs := Trunc(Seconds / 5 + 0.5) * 5'));
+      expect(round, contains('Secs := Trunc(Seconds / 10 + 0.5) * 10'));
+      expect(round, contains('Minutes := Trunc(Seconds / 60 + 0.5)'));
+      expect(round, contains('Rounded := Trunc(Seconds / 300 + 0.5) * 5;'));
+      expect(_text(script, 'hebrew', 'TimeLeft'), 'נותרו כ-%1');
+      expect(_text(script, 'hebrew', 'TimeLeftWord'), 'נותרו כ%1');
+      expect(_text(script, 'hebrew', 'TimeLeftOne'), 'נותרה כ%1');
+      expect(_text(script, 'hebrew', 'TimeLeftFew'), 'עוד כמה שניות');
+      expect(_text(script, 'hebrew', 'DurationHour'), 'שעה');
+      expect(_text(script, 'hebrew', 'DurationMinute'), 'דקה');
+      expect(_text(script, 'english', 'TimeLeft'), 'about %1 left');
+      expect(_text(script, 'english', 'TimeLeftFew'), 'a few seconds left');
     });
 
     test('$_assistant: היעד — כמו המחשב הזה, או רשימה אחת של כל יעד אחר', () {

@@ -605,12 +605,18 @@ struct WorkingPage: View {
 
     private func speed(_ status: PreparationStatus?) -> String {
         let s = model.strings
-        guard let status = status, status.phase == .downloading, let rate = status.bytesPerSecond else { return "" }
-        var text = humanSpeed(rate, english: s.english)
-        if let remaining = status.secondsRemaining {
-            text += " · " + s(.timeLeft, humanRemaining(remaining, english: s.english))
+        guard let status = status, let eta = status.eta else { return "" }
+        let timeText: String
+        switch eta {
+        case .waitingForConnection:
+            return s(.waitingForConnection)
+        case .calculating:
+            timeText = s(.calculatingTime)
+        case .remaining(let seconds):
+            timeText = remainingText(seconds, english: s.english)
         }
-        return text
+        guard status.phase == .downloading, let rate = status.bytesPerSecond else { return timeText }
+        return humanSpeed(rate, english: s.english) + " · " + timeText
     }
 
     private func bytes(_ status: PreparationStatus?) -> String {

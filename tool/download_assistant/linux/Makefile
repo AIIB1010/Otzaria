@@ -3,7 +3,7 @@
 # Cairo, GDK) plus libc: Otzaria's own packages depend on nothing more.
 #
 #   make                 build/Otzaria-Download-Assistant (fetches the pinned art once)
-#   make test            unit tests (fixtures, JSON, HTTP, markers, assembly, texts)
+#   make test            unit tests (fixtures, JSON, HTTP, markers, assembly, texts, ETA)
 #   make check-needed    fail when the binary links anything unexpected
 #   make dist DIST_ARCH=x64|arm64
 #
@@ -27,7 +27,7 @@ override CFLAGS += -std=gnu11 -Wall -Wextra -Wno-unused-parameter \
 override LDFLAGS += -Wl,--as-needed
 
 CORE := otz_common.c json.c manifest.c selection.c http.c release.c paths.c \
-  download.c assemble.c texts.c
+  download.c assemble.c texts.c eta.c
 APP := $(CORE) widgets.c ui.c main.c
 HEADERS := $(wildcard *.h)
 
@@ -84,7 +84,7 @@ $(BUILD)/core/test_main.o: tests/test_main.c $(HEADERS) $(BUILD)/build_info.h
 	$(CC) $(CFLAGS) $(GIO_CFLAGS) -DOTZ_FIXTURES_DIR='"$(FIXTURES)"' -c $< -o $@
 
 $(TEST_BIN): $(CORE:%.c=$(BUILD)/core/%.o) $(BUILD)/core/test_main.o
-	$(CC) $(LDFLAGS) -o $@ $^ $(GIO_LIBS)
+	$(CC) $(LDFLAGS) -o $@ $^ $(GIO_LIBS) -lm
 
 test: $(TEST_BIN) test-build-info
 	$(TEST_BIN)

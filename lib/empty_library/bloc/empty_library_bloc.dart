@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
@@ -1171,57 +1172,33 @@ class EmptyLibraryBloc extends Bloc<EmptyLibraryEvent, EmptyLibraryState> {
         await libraryDir.create(recursive: true);
       }
 
-      // שלב 1 — הורדת כל הקבצים יחד (פס וזמן משוער מאוחדים)
-      final etaEstimator = DownloadEtaEstimator();
-      var downloadedBase = 0;
-      for (final asset in assets) {
-        if (!asset.skipped) {
-          try {
-            await _downloadAsset(
-              asset: asset,
-              cumulativeBase: downloadedBase,
-              grandTotal: grandTotal,
-              estimator: etaEstimator,
-              emit: emit,
-            );
-          } catch (e) {
-            if (!asset.optional) rethrow;
-            debugPrint('הורדת ${asset.tempFileName} (אופציונלי) נכשלה: $e');
-            asset.skipped = true;
-          }
-        }
-        downloadedBase += asset.compressedSize;
-        // נכס אופציונלי שדולג/נכשל לא פלט את המשקל שלו — משלימים את הפס כדי
-        // שלא ייתקע מתחת ל-100% לפני המעבר לחילוץ (best-effort: שקוף למשתמש).
-        if (asset.skipped && grandTotal > 0) {
-          emit(
-            EmptyLibraryDownloading(
-              progress: (downloadedBase / grandTotal).clamp(0.0, 1.0),
-              message: asset.downloadTitle,
-            ),
-          );
-        }
-      }
-
-      // שלב 2 — חילוץ כל הקבצים יחד (פס מאוחד, משוקלל לפי הגודל הדחוס)
-      var extractBase = 0;
-      for (final asset in assets) {
-        if (!asset.skipped) {
-          try {
-            await _extractAsset(
-              asset: asset,
-              weightBase: extractBase,
-              totalWeight: grandTotal,
-              outputDir: libraryPath,
-              emit: emit,
-            );
-          } catch (e) {
-            if (!asset.optional) rethrow;
-            debugPrint('חילוץ ${asset.tempFileName} (אופציונלי) נכשל: $e');
-            asset.skipped = true;
-          }
-        }
-        extractBase += asset.compressedSize;
+      // שלב 1 — הורדת כל הקבצים יחד (פס וזמן משוער מאוחדים). הזמן המשוער כולל
+      // גם את החיבור והחילוץ שאחרי ההורדה.
+      final activeAssets = assets.where((asset) => !asset.skipped);
+      final eta = _EtaLine(
+        grandTotal > 0 && activeAssets.every((a) => a.compressedSize > 0)
+            ? (DownloadEtaEstimator()..planPhases([
+                for (final asset in activeAssets) ...[
+                  if (asset.split != null) asset.joinPhase,
+                  asset.extractPhase,
+                ],
+              ]))
+            : null,
+      );
+      // בלי דיווחי התקדמות (תקיעה, חיבור חלקים) השורה עדיין מתעדכנת.
+      final etaTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (!emit.isDone) eta.refresh?.call();
+      });
+      try {
+        await _downloadAndExtractAssets(
+          assets: assets,
+          grandTotal: grandTotal,
+          libraryPath: libraryPath,
+          eta: eta,
+          emit: emit,
+        );
+      } finally {
+        etaTicker.cancel();
       }
 
       emit(
@@ -1241,6 +1218,74 @@ class EmptyLibraryBloc extends Bloc<EmptyLibraryEvent, EmptyLibraryState> {
     }
   }
 
+  Future<void> _downloadAndExtractAssets({
+    required List<_DownloadAsset> assets,
+    required int grandTotal,
+    required String libraryPath,
+    required _EtaLine eta,
+    required Emitter<EmptyLibraryState> emit,
+  }) async {
+    var downloadedBase = 0;
+    for (final asset in assets) {
+      if (!asset.skipped) {
+        try {
+          await _downloadAsset(
+            asset: asset,
+            cumulativeBase: downloadedBase,
+            grandTotal: grandTotal,
+            eta: eta,
+            emit: emit,
+          );
+        } catch (e) {
+          eta.estimator?.endPhase();
+          if (!asset.optional) rethrow;
+          debugPrint('הורדת ${asset.tempFileName} (אופציונלי) נכשלה: $e');
+          asset.skipped = true;
+          eta.estimator
+            ?..dropPhase(asset.joinPhase.id)
+            ..dropPhase(asset.extractPhase.id);
+        }
+      }
+      downloadedBase += asset.compressedSize;
+      // נכס אופציונלי שדולג/נכשל לא פלט את המשקל שלו — משלימים את הפס כדי
+      // שלא ייתקע מתחת ל-100% לפני המעבר לחילוץ (best-effort: שקוף למשתמש).
+      if (asset.skipped && grandTotal > 0) {
+        emit(
+          EmptyLibraryDownloading(
+            progress: (downloadedBase / grandTotal).clamp(0.0, 1.0),
+            message: asset.downloadTitle,
+          ),
+        );
+      }
+    }
+
+    eta.estimator?.finishDownload();
+
+    // שלב 2 — חילוץ כל הקבצים יחד (פס מאוחד, משוקלל לפי הגודל הדחוס)
+    var extractBase = 0;
+    for (final asset in assets) {
+      if (!asset.skipped) {
+        try {
+          await _extractAsset(
+            asset: asset,
+            weightBase: extractBase,
+            totalWeight: grandTotal,
+            outputDir: libraryPath,
+            eta: eta,
+            emit: emit,
+          );
+        } catch (e) {
+          if (!asset.optional) rethrow;
+          debugPrint('חילוץ ${asset.tempFileName} (אופציונלי) נכשל: $e');
+          asset.skipped = true;
+        } finally {
+          eta.estimator?.endPhase();
+        }
+      }
+      extractBase += asset.compressedSize;
+    }
+  }
+
   /// מוריד קובץ דחוס יחיד (עם resume) ומדווח התקדמות מאוחדת על פני כל
   /// הקבצים: [cumulativeBase] = סכום הגדלים הדחוסים של הקבצים שכבר הורדו
   /// במלואם, [grandTotal] = סך הגדלים הדחוסים של כל הקבצים.
@@ -1248,7 +1293,7 @@ class EmptyLibraryBloc extends Bloc<EmptyLibraryEvent, EmptyLibraryState> {
     required _DownloadAsset asset,
     required int cumulativeBase,
     required int grandTotal,
-    required DownloadEtaEstimator estimator,
+    required _EtaLine eta,
     required Emitter<EmptyLibraryState> emit,
   }) async {
     final tempPath = path.join(Directory.systemTemp.path, asset.tempFileName);
@@ -1264,8 +1309,21 @@ class EmptyLibraryBloc extends Bloc<EmptyLibraryEvent, EmptyLibraryState> {
       asset.compressedSize,
     );
 
+    final split = asset.split;
+    // סופי החלקים (פרט לאחרון): אחרי כל אחד יש שקט ידוע עד תחילת החלק הבא.
+    final partEnds = <int>{};
+    if (split != null) {
+      var end = 0;
+      for (final part in split.parts.take(split.parts.length - 1)) {
+        partEnds.add(end += part.size);
+      }
+    }
+    var downloadedBytes = 0;
+    var sawProgress = false;
+    var postDownloadStarted = false;
+
     // מדווח התקדמות מאוחדת לפי הבייטים שהורדו עד כה בקובץ הנוכחי.
-    void emitProgress(int downloadedBytes) {
+    void emitProgress() {
       if (grandTotal <= 0) {
         emit(
           EmptyLibraryDownloading(progress: 0.0, message: asset.downloadTitle),
@@ -1273,12 +1331,8 @@ class EmptyLibraryBloc extends Bloc<EmptyLibraryEvent, EmptyLibraryState> {
         return;
       }
       final cumulative = cumulativeBase + downloadedBytes;
-      final eta = estimator.update(
-        downloadedBytes: cumulative,
-        totalBytes: grandTotal,
-        now: DateTime.now(),
-      );
-      final etaLine = eta != null ? '\n${formatRemainingTimeHebrew(eta)}' : '';
+      final etaText = eta.estimator?.statusText();
+      final etaLine = etaText != null ? '\n$etaText' : '';
       final resumeLine = resumeFromBytes > 0
           ? '\nממשיך הורדה מ-${formatMegabytesLtr(resumeFromBytes)}'
           : '';
@@ -1292,6 +1346,42 @@ class EmptyLibraryBloc extends Bloc<EmptyLibraryEvent, EmptyLibraryState> {
       );
     }
 
+    // המונה כולל בייטים שכבר היו על הדיסק; המעריך מבחין בהם לפי הקפיצה.
+    void onProgress(int downloaded) {
+      final firstReport = !sawProgress;
+      sawProgress = true;
+      downloadedBytes = downloaded;
+      final estimator = eta.estimator;
+      if (estimator != null) {
+        // הקובץ המחובר לא אומת ומורד מחדש — חוזרים למצב הורדה רגיל.
+        if (postDownloadStarted && downloaded < asset.compressedSize) {
+          postDownloadStarted = false;
+          estimator.endPhase();
+          if (split != null) estimator.planPhases([asset.joinPhase]);
+        }
+        estimator.addProgress(cumulativeBase + downloaded, grandTotal);
+        if (!postDownloadStarted && downloaded >= asset.compressedSize) {
+          postDownloadStarted = true;
+          if (split != null && !firstReport) {
+            estimator.startPhase(asset.joinPhase, tracksProgress: false);
+          } else if (firstReport && (split != null || asset.sha256 != null)) {
+            // קובץ שכבר היה שלם על הדיסק מאומת ממנו בלי דיווח התקדמות.
+            estimator
+              ..dropPhase(asset.joinPhase.id)
+              ..startPhase(asset.hashPhase, tracksProgress: false);
+          } else {
+            estimator.pause();
+          }
+        } else if (partEnds.contains(downloaded)) {
+          estimator.pause();
+        }
+      }
+      emitProgress();
+    }
+
+    eta.refresh = emitProgress;
+    eta.estimator?.pause();
+
     // מנקה sidecar מהפורמט המקומי הישן. מכאן ואילך PatchDownloader מנהל
     // Range/If-Range, אימות 206/416, גודל, timeout וסגירת משאבים במקום אחד.
     await deleteDownloadSidecar(tempPath);
@@ -1301,24 +1391,26 @@ class EmptyLibraryBloc extends Bloc<EmptyLibraryEvent, EmptyLibraryState> {
       connectTimeout: downloadConnectTimeout,
       stallTimeout: _downloadStallTimeout,
     );
-    final split = asset.split;
     if (split != null) {
       await downloader.downloadSplitToFile(
         split: split,
         destPath: tempPath,
         resumeToken: identity,
-        onProgress: (downloaded, _) => emitProgress(downloaded),
+        onProgress: (downloaded, _) => onProgress(downloaded),
       );
-      return;
+    } else {
+      await downloader.downloadToFile(
+        url: asset.resolvedUrl!,
+        destPath: tempPath,
+        expectedSize: asset.compressedSize > 0 ? asset.compressedSize : null,
+        expectedSha256: asset.sha256,
+        resumeToken: identity,
+        onProgress: (downloaded, _) => onProgress(downloaded),
+      );
     }
-    await downloader.downloadToFile(
-      url: asset.resolvedUrl!,
-      destPath: tempPath,
-      expectedSize: asset.compressedSize > 0 ? asset.compressedSize : null,
-      expectedSha256: asset.sha256,
-      resumeToken: identity,
-      onProgress: (downloaded, _) => emitProgress(downloaded),
-    );
+    eta.estimator
+      ?..endPhase()
+      ..pause();
   }
 
   Future<int> _reusableDownloadOffset(
@@ -1347,24 +1439,41 @@ class EmptyLibraryBloc extends Bloc<EmptyLibraryEvent, EmptyLibraryState> {
     required int weightBase,
     required int totalWeight,
     required String outputDir,
+    required _EtaLine eta,
     required Emitter<EmptyLibraryState> emit,
   }) async {
     final tempPath = path.join(Directory.systemTemp.path, asset.tempFileName);
+    var assetProgress = 0.0;
 
-    void report(double assetProgress) {
+    void emitProgress() {
       final combined = totalWeight > 0
           ? ((weightBase + asset.compressedSize * assetProgress) / totalWeight)
                 .clamp(0.0, 1.0)
           : assetProgress;
+      final etaText = eta.estimator?.statusText();
       emit(
         EmptyLibraryExtracting(
           selectedPath: tempPath,
           progress: combined,
-          message: asset.extractTitle,
+          message: etaText != null
+              ? '${asset.extractTitle}\n$etaText'
+              : asset.extractTitle,
         ),
       );
     }
 
+    void report(double progress) {
+      assetProgress = progress;
+      eta.estimator?.phaseProgress((asset.compressedSize * progress).round());
+      emitProgress();
+    }
+
+    // העתקת קובץ לא דחוס אינה מדווחת התקדמות — נספרת לאחור מההערכה.
+    eta.estimator?.startPhase(
+      asset.extractPhase,
+      tracksProgress: asset.isCompressed,
+    );
+    eta.refresh = emitProgress;
     report(0.0);
 
     try {
@@ -1664,6 +1773,18 @@ class _DownloadAsset {
   /// sha256 של הנכס מה-API — לאימות ההורדה ולסימון גרסת התלמוד והמילון.
   final String? sha256;
 
+  EtaPhase get joinPhase =>
+      EtaPhase('join:$tempFileName', EtaPhaseKind.join, compressedSize);
+
+  EtaPhase get hashPhase =>
+      EtaPhase('hash:$tempFileName', EtaPhaseKind.hash, compressedSize);
+
+  EtaPhase get extractPhase => EtaPhase(
+    'extract:$tempFileName',
+    isCompressed ? EtaPhaseKind.extract : EtaPhaseKind.copy,
+    compressedSize,
+  );
+
   /// החלקים כשהנכס מפוצל; אז הם מורדים ומחוברים אל קובץ ה-temp.
   final SplitAsset? split;
 
@@ -1718,4 +1839,13 @@ class UnsupportedDbSchemaException implements Exception {
   String toString() =>
       'ספריית הספרים בסכמה $schemaVersion, חדשה מזו שהגרסה הזו קוראת '
       '($readableSchemaVersion) — נדרש עדכון של התוכנה';
+}
+
+/// הזמן המשוער של עבודת ההורדה, ורענון השורה של השלב הנוכחי מהטיימר.
+class _EtaLine {
+  _EtaLine(this.estimator);
+
+  /// null כשגודל הכולל או גודל אחד הקבצים אינו ידוע — אז אין זמן משוער.
+  final DownloadEtaEstimator? estimator;
+  void Function()? refresh;
 }

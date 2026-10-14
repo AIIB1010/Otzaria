@@ -38,9 +38,10 @@
   X(CONNECT_STOP_NO) X(STOP_TITLE) X(STOP_TEXT) X(STOP_YES) X(STOP_NO)           \
   X(ERR_FILE_UNAVAILABLE) X(ERR_CANNOT_CONNECT) X(ERR_CANNOT_READ_LIST)          \
   X(ERR_CANNOT_PREPARE) X(ERR_COPY) X(ERR_SAVE) X(ERR_DAMAGED)                   \
-  X(ERR_WRITE_JOINED) X(OUTPUT_SUBFOLDER) X(DURATION_UNDER_MINUTE)               \
-  X(DURATION_HOUR) X(DURATION_TWO_HOURS) X(DURATION_HOURS) X(DURATION_MINUTE)    \
-  X(DURATION_MINUTES) X(DURATION_JOIN)
+  X(ERR_WRITE_JOINED) X(OUTPUT_SUBFOLDER) X(TIME_LEFT_FEW) X(TIME_LEFT_WORD)     \
+  X(TIME_LEFT_SINGLE) X(ETA_CALCULATING) X(WAITING_CONNECTION) X(DURATION_HOUR) \
+  X(DURATION_TWO_HOURS) X(DURATION_HOURS) X(DURATION_MINUTE) X(DURATION_MINUTES) \
+  X(DURATION_SECONDS) X(DURATION_JOIN)
 
 typedef enum {
 #define OTZ_KEY(name) S_##name,
@@ -72,4 +73,5 @@ char *otz_bidi(const char *text);
 
 char *otz_size_text(gint64 bytes);
 char *otz_speed_text(double bytes_per_second);
-char *otz_duration_text(double seconds);
+/* "About 2 minutes 30 seconds left", rounded as otz_eta_round rounds it. */
+char *otz_time_left_text(double seconds);

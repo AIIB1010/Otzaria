@@ -168,7 +168,7 @@ english.PresetCustomDesc=I want to choose what to download myself.
 english.RequiredTag=(required)
 english.OutputSubfolder=Otzaria setup for %1
 english.FallbackFolder=Otzaria setup
-english.DurationUnderMinute=less than a minute
+english.DurationSeconds=%1 seconds
 english.DurationHour=1 hour
 english.DurationTwoHours=2 hours
 english.DurationHours=%1 hours
@@ -176,7 +176,13 @@ english.DurationMinute=1 minute
 english.DurationMinutes=%1 minutes
 english.DurationJoin=%1 %2
 english.DownloadedOf=%1 of %2 downloaded
-english.TimeLeft=%1 left
+english.TimeLeft=about %1 left
+english.TimeLeftWord=about %1 left
+english.TimeLeftOne=about %1 left
+english.TimeLeftFew=a few seconds left
+english.EstimatingTime=Calculating time left…
+english.WaitingForConnection=Waiting for the connection…
+english.VerifyingDownloadedFile=Verifying the file…
 english.CheckingDownloadedFile=Checking the downloaded file
 english.DownloadingItem=Downloading: %1 (%2 of %3)
 english.DownloadingItemAgain=The download was interrupted, downloading again: %1 (try %2 of %3)
@@ -289,7 +295,7 @@ hebrew.PresetCustomDesc=אני רוצה לבחור בעצמי מה להוריד.
 hebrew.RequiredTag=(נדרש)
 hebrew.OutputSubfolder=אוצריא להתקנה ל-%1
 hebrew.FallbackFolder=אוצריא-להתקנה
-hebrew.DurationUnderMinute=פחות מדקה
+hebrew.DurationSeconds=%1 שניות
 hebrew.DurationHour=שעה
 hebrew.DurationTwoHours=שעתיים
 hebrew.DurationHours=%1 שעות
@@ -297,7 +303,13 @@ hebrew.DurationMinute=דקה
 hebrew.DurationMinutes=%1 דקות
 hebrew.DurationJoin=%1 ו-%2
 hebrew.DownloadedOf=ירדו %1 מתוך %2
-hebrew.TimeLeft=נותרו %1
+hebrew.TimeLeft=נותרו כ-%1
+hebrew.TimeLeftWord=נותרו כ%1
+hebrew.TimeLeftOne=נותרה כ%1
+hebrew.TimeLeftFew=עוד כמה שניות
+hebrew.EstimatingTime=מחשב את הזמן הנותר…
+hebrew.WaitingForConnection=ממתין לחיבור…
+hebrew.VerifyingDownloadedFile=מאמת את הקובץ…
 hebrew.CheckingDownloadedFile=בודק את הקובץ שירד
 hebrew.DownloadingItem=מוריד: %1 (%2 מתוך %3)
 hebrew.DownloadingItemAgain=ההורדה נקטעה, מוריד שוב: %1 (ניסיון %2 מתוך %3)
@@ -402,8 +414,12 @@ function SetEndOfFile(hFile: THandle): BOOL;
 function CreateHardLink(lpFileName, lpExistingFileName: String;
   lpSecurityAttributes: Integer): BOOL;
   external 'CreateHardLinkW@kernel32.dll stdcall';
-function GetTickCount(): LongWord;
-  external 'GetTickCount@kernel32.dll stdcall';
+function GetTickCount64(): Int64;
+  external 'GetTickCount64@kernel32.dll stdcall';
+function SetTimer(Wnd: Longint; IdEvent, Elapse, TimerFunc: LongWord): LongWord;
+  external 'SetTimer@user32.dll stdcall';
+function KillTimer(Wnd: Longint; IdEvent: LongWord): BOOL;
+  external 'KillTimer@user32.dll stdcall';
 
 const
   { מגבלת GitHub לנכס בודד. נכס גדול ממנה מתפרסם כחלקים. }
@@ -414,7 +430,20 @@ const
   CopyChunkSize = 4194304;
   AppendSliceSize = 67108864;
   ManifestSchemaVersion = 1;
-  SpeedWindowMs = 5000;
+  { הערכת הזמן: סכומים דועכים של בתים ושל זמן, e^(-dt/τ) דרך ExpNeg. }
+  EtaTauSec = 8;
+  SpeedTauSec = 3;
+  StallMs = 5000;
+  StallHideMs = 30000;
+  { תקיעה בודדת נספרת כשתי שניות; תקיעה שחוזרת בתוך 30 שניות — במלואה. }
+  StallSampleSec = 2;
+  { נקודת תיקון: שנייה של שקט אחרי פרץ, או 2 שניות של זרימה רציפה. }
+  DispFlowGapMs = 1000;
+  DispFlowMs = 2000;
+  DispMaxCorrSec = 30;
+  { קצב ברירת מחדל (בתים לשנייה) עד שנמדד קצב אמיתי באותה ריצה. }
+  DefaultHashRate = 150000000;
+  DefaultCopyRate = 100000000;
   { Inno (כשאין curl) אינו ממשיך הורדה מאמצע: חיבור שנקטע מוריד את הקובץ כולו שוב. }
   DownloadAttempts = 3;
 
@@ -501,8 +530,29 @@ var
   QueueSize: TInt64Array;
   ProgressCaption: String;
   ProgressDone, ProgressTotal: Int64;
-  SampleTick, SampleBytes: TInt64Array;
   VerifyStartTick: Int64;
+  { מעריך אחד לכל הריצה; הוא אינו מתאפס בין קבצים. }
+  EstSb, EstSt, SpdSb, SpdSt, EstActive, EstWarmActive, EstMaxGap,
+    EstIsoDeficit: Extended;
+  EstLastMs, EstLastBytes, EstSessionBytes, EstWarmBytes, EstStallRecMs,
+    EstActivityMs: Int64;
+  EstWarmSamples: Integer;
+  EstPaused, EstRebase, EstNewData, EstReported, EstWarmLatched,
+    StatusBusy: Boolean;
+  { אחרי שאלה פתוחה: Inno הוריד בזמנה, והדיווחים הראשונים נושאים את כל מה שהצטבר. }
+  EstSettleMs: Int64;
+  { שכבת התצוגה: הזמן המוצג (-1 = אין) ונקודות התיקון שלו. }
+  EtaShown, DispRawAtData: Extended;
+  DispLastMs, DispCorrMs, DispDataMs, DispFlowStartMs: Int64;
+  DispRunOpen: Boolean;
+  StatusTail: String;
+  StatusTailKind: Integer;
+  StatusTailMs: Int64;
+  { השלבים השקטים: ה-hash של Inno וחיבור החלקים, נמדדים כדי להעריך את הבאים. }
+  HashBytesMeasured, HashMsMeasured, CopyBytesMeasured, CopyMsMeasured: Int64;
+  JoinCopyLeft, JoinHashLeft: Int64;
+  CurrentProgress, CurrentFileSize: Int64;
+  DownloadTimer: LongWord;
 
 { ============================ עזרי טקסט ============================ }
 
@@ -963,7 +1013,7 @@ end;
 
 function NowMs(): Int64;
 begin
-  Result := GetTickCount();
+  Result := GetTickCount64();
 end;
 
 { מחשב hash ומתעד את משך הקריאה; הרכבה מחודשת מחייבת גם אימות של התוצר. }
@@ -2304,42 +2354,84 @@ begin
     end;
 end;
 
-{ "3 דקות", "שעה ו-10 דקות" — בלי שניות מדויקות, שממילא אינן יציבות. }
-function HumanDuration(Seconds: Int64): String;
-var
-  Hours, Minutes: Int64;
-  MinutesText: String;
+function JoinDuration(const First, Second: String): String;
 begin
-  if Seconds < 60 then
+  if First = '' then
+    Result := Second
+  else if Second = '' then
+    Result := First
+  else
+    Result := FmtMessage(CustomMessage('DurationJoin'), [First, Second]);
+end;
+
+{ עד דקה בקפיצות של 5 שניות, עד 10 דקות בקפיצות של 10, עד שעה בדקות שלמות,
+  ומעליה בקפיצות של 5 דקות. מעגלים קודם ומנסחים לפי הערך המעוגל (59 שניות = דקה). }
+procedure RoundDuration(Seconds: Extended; var Hours, Minutes, Secs: Int64);
+var
+  Rounded: Int64;
+begin
+  Hours := 0;
+  Minutes := 0;
+  Secs := 0;
+  if Seconds < 5 then
+    Secs := 5
+  else if Seconds < 60 then
+    Secs := Trunc(Seconds / 5 + 0.5) * 5
+  else if Seconds < 600 then
+    Secs := Trunc(Seconds / 10 + 0.5) * 10
+  else if Seconds < 3600 then
+    Minutes := Trunc(Seconds / 60 + 0.5)
+  else
   begin
-    Result := CustomMessage('DurationUnderMinute');
-    exit;
+    Rounded := Trunc(Seconds / 300 + 0.5) * 5;
+    Hours := Rounded div 60;
+    Minutes := Rounded mod 60;
   end;
-  Hours := Seconds div 3600;
-  Minutes := (Seconds mod 3600 + 30) div 60;
-  if Minutes = 60 then
-  begin
-    Hours := Hours + 1;
-    Minutes := 0;
-  end;
-  if Hours = 0 then
-    Result := ''
-  else if Hours = 1 then
+  Minutes := Minutes + Secs div 60;
+  Secs := Secs mod 60;
+  Hours := Hours + Minutes div 60;
+  Minutes := Minutes mod 60;
+end;
+
+function DurationText(Seconds: Extended): String;
+var
+  Hours, Minutes, Secs: Int64;
+  Part: String;
+begin
+  RoundDuration(Seconds, Hours, Minutes, Secs);
+  Result := '';
+  if Hours = 1 then
     Result := CustomMessage('DurationHour')
   else if Hours = 2 then
     Result := CustomMessage('DurationTwoHours')
-  else
+  else if Hours > 2 then
     Result := Msg1('DurationHours', IntToStr(Hours));
-  if Minutes = 0 then
-    exit;
+  Part := '';
   if Minutes = 1 then
-    MinutesText := CustomMessage('DurationMinute')
+    Part := CustomMessage('DurationMinute')
+  else if Minutes > 1 then
+    Part := Msg1('DurationMinutes', IntToStr(Minutes));
+  Result := JoinDuration(Result, Part);
+  if Secs > 0 then
+    Result := JoinDuration(Result, Msg1('DurationSeconds', IntToStr(Secs)));
+end;
+
+{ בעברית "כ" נצמדת למילה ("כשעה") ו"כ-" באה לפני ספרה, ו"נותרה" ליחיד בלבד.
+  מקבל את הערך הגולמי: 4.7 שניות הן עדיין "כמה שניות". }
+function TimeLeftText(Seconds: Extended): String;
+var
+  Hours, Minutes, Secs: Int64;
+begin
+  RoundDuration(Seconds, Hours, Minutes, Secs);
+  if Seconds < 5 then
+    Result := CustomMessage('TimeLeftFew')
+  else if ((Hours = 1) and (Minutes = 0)) or
+          ((Hours = 0) and (Minutes = 1) and (Secs = 0)) then
+    Result := Msg1('TimeLeftOne', DurationText(Seconds))
+  else if (Hours = 1) or (Hours = 2) or ((Hours = 0) and (Minutes = 1)) then
+    Result := Msg1('TimeLeftWord', DurationText(Seconds))
   else
-    MinutesText := Msg1('DurationMinutes', IntToStr(Minutes));
-  if Result = '' then
-    Result := MinutesText
-  else
-    Result := FmtMessage(CustomMessage('DurationJoin'), [Result, MinutesText]);
+    Result := Msg1('TimeLeft', DurationText(Seconds));
 end;
 
 function HumanRate(BytesPerSecond: Int64): String;
@@ -2356,59 +2448,508 @@ begin
     Result := LtrUnit(IntToStr(BytesPerSecond div 1024) + ' KB/s');
 end;
 
+{ ======================== הערכת הזמן שנותר ======================== }
+
+{ e^-X ל-X>=0: ב-Pascal Script אין Exp. חציה עד X<0.5, טור טיילור, וריבוע חוזר. }
+function ExpNeg(X: Extended): Extended;
+var
+  K, I: Integer;
+  Term, Sum: Extended;
+begin
+  Result := 1;
+  if X <= 0 then
+    exit;
+  Result := 0;
+  if X > 50 then
+    exit;
+  K := 0;
+  while X >= 0.5 do
+  begin
+    X := X / 2;
+    K := K + 1;
+  end;
+  Sum := 1;
+  Term := 1;
+  for I := 1 to 8 do
+  begin
+    Term := Term * X / I;
+    Sum := Sum + Term;
+  end;
+  for I := 1 to K do
+    Sum := Sum * Sum;
+  Result := 1 / Sum;
+end;
+
+function SecondsSince(Ms: Int64): Extended;
+begin
+  Result := NowMs() - Ms;
+  Result := Result / 1000;
+end;
+
+{ שכבת התצוגה מאפסת: הערך הבא שיגיע נקבע כמות שהוא. }
+procedure ResetShownEta();
+begin
+  EtaShown := -1;
+  DispLastMs := -1;
+  DispCorrMs := -1;
+  DispRunOpen := False;
+end;
+
+{ CountDown=False: ההפסקה (בין קבצים, שאלה פתוחה) אינה נספרת — התצוגה קפואה.
+  True: שלב מוערך בלי דיווחים (hash) — הזמן שעבר יורד מהמוצג. }
+procedure HoldShownEta(CountDown: Boolean);
+begin
+  if CountDown and (EtaShown >= 0) and (DispLastMs >= 0) then
+  begin
+    EtaShown := EtaShown - SecondsSince(DispLastMs);
+    if EtaShown < 0 then
+      EtaShown := 0;
+  end;
+  DispLastMs := NowMs();
+  DispRunOpen := False;
+end;
+
+{ מתחיל מעריך חדש לכל הריצה. בין קבצים לא מאפסים — רק SpeedPause/SpeedResume. }
 procedure ResetSpeed();
 begin
-  SetArrayLength(SampleTick, 0);
-  SetArrayLength(SampleBytes, 0);
+  EstSb := 0;
+  EstSt := 0;
+  SpdSb := 0;
+  SpdSt := 0;
+  EstActive := 0;
+  EstSessionBytes := 0;
+  EstWarmActive := 0;
+  EstWarmBytes := 0;
+  EstWarmSamples := 0;
+  EstMaxGap := 0;
+  EstStallRecMs := -1;
+  EstIsoDeficit := 0;
+  EstReported := False;
+  EstWarmLatched := False;
+  EstSettleMs := 0;
+  EstPaused := False;
+  EstRebase := True;
+  EstNewData := False;
+  EstLastMs := NowMs();
+  EstActivityMs := NowMs();
+  DispDataMs := -1;
+  ResetShownEta();
+  StatusTail := '';
+  StatusTailKind := 0;
 end;
 
-{ ממוצע נע על ~5 שניות: נשמרת דגימה כל רבע שנייה, והישנות נזרקות. }
+{ שלב בלי רשת (hash, מעבר בין קבצים, שאלה פתוחה): אין דגימות, ואין "תקיעה". }
+procedure SpeedPause();
+begin
+  EstPaused := True;
+end;
+
+{ הדיווח הבא רק קובע בסיס; עד אליו (התחברות לקובץ) זו עדיין הפסקה ולא תקיעה. }
+procedure SpeedResume();
+begin
+  EstPaused := False;
+  EstRebase := True;
+  HoldShownEta(False);
+end;
+
+{ שאלה פתוחה בזמן הורדה אינה רשת: המעריך מושהה והתצוגה קפואה עד שהיא נסגרת. }
+function SpeedHold(): Boolean;
+begin
+  Result := EstPaused;
+  SpeedPause();
+end;
+
+procedure SpeedRelease(WasPaused: Boolean);
+begin
+  if not WasPaused then
+  begin
+    SpeedResume();
+    EstSettleMs := NowMs() + 500;
+  end;
+  HoldShownEta(False);
+end;
+
+{ Bytes: בתים שירדו ברשת בריצה הזו, מצטבר. שקט אינו נדגם, והדגימה שאחריו מכסה
+  את הפער; תקיעה בודדת נספרת כ-2 שניות, וזו שחוזרת בתוך 30 שניות — במלואה. }
 procedure AddSpeedSample(Bytes: Int64);
 var
-  N, I: Integer;
-  Tick: Int64;
+  Tick, Delta: Int64;
+  Gap, Dt, Db, Decay, Since: Extended;
 begin
-  Tick := NowMs();
-  N := GetArrayLength(SampleTick);
-  if (N > 0) and (Tick < SampleTick[N - 1]) then
-  begin
-    ResetSpeed();
-    N := 0;
-  end;
-  if (N > 0) and (Tick - SampleTick[N - 1] < 250) then
+  EstNewData := True;
+  EstReported := True;
+  if EstPaused then
     exit;
-  SetArrayLength(SampleTick, N + 1);
-  SetArrayLength(SampleBytes, N + 1);
-  SampleTick[N] := Tick;
-  SampleBytes[N] := Bytes;
-  N := N + 1;
-  while (N > 2) and (Tick - SampleTick[1] >= SpeedWindowMs) do
+  Tick := NowMs();
+  if EstRebase or (Bytes < EstLastBytes) or (Tick < EstSettleMs) then
   begin
-    for I := 0 to N - 2 do
+    EstRebase := False;
+    EstLastMs := Tick;
+    EstLastBytes := Bytes;
+    EstActivityMs := Tick;
+    exit;
+  end;
+  Delta := Bytes - EstLastBytes;
+  if Delta = 0 then
+    exit;
+  EstActivityMs := Tick;
+  Gap := Tick - EstLastMs;
+  Gap := Gap / 1000;
+  if Gap < 0.05 then
+    exit;
+  if Gap * 1000 >= StallHideMs then
+  begin
+    { חלון חדש מתחיל בנתונים שחזרו; דגימת ההתאוששות רק קובעת בסיס. }
+    EstSb := 0;
+    EstSt := 0;
+    SpdSb := 0;
+    SpdSt := 0;
+    EstWarmActive := 0;
+    EstWarmBytes := 0;
+    EstWarmSamples := 0;
+    EstMaxGap := 0;
+    EstStallRecMs := -1;
+    EstIsoDeficit := 0;
+    EstWarmLatched := False;
+    EstLastMs := Tick;
+    EstLastBytes := Bytes;
+    exit;
+  end;
+  Dt := Gap;
+  if Gap * 1000 >= StallMs then
+  begin
+    if (EstStallRecMs >= 0) and (Tick - EstStallRecMs <= StallHideMs) then
     begin
-      SampleTick[I] := SampleTick[I + 1];
-      SampleBytes[I] := SampleBytes[I + 1];
+      { התקיעה הקודמת נספרה כבודדת — שקט ארוך שחוזר הוא חלק מהקצב. }
+      Since := Tick - EstStallRecMs;
+      Since := Since / 1000;
+      EstSt := EstSt + EstIsoDeficit * ExpNeg(Since / EtaTauSec);
+      SpdSt := SpdSt + EstIsoDeficit * ExpNeg(Since / SpeedTauSec);
+      EstActive := EstActive + EstIsoDeficit;
+      EstWarmActive := EstWarmActive + EstIsoDeficit;
+      EstIsoDeficit := 0;
+    end
+    else
+    begin
+      Dt := StallSampleSec;
+      EstIsoDeficit := Gap - StallSampleSec;
     end;
-    N := N - 1;
-    SetArrayLength(SampleTick, N);
-    SetArrayLength(SampleBytes, N);
+    EstStallRecMs := Tick;
+  end;
+  if Gap > EstMaxGap then
+    EstMaxGap := Gap;
+  Db := Delta;
+  Decay := ExpNeg(Dt / EtaTauSec);
+  EstSb := EstSb * Decay + Db;
+  EstSt := EstSt * Decay + Dt;
+  Decay := ExpNeg(Dt / SpeedTauSec);
+  SpdSb := SpdSb * Decay + Db;
+  SpdSt := SpdSt * Decay + Dt;
+  EstActive := EstActive + Dt;
+  EstSessionBytes := EstSessionBytes + Delta;
+  EstWarmActive := EstWarmActive + Dt;
+  EstWarmBytes := EstWarmBytes + Delta;
+  EstWarmSamples := EstWarmSamples + 1;
+  EstLastMs := Tick;
+  EstLastBytes := Bytes;
+end;
+
+{ ממוצע דועך משוקלל עם ממוצע הריצה; המשקל של הדועך עולה עם הזמן. }
+function BlendRate(Sb, St: Extended): Extended;
+var
+  Weight, Average: Extended;
+begin
+  Result := -1;
+  if (St <= 0) or (EstActive <= 0) then
+    exit;
+  Weight := EstActive / 60;
+  if Weight < 0.5 then
+    Weight := 0.5
+  else if Weight > 1 then
+    Weight := 1;
+  Average := EstSessionBytes;
+  Average := Average / EstActive;
+  Result := Weight * (Sb / St) + (1 - Weight) * Average;
+end;
+
+{ המהירות המוצגת, בבתים לשנייה, או -1 לפני שנייה של נתונים. }
+function CurrentSpeed(): Int64;
+var
+  Rate: Extended;
+begin
+  Result := -1;
+  if EstActive < 1 then
+    exit;
+  Rate := BlendRate(SpdSb, SpdSt);
+  if Rate >= 1 then
+    Result := Trunc(Rate);
+end;
+
+{ הקצב להערכת הזמן, או -1 בזמן החימום. זרם בפרצים ממתין לכמה מחזורים. }
+function DownloadRate(Remaining: Int64): Extended;
+var
+  Need, Wait, Got: Extended;
+begin
+  Result := -1;
+  Wait := 3 * EstMaxGap;
+  if Wait > 15 then
+    Wait := 15;
+  if Wait < 3 then
+    Wait := 3;
+  Need := Remaining;
+  Need := Need * 0.01;
+  if Need > 1048576 then
+    Need := 1048576;
+  Got := EstWarmBytes;
+  { החימום ננעל: תקיעה בודדת שמגדילה את EstMaxGap אינה מחזירה "מחשב". }
+  if not EstWarmLatched and ((EstWarmActive < Wait) or (EstWarmSamples < 3) or
+     (Got < Need)) then
+    exit;
+  EstWarmLatched := True;
+  Result := BlendRate(EstSb, EstSt);
+  if Result <= 0 then
+    Result := -1;
+end;
+
+function PhaseRate(Bytes, Ms: Int64; Fallback: Extended): Extended;
+var
+  Seconds: Extended;
+begin
+  Result := Fallback;
+  if (Ms < 1000) or (Bytes <= 0) then
+    exit;
+  Seconds := Ms;
+  Seconds := Seconds / 1000;
+  Result := Bytes;
+  Result := Result / Seconds;
+end;
+
+{ השלבים שאחרי ההורדה: ה-hash של HashBytes, ואז חיבור החלקים וה-hash שלו. }
+function PostSeconds(HashBytes: Int64): Extended;
+var
+  Rate, Bytes: Extended;
+begin
+  Rate := PhaseRate(HashBytesMeasured, HashMsMeasured, DefaultHashRate);
+  if Rate <= 0 then
+    Rate := DefaultHashRate;
+  Bytes := HashBytes;
+  if JoinHashLeft > 0 then
+    Bytes := Bytes + JoinHashLeft;
+  Result := Bytes / Rate;
+  if JoinCopyLeft > 0 then
+  begin
+    Rate := PhaseRate(CopyBytesMeasured, CopyMsMeasured, DefaultCopyRate);
+    if Rate <= 0 then
+      Rate := DefaultCopyRate;
+    Bytes := JoinCopyLeft;
+    Result := Result + Bytes / Rate;
   end;
 end;
 
-{ בתים לשנייה, או -1 כשעדיין אין מספיק דגימות. }
-function CurrentSpeed(): Int64;
+{ סופר לאחור בזמן אמת, ומתקן אל ההערכה רק בנקודות תיקון: שנייה של שקט אחרי
+  פרץ (לפי ההערכה של הדגימה האחרונה), או זרימה רציפה של 2 שניות לפחות. }
+procedure UpdateShownEta(Raw: Extended; Fresh: Boolean);
 var
-  N: Integer;
-  Elapsed: Int64;
+  Tick, Last, PrevData: Int64;
+  Next, Target, Diff, Band, Tau, Cdt: Extended;
+  HasTarget: Boolean;
 begin
-  Result := -1;
-  N := GetArrayLength(SampleTick);
-  if N < 2 then
+  Tick := NowMs();
+  if Raw < 0 then
+    Raw := 0;
+  Last := DispLastMs;
+  DispLastMs := Tick;
+  PrevData := DispDataMs;
+  if Fresh then
+  begin
+    if (PrevData < 0) or (Tick - PrevData >= DispFlowGapMs) then
+      DispFlowStartMs := Tick;
+    DispDataMs := Tick;
+    DispRawAtData := Raw;
+    DispRunOpen := True;
+  end;
+  if (EtaShown < 0) or (Last < 0) then
+  begin
+    DispCorrMs := Tick;
+    EtaShown := Raw;
     exit;
-  Elapsed := SampleTick[N - 1] - SampleTick[0];
-  if Elapsed < 1000 then
+  end;
+  Next := Tick - Last;
+  Next := EtaShown - Next / 1000;
+  HasTarget := False;
+  Target := 0;
+  if Fresh then
+  begin
+    if Tick - DispFlowStartMs >= DispFlowMs then
+    begin
+      HasTarget := True;
+      Target := Raw;
+    end;
+  end
+  else if DispRunOpen and (PrevData >= 0) and (Tick - PrevData >= DispFlowGapMs) then
+  begin
+    DispRunOpen := False;
+    HasTarget := True;
+    Target := DispRawAtData;
+  end;
+  if HasTarget then
+  begin
+    Cdt := 0;
+    if DispCorrMs >= 0 then
+      Cdt := SecondsSince(DispCorrMs);
+    if Cdt > DispMaxCorrSec then
+      Cdt := DispMaxCorrSec;
+    DispCorrMs := Tick;
+    if Target < Next * 0.5 then
+      Next := Target
+    else
+    begin
+      Diff := Target - Next;
+      Band := Next * 0.1;
+      if Band < 5 then
+        Band := 5;
+      if Abs(Diff) <= Band then
+        Tau := 30
+      else if Diff < 0 then
+        Tau := 3
+      else
+        Tau := 12;
+      Next := Next + (1 - ExpNeg(Cdt / Tau)) * Diff;
+    end;
+  end;
+  if Next < 0 then
+    Next := 0;
+  EtaShown := Next;
+end;
+
+{ מקבל את הערך הגולמי: 4.7 שניות הן עדיין "כמה שניות". }
+function ShownEtaText(): String;
+begin
+  Result := TimeLeftText(EtaShown);
+end;
+
+{ הטקסט שאחרי הבתים מתחלף לכל היותר פעם בשנייה, אלא כשהשלב השתנה. }
+function ThrottledTail(Kind: Integer; const Tail: String): String;
+begin
+  if (Kind <> StatusTailKind) or (NowMs() - StatusTailMs >= 1000) then
+  begin
+    StatusTail := Tail;
+    StatusTailKind := Kind;
+    StatusTailMs := NowMs();
+  end;
+  Result := StatusTail;
+end;
+
+function StatusJoin(const First, Second: String): String;
+begin
+  if First = '' then
+    Result := Second
+  else
+    Result := First + ' · ' + Second;
+end;
+
+{ נקרא מכל דיווח של Inno ומהטיימר: בלי טיימר אין מי שיגלה שהנתונים הפסיקו להגיע. }
+procedure ShowDownloadStatus();
+var
+  Done, Tick, Remaining: Int64;
+  Rate, Raw, Bytes: Extended;
+  Speed: Int64;
+  Caption, Tail: String;
+  Kind: Integer;
+  Fresh, Paused: Boolean;
+begin
+  if StatusBusy then
     exit;
-  Result := ((SampleBytes[N - 1] - SampleBytes[0]) * 1000) div Elapsed;
+  StatusBusy := True;
+  try
+    Tick := NowMs();
+    Done := ProgressDone + CurrentProgress;
+    Remaining := ProgressTotal - Done;
+    if Remaining < 0 then
+      Remaining := 0;
+    Fresh := EstNewData;
+    EstNewData := False;
+    Paused := EstPaused or EstRebase;
+    Caption := ProgressCaption;
+    Tail := '';
+    if VerifyStartTick > 0 then
+    begin
+      { ה-hash של Inno חוסם את התצוגה, ולכן מספר היה קופא: רק שם השלב. }
+      Caption := CustomMessage('CheckingDownloadedFile');
+      Kind := 3;
+      Tail := CustomMessage('VerifyingDownloadedFile');
+    end
+    else if not EstReported then
+    begin
+      ResetShownEta();
+      Kind := 1;
+      Tail := CustomMessage('EstimatingTime');
+    end
+    else if not Paused and (Remaining > 0) and (Tick - EstActivityMs >= StallMs) then
+    begin
+      { הזמן אינו מוצג בהמתנה ונשמר קפוא; אחרי 30 שניות מתחיל מחדש. }
+      HoldShownEta(False);
+      if Tick - EstActivityMs >= StallHideMs then
+        ResetShownEta();
+      Kind := 2;
+      Tail := CustomMessage('WaitingForConnection');
+    end
+    else
+    begin
+      Speed := CurrentSpeed();
+      if not Paused and (Speed > 0) then
+        Tail := HumanRate(Speed);
+      Raw := -1;
+      if Remaining = 0 then
+        Raw := 0
+      else
+      begin
+        Rate := DownloadRate(Remaining);
+        if Rate > 0 then
+        begin
+          Bytes := Remaining;
+          Raw := Bytes / Rate;
+        end;
+      end;
+      if Raw >= 0 then
+        Raw := Raw + PostSeconds(ProgressTotal - ProgressDone);
+      if Raw < 0 then
+      begin
+        ResetShownEta();
+        Kind := 1;
+        Tail := StatusJoin(Tail, CustomMessage('EstimatingTime'));
+      end
+      else
+      begin
+        { הפסקה ידועה שאינה שלב מוערך: התצוגה קפואה, כמו בתקיעה. }
+        if Paused and (EtaShown >= 0) then
+          HoldShownEta(False)
+        else
+          UpdateShownEta(Raw, Fresh);
+        Kind := 4;
+        Tail := StatusJoin(Tail, ShownEtaText());
+      end;
+    end;
+    DownloadStatus := FmtMessage(CustomMessage('DownloadedOf'), [HumanSize(Done),
+      HumanSize(ProgressTotal)]);
+    DownloadStatus := StatusJoin(DownloadStatus, ThrottledTail(Kind, Tail));
+    DownloadPage.SetText(Caption, DownloadStatus);
+  finally
+    StatusBusy := False;
+  end;
+end;
+
+{ הזמן שנותר לחיבור החלקים ול-hash שלהם, לשורת ההתקדמות של עמוד ההכנה. }
+function PostEtaText(): String;
+begin
+  UpdateShownEta(PostSeconds(0), True);
+  Result := ThrottledTail(5, ShownEtaText());
+end;
+
+procedure DownloadTick(Wnd: LongWord; Msg: LongWord; IdEvent: LongWord; Time: LongWord);
+begin
+  if (VerifyStartTick > 0) or not EstPaused then
+    ShowDownloadStatus();
 end;
 
 { הקבצים יורדים אחד-אחד כדי שכל קובץ שהושלם ייכנס למטמון מיד, ולכן הסכום
@@ -2416,31 +2957,24 @@ end;
 function OnDownloadProgress(const Url, FileName: String;
   const Progress, ProgressMax: Int64): Boolean;
 var
-  Done, Speed: Int64;
-  Status: String;
+  Done: Int64;
 begin
+  CurrentProgress := Progress;
   Done := ProgressDone + Progress;
   AddSpeedSample(Done);
-  Status := FmtMessage(CustomMessage('DownloadedOf'), [HumanSize(Done),
-    HumanSize(ProgressTotal)]);
-  Speed := CurrentSpeed();
-  if Speed > 0 then
-    Status := Status + ' · ' + HumanRate(Speed) + ' · ' +
-      Msg1('TimeLeft', HumanDuration((ProgressTotal - Done) div Speed));
-  DownloadStatus := Status;
-  { Inno מחשב את ה-hash אחרי הבית האחרון בלי לדווח התקדמות — הכותרת מסבירה
-    למה הפס עומד. }
-  if (ProgressMax > 0) and (Progress >= ProgressMax) then
+  { אחרי הבית האחרון Inno מחשב hash בלי לדווח התקדמות. }
+  if (ProgressMax > 0) and (Progress >= ProgressMax) and (VerifyStartTick = 0) then
   begin
-    if VerifyStartTick = 0 then
-    begin
-      VerifyStartTick := NowMs();
-      Log('DownloadAssistant: ' + FileName + ' received, download page verifies');
-    end;
-    DownloadPage.SetText(CustomMessage('CheckingDownloadedFile'), Status);
+    SpeedPause();
+    VerifyStartTick := NowMs();
+    Log('DownloadAssistant: ' + FileName + ' received, download page verifies');
+    { ה-hash מתחיל מיד בחזרה מכאן וחוסם את טיימר התצוגה: מציירים את שם השלב עכשיו. }
+    ShowDownloadStatus();
+    UiUpdateProgress();
+    WizardForm.Update;
   end
   else
-    DownloadPage.SetText(ProgressCaption, Status);
+    ShowDownloadStatus();
   Result := not StopRequested;
 end;
 
@@ -2707,6 +3241,8 @@ begin
   SetArrayLength(QueueSha, 0);
   SetArrayLength(QueueLabel, 0);
   SetArrayLength(QueueSize, 0);
+  JoinCopyLeft := 0;
+  JoinHashLeft := 0;
   Result := True;
 
   WorkPage.SetText(CustomMessage('CheckingCached'), '');
@@ -2724,7 +3260,11 @@ begin
           if ShouldAssembleSingleFile(A) and AssembledIsReady(A) then
             Continue;
           if ShouldAssembleSingleFile(A) then
-            Consumed := ConsumedPartCount(A, Prefix)
+          begin
+            Consumed := ConsumedPartCount(A, Prefix);
+            JoinCopyLeft := JoinCopyLeft + AssetSize[A] - Prefix;
+            JoinHashLeft := JoinHashLeft + AssetSize[A];
+          end
           else
             Consumed := 0;
           First := AssetPartStart[A];
@@ -2773,6 +3313,7 @@ var
   Failure: String;
 begin
   Result := True;
+  ResetSpeed();
   if GetArrayLength(QueueUrl) = 0 then
     exit;
   CurlResetRun();
@@ -2785,6 +3326,7 @@ begin
   DownloadPage.ShowBaseNameInsteadOfUrl := True;
   DownloadStatus := '';
   DownloadPage.Show;
+  DownloadTimer := SetTimer(0, 0, 250, CreateCallback(@DownloadTick));
   try
     for I := 0 to GetArrayLength(QueueUrl) - 1 do
     begin
@@ -2813,11 +3355,13 @@ begin
             IntToStr(Attempt), IntToStr(DownloadAttempts)]);
         DownloadPage.SetText(ProgressCaption, '');
         DownloadPage.Clear;
-        ResetSpeed();
         VerifyStartTick := 0;
+        CurrentProgress := 0;
+        CurrentFileSize := QueueSize[I];
         Started := NowMs();
         { ה-hash מהמניפסט מועבר תמיד — קובץ שאינו תואם נדחה כאן ולא נשמר. }
         DownloadPage.Add(QueueUrl[I], QueueFile[I], QueueSha[I]);
+        SpeedResume();
         try
           DownloadPage.Download;
           Failure := '';
@@ -2828,6 +3372,8 @@ begin
           Log('DownloadAssistant: ' + QueueFile[I] + ' attempt ' +
             IntToStr(Attempt) + ' failed: ' + Failure);
         end;
+        SpeedPause();
+        HoldShownEta(VerifyStartTick > 0);
         Attempt := Attempt + 1;
       until (Failure = '') or StopRequested or (Attempt > DownloadAttempts);
       if Failure <> '' then
@@ -2847,13 +3393,19 @@ begin
         exit;
       end;
       if VerifyStartTick > 0 then
+      begin
+        HashBytesMeasured := HashBytesMeasured + QueueSize[I];
+        HashMsMeasured := HashMsMeasured + NowMs() - VerifyStartTick;
         Log('DownloadAssistant: ' + QueueFile[I] + ' downloaded in ' +
           IntToStr(VerifyStartTick - Started) + ' ms, verified by download page in ' +
-          IntToStr(NowMs() - VerifyStartTick) + ' ms')
+          IntToStr(NowMs() - VerifyStartTick) + ' ms');
+      end
       else
         Log('DownloadAssistant: ' + QueueFile[I] + ' done in ' +
           IntToStr(NowMs() - Started) + ' ms');
       ProgressDone := ProgressDone + QueueSize[I];
+      CurrentProgress := 0;
+      VerifyStartTick := 0;
       if not PromoteToCache(ExpandConstant('{tmp}\') + QueueFile[I],
         QueueFile[I], QueueSize[I], QueueSha[I]) then
       begin
@@ -2865,6 +3417,7 @@ begin
       CurlForgetItem(I);
     end;
   finally
+    KillTimer(0, DownloadTimer);
     DownloadPage.Hide;
   end;
 end;
@@ -2882,7 +3435,7 @@ function AppendFileTo(const Dest, Src: String; Expected, DoneBefore,
   Total: Int64; const Caption: String): Boolean;
 var
   Output, Input: TFileStream;
-  Start, Copied, Slice, Got: Int64;
+  Start, Copied, Slice, Got, SliceStart: Int64;
 begin
   Result := False;
   try
@@ -2900,13 +3453,17 @@ begin
           Slice := Expected - Copied;
           if Slice > AppendSliceSize then
             Slice := AppendSliceSize;
+          SliceStart := NowMs();
           Got := Output.CopyFrom(Input, Slice, CopyChunkSize);
+          CopyMsMeasured := CopyMsMeasured + NowMs() - SliceStart;
+          CopyBytesMeasured := CopyBytesMeasured + Got;
+          JoinCopyLeft := JoinCopyLeft - Got;
           if Got <> Slice then
             Break;
           Copied := Copied + Got;
           WorkPage.SetText(Msg1('JoiningFiles', Caption),
             FmtMessage(CustomMessage('SizeOf'), [HumanSize(DoneBefore + Copied),
-              HumanSize(Total)]));
+              HumanSize(Total)]) + ' · ' + PostEtaText());
           WorkPage.SetProgress(MegaBytes(DoneBefore + Copied), MegaBytes(Total));
         end;
       finally
@@ -2949,7 +3506,8 @@ function AssembleAsset(AssetIndex: Integer; const Caption: String): Boolean;
 var
   TmpPath, FinalPath, PartPath: String;
   Consumed, I, First: Integer;
-  Prefix, Actual, Done: Int64;
+  Prefix, Actual, Done, Started: Int64;
+  Hash: String;
 begin
   Result := False;
   FinalPath := AssetOutputDir(AssetIndex) + '\' + AssetName[AssetIndex];
@@ -2981,6 +3539,7 @@ begin
       LoadErrorTech := 'part failed verification: ' + PartName[First + I];
       exit;
     end;
+    HoldShownEta(False);
     if not AppendFileTo(TmpPath, PartPath, PartSize[First + I], Done,
       AssetSize[AssetIndex], Caption) then
     begin
@@ -3000,9 +3559,16 @@ begin
     DeleteFile(TmpPath + '.sha256');
     exit;
   end;
+  { GetSHA256OfFile חוסם את התצוגה: רק שם השלב, בלי מספר שהיה קופא. }
   WorkPage.SetText(Msg1('CheckingJoined', Caption), CustomMessage('VerifyingJoined'));
   WorkPage.SetProgress(0, 1);
-  if HashFile(TmpPath) <> Lowercase(AssetSha[AssetIndex]) then
+  Started := NowMs();
+  Hash := HashFile(TmpPath);
+  HoldShownEta(True);
+  HashMsMeasured := HashMsMeasured + NowMs() - Started;
+  HashBytesMeasured := HashBytesMeasured + AssetSize[AssetIndex];
+  JoinHashLeft := JoinHashLeft - AssetSize[AssetIndex];
+  if Hash <> Lowercase(AssetSha[AssetIndex]) then
   begin
     LoadErrorMsg := CustomMessage('ErrorJoinedDamaged');
     LoadErrorTech := 'assembled sha256 mismatch: ' + AssetName[AssetIndex];

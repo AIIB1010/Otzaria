@@ -52,7 +52,7 @@ struct OtzJob {
   OtzProgress progress;
   OtzFailure failure;
   gint64 hashed;
-  gint64 downloaded;
+  gboolean same_filesystem; /* placing a cached file is a hard link */
 
   GPtrArray *queue; /* Item* still to download */
   guint next;
@@ -323,6 +323,8 @@ static void begin_assembly_verify(gpointer user_data) {
   g_mutex_lock(&job->lock);
   job->progress.phase = OTZ_PHASE_VERIFY_ASSEMBLY;
   job->progress.phase_done = 0;
+  job->progress.later_hash =
+      MAX(job->progress.later_hash - job->progress.phase_total, 0);
   g_mutex_unlock(&job->lock);
 }
 
@@ -334,7 +336,7 @@ static void account(OtzJob *job, Item *item, gint64 offset, gint64 hashed,
   job->progress.download_done += offset - item->progress;
   item->progress = offset;
   job->hashed += hashed;
-  job->downloaded += downloaded;
+  job->progress.network_bytes += downloaded;
   g_mutex_unlock(&job->lock);
 }
 
@@ -342,6 +344,16 @@ void otz_job_get_progress(OtzJob *job, OtzProgress *out) {
   g_mutex_lock(&job->lock);
   *out = job->progress;
   out->detail = g_strdup(job->progress.detail);
+  g_mutex_unlock(&job->lock);
+}
+
+/* A step with no network traffic, so the speed estimate pauses over it. */
+static void set_waiting(OtzJob *job, gboolean waiting) {
+  g_mutex_lock(&job->lock);
+  if (waiting)
+    job->progress.waiting++;
+  else
+    job->progress.waiting--;
   g_mutex_unlock(&job->lock);
 }
 
@@ -464,11 +476,15 @@ OtzRangeReply otz_classify_range_reply(guint status, const char *content_range,
 typedef struct {
   OtzJob *job;
   Item *item;
+  gint64 hashed;
 } PrefixContext;
 
+/* Re-reading a prefix never moves the bar back below what it already showed. */
 static void count_prefix(gint64 delta, gpointer user_data) {
   PrefixContext *context = user_data;
-  account(context->job, context->item, context->item->progress + delta, delta, 0);
+  context->hashed += delta;
+  account(context->job, context->item, MAX(context->item->progress, context->hashed),
+          delta, 0);
 }
 
 /* Opens the response, deciding what happens to an existing partial file:
@@ -490,10 +506,12 @@ static OtzHttpResponse *open_body(OtzJob *job, Item *item, int fd,
     OtzRangeReply reply = otz_classify_range_reply(
         head->status, head->content_range, head->content_length, from, item->size);
     if (reply == OTZ_RANGE_CONTINUE) {
-      PrefixContext context = {job, item};
-      account(job, item, 0, 0, 0);
-      if (!hash_fd(fd, from, checksum, count_prefix, &context, job->inner, error) ||
-          lseek(fd, from, SEEK_SET) != from) {
+      PrefixContext context = {job, item, 0};
+      set_waiting(job, TRUE);
+      gboolean hashed =
+          hash_fd(fd, from, checksum, count_prefix, &context, job->inner, error);
+      set_waiting(job, FALSE);
+      if (!hashed || lseek(fd, from, SEEK_SET) != from) {
         otz_http_response_free(response);
         return NULL;
       }
@@ -567,9 +585,12 @@ static gboolean fetch_once(OtzJob *job, Item *item, gboolean *resumed,
   if (offset == item->size) {
     /* A complete download whose rename never happened: hash it once instead of
      * fetching it again. */
-    PrefixContext context = {job, item};
-    if (!hash_fd(fd, offset, checksum, count_prefix, &context, job->inner, error))
-      goto out;
+    PrefixContext context = {job, item, 0};
+    set_waiting(job, TRUE);
+    gboolean hashed =
+        hash_fd(fd, offset, checksum, count_prefix, &context, job->inner, error);
+    set_waiting(job, FALSE);
+    if (!hashed) goto out;
     if (strcmp(g_checksum_get_string(checksum), item->sha256) == 0) {
       close(fd);
       fd = -1;
@@ -668,7 +689,10 @@ static gboolean fetch_item(OtzJob *job, Item *item, GError **error) {
     g_debug("%s: retry %d in %ds after: %s", item->name, attempt + 1,
             waits[attempt], local->message);
     g_error_free(local);
-    if (!sleep_cancellable(job->inner, waits[attempt])) {
+    set_waiting(job, TRUE);
+    gboolean slept = sleep_cancellable(job->inner, waits[attempt]);
+    set_waiting(job, FALSE);
+    if (!slept) {
       g_cancellable_set_error_if_cancelled(job->inner, error);
       return FALSE;
     }
@@ -684,13 +708,12 @@ static OtzFailure classify(const GError *error) {
   return OTZ_FAILURE_UNAVAILABLE;
 }
 
-static gpointer download_worker(gpointer data) {
-  OtzJob *job = data;
+static void download_items(OtzJob *job) {
   for (;;) {
     g_mutex_lock(&job->lock);
     if (job->worker_error != NULL || job->next >= job->queue->len) {
       g_mutex_unlock(&job->lock);
-      return NULL;
+      return;
     }
     Item *item = g_ptr_array_index(job->queue, job->next++);
     g_free(job->progress.detail);
@@ -710,7 +733,7 @@ static gpointer download_worker(gpointer data) {
       }
       g_mutex_unlock(&job->lock);
       g_cancellable_cancel(job->inner);
-      return NULL;
+      return;
     }
     double seconds = (g_get_monotonic_time() - started) / 1e6;
     g_debug("%s: done, %" G_GINT64_FORMAT " bytes in %.1fs (%.2f MB/s)",
@@ -720,6 +743,15 @@ static gpointer download_worker(gpointer data) {
     job->progress.files_done++;
     g_mutex_unlock(&job->lock);
   }
+}
+
+static gpointer download_worker(gpointer data) {
+  OtzJob *job = data;
+  download_items(job);
+  g_mutex_lock(&job->lock);
+  job->progress.workers--;
+  g_mutex_unlock(&job->lock);
+  return NULL;
 }
 
 static gboolean download_missing(OtzJob *job, GError **error) {
@@ -733,13 +765,14 @@ static gboolean download_missing(OtzJob *job, GError **error) {
   }
   if (job->queue->len == 0) return TRUE;
 
+  guint count = MIN(job->queue->len, OTZ_MAX_CONNECTIONS);
   g_mutex_lock(&job->lock);
   job->progress.phase = OTZ_PHASE_DOWNLOAD;
   job->progress.download_total = total;
   job->progress.files_total = job->queue->len;
+  job->progress.workers = count;
   g_mutex_unlock(&job->lock);
 
-  guint count = MIN(job->queue->len, OTZ_MAX_CONNECTIONS);
   GThread *threads[OTZ_MAX_CONNECTIONS];
   for (guint i = 0; i < count; i++)
     threads[i] = g_thread_new("otz-download", download_worker, job);
@@ -754,6 +787,58 @@ static gboolean download_missing(OtzJob *job, GError **error) {
 }
 
 /* ----------------------------------------------------------------- output */
+
+/* Copy and hash bytes of an output's steps, for the time-left estimate. */
+static void output_work(OtzJob *job, const Output *output, gint64 *copy,
+                        gint64 *hash) {
+  *copy = *hash = 0;
+  if (!output->assemble) {
+    if (!job->same_filesystem) *copy = output->size;
+    return;
+  }
+  *copy = output->size;
+  for (guint p = 0; p < output->first_part; p++)
+    *copy -= ((Item *)g_ptr_array_index(output->items, p))->size;
+  *hash = output->size;
+}
+
+static gboolean nearest_device(const char *path, dev_t *device);
+
+static void plan_post_work(OtzJob *job) {
+  dev_t cache_dev = 0, output_dev = 0;
+  job->same_filesystem = nearest_device(job->cache_dir, &cache_dev) &&
+                         nearest_device(job->output_dir, &output_dev) &&
+                         cache_dev == output_dev;
+  gint64 copy = 0, hash = 0;
+  for (guint i = 0; i < job->outputs->len; i++) {
+    gint64 c, h;
+    output_work(job, g_ptr_array_index(job->outputs, i), &c, &h);
+    copy += c;
+    hash += h;
+  }
+  g_mutex_lock(&job->lock);
+  job->progress.later_copy = copy;
+  job->progress.later_hash = hash;
+  g_mutex_unlock(&job->lock);
+}
+
+/* The output's copy becomes the current step (its verify stays later), in one
+ * snapshot with the phase so a poll never sees half of it. */
+static void begin_output(OtzJob *job, const Output *output, OtzPhase phase,
+                         gint64 done) {
+  gint64 copy, hash;
+  output_work(job, output, &copy, &hash);
+  g_mutex_lock(&job->lock);
+  job->progress.phase = phase;
+  job->progress.phase_done = done;
+  job->progress.phase_total = output->size;
+  job->progress.step_copy = copy;
+  job->progress.later_copy = MAX(job->progress.later_copy - copy, 0);
+  job->progress.part_count = output->items->len;
+  g_free(job->progress.detail);
+  job->progress.detail = g_strdup(output->name);
+  g_mutex_unlock(&job->lock);
+}
 
 static gboolean produce_outputs(OtzJob *job, GError **error) {
   if (g_mkdir_with_parents(job->output_dir, 0755) != 0) {
@@ -773,7 +858,7 @@ static gboolean produce_outputs(OtzJob *job, GError **error) {
     g_autofree char *dest = g_build_filename(output->dir, output->name, NULL);
     if (!output->assemble) {
       Item *item = g_ptr_array_index(output->items, 0);
-      set_phase(job, OTZ_PHASE_PLACE, output->name, output->size);
+      begin_output(job, output, OTZ_PHASE_PLACE, 0);
       if (!otz_place_file(item->cache_path, dest, item->size, add_phase_bytes, job,
                           job->inner, error)) {
         job->failure = OTZ_FAILURE_PLACE;
@@ -791,11 +876,7 @@ static gboolean produce_outputs(OtzJob *job, GError **error) {
       sizes[p] = item->size;
       if (p < output->first_part) already += item->size;
     }
-    set_phase(job, OTZ_PHASE_ASSEMBLE, output->name, output->size);
-    g_mutex_lock(&job->lock);
-    job->progress.phase_done = already;
-    job->progress.part_count = output->items->len;
-    g_mutex_unlock(&job->lock);
+    begin_output(job, output, OTZ_PHASE_ASSEMBLE, already);
     remove_stale_siblings(output->partial_path, output->name, ".partial");
     if (!otz_assemble(output->partial_path, dest, paths, sizes, output->first_part, output->size,
                       output->sha256,
@@ -831,6 +912,7 @@ gboolean otz_job_run(OtzJob *job, GCancellable *cancellable, GError **error) {
     job->failure = OTZ_FAILURE_CACHE;
     goto out;
   }
+  plan_post_work(job);
   if (!download_missing(job, error)) goto out;
   if (!produce_outputs(job, error)) goto out;
   set_phase(job, OTZ_PHASE_DONE, NULL, 0);
@@ -931,7 +1013,7 @@ gint64 otz_job_hashed_bytes(OtzJob *job) {
 
 gint64 otz_job_downloaded_bytes(OtzJob *job) {
   g_mutex_lock(&job->lock);
-  gint64 value = job->downloaded;
+  gint64 value = job->progress.network_bytes;
   g_mutex_unlock(&job->lock);
   return value;
 }

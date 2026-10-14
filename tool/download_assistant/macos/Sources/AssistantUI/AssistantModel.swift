@@ -59,7 +59,9 @@ public final class AssistantModel: ObservableObject {
     let embeddedTag: String
 
     @Published public internal(set) var page: AssistantPage = .welcome
-    @Published var dialog: DialogItem?
+    @Published var dialog: DialogItem? {
+        didSet { runner?.setEstimatorPaused(dialog != nil) }
+    }
     @Published var failure: FailureKind = .load
     @Published var error: AssistantError?
     @Published var showTechnical = false
