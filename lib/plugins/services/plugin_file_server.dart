@@ -119,6 +119,12 @@ class PluginFileServer {
 
   static const String _uploadDirName = 'otzaria_plugin_uploads';
 
+  /// טיפוסים שהדפדפן מריץ בהם סקריפט כשהם נפתחים כמסמך.
+  static const Set<String> _activeDocumentTypes = {
+    'text/html',
+    'image/svg+xml',
+  };
+
   /// ה-origin של השרת (`http://127.0.0.1:<port>`), או `null` אם טרם הופעל.
   String? get origin {
     final server = _server;
@@ -505,7 +511,18 @@ class PluginFileServer {
 
       final length = await file.length();
       response.headers.set('Accept-Ranges', 'bytes');
-      response.headers.contentType = _contentTypeForPath(grant.canonicalPath);
+      final contentType = _contentTypeForPath(grant.canonicalPath);
+      response.headers.contentType = contentType;
+      response.headers.set('X-Content-Type-Options', 'nosniff');
+      // תוסף שמנווט למסמך כזה יוצא מה-CSP של הדף שלו; בלי סקריפט ורשת הוא
+      // אינו יכול להוציא דרכו נתונים.
+      if (_activeDocumentTypes.contains(contentType.mimeType)) {
+        response.headers.set(
+          'Content-Security-Policy',
+          "sandbox; default-src 'none'; img-src data: blob:; "
+              "media-src data: blob:; font-src data:; style-src 'unsafe-inline'",
+        );
+      }
 
       final rangeHeader = request.headers.value('range');
       if (rangeHeader == null) {

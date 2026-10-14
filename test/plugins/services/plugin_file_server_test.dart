@@ -257,6 +257,28 @@ void main() {
     await response.drain();
   });
 
+  test('HTML ו-SVG מוגשים בלי סקריפט ובלי רשת; PDF בלי CSP', () async {
+    for (final name in ['page.html', 'image.svg']) {
+      final file = await writeFile(name, '<script></script>');
+      final reg = await server.register(
+        pluginId: 'p1',
+        canonicalPath: file.path,
+      );
+      final response = await get(reg.url);
+      final csp = response.headers.value('content-security-policy');
+      expect(csp, startsWith('sandbox;'), reason: name);
+      expect(csp, contains("default-src 'none'"), reason: name);
+      expect(response.headers.value('x-content-type-options'), 'nosniff');
+      await response.drain();
+    }
+
+    final pdf = await writeFile('book.pdf', '%PDF-1.4 fake');
+    final reg = await server.register(pluginId: 'p1', canonicalPath: pdf.path);
+    final response = await get(reg.url);
+    expect(response.headers.value('content-security-policy'), isNull);
+    await response.drain();
+  });
+
   test('isServerUri מזהה את ה-origin של השרת ושולל פורט אחר', () async {
     final file = await writeFile('doc.txt', 'x');
     await server.register(pluginId: 'p1', canonicalPath: file.path);
