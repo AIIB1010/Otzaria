@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:otzaria/text_book/models/book_notes.dart';
 import 'package:otzaria/book_protection/models/book_protection.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/models/links.dart';
@@ -298,6 +299,9 @@ class TextBookLoaded extends TextBookState {
   /// מופעי שמות הקודש שסומנו במסד, נטענים ברקע; ריק במסד ישן.
   final DivineNameSpans divineNames;
 
+  /// הערות השוליים מהמסד (`line_note`); ריק לספר שגוף ההערות נשאר בשורה.
+  final BookNotes bookNotes;
+
   /// טקסט להדגשה בלבד — לא מפעיל חלונית חיפוש.
   final String highlightText;
 
@@ -323,6 +327,7 @@ class TextBookLoaded extends TextBookState {
     this.selectedLinkTypes = const {},
     required this.linksByLine,
     DivineNameSpans? divineNames,
+    BookNotes? bookNotes,
     required this.tableOfContents,
     bool? removeNikud,
     bool removePunctuation = false,
@@ -371,6 +376,7 @@ class TextBookLoaded extends TextBookState {
     this.permanentHighlightLine,
   }) : readerIdentity = readerIdentity ?? Object(),
        divineNames = divineNames ?? DivineNameSpans.empty,
+       bookNotes = bookNotes ?? BookNotes.empty,
        displayOverrides =
            displayOverrides ??
            legacyDisplayOverrides(
@@ -535,6 +541,7 @@ class TextBookLoaded extends TextBookState {
     Set<String>? selectedLinkTypes,
     Map<int, List<Link>>? linksByLine,
     DivineNameSpans? divineNames,
+    BookNotes? bookNotes,
     List<TocEntry>? tableOfContents,
     bool? removeNikud,
     bool? removePunctuation,
@@ -675,6 +682,7 @@ class TextBookLoaded extends TextBookState {
       selectedLinkTypes: selectedLinkTypes ?? this.selectedLinkTypes,
       linksByLine: linksByLine ?? this.linksByLine,
       divineNames: divineNames ?? this.divineNames,
+      bookNotes: bookNotes ?? this.bookNotes,
       tableOfContents: tableOfContents ?? this.tableOfContents,
       isTanach: isTanach ?? this.isTanach,
       protection: protection ?? this.protection,
@@ -773,6 +781,7 @@ class TextBookLoaded extends TextBookState {
     activeCommentators,
     commentatorGroups,
     divineNames,
+    bookNotes,
     availableCommentators.length,
     _SetProp(rareCommentators),
     links.length,
