@@ -401,6 +401,8 @@ class _BackgroundPluginRunnerState extends State<_BackgroundPluginRunner>
     if (Platform.isWindows && WebViewEnvironmentHolder.environment == null) {
       return const SizedBox.shrink();
     }
+    final contentBlockers = pluginContentBlockers;
+    if (contentBlockers == null) return const SizedBox.shrink();
 
     return InAppWebView(
       webViewEnvironment: WebViewEnvironmentHolder.environment,
@@ -414,6 +416,7 @@ class _BackgroundPluginRunnerState extends State<_BackgroundPluginRunner>
         headlessEntrypoint: _isHeadless ? widget.plugin.entrypointPath : null,
       ),
       initialSettings: InAppWebViewSettings(
+        contentBlockers: contentBlockers,
         allowFileAccessFromFileURLs: false,
         allowUniversalAccessFromFileURLs: false,
         useShouldOverrideUrlLoading: true,

@@ -70,8 +70,10 @@ bool shouldHandleCreationFailure({
 
 InAppWebViewSettings buildPluginTabWebViewSettings({
   required bool isDevelopment,
+  List<ContentBlocker> contentBlockers = const [],
 }) {
   return InAppWebViewSettings(
+    contentBlockers: contentBlockers,
     allowFileAccessFromFileURLs: false,
     allowUniversalAccessFromFileURLs: false,
     useShouldOverrideUrlLoading: true,
@@ -479,6 +481,9 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
       );
     }
 
+    final contentBlockers = pluginContentBlockers;
+    if (contentBlockers == null) return const SizedBox.shrink();
+
     if (_creationWatchdog == null && webViewController == null) {
       _creationWatchdog = Timer(const Duration(seconds: 20), () {
         logPluginWebViewFailure(
@@ -504,6 +509,7 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
       ),
       initialSettings: buildPluginTabWebViewSettings(
         isDevelopment: widget.plugin.isDevelopment,
+        contentBlockers: contentBlockers,
       ),
       gestureRecognizers: pluginTabWebViewGestureRecognizers(
         isTouchPlatform: Platform.isAndroid || Platform.isIOS,

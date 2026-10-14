@@ -95,6 +95,7 @@ class PluginFileServer {
   final int maxUploadBytes;
 
   HttpServer? _server;
+  Future<void>? _starting;
   final Map<String, PluginFileGrant> _grants = {};
   final Map<String, _UploadSession> _uploads = {};
   final Random _random = Random.secure();
@@ -124,8 +125,21 @@ class PluginFileServer {
     return server == null ? null : 'http://127.0.0.1:${server.port}';
   }
 
-  Future<void> _ensureStarted() async {
-    if (_server != null) return;
+  /// הפורט של השרת, שמופעל לפי הצורך. קבוע עד [close] — שערי ה-WebView
+  /// מתירים רק אותו.
+  Future<int> ensurePort() async {
+    await _ensureStarted();
+    return _server!.port;
+  }
+
+  // שתי קריאות במקביל היו מפעילות שני שרתים, והראשון היה נזנח עם פורט אחר.
+  Future<void> _ensureStarted() =>
+      _starting ??= _start().catchError((Object error, StackTrace stack) {
+        _starting = null;
+        Error.throwWithStackTrace(error, stack);
+      });
+
+  Future<void> _start() async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     _server = server;
     server.listen(_handleRequest);
@@ -335,6 +349,7 @@ class PluginFileServer {
     }
     await _server?.close(force: true);
     _server = null;
+    _starting = null;
   }
 
   void revoke(String token) => _grants.remove(token);

@@ -24,9 +24,11 @@ import 'package:otzaria/plugins/bridge/plugin_save_target.dart';
 import 'package:otzaria/plugins/models/installed_plugin.dart';
 import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
 import 'package:otzaria/plugins/services/plugin_asset_scheme.dart';
+import 'package:otzaria/plugins/services/plugin_content_blockers.dart';
 import 'package:otzaria/plugins/services/plugin_file_server.dart';
 import 'package:otzaria/plugins/services/plugin_headless_shell.dart';
 import 'package:otzaria/plugins/services/plugin_network_gate.dart';
+import 'package:otzaria/plugins/services/plugin_network_policy.dart';
 import 'package:otzaria/plugins/services/plugin_ref_line_resolver.dart';
 import 'package:otzaria/plugins/services/plugin_runtime_dispatcher.dart';
 import 'package:otzaria/plugins/services/plugin_webview_failure_log.dart';
@@ -112,6 +114,26 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
   late final PluginSystemBloc pluginSystemBloc;
   late final FindRefRepository _findRefRepository;
   DateTime? _lastFileServerDenialLogAt;
+  Future<PluginNetworkPolicy>? _networkPolicy;
+  StreamSubscription<String?>? _networkPolicyChanges;
+  List<ContentBlocker>? _contentBlockers;
+  bool _contentBlockersPushPending = false;
+
+  /// מדיניות הרשת העדכנית של התוסף; מחושבת מחדש אחרי כל שינוי בה.
+  Future<PluginNetworkPolicy> get networkPolicy => _networkPolicy ??=
+      resolvePluginNetworkPolicy(
+        pluginId: plugin.pluginId,
+        manifest: plugin.manifest,
+        registry: pluginRegistryRepository,
+      ).catchError((Object e) {
+        debugPrint('$logTag [${plugin.pluginId}] network policy error: $e');
+        return PluginNetworkPolicy.none;
+      });
+
+  /// חוקי החסימה ל-`initialSettings`, או `null` כשעדיין אינם מוכנים — ואז אין
+  /// ליצור את ה-WebView: בלעדיהם הוא נטען בלי שום שער רשת.
+  List<ContentBlocker>? get pluginContentBlockers =>
+      pluginNetworkUsesContentBlockers ? _contentBlockers : const [];
 
   Map<String, dynamic> currentThemePayload() {
     if (!mounted) {
@@ -288,6 +310,50 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
       instanceId: instanceId,
       token: this,
     );
+
+    _networkPolicyChanges = PluginNetworkPolicy.changes.listen((pluginId) {
+      if (pluginId == null || pluginId == plugin.pluginId) {
+        _networkPolicy = null;
+        unawaited(_refreshContentBlockers());
+      }
+    });
+    unawaited(_refreshContentBlockers());
+  }
+
+  Future<void> _refreshContentBlockers() async {
+    if (!pluginNetworkUsesContentBlockers) return;
+    final rules = buildPluginContentBlockers(
+      pluginId: plugin.pluginId,
+      policy: await networkPolicy,
+      fileServerPort: await PluginFileServer.instance.ensurePort(),
+      devServerOrigin: plugin.isLocalhostDev ? plugin.devRootPath : null,
+    );
+    if (!mounted) return;
+    if (_contentBlockers == null) {
+      setState(() => _contentBlockers = rules);
+      return;
+    }
+    _contentBlockers = rules;
+    _contentBlockersPushPending = true;
+    await _pushContentBlockers();
+  }
+
+  /// ה-WebView כבר נוצר עם החוקים הקודמים, ולכן מעדכנים אותו במקום.
+  Future<void> _pushContentBlockers() async {
+    final controller = webViewController;
+    final rules = _contentBlockers;
+    if (controller == null || rules == null || !_contentBlockersPushPending) {
+      return;
+    }
+    _contentBlockersPushPending = false;
+    try {
+      final settings = await controller.getSettings();
+      if (settings == null) return;
+      settings.contentBlockers = rules;
+      await controller.setSettings(settings: settings);
+    } catch (e) {
+      debugPrint('$logTag [${plugin.pluginId}] content blockers update: $e');
+    }
   }
 
   /// ה-context אחרי אימות סיסמת "מצב בטוח", או null.
@@ -307,6 +373,7 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
     void Function()? onOwnerClosed,
   }) {
     _findRefRepository.dispose();
+    unawaited(_networkPolicyChanges?.cancel());
     final pluginId = plugin.pluginId;
     final id = instanceId;
     final controller = webViewController;
@@ -366,6 +433,7 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
         instanceId: instanceId,
       );
       bridge.register(controller);
+      unawaited(_pushContentBlockers());
       if (plugin.isLocalhostDev) {
         unawaited(loadPluginDevServer(controller, entrypoint));
       }

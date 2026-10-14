@@ -15,6 +15,7 @@ import 'package:otzaria/plugins/services/plugin_shortcut_registry.dart';
 import 'package:otzaria/plugins/services/plugin_toolbar_registry.dart';
 import 'package:otzaria/plugins/services/plugin_new_tab_page_registry.dart';
 import 'package:otzaria/plugins/services/plugin_new_tab_page_service.dart';
+import 'package:otzaria/plugins/services/plugin_network_policy.dart';
 import 'package:otzaria/plugins/services/plugin_text_reader_registry.dart';
 import 'package:otzaria/plugins/services/plugin_highlight_registry.dart';
 import 'package:otzaria/plugins/services/plugin_startup_contributions_service.dart';
@@ -661,6 +662,7 @@ class PluginSystemBloc extends Bloc<PluginSystemEvent, PluginSystemState> {
       await _cancelPluginNotifications(event.pluginId);
       await _installerService.resetPluginData(event.pluginId);
       PluginRuntimeDispatcher.instance.invalidatePlugin(event.pluginId);
+      PluginNetworkPolicy.notifyChanged(event.pluginId);
       await PluginRuntimeDispatcher.instance.reloadPlugin(event.pluginId);
       add(LoadPlugins());
       UiSnack.show(PluginMessages.pluginDataReset(plugin.name));
@@ -824,6 +826,9 @@ class PluginSystemBloc extends Bloc<PluginSystemEvent, PluginSystemState> {
         }
       }
       PluginRuntimeDispatcher.instance.invalidatePlugin(event.pluginId);
+      if (event.permission.startsWith('network.')) {
+        PluginNetworkPolicy.notifyChanged(event.pluginId);
+      }
       final grantedPermissions = await repository.getGrantedPermissionNames(
         event.pluginId,
       );

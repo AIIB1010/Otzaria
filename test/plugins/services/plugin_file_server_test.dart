@@ -35,6 +35,21 @@ void main() {
     return request.close();
   }
 
+  test('הפעלות במקביל מקבלות שרת אחד ופורט אחד', () async {
+    final file = await writeFile('doc.txt', 'x');
+    final results = await Future.wait([
+      server.ensurePort(),
+      server.register(pluginId: 'p', canonicalPath: file.path),
+      server.ensurePort(),
+    ]);
+    final port = results.first as int;
+    final url = (results[1] as PluginFileRegistration).url;
+
+    expect(results.last, port);
+    expect(Uri.parse(url).port, port);
+    expect((await get(url)).statusCode, 200);
+  });
+
   test('מגיש קובץ מלא עם 200 ו-Content-Type נכון', () async {
     final file = await writeFile('doc.txt', 'hello world');
     final reg = await server.register(
