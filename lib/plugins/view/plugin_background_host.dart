@@ -409,12 +409,16 @@ class _BackgroundPluginRunnerState extends State<_BackgroundPluginRunner>
       initialUrlRequest: widget.plugin.isLocalhostDev
           ? null
           : URLRequest(url: _entrypointUri),
-      onLoadResourceWithCustomScheme: (controller, request) => servePluginAsset(
-        url: request.url,
-        pluginId: widget.plugin.pluginId,
-        rootPath: widget.plugin.resolvedRootPath,
-        headlessEntrypoint: _isHeadless ? widget.plugin.entrypointPath : null,
-      ),
+      onLoadResourceWithCustomScheme: (controller, request) async =>
+          servePluginAsset(
+            url: request.url,
+            pluginId: widget.plugin.pluginId,
+            rootPath: widget.plugin.resolvedRootPath,
+            headlessEntrypoint: _isHeadless
+                ? widget.plugin.entrypointPath
+                : null,
+            contentSecurityPolicy: await pluginContentSecurityPolicy(),
+          ),
       initialSettings: InAppWebViewSettings(
         contentBlockers: contentBlockers,
         allowFileAccessFromFileURLs: false,

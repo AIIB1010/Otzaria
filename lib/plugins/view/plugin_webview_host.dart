@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -25,6 +26,7 @@ import 'package:otzaria/plugins/models/installed_plugin.dart';
 import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
 import 'package:otzaria/plugins/services/plugin_asset_scheme.dart';
 import 'package:otzaria/plugins/services/plugin_content_blockers.dart';
+import 'package:otzaria/plugins/services/plugin_content_security_policy.dart';
 import 'package:otzaria/plugins/services/plugin_file_server.dart';
 import 'package:otzaria/plugins/services/plugin_headless_shell.dart';
 import 'package:otzaria/plugins/services/plugin_network_gate.dart';
@@ -129,6 +131,14 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
         debugPrint('$logTag [${plugin.pluginId}] network policy error: $e');
         return PluginNetworkPolicy.none;
       });
+
+  /// ה-CSP שמצורף לכל קובץ של התוסף שמוגש דרך אוצריא.
+  Future<String> pluginContentSecurityPolicy() async =>
+      buildPluginContentSecurityPolicy(
+        pluginId: plugin.pluginId,
+        policy: await networkPolicy,
+        fileServerPort: await PluginFileServer.instance.ensurePort(),
+      );
 
   /// חוקי החסימה ל-`initialSettings`, או `null` כשעדיין אינם מוכנים — ואז אין
   /// ליצור את ה-WebView: בלעדיהם הוא נטען בלי שום שער רשת.
@@ -555,17 +565,31 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
             uri.toFilePath(),
             plugin.resolvedRootPath,
           )) {
-        return WebResourceResponse(
-          contentType: 'text/html',
-          contentEncoding: 'utf-8',
-          statusCode: 200,
-          reasonPhrase: 'OK',
-          data: utf8.encode(
+        return await _pluginFileResponse(
+          utf8.encode(
             pluginHeadlessShellHtml(plugin.entrypointPath, module: false),
           ),
+          contentType: 'text/html',
         );
       }
-      if (uri.scheme == 'file' && !_isInsideRoot(uri)) return _forbidden();
+      if (uri.scheme == 'file') {
+        if (!_isInsideRoot(uri)) return _forbidden();
+        // כל קובץ מוגש מכאן עם ה-CSP, לא רק HTML: גם SVG או XML שנפתחים כמסמך
+        // מריצים סקריפט, ו-Worker מקבל את המדיניות מתשובת הסקריפט שלו.
+        final path = uri.toFilePath();
+        try {
+          return await _pluginFileResponse(
+            await File(path).readAsBytes(),
+            contentType: pluginAssetContentType(path),
+          );
+        } on FileSystemException {
+          // לא null: אז ה-WebView היה קורא את הקובץ בעצמו, בלי ה-CSP.
+          return WebResourceResponse(
+            statusCode: 404,
+            reasonPhrase: 'Not Found',
+          );
+        }
+      }
       if (_isDevServerRequest(uri)) return null; // dev server + HMR
       if (uri.scheme == 'http' && PluginFileServer.instance.isServerUri(uri)) {
         // גם נתיב ההעלאה (/w/) של התוסף: בלי ההחרגה ה-PUT של
@@ -584,6 +608,20 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
       return _forbidden();
     }
   }
+
+  Future<WebResourceResponse> _pluginFileResponse(
+    Uint8List data, {
+    required String contentType,
+  }) async => WebResourceResponse(
+    contentType: contentType,
+    contentEncoding: 'utf-8',
+    statusCode: 200,
+    reasonPhrase: 'OK',
+    headers: {
+      pluginContentSecurityPolicyHeader: await pluginContentSecurityPolicy(),
+    },
+    data: data,
+  );
 
   /// סקריפט ה-boot: ה-SDK האמיתי וה-payload שהתוסף מקבל ב-plugin.boot.
   String pluginBootScript({

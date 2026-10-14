@@ -502,11 +502,13 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
       initialUrlRequest: widget.plugin.isLocalhostDev
           ? null
           : URLRequest(url: _entrypointUri),
-      onLoadResourceWithCustomScheme: (controller, request) => servePluginAsset(
-        url: request.url,
-        pluginId: widget.plugin.pluginId,
-        rootPath: widget.plugin.resolvedRootPath,
-      ),
+      onLoadResourceWithCustomScheme: (controller, request) async =>
+          servePluginAsset(
+            url: request.url,
+            pluginId: widget.plugin.pluginId,
+            rootPath: widget.plugin.resolvedRootPath,
+            contentSecurityPolicy: await pluginContentSecurityPolicy(),
+          ),
       initialSettings: buildPluginTabWebViewSettings(
         isDevelopment: widget.plugin.isDevelopment,
         contentBlockers: contentBlockers,
