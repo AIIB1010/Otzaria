@@ -766,6 +766,13 @@ export interface JewishHoliday {
   kind: JewishHolidayKind;
 }
 
+export interface DafYomi {
+  /** שם המסכת בעברית, למשל "ברכות" */
+  masechet: string;
+  /** מספר הדף במסכת */
+  daf: number;
+}
+
 export interface JewishDate {
   year: number;
   month: number;
@@ -775,6 +782,10 @@ export interface JewishDate {
   monthName: string;
   isLeapYear: boolean;
   isShabbat: boolean;
+  /** שם פרשת השבוע הקרובה מהתאריך הנתון (מושפע מ-inIsrael בפרשיות מחוברות) */
+  parasha: string;
+  /** דף היומי (בבלי); null עבור תאריכים שקדמו לתחילת המחזור הראשון (11.9.1923) */
+  dafYomi: DafYomi | null;
   holidays: JewishHoliday[];
 }
 

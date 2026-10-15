@@ -3922,6 +3922,8 @@ const { data } = await Otzaria.call('calendar.getJewishDate');
 //   monthName: "ניסן",
 //   isLeapYear: false,
 //   isShabbat: false,
+//   parasha: "אחרי מות",
+//   dafYomi: { masechet: "ברכות", daf: 2 },
 //   holidays: [
 //     { text: "שביעי של פסח", kind: "yomTov" }
 //   ]
@@ -3933,6 +3935,8 @@ const { data } = await Otzaria.call('calendar.getJewishDate');
 - `monthName` - שם החודש בעברית.
 - `isLeapYear` - האם השנה העברית היא שנה מעוברת.
 - `isShabbat` - האם התאריך חל בשבת.
+- `parasha` - שם פרשת השבוע הקרובה מהתאריך הנתון (ה-Shabbat הבא, או התאריך עצמו אם הוא שבת). מושפע מ-`inIsrael` של הלוח הנבחר עבור פרשיות מחוברות (כגון ויקהל-פקודי) שבהן בארץ קוראים פרשה אחת ובחו"ל שתיים.
+- `dafYomi` - הדף היומי (בבלי) לתאריך, בפורמט `{ masechet, daf }` (שם מסכת בעברית ומספר דף). `null` עבור תאריכים שקדמו לתחילת המחזור הראשון (י"א בספטמבר 1923).
 - `holidays` - רשימת חגים/ימים מיוחדים לתאריך, בפורמט `{ text, kind }`.
 
 ערכי `kind` אפשריים:
