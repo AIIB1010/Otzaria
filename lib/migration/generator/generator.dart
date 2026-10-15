@@ -786,6 +786,8 @@ String cleanHtml(String html) {
 }
 
 int detectHeaderLevel(String line) {
+  // הורדת אותיות רק לשורה שנפתחת ב-<h — שורות הטקסט ארוכות ורובן כאלה.
+  if (!line.startsWith('<h') && !line.startsWith('<H')) return 0;
   final lowerLine = line.toLowerCase();
   final int level;
   if (lowerLine.startsWith('<h1')) {
