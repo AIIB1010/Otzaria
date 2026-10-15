@@ -183,6 +183,126 @@ void main() {
 
       expect(restored.replaceAll('\n', ''), 'אבגדהוזחט');
     });
+
+    test('ניקוד תואם שומר על המיקום ומעברי השורה מול מופע בניקוד אחר', () {
+      final restored = restoreSelectedTextLineBreaksDetailed(
+        selectedText: 'שָׁם אָב',
+        visibleLines: const ['שָׁם', 'אָב', 'שֵׁם אָב'],
+      );
+
+      expect(restored, (
+        text: 'שָׁם \nאָב',
+        startLine: 0,
+        endLine: 1,
+        startColumn: 0,
+        ambiguous: false,
+      ));
+    });
+
+    test('רמז לשורה עם ניקוד אחר אינו גובר על התאמה מדויקת', () {
+      final restored = restoreSelectedTextLineBreaksDetailed(
+        selectedText: 'אֶת',
+        visibleLines: const ['אֵת', 'אֶת'],
+        preferredLine: 0,
+      );
+
+      expect(restored, (
+        text: 'אֶת',
+        startLine: 1,
+        endLine: 1,
+        startColumn: 0,
+        ambiguous: false,
+      ));
+    });
+
+    test('עמימות בין התאמות מדויקות נשמרת מול רמז למופע בניקוד אחר', () {
+      final restored = restoreSelectedTextLineBreaksDetailed(
+        selectedText: 'אֶת',
+        visibleLines: const ['אֶת', 'אֶת', 'אֵת'],
+        preferredLine: 2,
+      );
+
+      expect(restored, (
+        text: 'אֶת',
+        startLine: null,
+        endLine: null,
+        startColumn: null,
+        ambiguous: true,
+      ));
+    });
+
+    test('בחירה הפוכה בלישרים תהילה שומרת על מעבר שורה מול כנבואות', () {
+      const firstLine = 'דִּבְרֵי כְזָבִים, וּלְבָבֵימוֹ שָׁבוּ';
+      final restored = restoreSelectedTextLineBreaksDetailed(
+        selectedText: 'וּאוֹתָ',
+        visibleLines: const [
+          firstLine,
+          'אוֹתָם לְהַאְמִין כִּנְבוּאוֹת הַצֶּדֶק,',
+        ],
+        preferredLine: 1,
+      );
+
+      expect(restored, (
+        text: 'וּ\nאוֹתָ',
+        startLine: 0,
+        endLine: 1,
+        startColumn: firstLine.length - 2,
+        ambiguous: false,
+      ));
+    });
+
+    test('בחירה בלי דגש בסוף שורה עדיין משוחזרת לשורות (#1908)', () {
+      // הלוח האמיתי: פלאטר משמיט את הדגש של "וּ" בסוף שורה מנוקדת.
+      final lines = [
+        for (final raw in const [
+          '<blockquote><p><strong>שכל</strong>: אָכֵן שְׁגָגָה הִיא זֹאת אֶל־עֵינֵינוּ</p></blockquote>',
+          '<blockquote><p>כִּי עֵין בְּשָׂרִים הֵמָּה,</p></blockquote>',
+          '<blockquote><p>עַל־כֵּן אֱמֶת בִּדְבַר־כָּזָב יָמִירוּ,</p></blockquote>',
+          '<blockquote><p>חֹשֶׁךְ לְאוֹר שָׂמִים וָאוֹר לַחֹשֶׁךְ.</p></blockquote>',
+          '<blockquote><p>הֵן בַּאֲשֶׁר יַשִּׂיגוּ</p></blockquote>',
+          '<blockquote><p>יִתְעוּ לְכָל־מִקְרֶה קָטֹן וָפֶגַע,</p></blockquote>',
+          '<blockquote><p>אַף כִּי בְּמֻפְלָא וּמְכֻסֶּה מֵהֵמָּה.</p></blockquote>',
+          '<blockquote><p>שׁוּר נָא קְצֵה מָשׁוֹט אֶל־תּוֹךְ הַמָּיִם,</p></blockquote>',
+          '<blockquote><p>הֵן רַק־מְעֻוָּת וּמְעֻקָּל תִּרְאֵהוּ,</p></blockquote>',
+          '<blockquote><p>וּלְבָבְךָ יוֹדֵעַ</p></blockquote>',
+          '<blockquote><p>כִּי בֶאֱמֶת יָשָׁר הִנֵּה הִנֵּהוּ.</p></blockquote>',
+        ])
+          renderSelectionLine(rawText: raw, settings: const RenderSettings()),
+      ];
+      const selectedLines = [
+        'כֵן שְׁגָגָה הִיא זֹאת אֶל־עֵינֵינו',
+        'כִּי עֵין בְּשָׂרִים הֵמָּה,',
+        'עַל־כֵּן אֱמֶת בִּדְבַר־כָּזָב יָמִירוּ,',
+        'חֹשֶׁךְ לְאוֹר שָׂמִים וָאוֹר לַחֹשֶׁךְ.',
+        'הֵן בַּאֲשֶׁר יַשִּׂיגו',
+        'יִתְעוּ לְכָל־מִקְרֶה קָטֹן וָפֶגַע,',
+        'אַף כִּי בְּמֻפְלָא וּמְכֻסֶּה מֵהֵמָּה.',
+        'שׁוּר נָא קְצֵה מָשׁוֹט אֶל־תּוֹךְ הַמָּיִם,',
+        'הֵן רַק־מְעֻוָּת וּמְעֻקָּל תִּרְאֵהוּ,',
+        'וּלְבָבְךָ יוֹדֵעַ',
+        'כִּי בֶאֱמֶת',
+      ];
+
+      final restored = restoreSelectedTextLineBreaksDetailed(
+        selectedText: selectedLines.join(),
+        visibleLines: lines,
+      );
+
+      expect(restored.text, selectedLines.join('\n'));
+      expect(restored.startLine, 0);
+      expect(restored.endLine, 10);
+    });
+
+    test('מקף, פסק, סוף פסוק ונון הפוכה משתתפים בהתאמה', () {
+      for (final mark in const ['־', '׀', '׃', '׆']) {
+        final restored = restoreSelectedTextLineBreaksDetailed(
+          selectedText: 'הארץ$mark ויאמר',
+          visibleLines: ['את הארץ ויאמר', 'את הָאָרֶץ$mark ויאמר'],
+        );
+
+        expect(restored.startLine, 1, reason: mark);
+      }
+    });
   });
 
   group('buildSelectionWindow', () {
