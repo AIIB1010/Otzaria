@@ -121,6 +121,40 @@ void main() {
       );
     });
 
+    test('דף בעומק שלוש רמות נשמר אחרי הסרת הקטע', () async {
+      final link = _link(
+        heRef: 'דברי אמת, דברי אמת על הגמרא, שבת,  ה., א',
+        path2: 'דברי אמת',
+      );
+      const expected = 'דברי אמת, דברי אמת על הגמרא, שבת, ה.';
+      expect(link.fallbackDisplayReference, expected);
+      expect(await link.displayReference, expected);
+    });
+
+    test('טווח קטעים באותו דף עמוק אינו מקצר גם את הדף', () {
+      expect(
+        _link(
+          heRef: 'דברי אמת, דברי אמת על הגמרא, שבת,  ה., א',
+          heRefEnd: 'דברי אמת, דברי אמת על הגמרא, שבת,  ה., ב',
+          path2: 'דברי אמת',
+          index2End: 5,
+        ).fallbackDisplayReference,
+        'דברי אמת, דברי אמת על הגמרא, שבת, ה.',
+      );
+    });
+
+    test('טווח דפים בעומק שלוש רמות שומר על שני הדפים', () {
+      expect(
+        _link(
+          heRef: 'דברי אמת, דברי אמת על הגמרא, שבת, ה., א',
+          heRefEnd: 'דברי אמת, דברי אמת על הגמרא, שבת, ה:, ב',
+          path2: 'דברי אמת',
+          index2End: 5,
+        ).fallbackDisplayReference,
+        'דברי אמת, דברי אמת על הגמרא, שבת, ה.–ה:',
+      );
+    });
+
     test('קישור-טווח באותו דף מוצג כדף אחד', () {
       expect(
         _link(

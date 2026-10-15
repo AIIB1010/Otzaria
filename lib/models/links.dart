@@ -220,7 +220,9 @@ class Link {
   static const int _minPartsToDropLastLevel = 4;
 
   String _displayHeRefFor(String targetTitle) {
-    final trimmed = refUpToDaf(heRef.trim());
+    final trimmed = heRef.trim();
+    final dafRef = refUpToDaf(trimmed);
+    if (dafRef != trimmed) return dafRef;
     final end = _displayHeRefEnd;
     if (end != null && end.isNotEmpty && end != trimmed) return trimmed;
 
