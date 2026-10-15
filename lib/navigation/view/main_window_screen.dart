@@ -2977,9 +2977,9 @@ class MainWindowScreenState extends State<MainWindowScreen>
             listener: (context, state) {
               _startupWorkGate.markLibraryLoaded();
               _tryStartDeferredStartupWork();
-              // החלטת האינדוקס צורכת את הקטלוג שזה עתה נטען — כך אין קריאה
-              // עצמאית ל-getLibrary שתתחרה בטעינת הספר הפעיל בעלייה.
-              if (state.library != null) {
+              // צורכת את הקטלוג שנטען, בלי getLibrary שמתחרה בספר הפעיל בעלייה.
+              // בכשל, קריאה ל-library בונה את הקטלוג שוב ונכשלת בלי מאזין.
+              if (state.error == null) {
                 unawaited(
                   DataRepository.instance.library.then((library) {
                     if (!mounted || !context.mounted) return;
@@ -3034,7 +3034,10 @@ class MainWindowScreenState extends State<MainWindowScreen>
                     _pendingIndexRequests.remove(id);
                   }
                 }
-                if (state.library == null || !mounted || !context.mounted) {
+                if (state.error != null ||
+                    state.library == null ||
+                    !mounted ||
+                    !context.mounted) {
                   return;
                 }
                 if (startupRefreshId != null &&
