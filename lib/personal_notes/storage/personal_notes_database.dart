@@ -29,6 +29,8 @@ class PersonalNotesDatabase {
   static const _columnCreatedAt = 'created_at';
   static const _columnUpdatedAt = 'updated_at';
 
+  static const _tableUserBookKeys = 'personal_notes_user_book_keys';
+
   PersonalNotesDatabase._();
 
   static final PersonalNotesDatabase instance = PersonalNotesDatabase._();
@@ -59,6 +61,14 @@ class PersonalNotesDatabase {
 
   /// Create the database schema
   void _createSchema(Database db) {
+    db.execute('''
+      CREATE TABLE IF NOT EXISTS $_tableUserBookKeys (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        generation INTEGER NOT NULL,
+        completed_generation INTEGER NOT NULL
+      )
+    ''');
+    db.execute('INSERT OR IGNORE INTO $_tableUserBookKeys VALUES (1, 0, -1)');
     db.execute('''
       CREATE TABLE IF NOT EXISTS $_tableNotes (
         $_columnId TEXT PRIMARY KEY,
@@ -214,6 +224,67 @@ class PersonalNotesDatabase {
     });
   }
 
+  /// האם הערות תחת כותרת בלבד עדיין ממתינות לשיוך לספר אישי.
+  Future<bool> userBookKeysPending() async {
+    final db = await database;
+    final row = db.select('SELECT * FROM $_tableUserBookKeys').first;
+    return row['generation'] != row['completed_generation'];
+  }
+
+  /// דור השיוך נשמר במסד כדי לזהות גם ייבוא מחלון אחר.
+  Future<int> userBookKeysGeneration() async {
+    final db = await database;
+    final row = db.select('SELECT generation FROM $_tableUserBookKeys').first;
+    return row['generation'] as int;
+  }
+
+  /// [pending] false אחרי השיוך; true אחרי שחזור או ייבוא של הערות ישנות.
+  /// [ifGeneration] משאיר בקשות ייבוא חדשות ממתינות לריצה הבאה.
+  Future<void> setUserBookKeysPending(bool pending, {int? ifGeneration}) async {
+    final db = await database;
+    db.execute(
+      pending
+          ? 'UPDATE $_tableUserBookKeys SET generation = generation + 1'
+          : 'UPDATE $_tableUserBookKeys SET completed_generation = generation '
+                'WHERE (? IS NULL OR generation = ?)',
+      pending ? const [] : [ifGeneration, ifGeneration],
+    );
+  }
+
+  /// מעביר את [notes] למפתח [bookId] רק אם לא השתנו; מחזיר false אם נדרשת הכרעה מחדש.
+  Future<bool> moveNotesToBook(
+    Iterable<PersonalNote> notes,
+    String bookId,
+  ) async {
+    final expected = {for (final note in notes) note.id: note};
+    if (expected.isEmpty) return true;
+    final db = await database;
+    final changedBooks = <String>{};
+    var complete = true;
+    withTransaction(db, () {
+      for (final note in expected.values) {
+        final rows = db.select(
+          'SELECT * FROM $_tableNotes WHERE $_columnId = ?',
+          [note.id],
+        );
+        if (rows.isEmpty) continue;
+        final current = _noteFromMap(rows.first);
+        if (current.bookId == bookId) continue;
+        if (current != note) {
+          complete = false;
+          continue;
+        }
+        changedBooks.addAll([current.bookId, bookId]);
+        db.execute(
+          'UPDATE $_tableNotes SET $_columnBookId = ? WHERE $_columnId = ?',
+          [bookId, note.id],
+        );
+      }
+    });
+    _notifyChanges(changedBooks);
+    return complete;
+  }
+
   /// Batch insert multiple notes (for bulk restore/import)
   /// Skips notes that already exist (by ID), or overwrites them with [replace]
   Future<int> batchInsertNotes(
@@ -239,6 +310,7 @@ class PersonalNotesDatabase {
         }
       }
     });
+    if (count > 0) await setUserBookKeysPending(true);
     _notifyChanges(changedBooks);
     return count;
   }

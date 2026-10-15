@@ -1639,7 +1639,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
 
   bool _handleNavigationLogicalKey(
     LogicalKeyboardKey logicalKey, {
-    required bool isControlPressed,
+    required bool isAltPressed,
     bool isShiftPressed = false,
     required String source,
   }) {
@@ -1721,7 +1721,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
       return true;
     }
 
-    if (logicalKey == LogicalKeyboardKey.home && isControlPressed) {
+    if (logicalKey == LogicalKeyboardKey.home && !isAltPressed) {
       context.read<TextBookBloc>().add(const UpdateSelectedIndex(0));
       unawaited(
         _lines?.scrollToLine(
@@ -1734,7 +1734,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
       return true;
     }
 
-    if (logicalKey == LogicalKeyboardKey.end && isControlPressed) {
+    if (logicalKey == LogicalKeyboardKey.end && !isAltPressed) {
       final lastIndex = widget.content.length - 1;
       context.read<TextBookBloc>().add(UpdateSelectedIndex(lastIndex));
       unawaited(
@@ -2631,9 +2631,8 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
                               final handled = widget.isMainText
                                   ? _handleNavigationLogicalKey(
                                       event.logicalKey,
-                                      isControlPressed: HardwareKeyboard
-                                          .instance
-                                          .isControlPressed,
+                                      isAltPressed:
+                                          ShortcutHelper.isAltModifierPressed,
                                       isShiftPressed: HardwareKeyboard
                                           .instance
                                           .isShiftPressed,

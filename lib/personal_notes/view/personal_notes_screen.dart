@@ -20,6 +20,7 @@ import 'package:otzaria/printing/word_export_service.dart';
 import 'package:otzaria/utils/file/save_file_with_extension.dart';
 import 'package:pdf/pdf.dart';
 import 'package:otzaria/personal_notes/services/personal_notes_import_export_service.dart';
+import 'package:otzaria/personal_notes/services/personal_notes_user_book_keys.dart';
 import 'package:otzaria/personal_notes/storage/personal_notes_database.dart';
 import 'package:otzaria/personal_notes/widgets/personal_note_content_view.dart';
 import 'package:otzaria/personal_notes/widgets/personal_note_editor.dart';
@@ -688,6 +689,14 @@ class _PersonalNotesManagerScreenState
     );
 
     if (!mounted) return;
+    final libraryState = context.read<LibraryBloc>().state;
+    final library = libraryState.library;
+    if (library != null &&
+        !libraryState.isLoading &&
+        libraryState.error == null) {
+      await PersonalNotesUserBookKeys().assignPending(library);
+      if (!mounted) return;
+    }
     UiSnack.show(
       NotesMessages.importCompleted(
         inserted: summary.inserted,

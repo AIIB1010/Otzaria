@@ -56,6 +56,7 @@ import 'package:otzaria/text_book/view/widgets/nav_panel_tour_target.dart';
 import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
+import 'package:otzaria/personal_notes/services/personal_notes_user_book_keys.dart';
 import 'package:otzaria/pdf_book/view/pdf_book_screen.dart';
 import 'package:otzaria/tabs/models/tool_tab.dart';
 import 'package:otzaria/tools/open_tool_tab.dart';
@@ -403,6 +404,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
   bool _tourOverlayInsertScheduled = false;
   bool _tourOpenedOverflowMenu = false;
   late Screen _lastScreen;
+  Screen _screenBeforeSettings = Screen.library;
   // עוקב אחר מצב ההגדרות הקודם לצורך dispatch ספציפי
   SettingsState? _prevSettingsState;
   // עוקב אחר מצב הלוח הקודם לצורך dispatch ספציפי
@@ -2171,6 +2173,9 @@ class MainWindowScreenState extends State<MainWindowScreen>
         context.read<FocusRepository>().cancelPendingTabContentFocus();
         PluginRuntimeDispatcher.instance.cancelPendingKeyboardFocus();
       }
+      if (state.currentScreen == Screen.settings) {
+        _screenBeforeSettings = _lastScreen;
+      }
       _lastScreen = state.currentScreen;
     }
 
@@ -2986,6 +2991,17 @@ class MainWindowScreenState extends State<MainWindowScreen>
                     context.read<IndexingBloc>().add(
                       DropOrphanedIndexEntries(library),
                     );
+                    if (state.error == null) {
+                      unawaited(
+                        PersonalNotesUserBookKeys()
+                            .assignPending(library)
+                            .catchError(
+                              (Object e) => debugPrint(
+                                'Personal notes user-book keys failed: $e',
+                              ),
+                            ),
+                      );
+                    }
                   }),
                 );
               }
@@ -3576,6 +3592,9 @@ class MainWindowScreenState extends State<MainWindowScreen>
               child: MySettingsScreen(
                 key: _settingsScreenKey,
                 controller: _settingsScreenController,
+                onDesktopBack: () => this.context.read<NavigationBloc>().add(
+                  NavigateToScreen(_screenBeforeSettings),
+                ),
               ),
             );
 
