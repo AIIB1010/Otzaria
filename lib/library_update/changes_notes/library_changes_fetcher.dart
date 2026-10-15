@@ -32,6 +32,8 @@ class LibraryChangesFetcher {
   final http.Client Function() _clientFactory;
   final DateTime Function() _now;
   final Duration timeout;
+  Future<void> _queueWrites = Future.value();
+  Future<void> _fetches = Future.value();
 
   static Uri assetUrl(String releaseTag) => Uri.parse(
     'https://github.com/Otzaria/SeforimLibrary/releases/download/'
@@ -39,7 +41,10 @@ class LibraryChangesFetcher {
   );
 
   /// מוסיף לתור את [releaseTags] שאין להם עדיין הערות.
-  Future<void> enqueue(Iterable<String> releaseTags) async {
+  Future<void> enqueue(Iterable<String> releaseTags) =>
+      _serializeQueue(() => _enqueue(releaseTags));
+
+  Future<void> _enqueue(Iterable<String> releaseTags) async {
     final queue = await store.readFetchQueue();
     final now = _now();
     for (final tag in releaseTags) {
@@ -55,8 +60,20 @@ class LibraryChangesFetcher {
     });
   }
 
+  Future<void> _serializeQueue(Future<void> Function() operation) {
+    final next = _queueWrites.then((_) => operation());
+    _queueWrites = next.then<void>((_) {}, onError: (_) {});
+    return next;
+  }
+
   /// מנסה להוריד כל תג שבתור ומחזיר כמה נשמרו. לעולם אינו זורק.
-  Future<int> fetchQueued() async {
+  Future<int> fetchQueued() {
+    final next = _fetches.then((_) => _fetchQueued());
+    _fetches = next.then<void>((_) {}, onError: (_) {});
+    return next;
+  }
+
+  Future<int> _fetchQueued() async {
     final Map<String, DateTime> queue;
     try {
       queue = await store.readFetchQueue();
@@ -65,6 +82,7 @@ class LibraryChangesFetcher {
       return 0;
     }
     if (queue.isEmpty) return 0;
+    final initialTags = queue.keys.toSet();
     final now = _now();
     var saved = 0;
     final client = _clientFactory();
@@ -100,7 +118,14 @@ class LibraryChangesFetcher {
       client.close();
     }
     try {
-      await store.writeFetchQueue(queue);
+      await _serializeQueue(() async {
+        final current = await store.readFetchQueue();
+        // הוספות לתור בזמן ההורדה חייבות להישאר לניסיון הבא.
+        for (final tag in initialTags.difference(queue.keys.toSet())) {
+          current.remove(tag);
+        }
+        await store.writeFetchQueue(current);
+      });
     } catch (e) {
       debugPrint('[LibraryChanges] queue write failed: $e');
     }

@@ -113,6 +113,7 @@ class LibraryChangesNotes {
       _log(error, stackTrace);
     } finally {
       _showing = false;
+      if (_showAgain) await showPending();
     }
   }
 
