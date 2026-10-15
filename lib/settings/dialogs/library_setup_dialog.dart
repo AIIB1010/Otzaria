@@ -614,6 +614,7 @@ class _LibrarySetupDialogContentState
         final working = state.isLoading;
         final canConfirm = !working && _canConfirm(state);
         return AppCustomContentDialog(
+          canDismiss: !working,
           title: _hasLibrary
               ? context.settingsText(
                   'עדכון {folder}',

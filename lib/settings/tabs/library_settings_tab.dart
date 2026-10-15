@@ -518,24 +518,18 @@ class _LibrarySettingsTabState extends State<LibrarySettingsTab> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // מאגר הספרים (רק בדסקטופ)
-                    if (!(Platform.isAndroid || Platform.isIOS)) ...[
-                      SettingsCard(
-                        cardId: 'library.repository',
-                        title: context.settingsText('מאגר הספרים וחיפוש'),
-                        subtitle: context.settingsText(
-                          'תיקיות הספרים והאינדקס ומצב האינדקס',
-                        ),
-                        children: [
-                          ..._buildRepositoryCardChildren(
-                            context,
-                            libraryEmpty,
-                          ),
-                          ..._buildSearchChildren(context, state, libraryState),
-                        ],
+                    SettingsCard(
+                      cardId: 'library.repository',
+                      title: context.settingsText('מאגר הספרים וחיפוש'),
+                      subtitle: context.settingsText(
+                        'תיקיות הספרים והאינדקס ומצב האינדקס',
                       ),
-                      kSettingsCardSpacing,
-                    ],
+                      children: [
+                        ..._buildRepositoryCardChildren(context, libraryEmpty),
+                        ..._buildSearchChildren(context, state, libraryState),
+                      ],
+                    ),
+                    kSettingsCardSpacing,
 
                     // הפאנל המשותף (תצוגה + ספרים נוספים) - כעת כולל את תיקיית היברובוקס בתוכו!
                     LibrarySettingsPanel(
@@ -622,21 +616,6 @@ class _LibrarySettingsTabState extends State<LibrarySettingsTab> {
                     AttachedLibrariesPanel(
                       supportsLinking: attachedLibrariesSupportLinking,
                     ),
-
-                    // חיפוש ואינדקס — במובייל ככרטיס נפרד, ללא שורת מיקום
-                    // הספרייה (בדסקטופ מוצג בתוך כרטיס מאגר הספרים וחיפוש)
-                    if (Platform.isAndroid || Platform.isIOS) ...[
-                      kSettingsCardSpacing,
-                      SettingsCard(
-                        cardId: 'library.repository',
-                        title: context.settingsText('חיפוש ואינדקס'),
-                        children: _buildSearchChildren(
-                          context,
-                          state,
-                          libraryState,
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),

@@ -38,6 +38,7 @@ import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
 import 'package:otzaria/tabs/bloc/tabs_event.dart';
 import 'package:otzaria/tabs/bloc/tabs_state.dart';
 import 'package:otzaria/work_status/work_status_cubit.dart';
+import 'package:otzaria/shortcuts/keyboard_shortcuts.dart';
 import 'package:otzaria/workspaces/bloc/workspace_bloc.dart';
 import 'package:otzaria/workspaces/bloc/workspace_event.dart';
 import 'package:otzaria/workspaces/bloc/workspace_state.dart';
@@ -182,6 +183,36 @@ void main() {
           ),
         );
         await tester.pump();
+        if (start == Screen.settings) {
+          final rootContext = tester.element(find.byType(MainWindowScreen));
+          final shortcuts = tester.widget<KeyboardShortcuts>(
+            find.byType(KeyboardShortcuts),
+          );
+          for (final open in [
+            shortcuts.onFindRefRequested,
+            shortcuts.onNewSearchRequested!,
+          ]) {
+            showDialog<void>(
+              context: rootContext,
+              builder: (_) => const PopScope(
+                canPop: false,
+                child: AlertDialog(title: Text('התקנה פעילה')),
+              ),
+            );
+            await tester.pumpAndSettle();
+            showDialog<void>(
+              context: rootContext,
+              builder: (_) => const AlertDialog(title: Text('שכבה נוספת')),
+            );
+            await tester.pumpAndSettle();
+            open();
+            await tester.pumpAndSettle();
+            expect(find.text('שכבה נוספת'), findsNothing);
+            expect(find.text('התקנה פעילה'), findsOneWidget);
+            Navigator.of(rootContext).pop();
+            await tester.pumpAndSettle();
+          }
+        }
         Future<void> navigate(Screen screen) async {
           changes.add(NavigationState(currentScreen: screen));
           await tester.pump();

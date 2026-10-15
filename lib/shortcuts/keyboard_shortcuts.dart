@@ -83,6 +83,13 @@ class _KeyboardShortcutsState extends State<KeyboardShortcuts> {
 
   KeyEventResult _handleLateKeyEvent(KeyEvent event) {
     if (!mounted) return KeyEventResult.ignored;
+    final focusContext = FocusManager.instance.primaryFocus?.context;
+    final route = focusContext == null ? null : ModalRoute.of(focusContext);
+    if (route != null &&
+        !route.isFirst &&
+        route.popDisposition == RoutePopDisposition.doNotPop) {
+      return KeyEventResult.handled;
+    }
     return _handleKeyEvent(event, context.read<SettingsBloc>().state.shortcuts);
   }
 
@@ -229,10 +236,17 @@ class _KeyboardShortcutsState extends State<KeyboardShortcuts> {
     // דיאלוג/תפריט פתוח = route מעל מסך הבית ב-root Navigator. קיצורי ניווט
     // סוגרים אותו לפני המעבר; קיצורי טאבים מנוטרלים כדי לא לפעול על מסך שברקע.
     final rootNavigator = Navigator.maybeOf(context, rootNavigator: true);
-    void closeOverlayRoutes() {
+    bool closeOverlayRoutes() {
+      var blocked = false;
       if (rootNavigator?.canPop() ?? false) {
-        rootNavigator!.popUntil((route) => route.isFirst);
+        rootNavigator!.popUntil((route) {
+          blocked =
+              !route.isFirst &&
+              route.popDisposition == RoutePopDisposition.doNotPop;
+          return route.isFirst || blocked;
+        });
       }
+      return !blocked;
     }
 
     final isReadingScreen = _isReadingScreen;
@@ -351,7 +365,7 @@ class _KeyboardShortcutsState extends State<KeyboardShortcuts> {
     }
 
     if (ShortcutHelper.matchesShortcut(event, libraryShortcut)) {
-      closeOverlayRoutes();
+      if (!closeOverlayRoutes()) return KeyEventResult.handled;
       context.read<NavigationBloc>().add(
         const NavigateToScreen(Screen.library),
       );
@@ -427,7 +441,7 @@ class _KeyboardShortcutsState extends State<KeyboardShortcuts> {
 
     // עיון
     if (ShortcutHelper.matchesShortcut(event, readingScreenShortcut)) {
-      closeOverlayRoutes();
+      if (!closeOverlayRoutes()) return KeyEventResult.handled;
       context.read<NavigationBloc>().add(
         const NavigateToScreen(Screen.reading),
       );
@@ -440,7 +454,7 @@ class _KeyboardShortcutsState extends State<KeyboardShortcuts> {
       if (onNewSearch != null) {
         onNewSearch();
       } else {
-        closeOverlayRoutes();
+        if (!closeOverlayRoutes()) return KeyEventResult.handled;
         showDialog(
           context: context,
           builder: (context) => const SearchDialog(existingTab: null),
@@ -463,7 +477,7 @@ class _KeyboardShortcutsState extends State<KeyboardShortcuts> {
 
     // הגדרות
     if (ShortcutHelper.matchesShortcut(event, settingsShortcut)) {
-      closeOverlayRoutes();
+      if (!closeOverlayRoutes()) return KeyEventResult.handled;
       context.read<NavigationBloc>().add(
         const NavigateToScreen(Screen.settings),
       );
@@ -472,14 +486,14 @@ class _KeyboardShortcutsState extends State<KeyboardShortcuts> {
 
     // כלים
     if (ShortcutHelper.matchesShortcut(event, moreShortcut)) {
-      closeOverlayRoutes();
+      if (!closeOverlayRoutes()) return KeyEventResult.handled;
       ToolsLauncherController.instance.open();
       return KeyEventResult.handled;
     }
 
     // סימניות
     if (ShortcutHelper.matchesShortcut(event, bookmarksShortcut)) {
-      closeOverlayRoutes();
+      if (!closeOverlayRoutes()) return KeyEventResult.handled;
       showDialog(
         context: context,
         builder: (context) => const BookmarksDialog(),
@@ -493,14 +507,14 @@ class _KeyboardShortcutsState extends State<KeyboardShortcuts> {
     );
     if (saveGroupBookmarkShortcut.isNotEmpty &&
         ShortcutHelper.matchesShortcut(event, saveGroupBookmarkShortcut)) {
-      closeOverlayRoutes();
+      if (!closeOverlayRoutes()) return KeyEventResult.handled;
       showSaveGroupBookmarkDialog(context);
       return KeyEventResult.handled;
     }
 
     // היסטוריה
     if (ShortcutHelper.matchesShortcut(event, historyShortcut)) {
-      closeOverlayRoutes();
+      if (!closeOverlayRoutes()) return KeyEventResult.handled;
       showDialog(
         context: context,
         builder: (context) => const HistoryDialog(),
@@ -510,7 +524,7 @@ class _KeyboardShortcutsState extends State<KeyboardShortcuts> {
 
     // החלף שולחן עבודה
     if (ShortcutHelper.matchesShortcut(event, workspaceShortcut)) {
-      closeOverlayRoutes();
+      if (!closeOverlayRoutes()) return KeyEventResult.handled;
       showDialog(
         context: context,
         builder: (context) => const WorkspaceSwitcherDialog(),
@@ -531,7 +545,7 @@ class _KeyboardShortcutsState extends State<KeyboardShortcuts> {
       final toolShortcut = shortcutOf(entry.key);
       if (toolShortcut.isNotEmpty &&
           ShortcutHelper.matchesShortcut(event, toolShortcut)) {
-        closeOverlayRoutes();
+        if (!closeOverlayRoutes()) return KeyEventResult.handled;
         mainWindowScreenKey.currentState?.handleInternalDeepLink(
           'otzaria://open/tool/${entry.value}',
         );
@@ -547,7 +561,7 @@ class _KeyboardShortcutsState extends State<KeyboardShortcuts> {
       if (pluginShortcut.isNotEmpty &&
           ShortcutHelper.matchesShortcut(event, pluginShortcut)) {
         final pluginId = ShortcutValidator.pluginIdFromShortcutKey(pluginKey);
-        closeOverlayRoutes();
+        if (!closeOverlayRoutes()) return KeyEventResult.handled;
         mainWindowScreenKey.currentState?.handleInternalDeepLink(
           'otzaria://open/plugin/$pluginId',
         );

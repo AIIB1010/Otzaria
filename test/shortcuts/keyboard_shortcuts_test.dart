@@ -45,6 +45,8 @@ import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/widgets/text/rtl_text_field.dart';
 import 'package:otzaria/widgets/text/selection_copy_shortcuts.dart';
+import 'package:otzaria/widgets/dialogs/reusable_items_dialog.dart';
+import 'package:otzaria/widgets/widgets_exports.dart' show ActionButton;
 import 'package:provider/provider.dart';
 import '../helpers/memory_settings_cache.dart';
 
@@ -1446,7 +1448,11 @@ void main() {
         _StubNavigationBloc navigationBloc,
       })
     >
-    pumpWithDialog(WidgetTester tester) async {
+    pumpWithDialog(
+      WidgetTester tester, {
+      bool blocked = false,
+      VoidCallback? onCancel,
+    }) async {
       final tabsBloc = TabsBloc(repository: _FakeTabsRepository());
       final historyBloc = _StubHistoryBloc();
       final navigationBloc = _StubNavigationBloc();
@@ -1475,10 +1481,18 @@ void main() {
             Provider<FocusRepository>.value(value: FocusRepository()),
           ],
           child: MaterialApp(
-            home: Scaffold(
-              body: KeyboardShortcuts(
-                onFindRefRequested: () {},
-                child: const SizedBox(width: 100, height: 100),
+            home: PopScope(
+              canPop: false,
+              child: Scaffold(
+                body: KeyboardShortcuts(
+                  onFindRefRequested: () => navigationBloc.add(
+                    const NavigateToScreen(Screen.find),
+                  ),
+                  onNewSearchRequested: () => navigationBloc.add(
+                    const NavigateToScreen(Screen.search),
+                  ),
+                  child: const SizedBox(width: 100, height: 100),
+                ),
               ),
             ),
           ),
@@ -1488,10 +1502,26 @@ void main() {
 
       showDialog(
         context: tester.element(find.byType(SizedBox)),
-        builder: (_) => const AlertDialog(title: Text('דיאלוג בדיקה')),
+        builder: (_) => blocked
+            ? AppCustomContentDialog(
+                title: 'התקנה פעילה',
+                canDismiss: false,
+                actions: [
+                  if (onCancel != null)
+                    ActionButton.ghost(
+                      text: 'ביטול פריסה',
+                      onPressed: onCancel,
+                    ),
+                ],
+                child: const SizedBox.shrink(),
+              )
+            : const AlertDialog(title: Text('דיאלוג בדיקה')),
       );
       await tester.pumpAndSettle();
-      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(
+        find.byType(blocked ? AppCustomContentDialog : AlertDialog),
+        findsOneWidget,
+      );
 
       return (tabsBloc: tabsBloc, navigationBloc: navigationBloc);
     }
@@ -1520,6 +1550,60 @@ void main() {
 
       await tester.pump(const Duration(milliseconds: 400));
     });
+
+    for (final extraRoute in [false, true]) {
+      testWidgets('Ctrl+L מכבד התקנה חסומה, שכבה נוספת: $extraRoute', (
+        tester,
+      ) async {
+        final blocs = await pumpWithDialog(tester, blocked: true);
+        if (extraRoute) {
+          showDialog<void>(
+            context: tester.element(find.byType(AppCustomContentDialog)),
+            builder: (_) => const AlertDialog(title: Text('שכבה נוספת')),
+          );
+          await tester.pumpAndSettle();
+        }
+        await sendCtrl(tester, LogicalKeyboardKey.keyL);
+        await tester.pumpAndSettle();
+        expect(find.text('שכבה נוספת'), findsNothing);
+        expect(find.text('התקנה פעילה'), findsOneWidget);
+        expect(blocs.navigationBloc.events, isEmpty);
+      });
+    }
+
+    for (final cancellable in [false, true]) {
+      testWidgets(
+        'דיאלוג עסוק חוסם callbacks ושומר ביטול מקומי: $cancellable',
+        (
+          tester,
+        ) async {
+          var cancelled = 0;
+          final blocs = await pumpWithDialog(
+            tester,
+            blocked: true,
+            onCancel: cancellable ? () => cancelled++ : null,
+          );
+          await sendCtrl(tester, LogicalKeyboardKey.keyF);
+          await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+          await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+          await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+          await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+          await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+          await tester.pump();
+          expect(blocs.navigationBloc.events, isEmpty);
+          expect(find.text('התקנה פעילה'), findsOneWidget);
+          if (cancellable) {
+            await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+            await tester.sendKeyEvent(LogicalKeyboardKey.space);
+            await tester.pumpAndSettle();
+            expect(cancelled, 1);
+            await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+            await tester.pumpAndSettle();
+            expect(cancelled, 2);
+          }
+        },
+      );
+    }
 
     testWidgets('Ctrl+W כשדיאלוג פתוח אינו סוגר טאב שברקע', (tester) async {
       final blocs = await pumpWithDialog(tester);
