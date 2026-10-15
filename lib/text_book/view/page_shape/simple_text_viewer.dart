@@ -2410,25 +2410,39 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     onCopy: (profile) => _copyFormattedText(selectedText, false, profile),
   );
 
-  /// בקשת העתקה מקיצור דינמי — רק הטור שיעדו תואם מטפל בה.
+  /// בקשת העתקה מקיצור דינמי — הגוף מנתב למפרש הפעיל באותו מסך.
   void _onDynamicCopyRequest() {
     final tab = widget.tab;
     if (tab is! TextBookTab || !mounted) return;
     final request = tab.dynamicCopyRequestNotifier.value;
-    if (request == null || request.target != _textTarget) return;
+    if (request == null) return;
+    final viewer = request.target == _textTarget ? this : _lastActiveCommentary;
+    if (viewer == null ||
+        !viewer.mounted ||
+        request.target != viewer._textTarget) {
+      return;
+    }
+    if (viewer != this &&
+        (widget.selectionSyncController == null ||
+            !identical(
+              widget.selectionSyncController,
+              viewer.widget.selectionSyncController,
+            ))) {
+      return;
+    }
     tab.dynamicCopyRequestNotifier.value = null;
     switch (request.kind) {
       case DynamicShortcutKind.copySelectionWith:
-        _copyFormattedText(
+        viewer._copyFormattedText(
           null,
           false,
           request.profile,
           request.plainTextOnly,
         );
       case DynamicShortcutKind.copyParagraphWith:
-        final index = _savedSelectedIndex;
+        final index = viewer._savedSelectedIndex;
         if (index != null) {
-          _copyParagraphByIndex(
+          viewer._copyParagraphByIndex(
             index,
             profile: request.profile,
             plainTextOnly: request.plainTextOnly,

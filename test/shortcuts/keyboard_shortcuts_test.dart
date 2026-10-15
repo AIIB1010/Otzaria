@@ -1194,6 +1194,92 @@ void main() {
         expect(request?.plainTextOnly, isTrue);
       },
     );
+    for (final editing in [true, false]) {
+      testWidgets(
+        'Ctrl+C דינמי מכבד ${editing ? 'שדה טקסט' : 'דיאלוג שלא ניתן לסגור'}',
+        (tester) async {
+          final tab = TextBookTab(
+            book: TextBook(title: 'ספר בדיקה'),
+            index: 0,
+            blocOverride: _StubTextBookBloc(
+              TextBookLoaded.initial(
+                book: TextBook(title: 'ספר בדיקה'),
+                index: 0,
+                showLeftPane: false,
+                splitView: false,
+              ),
+            ),
+          );
+          addTearDown(tab.dispose);
+          final clipboardWrites = <String>[];
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            (call) async {
+              if (call.method == 'Clipboard.setData') {
+                clipboardWrites.add(call.arguments['text'] as String);
+              }
+              if (call.method == 'Clipboard.getData') return {'text': ''};
+              return null;
+            },
+          );
+          addTearDown(
+            () => tester.binding.defaultBinaryMessenger
+                .setMockMethodCallHandler(SystemChannels.platform, null),
+          );
+          final controller = TextEditingController(text: 'טקסט בשדה');
+          addTearDown(controller.dispose);
+          DynamicShortcutRegistry.instance.put(
+            const DynamicShortcut(
+              id: 'editing-dialog-copy',
+              key: 'ctrl+c',
+              kind: DynamicShortcutKind.copySelectionWith,
+              change: DynamicDisplayChange(nikud: DynamicMarkChange.hide),
+            ),
+          );
+          addTearDown(
+            () =>
+                DynamicShortcutRegistry.instance.remove('editing-dialog-copy'),
+          );
+          await pumpWithTab(
+            tester,
+            tab,
+            child: editing
+                ? RtlTextField(controller: controller, autofocus: true)
+                : const SizedBox(),
+          );
+          await tester.pumpAndSettle();
+          if (editing) {
+            controller.selection = TextSelection(
+              baseOffset: 0,
+              extentOffset: controller.text.length,
+            );
+          } else {
+            unawaited(
+              showDialog<void>(
+                context: tester.element(find.byType(KeyboardShortcuts)),
+                barrierDismissible: false,
+                builder: (_) => const PopScope(
+                  canPop: false,
+                  child: Dialog(child: Text('פעולה בתהליך')),
+                ),
+              ),
+            );
+            await tester.pumpAndSettle();
+          }
+          await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+          await tester.sendKeyDownEvent(LogicalKeyboardKey.keyC);
+          await tester.sendKeyUpEvent(LogicalKeyboardKey.keyC);
+          await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+          await tester.pump();
+          expect(tab.dynamicCopyRequestNotifier.value, isNull);
+          if (editing) {
+            expect(clipboardWrites, ['טקסט בשדה']);
+          } else {
+            expect(find.text('פעולה בתהליך'), findsOneWidget);
+          }
+        },
+      );
+    }
   });
 
   group('KeyboardShortcuts - Ctrl+W מוגבל למסך עיון', () {
