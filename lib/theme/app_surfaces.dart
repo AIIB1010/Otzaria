@@ -93,6 +93,10 @@ class AppSurfaces {
       ? const Color(0xFFF8FAFC)
       : cs.primary.withValues(alpha: 0.08);
 
+  /// רקע זמני לשורת ספר שהודגשה (מעבר מקישור/חיפוש/תוכן עניינים).
+  static Color highlightedLineBackground(ColorScheme cs) =>
+      cs.secondaryContainer.withValues(alpha: 0.4);
+
   /// רקע הדגשה לשורה שמעליה מרחפים בגרירה (drag target).
   ///
   /// 8% primary — רמז עדין למקום השחרור מבלי להסתיר את תוכן השורה.

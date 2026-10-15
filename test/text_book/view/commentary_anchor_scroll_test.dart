@@ -628,8 +628,6 @@ TextBookLoaded _loadedState({
   selectedIndices: {selectedLine},
   pinLeftPane: false,
   searchText: '',
-  scrollController: ItemScrollController(),
-  positionsListener: ItemPositionsListener.create(),
 );
 
 class _TestTextBookBloc extends Bloc<TextBookEvent, TextBookState>

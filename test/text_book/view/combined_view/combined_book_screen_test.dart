@@ -27,7 +27,6 @@ import 'package:otzaria/widgets/misc/link_context_menu_entry.dart';
 import 'package:otzaria/widgets/misc/link_preview_overlay.dart';
 import 'package:otzaria/widgets/smart_text/smart_text_widget.dart';
 import 'package:otzaria/widgets/text/selection_copy_shortcuts.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../../../test_helpers/memory_cache_provider.dart';
 
 void main() {
@@ -488,54 +487,6 @@ void main() {
       await tester.pump();
 
       expect(region(), same(regionBefore));
-    });
-  });
-
-  group('shouldRestoreScrollOnContinuousModeChange', () {
-    test('החלפת מצב (רגיל→רציף או להיפך) → משחזרים גלילה', () {
-      // הבאג שתוקן: מיפוי שורה↔פריט מתחלף אבל הרשימה נשארת על אינדקס
-      // הפריט הישן — בלי שחזור המשתמש קופץ למקום רחוק בספר.
-      expect(
-        shouldRestoreScrollOnContinuousModeChange(
-          previousMode: false,
-          currentMode: true,
-        ),
-        isTrue,
-      );
-      expect(
-        shouldRestoreScrollOnContinuousModeChange(
-          previousMode: true,
-          currentMode: false,
-        ),
-        isTrue,
-      );
-    });
-
-    test('אותו מצב → אין שחזור (emit-ים שוטפים לא מזיזים את הגלילה)', () {
-      expect(
-        shouldRestoreScrollOnContinuousModeChange(
-          previousMode: true,
-          currentMode: true,
-        ),
-        isFalse,
-      );
-      expect(
-        shouldRestoreScrollOnContinuousModeChange(
-          previousMode: false,
-          currentMode: false,
-        ),
-        isFalse,
-      );
-    });
-
-    test('ה-state הראשון שנצפה (previousMode=null) → אין שחזור', () {
-      expect(
-        shouldRestoreScrollOnContinuousModeChange(
-          previousMode: null,
-          currentMode: true,
-        ),
-        isFalse,
-      );
     });
   });
 
@@ -1077,8 +1028,6 @@ TextBookLoaded _loadedState() {
     selectedIndex: null,
     pinLeftPane: false,
     searchText: '',
-    scrollController: ItemScrollController(),
-    positionsListener: ItemPositionsListener.create(),
   );
 }
 

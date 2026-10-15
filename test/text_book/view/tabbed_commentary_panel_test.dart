@@ -20,10 +20,10 @@ import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/view/tabbed_commentary_panel.dart';
-import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:otzaria_icons/otzaria_icons.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../../test_helpers/memory_cache_provider.dart';
+import '../../test_helpers/reading_toc.dart';
+import 'package:otzaria/text_book/view/reading_viewport/line_scroll_controller.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -314,10 +314,13 @@ void main() {
     expect((event as AddTab).tab, isA<CommentatorsTab>());
     expect((event.tab as CommentatorsTab).sourceTab, same(sourceTab));
   });
-  testWidgets('note navigation maps one based source to paragraph', (
+  testWidgets('note navigation scrolls to the one based source line', (
     tester,
   ) async {
-    final scroll = _RecordingScrollController();
+    final lines = LineScrollController();
+    addTearDown(lines.dispose);
+    final navigated = <int>[];
+    lines.externalNavigator = (line) async => navigated.add(line);
     const content = [
       '<h2>א</h2>',
       '1',
@@ -334,20 +337,25 @@ void main() {
         content: content,
         continuousReadingMode: true,
         supportsContinuousReadingMode: true,
-        readingSegments: buildReadingSegments(content, continuous: true),
-        scrollController: scroll,
+        tableOfContents: headerToc(content),
       ),
     );
     addTearDown(bloc.close);
     await tester.pumpWidget(
-      buildPanel(initialTabIndex: kNotesTabIndex, textBookBlocOverride: bloc),
+      LineScrollScope(
+        controller: lines,
+        child: buildPanel(
+          initialTabIndex: kNotesTabIndex,
+          textBookBlocOverride: bloc,
+        ),
+      ),
     );
     await tester.pumpAndSettle();
     tester
         .widget<PersonalNotesSidebar>(find.byType(PersonalNotesSidebar))
         .onNavigateToLine(8);
     await tester.pumpAndSettle();
-    expect(scroll.indices, [3]);
+    expect(navigated, [7]);
     expect(bloc.recordedEvents.whereType<UpdateSelectedIndex>().last.index, 7);
     expect(bloc.recordedEvents.whereType<HighlightLine>().last.lineIndex, 7);
   });
@@ -434,8 +442,6 @@ TextBookLoaded _loadedState({
   selectedIndex: null,
   pinLeftPane: false,
   searchText: '',
-  scrollController: ItemScrollController(),
-  positionsListener: ItemPositionsListener.create(),
 );
 
 class _TestTextBookBloc extends Bloc<TextBookEvent, TextBookState>
@@ -486,20 +492,4 @@ class _RecordingTabsBloc extends Bloc<TabsEvent, TabsState>
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-class _RecordingScrollController extends ItemScrollController {
-  final List<int> indices = [];
-  @override
-  bool get isAttached => true;
-  @override
-  Future<void> scrollTo({
-    required int index,
-    double alignment = 0,
-    required Duration duration,
-    Curve curve = Curves.linear,
-    List<double> opacityAnimationWeights = const [40, 20, 40],
-  }) async {
-    indices.add(index);
-  }
 }

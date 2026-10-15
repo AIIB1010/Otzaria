@@ -8,7 +8,6 @@ import 'package:otzaria/tabs/bloc/tabs_state.dart';
 import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
-import 'package:otzaria/text_book/bloc/text_book_event.dart';
 
 /// מחליף את תצוגת הטקסט בלבד; זהות הכרטיסייה וההיסטוריה נשמרות.
 class PluginTextReader extends StatefulWidget {
@@ -36,7 +35,7 @@ class _PluginTextReaderState extends State<PluginTextReader> {
   }
 
   void _syncNavigation() {
-    widget.tab.scrollController.externalScroll =
+    widget.tab.lines.externalNavigator =
         PluginTextReaderRegistry.instance.usesPlugin(widget.tab)
         ? _navigate
         : null;
@@ -48,21 +47,9 @@ class _PluginTextReaderState extends State<PluginTextReader> {
     _syncNavigation();
   }
 
-  Future<void> _navigate(int index, {int? sourceLineIndex}) async {
-    final state = widget.tab.bloc.state;
-    final line =
-        sourceLineIndex ??
-        (state is TextBookLoaded && state.readingSegments.isNotEmpty
-            ? state
-                  .readingSegments[index.clamp(
-                    0,
-                    state.readingSegments.length - 1,
-                  )]
-                  .startLineIndex
-            : index);
-    widget.tab.index = line;
+  /// המיקום כבר פורסם ב-[LineScrollController]; כאן רק מודיעים לתוסף.
+  Future<void> _navigate(int line) async {
     _lastIndex = line;
-    widget.tab.bloc.add(UpdateVisibleIndecies([line]));
     final registry = PluginTextReaderRegistry.instance;
     final plugin = registry.activePlugin;
     if (plugin == null || !registry.usesPlugin(widget.tab)) return;
@@ -78,7 +65,9 @@ class _PluginTextReaderState extends State<PluginTextReader> {
   @override
   void dispose() {
     PluginTextReaderRegistry.instance.removeListener(_syncNavigation);
-    widget.tab.scrollController.externalScroll = null;
+    if (widget.tab.lines.externalNavigator == _navigate) {
+      widget.tab.lines.externalNavigator = null;
+    }
     super.dispose();
   }
 

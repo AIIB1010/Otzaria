@@ -26,10 +26,9 @@ import 'package:otzaria/text_book/view/combined_view/combined_book_screen.dart';
 import 'package:otzaria/text_book/view/error_report_dialog.dart';
 import 'package:otzaria/text_book/view/selection/selected_text_copy.dart';
 import 'package:otzaria/text_display/text_display_exports.dart';
-import 'package:otzaria/text_book/utils/reading_segments.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import '../../../test_helpers/memory_cache_provider.dart';
+import '../../../test_helpers/reading_toc.dart';
 
 const _lines = ['פסקה ראשונה', 'פסקה שניה', 'פסקה שלישית'];
 
@@ -301,6 +300,35 @@ void main() {
       expect(copied, ['רבי יוחנן הלכה']);
     });
 
+    testWidgets('error report targets the clicked line: $continuous', (
+      tester,
+    ) async {
+      await _pumpView(
+        tester,
+        continuous: continuous,
+        book: TextBook(title: 'ספר בדיקה', id: 7),
+      );
+      await tester.tapAt(
+        _textBox(tester, 'שלישית').center,
+        kind: PointerDeviceKind.mouse,
+        buttons: kSecondaryMouseButton,
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.tap(find.text('דווח על טעות בספר'));
+      for (var i = 0; i < 40; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        await tester.pump();
+        if (find.byType(TabbedReportDialog).evaluate().isNotEmpty) break;
+      }
+      final dialog = tester.widget<TabbedReportDialog>(
+        find.byType(TabbedReportDialog),
+      );
+      expect(dialog.currentLineNumber, 3);
+    });
+
     testWidgets('error report gets the source selection: $continuous', (
       tester,
     ) async {
@@ -529,17 +557,14 @@ TextBookLoaded _loadedState({
             for (final title in availableCommentators) _commentaryLink(title),
           ],
         },
-    tableOfContents: const [],
+    tableOfContents: headerToc(data),
     removeNikud: false,
     visibleIndices: List.generate(data.length, (index) => index),
     selectedIndex: selectedIndex,
     selectedIndices: selectedIndex == null ? const {} : {selectedIndex},
     continuousReadingMode: continuous,
-    readingSegments: buildReadingSegments(data, continuous: continuous),
     pinLeftPane: false,
     searchText: '',
-    scrollController: ItemScrollController(),
-    positionsListener: ItemPositionsListener.create(),
     displayPolicy: displayPolicy,
   );
 }

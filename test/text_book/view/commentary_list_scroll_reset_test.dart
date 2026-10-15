@@ -468,8 +468,6 @@ TextBookLoaded _state({
     selectedIndices: selectedIndices,
     pinLeftPane: false,
     searchText: '',
-    scrollController: ItemScrollController(),
-    positionsListener: ItemPositionsListener.create(),
   );
 }
 

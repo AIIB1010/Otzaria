@@ -20,7 +20,6 @@ import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/view/combined_view/combined_book_screen.dart';
 import 'package:otzaria/widgets/lists/scroll_position_reanchor.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import '../../../test_helpers/memory_cache_provider.dart';
 
@@ -92,8 +91,6 @@ void main() {
       selectedIndex: null,
       pinLeftPane: false,
       searchText: '',
-      scrollController: ItemScrollController(),
-      positionsListener: ItemPositionsListener.create(),
     );
     final textBookBloc = _TestTextBookBloc(state);
     final personalNotesBloc = _TestPersonalNotesBloc(
@@ -181,7 +178,7 @@ void main() {
     final tab = await pumpView(tester);
     if (scrolledBy > 0) {
       unawaited(
-        tab.mainOffsetController.animateScroll(
+        tab.lines.offsetController.animateScroll(
           offset: scrolledBy,
           duration: const Duration(milliseconds: 100),
         ),
@@ -241,7 +238,7 @@ void main() {
       await selectThenMove(
         tester,
         scrolledBy: scrolledBy,
-        move: (tab) async => tab.scrollController.jumpTo(index: 50),
+        move: (tab) async => tab.lines.itemController.jumpTo(index: 50),
         expected: isEmpty,
       );
     });
@@ -250,7 +247,7 @@ void main() {
         tester,
         scrolledBy: scrolledBy,
         move: (tab) async => unawaited(
-          tab.scrollController.scrollTo(
+          tab.lines.itemController.scrollTo(
             index: 50,
             duration: const Duration(milliseconds: 300),
           ),
@@ -264,7 +261,7 @@ void main() {
   testWidgets('גלילה של יותר ממסך וחזרה שומרת את הבחירה', (tester) async {
     Future<void> scrollBy(TextBookTab tab, double offset) async {
       unawaited(
-        tab.mainOffsetController.animateScroll(
+        tab.lines.offsetController.animateScroll(
           offset: offset,
           duration: const Duration(milliseconds: 100),
         ),

@@ -555,6 +555,120 @@ void main() {
     });
   });
 
+  group('פסקאות ממוזגות (מצב רציף)', () {
+    // שורות 0–1 בפסקה אחת וכותרת בזרימה לפני שורה 1; שורה 2 פריט נפרד.
+    const lines = ['אבג דהו', 'זחט יכל', 'מנס עפצ'];
+    final SelectionParagraphs paragraphs = (
+      joinsNext: (line) => line == 0,
+      headingAt: (line) => line == 1 ? 'כותרת · משנה' : null,
+    );
+
+    test('שורות באותה פסקה מחוברות ברווח, ובין פריטים נשאר מעבר שורה', () {
+      final restored = restoreSelectedTextLineBreaksDetailed(
+        selectedText: 'דהו זחט יכלמנס',
+        visibleLines: lines,
+        paragraphs: (joinsNext: (line) => line == 0, headingAt: (_) => null),
+      );
+
+      expect(restored.text, 'דהו זחט יכל\nמנס');
+      expect(restored.startLine, 0);
+      expect(restored.endLine, 2);
+      expect(restored.startColumn, 4);
+    });
+
+    test('כותרת בזרימה אינה נכללת בטקסט ובמיקום', () {
+      final restored = restoreSelectedTextLineBreaksDetailed(
+        selectedText: 'דהו כותרת · משנה זחט',
+        visibleLines: lines,
+        paragraphs: paragraphs,
+      );
+
+      expect(restored.text, 'דהו זחט');
+      expect(restored.startLine, 0);
+      expect(restored.endLine, 1);
+    });
+
+    test('בחירה שמתחילה בתוך הכותרת מתחילה בשורה שהיא פותחת', () {
+      final restored = restoreSelectedTextLineBreaksDetailed(
+        selectedText: 'משנה זחט',
+        visibleLines: lines,
+        paragraphs: paragraphs,
+      );
+
+      expect(restored.text, 'זחט');
+      expect(restored.startLine, 1);
+      expect(restored.startColumn, 0);
+    });
+
+    test('בחירה שמסתיימת בתוך הכותרת מסתיימת בשורה שלפניה', () {
+      final restored = restoreSelectedTextLineBreaksDetailed(
+        selectedText: 'דהו כותרת',
+        visibleLines: lines,
+        paragraphs: paragraphs,
+      );
+
+      expect(restored.text, 'דהו ');
+      expect(restored.endLine, 0);
+    });
+
+    for (final selected in [
+      'אָב כּוֹתֶרֶת מְנֻקֶּדֶת גַּד',
+      'אָב כוֹתֶרֶת מְנֻקֶּדֶת גַּד',
+    ]) {
+      test('כותרת מנוקדת מושמטת מבחירה רציפה: $selected', () {
+        final restored = restoreSelectedTextLineBreaksDetailed(
+          selectedText: selected,
+          visibleLines: const ['אָב', 'גַּד'],
+          paragraphs: (
+            joinsNext: (line) => line == 0,
+            headingAt: (line) => line == 1 ? 'כּוֹתֶרֶת מְנֻקֶּדֶת' : null,
+          ),
+        );
+
+        expect(restored, (
+          text: 'אָב גַּד',
+          startLine: 0,
+          endLine: 1,
+          startColumn: 0,
+          ambiguous: false,
+        ));
+      });
+    }
+
+    for (final gap in ['', ' ', '\n', '\u00a0']) {
+      test(
+        'ניקוד בסוף שורה נשמר בחיבור רציף כשחסר ניקוד אחר: ${gap.codeUnits}',
+        () {
+          final restored = restoreSelectedTextLineBreaksDetailed(
+            selectedText: 'אָבּ$gapגַד',
+            visibleLines: const ['אָבּ', 'גַּד'],
+            paragraphs: (
+              joinsNext: (line) => line == 0,
+              headingAt: (_) => null,
+            ),
+          );
+
+          expect(restored, (
+            text: 'אָבּ גַד',
+            startLine: 0,
+            endLine: 1,
+            startColumn: 0,
+            ambiguous: false,
+          ));
+        },
+      );
+    }
+
+    test('בלי מבנה פסקאות (מצב רגיל) — מעבר שורה בכל גבול', () {
+      final restored = restoreSelectedTextLineBreaksDetailed(
+        selectedText: 'דהוזחט',
+        visibleLines: lines,
+      );
+
+      expect(restored.text, 'דהו\nזחט');
+    });
+  });
+
   group('locateSelectionRangesPerLine', () {
     test('בחירה על פני שלוש שורות: סיומת, שורה מלאה, תחילית', () {
       final ranges = locateSelectionRangesPerLine(

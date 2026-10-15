@@ -128,6 +128,7 @@ List<AppContextMenuEntry> buildClickedHighlightPluginEntries({
   required RenderSettings settings,
   required List<(String, PluginContextMenuItem)> pluginItems,
   required BuildContext menuContext,
+  TextRange? lineRange,
 }) {
   if (root == null) return const [];
   final book = state.book;
@@ -139,6 +140,7 @@ List<AppContextMenuEntry> buildClickedHighlightPluginEntries({
     sectionIndex: paragraphIndex,
     rawText: rawText,
     settings: settings,
+    lineRange: lineRange,
   );
   if (clicked.isEmpty) return const [];
   final entries = buildPluginContextMenuEntries(
@@ -174,6 +176,7 @@ List<AppContextMenuEntry> buildReaderPluginMenuEntries({
   required BuildContext menuContext,
   String selectionContext = 'reader-selection',
   List<(String, PluginContextMenuItem)>? pluginItems,
+  TextRange? lineRange,
 }) {
   final items = pluginItems ?? ContextMenuRegistry.instance.getAll();
   if (items.isEmpty || paragraphIndex < 0 || paragraphIndex >= lines.length) {
@@ -199,6 +202,7 @@ List<AppContextMenuEntry> buildReaderPluginMenuEntries({
       settings: renderSettings,
       pluginItems: items,
       menuContext: menuContext,
+      lineRange: lineRange,
     );
     return [
       if (bookEntries.isNotEmpty) const AppContextMenuEntry.divider(),

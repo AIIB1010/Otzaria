@@ -11,7 +11,7 @@ import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/view/alt_toc_sidebar_view.dart';
 import 'package:otzaria/text_book/utils/dibburim_structure.dart';
 import 'package:otzaria/widgets/lists/nav_tree_tile.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+import 'package:otzaria/text_book/view/reading_viewport/line_scroll_controller.dart';
 
 /// דיבורי-המתחיל בלשונית 'כותרות': מבנה מסונתז "דיבורי המתחיל" שבו הדיבורים
 /// הם עלים תחת כותרות ה-TOC, בלי מסד (המבנים האמיתיים חוזרים ריקים).
@@ -47,8 +47,6 @@ TextBookLoaded _loadedState({
     selectedIndex: null,
     pinLeftPane: false,
     searchText: '',
-    scrollController: ItemScrollController(),
-    positionsListener: ItemPositionsListener.create(),
   );
 }
 
@@ -76,7 +74,7 @@ Future<void> _pumpSidebar(
               child: AltTocSidebarView(
                 book: TextBook(title: 'ספר בדיקה'),
                 closeLeftPaneCallback: () {},
-                scrollController: ItemScrollController(),
+                lines: LineScrollController(),
                 dibburim: dibburim,
                 tableOfContents: toc,
               ),

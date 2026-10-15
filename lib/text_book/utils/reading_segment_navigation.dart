@@ -1,5 +1,4 @@
 import 'package:flutter/widgets.dart';
-import 'package:otzaria/widgets/lists/jump_aware_item_scroll_controller.dart';
 import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
@@ -73,62 +72,47 @@ ItemPosition? _findPosition(ItemPositionsListener listener, int segmentIndex) {
 /// הנחיתה נמדדת ומתוקנת גם ליעד ללא דיוק תוך-שורתי (ניווט מכותרות/TOC):
 /// רה-פריסה תוך כדי האנימציה (טעינה הדרגתית) מסיטה את היעד, ובלי תיקון נשארים במקום.
 ///
-/// [latestSegments] פותר מחדש את היעד כשטעינת רקע מחליפה את הסגמנטים;
-/// בלעדיו משתמשים ב-[segments] לאורך כל הגלילה.
+/// [latestSegments] מחשב מחדש את מיקום השורה בפסקה כשתוכנה נטען תוך כדי
+/// הגלילה; בלעדיו משתמשים ב-[segments] לאורך כל הגלילה. [measure] — גבולות
+/// השורה מהרינדור כשהפריט בנוי; בלעדיו לפי אורך הטקסט.
 Future<void> scrollToSourceLine({
   required ItemScrollController scrollController,
   required ScrollOffsetController? scrollOffsetController,
   required ItemPositionsListener? positionsListener,
-  required List<ReadingSegment> segments,
+  required ReadingSegments segments,
   required int lineIndex,
   required double viewportExtent,
   double alignment = kReadingAnchorAlignment,
   double intraLineFraction = 0,
   Duration duration = const Duration(milliseconds: 250),
   Curve curve = Curves.ease,
-  List<ReadingSegment> Function()? latestSegments,
+  ReadingSegments Function()? latestSegments,
+  bool Function()? isCurrent,
+  MeasuredLineExtent? measure,
 }) async {
   if (segments.isEmpty || !scrollController.isAttached) {
     return;
   }
 
-  if (scrollController is JumpAwareItemScrollController) {
-    scrollController.beginNavigation();
-  }
   var segmentIndex = -1;
   var fraction = 0.0;
   var safeLineIndex = lineIndex;
-  // היעד נפתר מול הרשימה העדכנית כי טעינת רקע משנה את מספור הסגמנטים.
   bool resolveTarget() {
     final current = latestSegments?.call() ?? segments;
     if (current.isEmpty) return false;
-    safeLineIndex = lineIndex
-        .clamp(
-          current.first.startLineIndex,
-          current.last.sourceLineIndices.last,
-        )
-        .toInt();
+    safeLineIndex = lineIndex.clamp(0, current.layout.lineCount - 1).toInt();
     segmentIndex = segmentIndexForLine(current, safeLineIndex);
-    fraction = lineFractionWithinSegment(
-      current[segmentIndex],
+    fraction = lineFractionInItem(
+      current,
+      segmentIndex,
       safeLineIndex,
       intraLineFraction: intraLineFraction,
+      measure: measure,
     );
     return true;
   }
 
   if (!resolveTarget()) return;
-  if (scrollController is JumpAwareItemScrollController &&
-      scrollController.externalScroll != null) {
-    await scrollController.scrollTo(
-      index: segmentIndex,
-      sourceLineIndex: safeLineIndex,
-      alignment: alignment,
-      duration: duration,
-      curve: curve,
-    );
-    return;
-  }
 
   Future<void> scrollToSegment() async {
     if (duration == Duration.zero) {
@@ -151,16 +135,23 @@ Future<void> scrollToSourceLine({
     return;
   }
 
-  // משך הגלילה היחסית. `animateScroll` עוטף את `ScrollController.animateTo`,
-  // שזורק assert על `Duration.zero`; לכן מצב מיידי מתורגם לדיוק עדין קצר.
-  final fineDuration = duration == Duration.zero
-      ? const Duration(milliseconds: 120)
-      : duration;
+  // `animateScroll` זורק assert על `Duration.zero`; מצב מיידי נוחת בפריים אחד.
+  final instant = duration == Duration.zero;
+  final fineDuration = instant ? _instantStep : duration;
 
-  // הסגמנט אינו גלוי — קפיצה ולא גלילה מונפשת: המעבר בין שתי הרשימות של
-  // החבילה דורש 2 מסכי גלילה, ונעצר על יעד שגוי כששורות שטרם נטענו בגובה ~0.
+  // יעד רחוק במצב רציף: קפיצה — המעבר המונפש בין שתי הרשימות של החבילה נעצר
+  // על יעד שגוי כשפסקאות שטרם נטענו בגובה משוער. במצב רגיל: גלילה מונפשת.
   if (_findPosition(positionsListener, segmentIndex) == null) {
-    scrollController.jumpTo(index: segmentIndex, alignment: alignment);
+    if (instant || segments.layout.continuous) {
+      scrollController.jumpTo(index: segmentIndex, alignment: alignment);
+    } else {
+      await scrollController.scrollTo(
+        index: segmentIndex,
+        alignment: alignment,
+        duration: duration,
+        curve: curve,
+      );
+    }
     await WidgetsBinding.instance.endOfFrame;
   }
 
@@ -174,15 +165,14 @@ Future<void> scrollToSourceLine({
   for (var attempt = 0; attempt < 5; attempt++) {
     // הרשימה יורדת מהעץ באמצע האנימציה (מעבר כרטיסיה, סגירתה, העברתה לחלון
     // אחר), או מוחלפת בקורא חיצוני — מדידות ישנות אינן מעידות שהרשימה חיה.
-    if (!scrollController.isAttached ||
-        (scrollController is JumpAwareItemScrollController &&
-            !scrollController.isNativeAttached)) {
+    if (!scrollController.isAttached || !(isCurrent?.call() ?? true)) {
       return;
     }
     final previousIndex = segmentIndex;
+    final previousFraction = fraction;
     if (!resolveTarget()) return;
-    if (segmentIndex != previousIndex) {
-      // המרחק שנמדד מול הסגמנט הישן אינו רלוונטי אחרי החלפת הרשימה.
+    if (segmentIndex != previousIndex || fraction != previousFraction) {
+      // המרחק שנמדד מול היעד הקודם אינו רלוונטי אחרי שהפסקה נטענה.
       previousDistance = double.infinity;
       confirming = false;
     }
@@ -226,6 +216,8 @@ Future<void> scrollToSourceLine({
       curve: attempt == 0 ? curve : Curves.easeOut,
     );
     await WidgetsBinding.instance.endOfFrame;
-    stepDuration = const Duration(milliseconds: 120);
+    stepDuration = instant ? _instantStep : const Duration(milliseconds: 120);
   }
 }
+
+const Duration _instantStep = Duration(milliseconds: 1);

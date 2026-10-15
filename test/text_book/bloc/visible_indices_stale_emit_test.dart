@@ -8,7 +8,6 @@ import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/data/repository/text_book_repository.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 /// `UpdateVisibleIndecies` מצלם את ה-state בכניסה למטפל. כל `await` בדרך
 /// ל-emit מאפשר לאירוע אחר לפלוט מצב חדש, וה-emit של הצילום המיושן דורס אותו —
@@ -115,8 +114,6 @@ Future<TextBookBloc> _loadedBloc({required bool showLeftPane}) async {
       searchMode: SearchMode.exact,
       showPageShapeView: false,
     ),
-    scrollController: ItemScrollController(),
-    positionsListener: ItemPositionsListener.create(),
   );
 
   bloc.add(

@@ -6,7 +6,6 @@ import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/data/repository/text_book_repository.dart';
 import 'package:otzaria/data/data_providers/file_system_data_provider.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 /// טאב המציג מפרשים לספר טקסט ספציפי עם בחירת פרק/פסוק עצמאית.
 ///
@@ -25,9 +24,6 @@ class CommentatorsTab extends OpenedTab {
 
   /// ה-state הנוכחי, בלי לבנות bloc לטאב שטרם הוצג.
   TextBookState get blocState => _bloc?.state ?? _initialState;
-  final ItemScrollController scrollController = ItemScrollController();
-  final ItemPositionsListener positionsListener =
-      ItemPositionsListener.create();
 
   /// השורה שנבחרה ב-sourceTab בעת הפתיחה (אם הייתה), null אם לא הייתה בחירה
   final int? initialSelectedLine;
@@ -46,9 +42,7 @@ class CommentatorsTab extends OpenedTab {
 
   static int _resolveStartIndex(TextBookTab tab) {
     final s = tab.blocState;
-    if (s is! TextBookLoaded) return tab.index;
-    return s.selectedIndex ??
-        (s.visibleIndices.isNotEmpty ? s.visibleIndices.first : tab.index);
+    return (s is TextBookLoaded ? s.selectedIndex : null) ?? tab.index;
   }
 
   CommentatorsTab({
@@ -144,8 +138,6 @@ class CommentatorsTab extends OpenedTab {
     final created = TextBookBloc(
       repository: TextBookRepository(fileSystem: FileSystemData.instance),
       initialState: _initialState,
-      scrollController: scrollController,
-      positionsListener: positionsListener,
     );
     if (_isDisposed) created.close();
     return created;

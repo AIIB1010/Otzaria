@@ -44,6 +44,7 @@ import 'package:otzaria/widgets/smart_text/smart_text_widget.dart';
 import 'package:otzaria/text_book/view/selection/selection_persistence.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../../../test_helpers/memory_cache_provider.dart';
+import 'package:otzaria/text_book/view/reading_viewport/line_scroll_controller.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -566,7 +567,11 @@ void main() {
   testWidgets('ריחוף על הסרגל בצורת הדף מציג תווית יעד מתוך labelForIndex', (
     tester,
   ) async {
-    final textBookBloc = _TestTextBookBloc(_loadedState());
+    // תוכן ארוך כדי שהסרגל הפנימי יוצג (יש מה לגלול).
+    final content = List<String>.generate(200, (i) => 'שורה $i');
+    final textBookBloc = _TestTextBookBloc(
+      _loadedState().copyWith(content: content),
+    );
     final personalNotesBloc = _TestPersonalNotesBloc(
       PersonalNotesState(
         isLoading: false,
@@ -579,9 +584,6 @@ void main() {
       ),
     );
     final settingsBloc = _TestSettingsBloc(SettingsState.initial());
-
-    // תוכן ארוך כדי שהסרגל הפנימי יוצג (יש מה לגלול).
-    final content = List<String>.generate(200, (i) => 'שורה $i');
 
     await tester.pumpWidget(
       MaterialApp(
@@ -2211,7 +2213,9 @@ void main() {
     tester.view.physicalSize = const Size(700, 500);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    final offsetController = ScrollOffsetController();
+    final lineScroll = LineScrollController();
+    addTearDown(lineScroll.dispose);
+    final offsetController = lineScroll.offsetController;
     await _pumpMarkedViewer(
       tester,
       lines: [
@@ -2219,7 +2223,7 @@ void main() {
           // צמד האותיות של כל שורה ייחודי לה ('טא' בשורה 8).
           'פסקה ${List.filled(6, 'מילה${String.fromCharCodes([0x5D0 + i % 22, 0x5D0 + i ~/ 22])}').join(' ')}',
       ],
-      scrollOffsetController: offsetController,
+      lineScroll: lineScroll,
     );
     String selectedText() =>
         (SelectionContainer.maybeOf(
@@ -2268,7 +2272,7 @@ Future<_SelectionEmittingTextBookBloc> _pumpMarkedViewer(
   String line = 'אמר רבי יוחנן הלכה',
   List<String>? lines,
   TextDisplayPolicy? displayPolicy,
-  ScrollOffsetController? scrollOffsetController,
+  LineScrollController? lineScroll,
 }) async {
   lines ??= [line];
   final anchorLink = Link(
@@ -2285,7 +2289,6 @@ Future<_SelectionEmittingTextBookBloc> _pumpMarkedViewer(
       content: lines,
       clearSelectedIndex: true,
       displayPolicy: displayPolicy,
-      scrollOffsetController: scrollOffsetController,
       linksByLine: {
         1: [anchorLink],
       },
@@ -2309,6 +2312,7 @@ Future<_SelectionEmittingTextBookBloc> _pumpMarkedViewer(
             fontSize: 18,
             openBookCallback: (_) {},
             isMainText: true,
+            lines: lineScroll,
           ),
         ),
       ),
@@ -2537,8 +2541,6 @@ TextBookLoaded _loadedState() {
     selectedIndex: 0,
     pinLeftPane: false,
     searchText: '',
-    scrollController: ItemScrollController(),
-    positionsListener: ItemPositionsListener.create(),
   );
 }
 

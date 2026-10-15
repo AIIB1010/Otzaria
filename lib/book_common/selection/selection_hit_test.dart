@@ -46,15 +46,20 @@ enum SelectionSegmentEdge { full, prefix, suffix, substring }
 
 /// Returns the start offset of the occurrence under [globalPosition].
 /// This disambiguates repeated selected text inside the same paragraph.
+/// [lineRange] מצמצם את החיפוש לשורת מקור אחת בתוך פסקה ממוזגת, והתוצאה
+/// יחסית לתחילתה.
 int? renderedSelectionStartAtPosition({
   required RenderObject root,
   required Offset globalPosition,
   required String selectedSegment,
+  TextRange? lineRange,
 }) {
   if (selectedSegment.isEmpty) return null;
   final paragraph = _findParagraphContaining(root, globalPosition);
   if (paragraph == null) return null;
-  final text = paragraph.text.toPlainText(includeSemanticsLabels: false);
+  final paragraphText = _paragraphText(paragraph, lineRange);
+  if (paragraphText == null) return null;
+  final (:text, :base) = paragraphText;
   final occurrences = <int>[];
   for (var from = 0; ;) {
     final found = text.indexOf(selectedSegment, from);
@@ -65,7 +70,7 @@ int? renderedSelectionStartAtPosition({
   if (occurrences.isEmpty) return null;
 
   final local = paragraph.globalToLocal(globalPosition);
-  final clickedOffset = paragraph.getPositionForOffset(local).offset;
+  final clickedOffset = paragraph.getPositionForOffset(local).offset - base;
   for (final start in occurrences) {
     if (clickedOffset >= start &&
         clickedOffset <= start + selectedSegment.length) {
@@ -79,15 +84,21 @@ int? renderedSelectionStartAtPosition({
 
 /// Returns the rendered text offset under a pointer before Flutter collapses
 /// the selection into plain text. Used as a stable occurrence hint.
+/// With [lineRange] the offset is relative to that source line's text.
 int? renderedTextOffsetAtPosition({
   required RenderObject root,
   required Offset globalPosition,
+  TextRange? lineRange,
 }) {
   final paragraph = _findParagraphContaining(root, globalPosition);
   if (paragraph == null) return null;
-  return paragraph
+  final offset = paragraph
       .getPositionForOffset(paragraph.globalToLocal(globalPosition))
       .offset;
+  final paragraphText = _paragraphText(paragraph, lineRange);
+  if (paragraphText == null) return null;
+  final (:text, :base) = paragraphText;
+  return (offset - base).clamp(0, text.length).toInt();
 }
 
 /// בודק אם נקודת הלחיצה [globalPosition] נופלת על הטקסט המסומן בפועל.
@@ -113,11 +124,14 @@ bool? clickIsOnRenderedSelection({
   required String selectedSegment,
   required SelectionSegmentEdge edge,
   int? segmentStartHint,
+  TextRange? lineRange,
 }) {
   final paragraph = _findParagraphContaining(root, globalPosition);
   if (paragraph == null) return null;
 
-  final pText = paragraph.text.toPlainText(includeSemanticsLabels: false);
+  final paragraphText = _paragraphText(paragraph, lineRange);
+  if (paragraphText == null) return null;
+  final (text: pText, :base) = paragraphText;
   if (pText.isEmpty) return null;
 
   final int selStart;
@@ -163,7 +177,7 @@ bool? clickIsOnRenderedSelection({
   if (selStart >= selEnd) return null;
 
   final boxes = paragraph.getBoxesForSelection(
-    TextSelection(baseOffset: selStart, extentOffset: selEnd),
+    TextSelection(baseOffset: base + selStart, extentOffset: base + selEnd),
     boxHeightStyle: ui.BoxHeightStyle.includeLineSpacingMiddle,
   );
   if (boxes.isEmpty) return null;
@@ -232,12 +246,15 @@ bool? clickIsOnTextOccurrence({
   required String text,
   int? occurrenceIndex,
   int? occurrenceCount,
+  TextRange? lineRange,
 }) {
   if (text.isEmpty) return false;
   final paragraph = _findParagraphContaining(root, globalPosition);
   if (paragraph == null) return null;
 
-  final pText = paragraph.text.toPlainText(includeSemanticsLabels: false);
+  final paragraphText = _paragraphText(paragraph, lineRange);
+  if (paragraphText == null) return null;
+  final (text: pText, :base) = paragraphText;
   if (pText.isEmpty) return null;
 
   final starts = <int>[];
@@ -260,7 +277,10 @@ bool? clickIsOnTextOccurrence({
   final local = paragraph.globalToLocal(globalPosition);
   for (final start in candidates) {
     final boxes = paragraph.getBoxesForSelection(
-      TextSelection(baseOffset: start, extentOffset: start + text.length),
+      TextSelection(
+        baseOffset: base + start,
+        extentOffset: base + start + text.length,
+      ),
       boxHeightStyle: ui.BoxHeightStyle.includeLineSpacingMiddle,
     );
     for (final box in boxes) {
@@ -307,6 +327,22 @@ int _overlapLen(String a, String b, {required bool suffixOfFirst}) {
     }
   }
   return 0;
+}
+
+/// טקסט הפסקה, או רק השורה [lineRange] שבתוכה, עם אופסט תחילתה בפסקה.
+/// null כש-[lineRange] אינו תואם לטקסט — אופסטים מהפסקה כולה היו שגויים.
+({String text, int base})? _paragraphText(
+  RenderParagraph paragraph,
+  TextRange? lineRange,
+) {
+  final text = paragraph.text.toPlainText(includeSemanticsLabels: false);
+  if (lineRange == null) return (text: text, base: 0);
+  if (!lineRange.isValid ||
+      !lineRange.isNormalized ||
+      lineRange.end > text.length) {
+    return null;
+  }
+  return (text: lineRange.textInside(text), base: lineRange.start);
 }
 
 /// מאתר את ה-RenderParagraph העמוק ביותר בתת-העץ של [root] שתיבתו מכילה את

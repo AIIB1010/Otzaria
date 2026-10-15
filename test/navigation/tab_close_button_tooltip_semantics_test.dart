@@ -31,7 +31,6 @@ import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import '../helpers/memory_settings_cache.dart';
 import '../helpers/semantics_update_recorder.dart';
@@ -234,8 +233,6 @@ TextBookTab _makeTextTab(String title, {String currentTitle = ''}) {
       pinLeftPane: false,
       searchText: '',
       currentTitle: currentTitle,
-      scrollController: ItemScrollController(),
-      positionsListener: ItemPositionsListener.create(),
     ),
   );
   final tab = TextBookTab(book: book, index: 0, blocOverride: bloc);

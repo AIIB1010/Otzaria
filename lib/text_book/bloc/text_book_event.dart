@@ -224,19 +224,16 @@ class ClearHighlightedLine extends TextBookEvent {
 class ApplyMarkHighlight extends TextBookEvent {
   final String highlightText;
   final int? permanentHighlightLine;
-  final int? scrollToIndex;
 
   const ApplyMarkHighlight({
     this.highlightText = '',
     this.permanentHighlightLine,
-    this.scrollToIndex,
   });
 
   @override
   List<Object?> get props => [
     highlightText,
     permanentHighlightLine,
-    scrollToIndex,
   ];
 }
 

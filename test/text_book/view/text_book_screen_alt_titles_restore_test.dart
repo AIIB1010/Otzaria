@@ -41,7 +41,6 @@ import 'package:otzaria/tools/shamor_zachor/providers/shamor_zachor_progress_pro
 import 'package:otzaria/tour/bloc/tour_cubit.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite3;
 
 import '../../helpers/seforim_fixture_db.dart';
@@ -229,8 +228,6 @@ TextBookLoaded _loadedState(TextBook book) {
     pinLeftPane: false,
     searchText: '',
     currentTitle: 'פרק',
-    scrollController: ItemScrollController(),
-    positionsListener: ItemPositionsListener.create(),
     searchMode: SearchMode.exact,
   );
 }

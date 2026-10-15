@@ -239,6 +239,13 @@ String restoreSelectedTextLineBreaks({
   ).text;
 }
 
+/// פסקאות ממוזגות בחלון הבחירה: [joinsNext] — השורה מחוברת לבאה ברווח, כמו
+/// בתצוגה; [headingAt] — כותרת בזרימה לפני השורה, שאינה חלק מטקסט הבחירה.
+typedef SelectionParagraphs = ({
+  bool Function(int windowLine) joinsNext,
+  String? Function(int windowLine) headingAt,
+});
+
 /// כמו [restoreSelectedTextLineBreaks] + מיקום ההתאמה — חייב להיחשב כאן, כי
 /// indexOf נשבר על NBSP/רווח-דק שבבחירה ואינם בשורות המרונדרות.
 /// [preferredLine] — השורה מהעדכון הקודם, מכריעה בין כמה מופעים תואמים.
@@ -246,6 +253,7 @@ RestoredSelection restoreSelectedTextLineBreaksDetailed({
   required String selectedText,
   required List<String> visibleLines,
   int? preferredLine,
+  SelectionParagraphs? paragraphs,
 }) {
   RestoredSelection withoutLocation(String text) => (
     text: text,
@@ -260,11 +268,12 @@ RestoredSelection restoreSelectedTextLineBreaksDetailed({
   }
 
   final exact =
-      _restoreExact(selectedText, visibleLines, preferredLine) ??
+      _restoreExact(selectedText, visibleLines, preferredLine, paragraphs) ??
       _restoreExact(
         selectedText,
         visibleLines,
         preferredLine,
+        paragraphs,
         isIgnored: _isWhitespaceOrMark,
       );
   if (exact != null) {
@@ -391,7 +400,8 @@ bool _hasWhitespaceBetween(String text, int from, int to) =>
 RestoredSelection? _restoreExact(
   String selectedText,
   List<String> visibleLines,
-  int? preferredLine, {
+  int? preferredLine,
+  SelectionParagraphs? paragraphs, {
   bool Function(int) isIgnored = _isWhitespace,
 }) {
   // הבחירה ללא תווי רווח + מיפוי כל תו לאינדקסו במחרוזת המקורית.
@@ -417,62 +427,110 @@ RestoredSelection? _restoreExact(
   // איחוד השורות ללא תווי רווח + מספר השורה והעמודה של כל תו.
   final lineOfChar = <int>[];
   final columnOfChar = <int>[];
+  // תו של כותרת בזרימה: משויך לשורה שהיא פותחת, ועמודתו בתוך הכותרת.
+  final headingChar = <bool>[];
   final visibleBuffer = StringBuffer();
-  for (var lineIndex = 0; lineIndex < visibleLines.length; lineIndex++) {
-    final line = visibleLines[lineIndex];
-    for (var i = 0; i < line.length; i++) {
-      if (!isIgnored(line.codeUnitAt(i))) {
-        visibleBuffer.write(line[i]);
+  void addChars(String text, int lineIndex, bool isHeading) {
+    for (var i = 0; i < text.length; i++) {
+      if (!isIgnored(text.codeUnitAt(i))) {
+        visibleBuffer.write(text[i]);
         lineOfChar.add(lineIndex);
         columnOfChar.add(i);
+        headingChar.add(isHeading);
       }
     }
+  }
+
+  for (var lineIndex = 0; lineIndex < visibleLines.length; lineIndex++) {
+    final heading = paragraphs?.headingAt(lineIndex);
+    if (heading != null) addChars(heading, lineIndex, true);
+    addChars(visibleLines[lineIndex], lineIndex, false);
   }
   final visibleCompact = visibleBuffer.toString();
 
   // מאמת שקיום רווח בין תווים סמוכים זהה בבחירה ובתצוגה, כדי לא לשייך למופע
-  // עם פיזור רווחים אחר. גבול שורות הוא wildcard — שם הבחירה חסרת רווח בדין.
+  // עם פיזור רווחים אחר. גבול שורות וכותרות הוא wildcard.
   bool selectedHasGap(int k) => _hasWhitespaceBetween(
     selectedText,
     selectedIndexMap[k - 1],
     selectedIndexMap[k],
   );
   bool visibleHasGap(int pos) => _hasWhitespaceBetween(
-    visibleLines[lineOfChar[pos]],
+    headingChar[pos]
+        ? paragraphs!.headingAt(lineOfChar[pos])!
+        : visibleLines[lineOfChar[pos]],
     columnOfChar[pos - 1],
     columnOfChar[pos],
   );
 
   bool isConsistentAt(int start) {
     for (var k = 1; k < selectedCompact.length; k++) {
-      if (lineOfChar[start + k] != lineOfChar[start + k - 1]) continue;
-      if (selectedHasGap(k) != visibleHasGap(start + k)) {
+      final pos = start + k;
+      if (lineOfChar[pos] != lineOfChar[pos - 1] ||
+          headingChar[pos] != headingChar[pos - 1]) {
+        continue;
+      }
+      if (selectedHasGap(k) != visibleHasGap(pos)) {
         return false;
       }
     }
     return true;
   }
 
-  // הזרקת \n לפני התו הראשון של כל שורה חדשה בתוך ההתאמה — אלא אם רווחי
-  // הגבול בבחירה כבר מכילים \n (למשל מ-<br>), כדי לא להכפיל מעבר קיים.
+  bool joins(int fromLine, int toLine) {
+    final joinsNext = paragraphs?.joinsNext;
+    if (joinsNext == null) return false;
+    for (var line = fromLine; line < toLine; line++) {
+      if (!joinsNext(line)) return false;
+    }
+    return true;
+  }
+
+  // התווים שאינם כותרת, עם הרווחים שביניהם. גבול שורות: באותה פסקה ממוזגת —
+  // רווח יחיד; אחרת \n, אלא אם הרווחים בבחירה כבר מכילים \n (למשל מ-<br>).
   String restoreAt(int start) {
     final result = StringBuffer();
-    var writtenUpTo = 0;
-    for (var k = 1; k < selectedCompact.length; k++) {
-      if (lineOfChar[start + k] != lineOfChar[start + k - 1]) {
-        final breakAt = selectedIndexMap[k];
-        final boundaryGap = selectedText.substring(
-          selectedIndexMap[k - 1] + 1,
-          breakAt,
-        );
-        result.write(selectedText.substring(writtenUpTo, breakAt));
-        if (!boundaryGap.contains('\n')) {
-          result.write('\n');
-        }
-        writtenUpTo = breakAt;
+    int? previous;
+    var headingAt = -1;
+    for (var k = 0; k < selectedCompact.length; k++) {
+      if (headingChar[start + k]) {
+        if (headingAt < 0) headingAt = selectedIndexMap[k];
+        continue;
       }
+      final at = selectedIndexMap[k];
+      final gapStart = previous == null ? 0 : selectedIndexMap[previous] + 1;
+      final gap = selectedText.substring(
+        gapStart,
+        headingAt < 0 ? at : headingAt,
+      );
+      final line = lineOfChar[start + k];
+      final previousLine = previous == null
+          ? line
+          : lineOfChar[start + previous];
+      if (line == previousLine) {
+        result.write(gap);
+      } else if (joins(previousLine, line)) {
+        for (final unit in gap.codeUnits.where(
+          (unit) => !_isWhitespace(unit),
+        )) {
+          result.writeCharCode(unit);
+        }
+        result.write(' ');
+      } else {
+        result.write(gap);
+        if (!gap.contains('\n')) result.write('\n');
+      }
+      result.write(selectedText[at]);
+      previous = k;
+      headingAt = -1;
     }
-    result.write(selectedText.substring(writtenUpTo));
+    if (previous == null) return '';
+    result.write(
+      selectedText.substring(
+        selectedIndexMap[previous] + 1,
+        headingAt < 0 ? null : headingAt,
+      ),
+    );
     return result.toString();
   }
 
@@ -491,13 +549,24 @@ RestoredSelection? _restoreExact(
     return null;
   }
 
-  RestoredSelection resultAt(int start) => (
-    text: restoreAt(start),
-    startLine: lineOfChar[start],
-    endLine: lineOfChar[start + selectedCompact.length - 1],
-    startColumn: columnOfChar[start],
-    ambiguous: false,
-  );
+  RestoredSelection resultAt(int start) {
+    var first = start;
+    var last = start + selectedCompact.length - 1;
+    while (first <= last && headingChar[first]) {
+      first++;
+    }
+    while (last >= first && headingChar[last]) {
+      last--;
+    }
+    final inText = first <= last;
+    return (
+      text: restoreAt(start),
+      startLine: inText ? lineOfChar[first] : null,
+      endLine: inText ? lineOfChar[last] : null,
+      startColumn: inText ? columnOfChar[first] : null,
+      ambiguous: false,
+    );
+  }
 
   // מועמד יחיד — תוצאה מלאה כולל מיקום.
   if (candidateStarts.length == 1) {

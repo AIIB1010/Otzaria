@@ -5,12 +5,10 @@ import 'package:otzaria/models/books.dart';
 import 'package:otzaria/models/links.dart';
 import 'package:otzaria/settings/engine/settings_state.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
-import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:otzaria/utils/file/toc_parser.dart';
 import 'package:otzaria/text_book/view/selection/selected_text_copy.dart';
 import 'package:otzaria/text_display/text_display_exports.dart';
 import 'package:otzaria/widgets/smart_text/render_settings.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 void main() {
   group('resolveHtmlTextForSelection', () {
@@ -191,11 +189,8 @@ void main() {
         final state = _state('טקסט', link, const TextDisplayPatch()).copyWith(
           book: _TocBook(TocParser.parseEntriesFromContent(full.join('\n'))),
           content: partial,
-          readingSegments: buildReadingSegments(
-            partial,
-            continuous: continuous,
-            loadedLineFlags: const [false, false, false, true, true],
-          ),
+          continuousReadingMode: continuous,
+          loadedLineFlags: const [false, false, false, true, true],
         );
         final copied = await buildSelectedTextCopy(
           plainText: 'טקסט',
@@ -220,11 +215,7 @@ void main() {
       final state = _state('טקסט', link, const TextDisplayPatch()).copyWith(
         book: book,
         content: content,
-        readingSegments: buildReadingSegments(
-          content,
-          continuous: true,
-          loadedLineFlags: const [false, false, true, true],
-        ),
+        loadedLineFlags: const [false, false, true, true],
       );
       for (final otherBook in [false, true]) {
         final copied = await buildSelectedTextCopy(
@@ -255,11 +246,7 @@ void main() {
       final state = _state('טקסט', link, const TextDisplayPatch()).copyWith(
         book: _TocBook(TocParser.parseEntriesFromContent(full.join('\n'))),
         content: partial,
-        readingSegments: buildReadingSegments(
-          partial,
-          continuous: true,
-          loadedLineFlags: const [false, false, false, true, true],
-        ),
+        loadedLineFlags: const [false, false, false, true, true],
       );
       final copied = await buildSelectedTextCopy(
         plainText: 'טקסט',
@@ -299,27 +286,7 @@ void main() {
 
     test('חיפוש זמינות מבחין בגבולות ובטווח חסר, ומאפשר מידע חסר', () {
       final state = _state('טקסט', link, const TextDisplayPatch()).copyWith(
-        readingSegments: const [
-          ReadingSegment(
-            text: '',
-            sourceLineIndices: [0],
-            lineRanges: [],
-            isHeader: false,
-          ),
-          ReadingSegment(
-            text: '',
-            sourceLineIndices: [2, 3],
-            lineRanges: [],
-            isHeader: false,
-            isLoaded: false,
-          ),
-          ReadingSegment(
-            text: '',
-            sourceLineIndices: [5],
-            lineRanges: [],
-            isHeader: false,
-          ),
-        ],
+        loadedLineFlags: const [true, true, false, false, true, true],
       );
       for (final i in [-1, 0, 1, 4, 5, 6]) {
         expect(state.isContentLineLoaded(i), isTrue, reason: 'index=$i');
@@ -382,8 +349,6 @@ TextBookLoaded _state(String line, Link link, TextDisplayPatch copy) {
     selectedIndex: 0,
     pinLeftPane: false,
     searchText: '',
-    scrollController: ItemScrollController(),
-    positionsListener: ItemPositionsListener.create(),
     displayPolicy: TextDisplayPolicy.empty.merged(
       TextDisplayBookClass.general,
       const TextDisplaySlot(

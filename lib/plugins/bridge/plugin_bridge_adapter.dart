@@ -2513,22 +2513,7 @@ class PluginBridgeAdapter {
         if (index is! int || index < 0) {
           throw Exception('error.invalid_params: index must be nonnegative');
         }
-        tab.index = index;
-        final currentState = tab.bloc.state;
-        if (currentState is TextBookLoaded &&
-            (currentState.visibleIndices.isEmpty ||
-                currentState.visibleIndices.first != index)) {
-          // toJson שומר את visibleIndices כשהקורא המובנה כבר נטען.
-          // מחכים לעדכון לפני SaveTabs, כדי שלא ישמור מיקום ישן.
-          final updated = tab.bloc.stream.firstWhere(
-            (state) =>
-                state is TextBookLoaded &&
-                state.visibleIndices.isNotEmpty &&
-                state.visibleIndices.first == index,
-          );
-          tab.bloc.add(UpdateVisibleIndecies([index]));
-          await updated.timeout(const Duration(seconds: 2));
-        }
+        tab.lines.reportExternalLine(index);
         final ref = args['ref'];
         if (ref is String && ref.length <= 500) tab.currentTitle.value = ref;
         _dependencies.tabsBloc.add(const SaveTabs());

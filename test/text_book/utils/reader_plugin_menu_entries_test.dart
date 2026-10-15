@@ -6,7 +6,6 @@ import 'package:otzaria/plugins/models/plugin_context_menu_item.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/utils/reader_plugin_menu_entries.dart';
 import 'package:otzaria/widgets/smart_text/render_settings.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 void main() {
   const lines = ['שלום עולם', 'עולם ומלואו', 'שלום לכולם'];
@@ -30,8 +29,6 @@ void main() {
     selectedIndex: null,
     pinLeftPane: false,
     searchText: '',
-    scrollController: ItemScrollController(),
-    positionsListener: ItemPositionsListener.create(),
   );
 
   test('זהות ספר ללא סימון כוללת את הפסקה שנלחצה ולא טווח מומצא', () {
