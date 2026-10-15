@@ -2760,6 +2760,10 @@ begin
   Last := DispLastMs;
   DispLastMs := Tick;
   PrevData := DispDataMs;
+  HasTarget := DispRunOpen and (PrevData >= 0) and (Tick - PrevData >= DispFlowGapMs);
+  Target := DispRawAtData;
+  if HasTarget then
+    DispRunOpen := False;
   if Fresh then
   begin
     if (PrevData < 0) or (Tick - PrevData >= DispFlowGapMs) then
@@ -2776,21 +2780,10 @@ begin
   end;
   Next := Tick - Last;
   Next := EtaShown - Next / 1000;
-  HasTarget := False;
-  Target := 0;
-  if Fresh then
+  if Fresh and (Tick - DispFlowStartMs >= DispFlowMs) then
   begin
-    if Tick - DispFlowStartMs >= DispFlowMs then
-    begin
-      HasTarget := True;
-      Target := Raw;
-    end;
-  end
-  else if DispRunOpen and (PrevData >= 0) and (Tick - PrevData >= DispFlowGapMs) then
-  begin
-    DispRunOpen := False;
     HasTarget := True;
-    Target := DispRawAtData;
+    Target := Raw;
   end;
   if HasTarget then
   begin

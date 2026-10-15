@@ -375,6 +375,34 @@ void main() {
   });
 
   group('DownloadEtaEstimator — שינוי קצב קבוע', () {
+    for (final phaseMs in [0, 50, 950]) {
+      for (final (from, to) in [(5, 1), (1, 5)]) {
+        test('1Hz, טיימר +$phaseMs ms, קצב $from → $to MB/s', () {
+          var now = Duration.zero;
+          final eta = DownloadEtaEstimator(clock: () => now);
+          const total = 2000 * _mb;
+          var bytes = 0;
+          eta.addProgress(0, total);
+          for (var second = 1; second <= 400; second++) {
+            now = Duration(seconds: second);
+            bytes += (second <= 20 ? from : to) * _mb;
+            eta.addProgress(bytes, total);
+            eta.read();
+            now += Duration(milliseconds: phaseMs);
+            final reading = eta.read();
+            if (second >= 120) {
+              final expected = (total - bytes) / (to * _mb);
+              expect(reading.status, EtaStatus.estimating);
+              expect(
+                reading.remaining!.inMicroseconds / 1e6,
+                closeTo(expected, expected * 0.15),
+              );
+            }
+          }
+        });
+      }
+    }
+
     for (final (from, to) in [(10, 5), (5, 10)]) {
       test('$from → $to MB/s: בטווח 10% מהאמת אחרי 45 שניות', () {
         final h = _Harness(3000 * _mb);
@@ -535,8 +563,8 @@ void main() {
 
     test('בלי נקודת תיקון: ספירה לאחור בלבד', () {
       final display = EtaCountdownDisplay()..update(100, 0, fresh: true);
-      // נתונים טריים אחרי שקט של שנייה — תחילת זרימה, עוד לא נקודת תיקון.
-      expect(display.update(200, 1, fresh: true), 99);
+      // פחות משנייה בין דגימות — עוד אין סוף פרץ או שתי שניות של זרימה.
+      expect(display.update(200, 0.9, fresh: true), 99.1);
     });
   });
 

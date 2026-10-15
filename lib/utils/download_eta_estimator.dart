@@ -165,6 +165,12 @@ class EtaCountdownDisplay {
     final last = _lastT;
     _lastT = t;
     final lastData = _lastDataT;
+    double? target;
+    if (_runOpen && lastData != null && t - lastData >= _flowGapSeconds) {
+      // מסיימים את הפרץ הקודם גם כשכבר הגיעה הדגימה הבאה.
+      _runOpen = false;
+      target = _rawAtLastData;
+    }
     if (fresh) {
       if (lastData == null || t - lastData >= _flowGapSeconds) _flowStartT = t;
       _lastDataT = t;
@@ -176,16 +182,7 @@ class EtaCountdownDisplay {
       return _shown = raw;
     }
     var next = shown - (t - last);
-    double? target;
-    if (fresh) {
-      if (t - _flowStartT >= _flowSeconds) target = raw;
-    } else if (_runOpen &&
-        lastData != null &&
-        t - lastData >= _flowGapSeconds) {
-      // סוף פרץ: הגולמי של הדגימה האחרונה (בתחילת פרץ הקצב עדיין נמוך).
-      _runOpen = false;
-      target = _rawAtLastData;
-    }
+    if (fresh && t - _flowStartT >= _flowSeconds) target = raw;
     if (target != null) {
       final cdt = math.min(t - (_lastCorrectionT ?? t), _maxCorrectionSeconds);
       _lastCorrectionT = t;

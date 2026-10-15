@@ -325,6 +325,35 @@ void main() {
       );
     });
 
+    test('גרסאות שונות של אותו נכס מתחרות על אותה נעילה לפני ניקוי', () {
+      final lock = _routine(curl, 'function CurlTryLock(');
+      expect(
+        lock,
+        contains("CurlCreateFile(CachePath(QueueFile[I]) + '.partial.lock'"),
+      );
+      expect(lock, isNot(contains('CurlBase(')));
+      expect(lock, isNot(contains('CurlWholePath(')));
+      expect(lock, isNot(contains('QueueSha')));
+      final item = _routine(curl, 'function CurlDownloadItem(');
+      expect(
+        item.indexOf('CurlTryLock(I)'),
+        lessThan(item.indexOf('CurlFetchLocked(I)')),
+      );
+      expect(
+        item.indexOf('CurlDropPartials('),
+        lessThan(item.indexOf('CurlUnlock()')),
+      );
+      final forget = _routine(curl, 'procedure CurlForgetItem(');
+      expect(
+        forget.indexOf('CurlTryLock(I)'),
+        lessThan(forget.indexOf('CurlDropPartials(')),
+      );
+      expect(
+        forget.indexOf('CurlDropPartials('),
+        lessThan(forget.indexOf('CurlUnlock()')),
+      );
+    });
+
     test('שני מסייעים אינם כותבים לאותם קבצים חלקיים', () {
       final lock = _routine(curl, 'function CurlTryLock(');
       expect(lock, contains(r'$04000080'), reason: 'FILE_FLAG_DELETE_ON_CLOSE');

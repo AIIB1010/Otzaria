@@ -890,12 +890,37 @@ final class EtaCountdownDisplayTests: XCTestCase {
     func testWithoutACorrectionPointOnlyCountsDown() {
         var display = EtaCountdownDisplay()
         display.update(raw: 100, time: 0, fresh: true)
-        // נתונים טריים אחרי שקט של שנייה — תחילת זרימה, עוד לא נקודת תיקון.
-        XCTAssertEqual(display.update(raw: 200, time: 1, fresh: true), 99)
+        // פחות משנייה בין דגימות — עוד אין סוף פרץ או שתי שניות של זרימה.
+        XCTAssertEqual(display.update(raw: 200, time: 0.9, fresh: true), 99.1)
     }
 }
 
 final class EtaScenarioTests: XCTestCase {
+    func testOncePerSecondRateChangesAcrossTimerPhases() {
+        for phase in [0.0, 0.05, 0.95] {
+            for (from, to): (Int64, Int64) in [(5, 1), (1, 5)] {
+                var eta = DownloadEta()
+                let total = 2000 * mb
+                var bytes: Int64 = 0
+                eta.report(receivedBytes: 0, remainingBytes: total, now: 0)
+                for second in 1...400 {
+                    bytes += (second <= 20 ? from : to) * mb
+                    eta.report(receivedBytes: bytes, remainingBytes: total - bytes, now: Double(second))
+                    _ = eta.read(now: Double(second))
+                    let reading = eta.read(now: Double(second) + phase)
+                    if second >= 120 {
+                        guard case .remaining(let shown) = reading else {
+                            XCTFail("Expected an estimate")
+                            return
+                        }
+                        let expected = Double(total - bytes) / Double(to * mb)
+                        XCTAssertEqual(shown, expected, accuracy: expected * 0.15)
+                    }
+                }
+            }
+        }
+    }
+
     func testSteady3GBAt5MBpsWithNoise() {
         let run = simulate(steadyChunks(totalBytes: 3000 * mb, rate: 5 * mb, jitter: 0.4))
         XCTAssertEqual(run.textIncreases(), 0)

@@ -1581,7 +1581,7 @@ static void test_eta_display(void) {
   /* No correction point: countdown only. */
   OtzEtaDisplay plain = {0};
   otz_eta_display_update(&plain, 100, 0, TRUE);
-  g_assert_cmpfloat(otz_eta_display_update(&plain, 200, 1, TRUE), ==, 99);
+  g_assert_cmpfloat(otz_eta_display_update(&plain, 200, 0.9, TRUE), ==, 99.1);
 }
 
 /* ------------------------------------------- realistic runs (chunk lists) */
@@ -1807,6 +1807,31 @@ static void test_eta_sim_bursty(void) {
   g_assert_cmpfloat(emixed, <, 0.15);
 }
 
+static void test_eta_once_per_second(void) {
+  const double phases[] = {0, 0.05, 0.95};
+  for (int phase = 0; phase < 3; phase++) {
+    for (int direction = 0; direction < 2; direction++) {
+      long long from = direction ? MB : 5 * MB;
+      long long to = direction ? 5 * MB : MB;
+      long long total = 2000 * MB, bytes = 0;
+      OtzEta eta;
+      otz_eta_init(&eta);
+      double shown;
+      for (int second = 1; second <= 400; second++) {
+        bytes += second <= 20 ? from : to;
+        otz_eta_tick(&eta, second, bytes, total - bytes, 0, 0, 0, 0, &shown);
+        OtzEtaStatus status = otz_eta_tick(&eta, second + phases[phase], bytes,
+                                          total - bytes, 0, 0, 0, 0, &shown);
+        if (second >= 120) {
+          double expected = (double)(total - bytes) / to;
+          g_assert_cmpint(status, ==, OTZ_ETA_ESTIMATING);
+          g_assert_cmpfloat(fabs(shown - expected), <=, expected * 0.15);
+        }
+      }
+    }
+  }
+}
+
 static void test_eta_sim_rate_change(void) {
   static const long long down[][2] = {{30, 10 * MB}, {100000, 5 * MB}};
   static const long long up[][2] = {{30, 5 * MB}, {100000, 10 * MB}};
@@ -1956,6 +1981,7 @@ int main(int argc, char **argv) {
   g_test_add_func("/eta/display", test_eta_display);
   g_test_add_func("/eta/sim-steady", test_eta_sim_steady);
   g_test_add_func("/eta/sim-bursty", test_eta_sim_bursty);
+  g_test_add_func("/eta/once-per-second", test_eta_once_per_second);
   g_test_add_func("/eta/sim-rate-change", test_eta_sim_rate_change);
   g_test_add_func("/eta/sim-stalls", test_eta_sim_stalls);
   g_test_add_func("/eta/format-table", test_eta_format_table);

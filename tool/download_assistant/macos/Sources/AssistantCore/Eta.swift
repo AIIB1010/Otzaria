@@ -129,6 +129,12 @@ public struct EtaCountdownDisplay {
         let last = lastTime
         lastTime = time
         let lastData = lastDataTime
+        var target: TimeInterval?
+        if runOpen, let lastData = lastData, time - lastData >= Self.flowGapSeconds {
+            // מסיימים את הפרץ הקודם גם כשכבר הגיעה הדגימה הבאה.
+            runOpen = false
+            target = rawAtLastData
+        }
         if fresh {
             if lastData == nil || time - lastData! >= Self.flowGapSeconds { flowStartTime = time }
             lastDataTime = time
@@ -141,14 +147,7 @@ public struct EtaCountdownDisplay {
             return raw
         }
         var next = previous - (time - lastUpdate)
-        var target: TimeInterval?
-        if fresh {
-            if time - flowStartTime >= Self.flowSeconds { target = raw }
-        } else if runOpen, let lastData = lastData, time - lastData >= Self.flowGapSeconds {
-            // סוף פרץ: הגולמי של הדגימה האחרונה (בתחילת פרץ הקצב עדיין נמוך).
-            runOpen = false
-            target = rawAtLastData
-        }
+        if fresh && time - flowStartTime >= Self.flowSeconds { target = raw }
         if let target = target {
             let cdt = min(time - (lastCorrectionTime ?? time), Self.maxCorrectionSeconds)
             lastCorrectionTime = time

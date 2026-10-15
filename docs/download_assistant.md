@@ -827,7 +827,8 @@ ISCC /DDevManifestFile=C:\...\fixtures\release-manifest.json `
 ב-`--version`).
 
 * **קבצים חלקיים במטמון**, לא ב-`{tmp}`: `<name>.<12 תווי sha256>.partial`, ולקטעים
-  `…seg<k>of4.partial`. שארית של גרסה אחרת נמחקת. ההמשך שורד סגירה ופתיחה.
+  `…seg<k>of4.partial`. שארית של גרסה אחרת נמחקת תחת הנעילה של שם הנכס.
+  ההמשך שורד סגירה ופתיחה.
 * **ארבעה טווחים לקובץ** (`SegmentsPerFile`), הקבצים עצמם בזה אחר זה; מתחת ל-64MB —
   חיבור אחד. לפני פיצול נשלחת בקשה ל-`bytes=0-0`, ורק 206 עם
   `Content-Range: bytes 0-0/<size>` מאפשר אותו; 200 — חיבור אחד. בדיקה שלא קיבלה
@@ -864,8 +865,9 @@ ISCC /DDevManifestFile=C:\...\fixtures\release-manifest.json `
   ארגומנטים קבועים: `--connect-timeout 30 --speed-limit 1024 --speed-time 60
   --ssl-revoke-best-effort --suppress-connect-headers` (Schannel מאחורי פרוקסי
   מסנן; תשובת ה-CONNECT של פרוקסי אינה נקראת כתשובת השרת).
-* **שני מסייעים**: `<…>.partial.lock` נפתח בלי שיתוף ו-`FILE_FLAG_DELETE_ON_CLOSE`
-  לכל משך הפריט. רק sharing violation גורם להמתנה ("מסייע הורדה אחר מוריד…");
+* **שני מסייעים**: `<name>.partial.lock` נפתח בלי שיתוף ו-`FILE_FLAG_DELETE_ON_CLOSE`
+  לכל משך הפריט. הנעילה משותפת גם לגרסאות עם SHA שונה, כדי שניקוי שאריות
+  לא ימחק הורדה פעילה. רק sharing violation גורם להמתנה ("מסייע הורדה אחר מוריד…");
   שגיאה אחרת — Inno. אחרי ההמתנה משתמשים בקובץ שהראשון הכניס למטמון.
 * **הערכת הזמן**: מעריך אחד לכל המשימה (ResetSpeed רק ב-RunDownloads). המהירות נמדדת
   מבתים שירדו ברשת בלבד, לא מקבצים חלקיים שכבר במטמון; נעילה, בדיקת Range והמתנה בין

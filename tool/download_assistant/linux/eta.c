@@ -117,6 +117,9 @@ double otz_eta_display_update(OtzEtaDisplay *display, double raw, double t, int 
   display->last_t = t;
   int had_data = display->has_data;
   double last_data = display->last_data_t;
+  int has_target = display->run_open && had_data && t - last_data >= FLOW_GAP_SECONDS;
+  double target = display->raw_at_last_data;
+  if (has_target) display->run_open = 0;
   if (fresh) {
     if (!had_data || t - last_data >= FLOW_GAP_SECONDS) display->flow_start_t = t;
     display->has_data = 1;
@@ -130,18 +133,9 @@ double otz_eta_display_update(OtzEtaDisplay *display, double raw, double t, int 
     return display->shown = raw;
   }
   double next = display->shown - (t - last);
-  int has_target = 0;
-  double target = 0;
-  if (fresh) {
-    if (t - display->flow_start_t >= FLOW_SECONDS) {
-      has_target = 1;
-      target = raw;
-    }
-  } else if (display->run_open && had_data && t - last_data >= FLOW_GAP_SECONDS) {
-    /* End of a burst: the raw value of its last sample (a burst starts slow). */
-    display->run_open = 0;
+  if (fresh && t - display->flow_start_t >= FLOW_SECONDS) {
     has_target = 1;
-    target = display->raw_at_last_data;
+    target = raw;
   }
   if (has_target) {
     double cdt = min_d(t - display->last_correction_t, MAX_CORRECTION_SECONDS);

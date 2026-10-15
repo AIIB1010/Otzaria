@@ -142,8 +142,7 @@ begin
   end;
 end;
 
-{ מוחק את קבצי הביניים של אותו שם מגרסה אחרת; KeepPrefix ריק — את כולם. קובץ
-  שמסייע אחר כותב אליו פתוח אצלו, ולכן המחיקה שלו נכשלת בשקט. }
+{ כל ניקוי מחייב נעילה של שם הנכס, גם כשה-SHA של הקבצים שונה. }
 procedure CurlDropPartials(const Name, KeepPrefix: String);
 var
   Rec: TFindRec;
@@ -1020,7 +1019,7 @@ var
   Err: LongWord;
 begin
   { GENERIC_READ | GENERIC_WRITE, בלי שיתוף, OPEN_ALWAYS, FILE_FLAG_DELETE_ON_CLOSE }
-  CurlLockHandle := CurlCreateFile(CurlWholePath(I) + '.lock', $C0000000, 0, 0, 4,
+  CurlLockHandle := CurlCreateFile(CachePath(QueueFile[I]) + '.partial.lock', $C0000000, 0, 0, 4,
     $04000080, 0);
   if CurlLockHandle <> -1 then
   begin

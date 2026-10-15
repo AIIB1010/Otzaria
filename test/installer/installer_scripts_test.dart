@@ -3335,7 +3335,15 @@ void main() {
       final shown = _routine(script, 'procedure UpdateShownEta(');
       expect(shown, contains('if Raw < 0 then'));
       expect(shown, contains('Target := DispRawAtData;'));
-      expect(shown, contains('if Tick - DispFlowStartMs >= DispFlowMs then'));
+      expect(
+        shown.indexOf('Target := DispRawAtData;'),
+        lessThan(shown.indexOf('if Fresh then')),
+        reason: 'סוף הפרץ הקודם נבדק לפני שדגימה טרייה מחליפה אותו',
+      );
+      expect(
+        shown,
+        contains('if Fresh and (Tick - DispFlowStartMs >= DispFlowMs) then'),
+      );
       expect(
         shown.indexOf('if Target < Next * 0.5 then'),
         greaterThan(shown.indexOf('if HasTarget then')),
