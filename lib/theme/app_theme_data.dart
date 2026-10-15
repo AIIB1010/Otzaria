@@ -40,13 +40,21 @@ class AppThemeData {
   /// לתוספים, כדי שכולם יקבלו בדיוק אותם צבעים.
   static ColorScheme createColorScheme(Color seedColor, Brightness brightness) {
     final isNeutral = HSLColor.fromColor(seedColor).saturation < 0.1;
-    final scheme = ColorScheme.fromSeed(
+    final base = ColorScheme.fromSeed(
       seedColor: seedColor,
       brightness: brightness,
       dynamicSchemeVariant: isNeutral
           ? DynamicSchemeVariant.monochrome
           : DynamicSchemeVariant.tonalSpot,
     );
+    // ב-monochrome ה-primary כמעט זהה ל-onSurface, והקישורים בטקסט נבלעים בו.
+    final scheme = isNeutral
+        ? base.copyWith(
+            primary: brightness == Brightness.light
+                ? const Color(0xFF5E5E5E)
+                : const Color(0xFF919191),
+          )
+        : base;
     // ערכת "לבן": monochrome מחזיר לזרע לבן ולזרע אפור את אותו סולם נייטרלי,
     // ולכן גם ה-surface וגם סולם ה-surfaceContainer נדרסים — בלעדיו הסרגל,
     // חלונית הניווט ורקע הלוח נשארים אפורים כמו בערכת "אפור" (issue #1221).
