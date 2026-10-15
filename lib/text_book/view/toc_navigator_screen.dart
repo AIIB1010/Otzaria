@@ -16,17 +16,18 @@ import 'package:otzaria/text_book/view/toc_filter.dart';
 import 'package:otzaria/text_book/view/toc_navigator_internals.dart';
 import 'package:otzaria/widgets/feedback/otzaria_empty_state.dart';
 import 'package:otzaria/widgets/lists/nav_tree_tile.dart';
+import 'package:otzaria/text_book/view/reading_viewport/line_scroll_controller.dart';
 
 class TocViewer extends StatefulWidget {
   const TocViewer({
     super.key,
-    required this.scrollController,
+    required this.lines,
     required this.closeLeftPaneCallback,
     required this.focusNode,
   });
 
   final void Function() closeLeftPaneCallback;
-  final ItemScrollController scrollController;
+  final LineScrollController lines;
   final FocusNode focusNode;
 
   @override
@@ -166,13 +167,8 @@ class _TocViewerState extends State<TocViewer>
     if (state is! TextBookLoaded) {
       return;
     }
-    final navigation = scrollToSourceLine(
-      scrollController: widget.scrollController,
-      scrollOffsetController: state.scrollOffsetController,
-      positionsListener: state.positionsListener,
-      segments: state.readingSegments,
-      lineIndex: lineIndex,
-      viewportExtent: context.size?.height ?? MediaQuery.sizeOf(context).height,
+    final navigation = widget.lines.scrollToLine(
+      lineIndex,
       duration: const Duration(milliseconds: 250),
       curve: Curves.ease,
     );

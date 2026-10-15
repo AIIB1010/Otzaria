@@ -29,7 +29,6 @@ import 'package:otzaria/tools/shamor_zachor/providers/shamor_zachor_progress_pro
 import 'package:otzaria/tour/bloc/tour_cubit.dart';
 import 'package:provider/provider.dart';
 import 'package:otzaria/tour/tour_target_keys.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import '../../test_helpers/memory_cache_provider.dart';
 import '../../support/search_engine_test_init.dart';
@@ -201,8 +200,6 @@ TextBookLoaded _loadedState(
     searchText: searchText,
     permanentHighlightLine: markLine,
     currentTitle: 'סימן א',
-    scrollController: ItemScrollController(),
-    positionsListener: ItemPositionsListener.create(),
     searchMode: SearchMode.exact,
   );
 }

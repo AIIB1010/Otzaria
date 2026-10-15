@@ -18,6 +18,7 @@ import 'package:otzaria/widgets/lists/nav_tree_tile.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import '../../support/search_engine_test_init.dart';
+import 'package:otzaria/text_book/view/reading_viewport/line_scroll_controller.dart';
 
 /// Bloc בדיקה שמאפשר emit ידני של states ל-TocViewer.
 /// מאפשר לאמת ש-buildWhen מסנן emits לא רלוונטיים — ההגנה המרכזית של
@@ -102,8 +103,6 @@ TextBookLoaded _loadedState({
     selectedIndex: selectedIndex,
     pinLeftPane: false,
     searchText: '',
-    scrollController: ItemScrollController(),
-    positionsListener: ItemPositionsListener.create(),
   );
 }
 
@@ -161,7 +160,7 @@ Future<void> main() async {
                 // עוטף את ה-TocViewer ב-Builder שסופר rebuilds דרך InheritedWidget
                 // לא רלוונטי — נכליל ספירה דרך paneContent של TocViewer בעקיפין.
                 return TocViewer(
-                  scrollController: ItemScrollController(),
+                  lines: LineScrollController(),
                   closeLeftPaneCallback: () {},
                   focusNode: focusNode,
                 );
@@ -228,7 +227,7 @@ Future<void> main() async {
     await tester.pumpWidget(
       _wrap(
         TocViewer(
-          scrollController: ItemScrollController(),
+          lines: LineScrollController(),
           closeLeftPaneCallback: () {},
           focusNode: focusNode,
         ),
@@ -274,7 +273,7 @@ Future<void> main() async {
     await tester.pumpWidget(
       _wrap(
         TocViewer(
-          scrollController: ItemScrollController(),
+          lines: LineScrollController(),
           closeLeftPaneCallback: () {},
           focusNode: focusNode,
         ),
@@ -326,7 +325,7 @@ Future<void> main() async {
     await tester.pumpWidget(
       _wrap(
         TocViewer(
-          scrollController: ItemScrollController(),
+          lines: LineScrollController(),
           closeLeftPaneCallback: () {},
           focusNode: focusNode,
         ),
@@ -357,7 +356,7 @@ Future<void> main() async {
     await tester.pumpWidget(
       _wrap(
         TocViewer(
-          scrollController: ItemScrollController(),
+          lines: LineScrollController(),
           closeLeftPaneCallback: () {},
           focusNode: focusNode,
         ),
@@ -392,7 +391,7 @@ Future<void> main() async {
     await tester.pumpWidget(
       _wrap(
         TocViewer(
-          scrollController: ItemScrollController(),
+          lines: LineScrollController(),
           closeLeftPaneCallback: () {},
           focusNode: focusNode,
         ),
@@ -426,7 +425,7 @@ Future<void> main() async {
     await tester.pumpWidget(
       _wrap(
         TocViewer(
-          scrollController: ItemScrollController(),
+          lines: LineScrollController(),
           closeLeftPaneCallback: () {},
           focusNode: focusNode,
         ),
@@ -467,7 +466,7 @@ Future<void> main() async {
       await tester.pumpWidget(
         _wrap(
           TocViewer(
-            scrollController: ItemScrollController(),
+            lines: LineScrollController(),
             closeLeftPaneCallback: () {},
             focusNode: focusNode,
           ),
@@ -521,7 +520,7 @@ Future<void> main() async {
       await tester.pumpWidget(
         _wrap(
           TocViewer(
-            scrollController: ItemScrollController(),
+            lines: LineScrollController(),
             closeLeftPaneCallback: () {},
             focusNode: focusNode,
           ),
@@ -571,7 +570,7 @@ Future<void> main() async {
       await tester.pumpWidget(
         _wrap(
           TocViewer(
-            scrollController: ItemScrollController(),
+            lines: LineScrollController(),
             closeLeftPaneCallback: () {},
             focusNode: focusNode,
           ),
@@ -646,7 +645,7 @@ Future<void> main() async {
     await tester.pumpWidget(
       _wrap(
         TocViewer(
-          scrollController: ItemScrollController(),
+          lines: LineScrollController(),
           closeLeftPaneCallback: () {},
           focusNode: focusNode,
         ),
@@ -698,7 +697,7 @@ Future<void> main() async {
     await tester.pumpWidget(
       _wrap(
         TocViewer(
-          scrollController: ItemScrollController(),
+          lines: LineScrollController(),
           closeLeftPaneCallback: () {},
           focusNode: focusNode,
         ),
@@ -740,7 +739,7 @@ Future<void> main() async {
       await tester.pumpWidget(
         _wrap(
           TocViewer(
-            scrollController: ItemScrollController(),
+            lines: LineScrollController(),
             closeLeftPaneCallback: () {},
             focusNode: focusNode,
           ),
@@ -803,7 +802,7 @@ Future<void> main() async {
       await tester.pumpWidget(
         _wrap(
           TocViewer(
-            scrollController: ItemScrollController(),
+            lines: LineScrollController(),
             closeLeftPaneCallback: () {},
             focusNode: focusNode,
           ),
@@ -837,7 +836,7 @@ Future<void> main() async {
       await tester.pumpWidget(
         _wrap(
           TocViewer(
-            scrollController: ItemScrollController(),
+            lines: LineScrollController(),
             closeLeftPaneCallback: () {},
             focusNode: focusNode,
           ),
@@ -880,7 +879,7 @@ Future<void> main() async {
       await tester.pumpWidget(
         _wrap(
           TocViewer(
-            scrollController: ItemScrollController(),
+            lines: LineScrollController(),
             closeLeftPaneCallback: () {},
             focusNode: focusNode,
           ),
@@ -934,7 +933,7 @@ Future<void> main() async {
     await tester.pumpWidget(
       _wrap(
         TocViewer(
-          scrollController: ItemScrollController(),
+          lines: LineScrollController(),
           closeLeftPaneCallback: () {},
           focusNode: focusNode,
         ),
@@ -970,7 +969,7 @@ Future<void> main() async {
     await tester.pumpWidget(
       _wrap(
         TocViewer(
-          scrollController: ItemScrollController(),
+          lines: LineScrollController(),
           closeLeftPaneCallback: () {},
           focusNode: focusNode,
         ),
@@ -1006,7 +1005,7 @@ Future<void> main() async {
     await tester.pumpWidget(
       _wrap(
         TocViewer(
-          scrollController: ItemScrollController(),
+          lines: LineScrollController(),
           closeLeftPaneCallback: () {},
           focusNode: focusNode,
         ),
@@ -1041,7 +1040,7 @@ Future<void> main() async {
     await tester.pumpWidget(
       _wrap(
         TocViewer(
-          scrollController: ItemScrollController(),
+          lines: LineScrollController(),
           closeLeftPaneCallback: () {},
           focusNode: focusNode,
         ),
@@ -1095,7 +1094,7 @@ Future<void> main() async {
       await tester.pumpWidget(
         _wrap(
           TocViewer(
-            scrollController: ItemScrollController(),
+            lines: LineScrollController(),
             closeLeftPaneCallback: () {},
             focusNode: focusNode,
           ),

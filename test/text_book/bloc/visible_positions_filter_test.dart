@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
+import 'package:otzaria/text_book/utils/reading_position.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 void main() {
-  group('TextBookBloc.filterBarelyVisiblePositionsForTesting', () {
+  group('filterBarelyVisiblePositions', () {
     test('שומר על position יחיד גם אם גלוי מעט (אין fallback אחר)', () {
       // אחרי גלילה לתחילת/סוף הספר ייתכן שיש רק position אחד גלוי, גם אם
       // גלוי חלקית. לא נסיר אותו - אין מה להחזיר במקום.
@@ -15,7 +15,7 @@ void main() {
         ),
       ];
 
-      final filtered = TextBookBloc.filterBarelyVisiblePositionsForTesting(
+      final filtered = filterBarelyVisiblePositions(
         positions,
       );
 
@@ -45,7 +45,7 @@ void main() {
         ),
       ];
 
-      final filtered = TextBookBloc.filterBarelyVisiblePositionsForTesting(
+      final filtered = filterBarelyVisiblePositions(
         positions,
       );
 
@@ -68,7 +68,7 @@ void main() {
         ),
       ];
 
-      final filtered = TextBookBloc.filterBarelyVisiblePositionsForTesting(
+      final filtered = filterBarelyVisiblePositions(
         positions,
       );
 
@@ -93,7 +93,7 @@ void main() {
         ),
       ];
 
-      final filtered = TextBookBloc.filterBarelyVisiblePositionsForTesting(
+      final filtered = filterBarelyVisiblePositions(
         positions,
       );
 
@@ -117,7 +117,7 @@ void main() {
         ),
       ];
 
-      final filtered = TextBookBloc.filterBarelyVisiblePositionsForTesting(
+      final filtered = filterBarelyVisiblePositions(
         positions,
       );
 
@@ -141,7 +141,7 @@ void main() {
         ),
       ];
 
-      final filtered = TextBookBloc.filterBarelyVisiblePositionsForTesting(
+      final filtered = filterBarelyVisiblePositions(
         positions,
       );
 
@@ -164,7 +164,7 @@ void main() {
         ),
       ];
 
-      final filtered = TextBookBloc.filterBarelyVisiblePositionsForTesting(
+      final filtered = filterBarelyVisiblePositions(
         positions,
       );
 
@@ -176,7 +176,7 @@ void main() {
       // פחות מ-15% מגובהו. סינונו הוציא אותו מ-visibleIndices, ובתצוגה
       // המפוצלת הבחירה בו התאפסה מייד.
       List<int> visible(List<ItemPosition> positions) =>
-          TextBookBloc.filterBarelyVisiblePositionsForTesting(
+          filterBarelyVisiblePositions(
             positions,
           ).map((p) => p.index).toList();
 
@@ -212,7 +212,7 @@ void main() {
         ),
       ];
 
-      final filtered = TextBookBloc.filterBarelyVisiblePositionsForTesting(
+      final filtered = filterBarelyVisiblePositions(
         positions,
       );
 

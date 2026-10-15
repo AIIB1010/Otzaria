@@ -28,7 +28,6 @@ import 'package:otzaria/data/repository/text_book_repository.dart';
 import 'package:otzaria_search_engine/otzaria_search_engine.dart'
     show SearchScope, WordMatchMode;
 import 'package:path/path.dart' as p;
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -342,6 +341,9 @@ void main() {
 
         expect(bloc.state.tabs, hasLength(1));
         expect(bloc.state.currentTabIndex, 0);
+        // הניווט בשורות מקור: הקורא טרם הוצג, ולכן היעד ממתין לחיבורו.
+        expect(existingTab.index, 25);
+        expect(existingTab.lines.hasPendingTarget, isTrue);
 
         await _closeBlocAndAllowDeferredDispose(bloc);
       },
@@ -1876,8 +1878,6 @@ void main() {
             false,
             const [],
           ),
-          scrollController: ItemScrollController(),
-          positionsListener: ItemPositionsListener.create(),
         );
 
         final existingTab = TextBookTab(
@@ -2437,8 +2437,6 @@ TextBookBloc _createLoadedTextBookBloc({
   final bloc = TextBookBloc(
     repository: _PinpointFakeTextBookRepository(),
     initialState: TextBookInitial.named(book, initialIndex, false, const []),
-    scrollController: ItemScrollController(),
-    positionsListener: ItemPositionsListener.create(),
   );
   bloc.add(
     const LoadContent(
@@ -2511,8 +2509,6 @@ class _RecordingTextBookBloc extends Bloc<TextBookEvent, TextBookState>
     visibleIndices: const [0],
     pinLeftPane: false,
     searchText: '',
-    scrollController: ItemScrollController(),
-    positionsListener: ItemPositionsListener.create(),
   );
 
   /// מדמה סיום טעינת התוכן, כדי לבדוק מסלולים שממתינים ל-TextBookLoaded.

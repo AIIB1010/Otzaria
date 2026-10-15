@@ -147,44 +147,17 @@ class SmartTextWidget extends StatelessWidget {
     final bookId = highlightBookId;
     final sectionIndex = highlightSectionIndex;
     if (bookId != null && sectionIndex != null) {
-      final rawSourceHtml = highlightSourceText ?? text;
-      final renderingSignature = settings.sectionContentRenderingSignature;
-      // ניקוי-HTML וגיבוב הם העלות הכבדה בפריים; מדלגים עליהם כשהקלט זהה
-      // לפריים הקודם, וזה המצב בכמעט כל פריים גלילה.
-      if (ReaderSectionSyncGate.instance.claimSync(
+      syncReaderSectionForPlugins(
         bookId: bookId,
+        bookUid: highlightBookUid,
         bookDbId: highlightBookDbId,
         bookType: highlightBookType,
         bookSource: highlightBookSource,
         sectionIndex: sectionIndex,
-        rawSourceHtml: rawSourceHtml,
+        rawSourceHtml: highlightSourceText ?? text,
         processedHtml: processedHtml,
-        renderingSignature: renderingSignature,
-        highlightsRevision: PluginHighlightRegistry.instance.revision,
-      )) {
-        final sourceText = TextRendererService.stripHtml(rawSourceHtml);
-        final renderedText = TextRendererService.stripHtml(processedHtml);
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          PluginHighlightRegistry.instance.reanchorSection(
-            bookId: bookId,
-            sectionIndex: sectionIndex,
-            sourceText: sourceText,
-            bookUid: highlightBookUid,
-          );
-          unawaited(
-            _recordSectionContentSnapshot(
-              bookId: bookId,
-              bookDbId: highlightBookDbId,
-              bookType: highlightBookType,
-              bookSource: highlightBookSource,
-              sectionIndex: sectionIndex,
-              sourceText: sourceText,
-              renderedText: renderedText,
-              renderingSignature: renderingSignature,
-            ),
-          );
-        });
-      }
+        renderingSignature: settings.sectionContentRenderingSignature,
+      );
     }
     var frameRanges = const <PluginHighlightRenderedRange>[];
     if (highlights.isNotEmpty) {
@@ -716,8 +689,58 @@ class _SmartTextCallbacks extends InheritedWidget {
   bool updateShouldNotify(_SmartTextCallbacks oldWidget) => false;
 }
 
-/// גרסה פשוטה יותר של SmartTextWidget שמקבלת פרמטרים בודדים
-/// במקום RenderSettings - נוחה למקרים פשוטים
+/// עיגון מחדש של הדגשות התוספים ותיעוד תוכן הקטע (#828) לשורה מוצגת.
+/// [processedHtml] הוא התוצר של `processText`, לפני ציור ההדגשות.
+void syncReaderSectionForPlugins({
+  required String bookId,
+  String? bookUid,
+  int? bookDbId,
+  String? bookType,
+  String? bookSource,
+  required int sectionIndex,
+  required String rawSourceHtml,
+  required String processedHtml,
+  required Object renderingSignature,
+}) {
+  // ניקוי-HTML וגיבוב הם העלות הכבדה בפריים; מדלגים עליהם כשהקלט זהה
+  // לפריים הקודם, וזה המצב בכמעט כל פריים גלילה.
+  if (!ReaderSectionSyncGate.instance.claimSync(
+    bookId: bookId,
+    bookDbId: bookDbId,
+    bookType: bookType,
+    bookSource: bookSource,
+    sectionIndex: sectionIndex,
+    rawSourceHtml: rawSourceHtml,
+    processedHtml: processedHtml,
+    renderingSignature: renderingSignature,
+    highlightsRevision: PluginHighlightRegistry.instance.revision,
+  )) {
+    return;
+  }
+  final sourceText = TextRendererService.stripHtml(rawSourceHtml);
+  final renderedText = TextRendererService.stripHtml(processedHtml);
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    PluginHighlightRegistry.instance.reanchorSection(
+      bookId: bookId,
+      sectionIndex: sectionIndex,
+      sourceText: sourceText,
+      bookUid: bookUid,
+    );
+    unawaited(
+      _recordSectionContentSnapshot(
+        bookId: bookId,
+        bookDbId: bookDbId,
+        bookType: bookType,
+        bookSource: bookSource,
+        sectionIndex: sectionIndex,
+        sourceText: sourceText,
+        renderedText: renderedText,
+        renderingSignature: renderingSignature,
+      ),
+    );
+  });
+}
+
 Future<void> _recordSectionContentSnapshot({
   required String bookId,
   int? bookDbId,

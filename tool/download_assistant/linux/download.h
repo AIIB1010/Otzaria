@@ -31,7 +31,11 @@ typedef enum {
 typedef struct {
   OtzPhase phase;
   gint64 phase_done, phase_total;       /* bytes of the current non-download step */
-  gint64 download_done, download_total; /* bytes */
+  gint64 download_done, download_total; /* bytes on disk, including resumed */
+  gint64 network_bytes;                 /* read from the network, never decreases */
+  gint64 step_copy;                     /* copy bytes the current step was planned with */
+  gint64 later_copy, later_hash;        /* post-download work after the current step */
+  guint workers, waiting; /* download threads; those hashing a prefix or backing off */
   guint files_done, files_total;        /* downloads */
   guint part_index, part_count;         /* while assembling */
   char *detail;                         /* file name; owned by the snapshot */

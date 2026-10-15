@@ -26,7 +26,6 @@ import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/widgets/misc/app_dropdown_field.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import '../test_helpers/memory_cache_provider.dart';
 
@@ -183,8 +182,6 @@ TextBookLoaded _loaded({required bool showPageShapeView}) => TextBookLoaded(
   selectedIndex: null,
   pinLeftPane: false,
   searchText: '',
-  scrollController: ItemScrollController(),
-  positionsListener: ItemPositionsListener.create(),
 );
 
 class _TestSettingsBloc extends Bloc<SettingsEvent, SettingsState>

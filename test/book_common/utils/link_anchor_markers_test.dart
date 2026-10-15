@@ -5,6 +5,8 @@ import 'package:otzaria/models/links.dart';
 import 'package:otzaria/book_common/utils/link_anchor_markers.dart';
 import 'package:otzaria/book_common/utils/link_anchor_variants.dart';
 import 'package:otzaria/personal_notes/utils/note_anchor_utils.dart';
+import 'package:otzaria/widgets/smart_text/render_settings.dart';
+import 'package:otzaria/widgets/smart_text/text_renderer_service.dart';
 
 Link _anchorLink({
   required String heRef,
@@ -946,4 +948,82 @@ void main() {
       ]),
     );
   });
+
+  test(
+    'עוגן שמכסה <sup> שלם עוטף את ה-sup מבחוץ, וה-sup מוצג מורם (#2358)',
+    () {
+      const line = 'טקסט<sup>4</sup> עוד<sup>5</sup> סוף';
+      Link note(int index) {
+        final start = line.indexOf('<sup>', index == 0 ? 0 : 16);
+        return Link(
+          heRef: 'הערות $index',
+          index1: 1,
+          path2: 'הערות',
+          index2: index + 1,
+          connectionType: 'commentary',
+          anchorStart: start,
+          anchorEnd: line.indexOf('</sup>', start) + '</sup>'.length,
+          anchorOffsetsAreRaw: true,
+        );
+      }
+
+      final html = injectLinkAnchorMarkers(
+        rawLine: line,
+        anchorLinks: [note(0), note(1)],
+        styleIndexByCommentator: const {},
+        lineIndex: 0,
+      );
+      expect(
+        html,
+        'טקסט<a class="link-anchor-range" href="otzaria://anchor?ref=0_0&range=1">'
+        '<sup>4</sup></a> עוד'
+        '<a class="link-anchor-range" href="otzaria://anchor?ref=0_1&range=1">'
+        '<sup>5</sup></a> סוף',
+      );
+      final rendered = TextRendererService.processText(
+        html,
+        const RenderSettings(),
+      );
+      expect(rendered, isNot(contains('<sup')));
+      expect(RegExp('class="raised-sup"').allMatches(rendered), hasLength(2));
+    },
+  );
+
+  for (final rawOffsets in [false, true]) {
+    test('טווח שחוצה שני sup אינו מורחב ($rawOffsets)', () {
+      const line = 'לפני<sup>1</sup> טקסט רגיל <sup>2</sup>אחרי';
+      final start = line.indexOf('1');
+      final end = line.indexOf('2') + 1;
+      final html = injectLinkAnchorMarkers(
+        rawLine: line,
+        anchorLinks: [
+          Link(
+            heRef: 'הערות א',
+            index1: 1,
+            path2: 'הערות',
+            index2: 1,
+            connectionType: 'commentary',
+            anchorStart: rawOffsets ? line.indexOf('<sup>') : 4,
+            anchorEnd: rawOffsets ? line.lastIndexOf('</sup>') + 6 : 17,
+            anchorOffsetsAreRaw: rawOffsets,
+          ),
+        ],
+        styleIndexByCommentator: const {},
+        lineIndex: 0,
+      );
+      expect(
+        html,
+        wrapHtmlRanges(line, [
+          HtmlWrapRange(
+            start: start,
+            end: end,
+            openTag:
+                '<a class="link-anchor-range" '
+                'href="otzaria://anchor?ref=0_0&range=1">',
+            closeTag: '</a>',
+          ),
+        ]),
+      );
+    });
+  }
 }

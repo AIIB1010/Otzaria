@@ -12,11 +12,11 @@ import 'package:otzaria/tabs/bloc/tabs_event.dart';
 import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
-import 'package:otzaria/text_book/utils/reading_segment_navigation.dart';
 
 import 'package:otzaria/utils/text/heading_slug.dart';
 import 'package:otzaria/utils/text/otzaria_markup.dart';
 import 'package:path/path.dart' as p;
+import 'package:otzaria/text_book/view/reading_viewport/line_scroll_controller.dart';
 
 /// מחלקה לטיפול בקישורי HTML בתוך הטקסט
 class HtmlLinkHandler {
@@ -260,18 +260,9 @@ class HtmlLinkHandler {
       if (state is! TextBookLoaded) return false;
       final index = findIdAnchorLine(state.content, fragment);
       if (index == null) return false;
-      final viewportExtent =
-          context.size?.height ?? MediaQuery.sizeOf(context).height;
-      await scrollToSourceLine(
-        scrollController: state.scrollController,
-        scrollOffsetController: state.scrollOffsetController,
-        positionsListener: state.positionsListener,
-        segments: state.readingSegments,
-        lineIndex: index,
-        viewportExtent: viewportExtent,
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.ease,
-      );
+      final lines = LineScrollScope.maybeOf(context);
+      if (lines == null) return false;
+      await lines.scrollToLine(index);
       return true;
     } catch (e) {
       debugPrint('שגיאה בניווט לעוגן id: $e');
@@ -294,9 +285,7 @@ class HtmlLinkHandler {
         throw Exception('לא ניתן לנווט - הספר לא נטען');
       }
 
-      // חיפוש הכותרת בתוכן הספציפי
-      final viewportExtent =
-          context.size?.height ?? MediaQuery.sizeOf(context).height;
+      final lines = LineScrollScope.maybeOf(context);
       // עוגן בתוכן שהקורא מציג כרגע קודם לפענוח הנתיב: טעינה מחדש של הספר
       // מחזירה אינדקסים של שורות המקור, שאינם באותה מפה כמו ה-HTML המוצג
       // (ספרי Markdown).
@@ -308,17 +297,8 @@ class HtmlLinkHandler {
           : await _findHeaderPath(state.book, segments);
 
       if (resolved.index != null) {
-        // ניווט לאינדקס שנמצא
-        await scrollToSourceLine(
-          scrollController: state.scrollController,
-          scrollOffsetController: state.scrollOffsetController,
-          positionsListener: state.positionsListener,
-          segments: state.readingSegments,
-          lineIndex: resolved.index!,
-          viewportExtent: viewportExtent,
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.ease,
-        );
+        if (lines == null) return;
+        await lines.scrollToLine(resolved.index!);
 
         if (context.mounted) {
           UiSnack.show(

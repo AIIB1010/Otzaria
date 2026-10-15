@@ -238,6 +238,13 @@ class BackupService {
     'index': 'אינדקס החיפוש, נבנה מחדש מהספרים',
     'dictionaries': 'נכסי מילון שניתן להוריד שוב',
     'library_update_cache': 'קאש הורדות זמני',
+    'pending_library_changes':
+        '"מה חדש בספרים" שהורד או נמסר מהמעדכן הלא-מקוון וטרם הוצג; '
+        'שייך לעדכון הספרייה במכשיר זה',
+    'library_changes_seen':
+        '"מה חדש בספרים" שכבר הוצג; ניתן להורדה שוב מה-release',
+    'library_changes_fetch_queue.json':
+        'תור זמני של הערות עדכון שטרם פורסמו, לניסיון חוזר במכשיר זה',
     'webview2': 'נתוני מנוע הדפדפן המשובץ',
     'backups': 'תיקיית הגיבויים עצמה',
     'library_loaded.marker':

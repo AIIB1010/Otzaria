@@ -37,7 +37,7 @@ public enum StringKey: String, CaseIterable {
     case folderTitle, folderDesc, folderHint, folderFallbackNote, browse, chooseFolderPrompt
     case readyTitle, readyDesc, readyHint
     case rowVersion, rowWhat, rowFor, rowSavedIn, rowFile, rowFolder
-    case downloadingVersion, downloadDesc, downloadingItem, downloadedOf, timeLeft, sizeOf
+    case downloadingVersion, downloadDesc, downloadingItem, downloadedOf, calculatingTime, waitingForConnection, sizeOf
     case workTitle, workDesc, preparing
     case finishedTitle, guideThisFile, guideOtherFile, guideThisFolder, guideOtherFolder, guideRunExe
     case guideJoin, preparedFiles, openHintExe, openHintDmg, openHintPackage, openHintApk
@@ -154,7 +154,8 @@ public struct Strings {
         .downloadDesc: "הקבצים יורדים מאתר אוצריא. אפשר לעצור בכל רגע — מה שכבר ירד יישמר.",
         .downloadingItem: "מוריד: %1",
         .downloadedOf: "ירדו %1 מתוך %2",
-        .timeLeft: "נותרו %1",
+        .calculatingTime: "מחשב את הזמן הנותר…",
+        .waitingForConnection: "ממתין לחיבור…",
         .sizeOf: "%1 מתוך %2",
         .workTitle: "הכנת ההתקנה",
         .workDesc: "רגע, מכינים את הקבצים.",
@@ -296,7 +297,8 @@ public struct Strings {
         .downloadDesc: "The files are downloading from the Otzaria website. You can stop at any time — whatever was already downloaded is kept.",
         .downloadingItem: "Downloading: %1",
         .downloadedOf: "%1 of %2 downloaded",
-        .timeLeft: "%1 left",
+        .calculatingTime: "Calculating time left…",
+        .waitingForConnection: "Waiting for the connection…",
         .sizeOf: "%1 of %2",
         .workTitle: "Preparing the installation",
         .workDesc: "One moment, preparing the files.",

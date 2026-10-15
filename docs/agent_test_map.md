@@ -36,6 +36,11 @@
 | Book source dialog | `test/book_common/view/book_source_dialog_test.dart` |
 | Commentator name matching | `test/book_common/utils/commentator_name_matching_test.dart`, `test/text_book/view/page_shape/page_shape_category_commentator_matching_test.dart` |
 | Error report dialog | `test/text_book/view/error_report_dialog_test.dart` |
+| מצב רציף: פריסת פריטים מתוך מבנה הספר | `test/text_book/utils/reading_layout_test.dart` |
+| מצב רציף: המיקום הנוכחי (שורה עליונה, שורות גלויות) | `test/text_book/utils/reading_position_test.dart` |
+| מצב רציף: ניווט לשורה בפסקה, מקום שמור לפסקה שלא נטענה | `test/text_book/view/combined_view/continuous_line_navigation_test.dart` |
+| מצב רציף: מיקום שורה נמדד מהרינדור (בלוק ממורכז, כותרת בפסקה) | `test/text_book/view/combined_view/continuous_measured_line_position_test.dart` |
+| מצב רציף: לחיצה, תפריט, בחירה, העתקה וסנכרון תוספים לפי שורה בפסקה | `test/text_book/view/reader_line/continuous_line_interaction_test.dart` |
 | הצעת תיקון בדיאלוג הדיווח (עורך, diff, מחיקה מול ללא-הצעה, מיפוי בחירה לשורה הגולמית) | `test/text_book/view/text_correction_editor_test.dart` |
 
 **Text Book BLoC**
@@ -44,6 +49,7 @@
 | BLoC state equality | `test/text_book/bloc/text_book_state_test.dart` |
 | Background content loading | `test/text_book/bloc/background_full_content_loading_test.dart` |
 | Continuous reading mode | `test/text_book/bloc/continuous_reading_mode_test.dart` |
+| מצב רציף: הגדרת הספר חלה לפני הבנייה הראשונה | `test/text_book/bloc/per_book_continuous_initial_load_test.dart` |
 | Selected link types persistence | `test/text_book/bloc/selected_link_types_persistence_test.dart` |
 | visibleIndices throttling (scroll perf) | `test/text_book/bloc/visible_indices_throttle_test.dart` |
 

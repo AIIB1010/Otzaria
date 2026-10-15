@@ -1,6 +1,7 @@
 /* Unit tests: the shared contract fixtures, JSON, HTTP parsing, host checks,
- * cache markers and assembly. Run with `make test`. */
+ * cache markers, assembly and the time-left estimate. Run with `make test`. */
 #include <fcntl.h>
+#include <math.h>
 #include <stdlib.h>
 #include <gio/gio.h>
 #include <glib/gstdio.h>
@@ -10,6 +11,7 @@
 
 #include "assemble.h"
 #include "download.h"
+#include "eta.h"
 #include "http.h"
 #include "json.h"
 #include "manifest.h"
@@ -912,6 +914,13 @@ static void test_job_complete_download_promoted(void) {
   g_assert_false(g_file_test(stale, G_FILE_TEST_EXISTS));
   g_assert_cmpint(otz_job_downloaded_bytes(job), ==, 0);
   g_assert_cmpint(otz_job_hashed_bytes(job), ==, 5);
+  OtzProgress progress;
+  otz_job_get_progress(job, &progress);
+  g_assert_cmpint(progress.download_done, ==, 5);
+  g_assert_cmpint(progress.network_bytes, ==, 0);
+  g_assert_cmpuint(progress.workers, ==, 0);
+  g_assert_cmpuint(progress.waiting, ==, 0);
+  otz_progress_clear(&progress);
   job_fixture_clear(&f);
 }
 
@@ -1180,20 +1189,44 @@ static void test_texts_format(void) {
   g_assert_cmpstr(step, ==, "Step 2 of 5");
   g_autofree char *item = otz_trf(S_DOWNLOADING_ITEM, "A %2", "1", "3", NULL);
   g_assert_cmpstr(item, ==, "Downloading: A %2 (1 of 3)");
-  g_autofree char *hours = otz_duration_text(2 * 3600 + 20 * 60);
-  g_assert_cmpstr(hours, ==, "2 hours 20 minutes");
-  g_autofree char *short_time = otz_duration_text(30);
-  g_assert_cmpstr(short_time, ==, "less than a minute");
+  g_autofree char *hours = otz_time_left_text(2 * 3600 + 21 * 60);
+  g_assert_cmpstr(hours, ==, "about 2 hours 20 minutes left");
+  g_autofree char *short_time = otz_time_left_text(32);
+  g_assert_cmpstr(short_time, ==, "about 30 seconds left");
+  g_autofree char *few = otz_time_left_text(4);
+  g_assert_cmpstr(few, ==, "a few seconds left");
+  g_autofree char *en_minute = otz_time_left_text(59);
+  g_assert_cmpstr(en_minute, ==, "about 1 minute left");
+  g_autofree char *en_hours = otz_time_left_text(2 * 3600 + 5 * 60);
+  g_assert_cmpstr(en_hours, ==, "about 2 hours 5 minutes left");
   g_assert_cmpstr(otz_tr_message("לא ניתן לקרוא את רשימת הקבצים של אוצריא."), ==,
                   "Can't read the list of Otzaria files.");
   g_autofree char *plain = otz_ltr("37\xC2\xA0MB");
   g_assert_cmpstr(plain, ==, "37\xC2\xA0MB");
 
   otz_set_english(FALSE);
-  g_autofree char *minutes = otz_duration_text(44 * 60);
-  g_assert_cmpstr(minutes, ==, "44 דקות");
-  g_autofree char *hour = otz_duration_text(3600 + 60);
-  g_assert_cmpstr(hour, ==, "שעה ו-דקה");
+  g_autofree char *minutes = otz_time_left_text(44 * 60);
+  g_assert_cmpstr(minutes, ==, "נותרו כ-44 דקות");
+  g_autofree char *hour = otz_time_left_text(3600 + 15 * 60);
+  g_assert_cmpstr(hour, ==, "נותרו כשעה ו-15 דקות");
+  g_autofree char *minute = otz_time_left_text(94);
+  g_assert_cmpstr(minute, ==, "נותרו כדקה ו-30 שניות");
+  g_autofree char *two = otz_time_left_text(2 * 3600 + 60);
+  g_assert_cmpstr(two, ==, "נותרו כשעתיים");
+  g_autofree char *two_five = otz_time_left_text(2 * 3600 + 5 * 60);
+  g_assert_cmpstr(two_five, ==, "נותרו כשעתיים ו-5 דקות");
+  g_autofree char *one_minute = otz_time_left_text(59);
+  g_assert_cmpstr(one_minute, ==, "נותרה כדקה");
+  g_autofree char *ten = otz_time_left_text(599);
+  g_assert_cmpstr(ten, ==, "נותרו כ-10 דקות");
+  g_autofree char *one_hour = otz_time_left_text(3599);
+  g_assert_cmpstr(one_hour, ==, "נותרה כשעה");
+  g_autofree char *seconds = otz_time_left_text(44);
+  g_assert_cmpstr(seconds, ==, "נותרו כ-45 שניות");
+  g_autofree char *mixed = otz_time_left_text(200);
+  g_assert_cmpstr(mixed, ==, "נותרו כ-3 דקות ו-20 שניות");
+  g_autofree char *he_few = otz_time_left_text(0.4);
+  g_assert_cmpstr(he_few, ==, "עוד כמה שניות");
   g_autofree char *isolated = otz_ltr("37\xC2\xA0MB");
   g_assert_cmpstr(isolated, ==, "\xE2\x81\xA6" "37\xC2\xA0MB\xE2\x81\xA9");
   /* RLM opens each line and follows ", ". */
@@ -1201,6 +1234,700 @@ static void test_texts_format(void) {
   g_assert_cmpstr(bidi, ==,
                   "\xE2\x80\x8FWindows,\xE2\x80\x8F Linux או Android\n\xE2\x80\x8Fשורה");
   g_assert_cmpstr(otz_tr_message("other"), ==, "other");
+}
+
+/* ------------------------------------------------------------- ETA */
+/* The scenarios of test/utils/download_eta_estimator_test.dart, driven the way
+ * ui.c drives the estimator: a poll every 100 ms, as are the network chunks. */
+
+#define MB 1000000LL
+#define POLL_MS 100
+
+static void test_eta_work_rates(void) {
+  OtzWorkRates work;
+  otz_work_init(&work);
+  g_assert_cmpfloat(otz_work_rate(&work, OTZ_WORK_HASH), ==, 150e6);
+  g_assert_cmpfloat(otz_work_rate(&work, OTZ_WORK_COPY), ==, 100e6);
+  g_assert_cmpfloat_with_epsilon(otz_work_seconds(&work, 100000000, 300000000), 3,
+                                 1e-9);
+  otz_work_sample(&work, OTZ_WORK_COPY, 0, 0);
+  otz_work_sample(&work, OTZ_WORK_COPY, 0.5, 25000000);
+  g_assert_cmpfloat(otz_work_rate(&work, OTZ_WORK_COPY), ==, 100e6);
+  otz_work_sample(&work, OTZ_WORK_COPY, 2, 100000000);
+  g_assert_cmpfloat_with_epsilon(otz_work_rate(&work, OTZ_WORK_COPY), 50e6, 1);
+  /* A new step starting lower is a new baseline, not negative work. */
+  otz_work_sample(&work, OTZ_WORK_COPY, 3, 0);
+  g_assert_cmpfloat_with_epsilon(otz_work_rate(&work, OTZ_WORK_COPY), 50e6, 1);
+}
+
+typedef struct {
+  double t, shown;
+  OtzEtaStatus status;
+} EtaRecord;
+
+/* The UI's poll loop with a fake clock, in 50 ms steps. */
+typedef struct {
+  OtzEta eta;
+  int ms;
+  long long net, total, offset, rate, true_rate;
+  double post;
+  gboolean paused;
+  OtzEtaStatus status;
+  double shown;
+  GArray *records;
+} Harness;
+
+static void h_init(Harness *h, long long total) {
+  memset(h, 0, sizeof *h);
+  otz_eta_init(&h->eta);
+  h->total = total;
+  h->true_rate = 10 * MB;
+  h->shown = -1;
+  h->records = g_array_new(FALSE, FALSE, sizeof(EtaRecord));
+}
+
+static void h_clear(Harness *h) { g_array_unref(h->records); }
+
+static void h_poll(Harness *h) {
+  long long remaining = MAX(h->total - h->offset - h->net, 0);
+  h->status = otz_eta_tick(&h->eta, h->ms / 1000.0, h->net, remaining, h->post, FALSE,
+                           FALSE, h->paused, &h->shown);
+  EtaRecord record = {h->ms / 1000.0, h->shown, h->status};
+  g_array_append_val(h->records, record);
+}
+
+static void h_run(Harness *h, double seconds, long long rate) {
+  int steps = (int)lround(seconds * 20);
+  for (int i = 0; i < steps; i++) {
+    h->ms += 50;
+    if (rate > 0 && h->ms % 100 == 0) h->net += rate / 10;
+    if (h->ms % POLL_MS == 0) h_poll(h);
+  }
+}
+
+static void h_feed(Harness *h, double seconds, long long rate) {
+  h->true_rate = rate;
+  h_run(h, seconds, rate);
+}
+
+static double h_exact(const Harness *h) {
+  return (h->total - h->offset - h->net) / (double)h->true_rate;
+}
+
+static void test_eta_warm_up(void) {
+  Harness h;
+  h_init(&h, 1000 * MB);
+  h_feed(&h, 2.5, 10 * MB);
+  g_assert_cmpint(h.status, ==, OTZ_ETA_CALCULATING);
+  g_assert_cmpfloat(h.shown, ==, -1);
+  h_feed(&h, 1, 10 * MB);
+  g_assert_cmpint(h.status, ==, OTZ_ETA_ESTIMATING);
+  g_assert_cmpfloat(fabs(h.shown - h_exact(&h)), <=, h_exact(&h) * 0.05);
+  h_clear(&h);
+
+  /* Before the first poll of the download: calculating, not the steps alone. */
+  OtzEta eta;
+  otz_eta_init(&eta);
+  double shown;
+  g_assert_cmpint(otz_eta_tick(&eta, 2, 0, 1000 * MB, 10, FALSE, FALSE, TRUE, &shown),
+                  ==, OTZ_ETA_CALCULATING);
+  g_assert_cmpfloat(shown, ==, -1);
+
+  /* 100 KB/s for 5 s: under 1 MiB and under 1% of the rest. */
+  h_init(&h, 1000 * MB);
+  h_feed(&h, 5, 100000);
+  g_assert_cmpint(h.status, ==, OTZ_ETA_CALCULATING);
+  h_clear(&h);
+}
+
+static void test_eta_not_network(void) {
+  /* A resumed file: 600 MB were on disk, they only shorten the rest. */
+  Harness h;
+  h_init(&h, 1000 * MB);
+  h.offset = 600 * MB;
+  h_feed(&h, 5, 10 * MB);
+  g_assert_cmpfloat(fabs(h.shown - h_exact(&h)), <=, h_exact(&h) * 0.05);
+  h_clear(&h);
+
+  /* A download that starts again from 0: the rate stays, only the rest grows. */
+  h_init(&h, 1000 * MB);
+  h_feed(&h, 10, 10 * MB);
+  h.offset = -h.net;
+  h_feed(&h, 0.25, 10 * MB);
+  g_assert_cmpint(h.status, ==, OTZ_ETA_ESTIMATING);
+  h_feed(&h, 2, 10 * MB);
+  g_assert_cmpint(h.status, ==, OTZ_ETA_ESTIMATING);
+  g_assert_cmpfloat(h.shown, <=, h_exact(&h) * 1.1);
+  g_assert_cmpfloat(h.shown, >, 50);
+  h_clear(&h);
+}
+
+static void test_eta_known_pause(void) {
+  Harness h;
+  h_init(&h, 1000 * MB);
+  h_feed(&h, 10, 10 * MB);
+  double before = h.shown;
+  h.paused = TRUE;
+  guint from = h.records->len;
+  h_run(&h, 60, 0);
+  for (guint i = from; i < h.records->len; i++) {
+    EtaRecord *r = &g_array_index(h.records, EtaRecord, i);
+    g_assert_cmpint(r->status, ==, OTZ_ETA_ESTIMATING);
+    g_assert_cmpfloat_with_epsilon(r->shown, before, 1e-6);
+  }
+  h.paused = FALSE;
+  h.net += 64 * 1024;
+  h_feed(&h, 2, 10 * MB);
+  g_assert_cmpfloat(h.shown, <=, before);
+  g_assert_cmpfloat(fabs(h.shown - h_exact(&h)), <=, h_exact(&h) * 0.1);
+  h_clear(&h);
+}
+
+static EtaRecord *h_record_at(Harness *h, double t) {
+  for (guint i = 0; i < h->records->len; i++) {
+    EtaRecord *r = &g_array_index(h->records, EtaRecord, i);
+    if (fabs(r->t - t) < 1e-6) return r;
+  }
+  g_assert_not_reached();
+}
+
+static void test_eta_stall_status(void) {
+  Harness h;
+  h_init(&h, 1000 * MB);
+  h_feed(&h, 10, 10 * MB);
+  h_run(&h, 6, 0);
+  g_assert_cmpint(h_record_at(&h, 14)->status, ==, OTZ_ETA_ESTIMATING);
+  EtaRecord *stalled = h_record_at(&h, 16);
+  g_assert_cmpint(stalled->status, ==, OTZ_ETA_STALLED);
+  g_assert_cmpfloat(stalled->shown, ==, -1);
+  h_clear(&h);
+}
+
+/* The displayed speed is the same blended rate with tau 3 s. */
+static void test_eta_speed(void) {
+  Harness h;
+  h_init(&h, 1000 * MB);
+  h_feed(&h, 0.5, 10 * MB);
+  g_assert_cmpfloat(otz_eta_speed(&h.eta), ==, 0);
+  h_feed(&h, 5, 10 * MB);
+  g_assert_cmpfloat(otz_eta_speed(&h.eta), ==, otz_rate_value(&h.eta.speed));
+  g_assert_cmpfloat(fabs(otz_eta_speed(&h.eta) - 10 * MB), <=, 0.02 * 10 * MB);
+  h_feed(&h, 10, 5 * MB);
+  g_assert_cmpfloat(fabs(otz_eta_speed(&h.eta) - 5 * MB), <=, 0.25 * 5 * MB);
+  h_clear(&h);
+}
+
+static void test_eta_short_silences(void) {
+  Harness h;
+  h_init(&h, 3000 * MB);
+  h_feed(&h, 20, 10 * MB);
+  double previous = h.shown;
+  for (int gap = 1; gap <= 4; gap++) {
+    /* Checked once a second, as the text changes at most once a second. */
+    for (int second = 0; second < gap; second++) {
+      h_run(&h, 1, 0);
+      g_assert_cmpfloat(h.shown, <=, previous);
+      previous = h.shown;
+    }
+    h_feed(&h, 5, 10 * MB);
+    previous = h.shown;
+  }
+  h_clear(&h);
+}
+
+static void test_eta_stall_recovery(void) {
+  Harness h;
+  h_init(&h, 2000 * MB);
+  h_feed(&h, 20, 10 * MB);
+  guint from = h.records->len;
+  h_run(&h, 12, 0);
+  for (int i = 0; i < 240; i++) {
+    h_feed(&h, 0.25, 10 * MB);
+    g_assert_cmpfloat(h.shown, <=, (h_exact(&h) + 12) * 1.1);
+  }
+  /* The warm-up latches: a lone stall shows only the stall status, never
+   * "calculating" again. */
+  for (guint i = from; i < h.records->len; i++)
+    g_assert_cmpint(g_array_index(h.records, EtaRecord, i).status, !=,
+                    OTZ_ETA_CALCULATING);
+  h_clear(&h);
+
+  h_init(&h, 2000 * MB);
+  h_feed(&h, 20, 10 * MB);
+  h_run(&h, 45, 0);
+  h_feed(&h, 0.25, 10 * MB);
+  g_assert_cmpint(h.status, ==, OTZ_ETA_CALCULATING);
+  while (h.status == OTZ_ETA_CALCULATING) h_feed(&h, 0.25, 10 * MB);
+  g_assert_cmpfloat(fabs(h.shown - h_exact(&h)), <=, h_exact(&h) * 0.15);
+  h_clear(&h);
+}
+
+static void test_eta_rate_change(void) {
+  static const long long pairs[][2] = {{10, 5}, {5, 10}};
+  for (gsize i = 0; i < G_N_ELEMENTS(pairs); i++) {
+    Harness h;
+    h_init(&h, 3000 * MB);
+    h_feed(&h, 30, pairs[i][0] * MB);
+    h_feed(&h, 45, pairs[i][1] * MB);
+    g_assert_cmpfloat(fabs(h.shown - h_exact(&h)), <=, h_exact(&h) * 0.1);
+    h_clear(&h);
+  }
+}
+
+static void test_eta_planned_steps(void) {
+  /* 1.5 GB to hash at the default 150 MB/s: 10 more seconds. */
+  Harness h;
+  h_init(&h, 1000 * MB);
+  OtzWorkRates work;
+  otz_work_init(&work);
+  h.post = otz_work_seconds(&work, 0, 1500 * MB);
+  h_feed(&h, 10, 10 * MB);
+  g_assert_cmpfloat(fabs(h.shown - (h_exact(&h) + 10)), <=, h_exact(&h) * 0.05);
+  h_clear(&h);
+
+  /* A step that reports progress is measured at its live rate: 10 MB/s, four
+   * times slower than assumed; 400 of 600 MB done leaves 20 s. */
+  OtzEta eta;
+  otz_eta_init(&eta);
+  otz_work_init(&work);
+  double shown = -1;
+  for (int i = 1; i <= 160; i++) {
+    double t = i * 0.25;
+    long long done = (long long)lround(i * 2.5) * MB;
+    otz_work_sample(&work, OTZ_WORK_COPY, t, done);
+    double post = otz_work_seconds(&work, 600 * MB - done, 0);
+    g_assert_cmpint(otz_eta_tick(&eta, t, 0, 0, post, TRUE, TRUE, FALSE, &shown), ==,
+                    OTZ_ETA_PHASE);
+  }
+  g_assert_cmpfloat(fabs(shown - 20), <=, 5);
+}
+
+/* Bursts: `data` seconds of 100 ms samples, then a gap of `silence` between
+ * samples; the rate at the end of each burst of the second half. */
+static void bursty_rates(double data, double silence, double average, double bound) {
+  const double interval = 0.1;
+  int chunks = (int)lround(data / interval);
+  double cycle = (chunks - 1) * interval + silence;
+  long long chunk = llround(average * cycle / chunks);
+  OtzRate rate;
+  otz_rate_init(&rate, 8);
+  double t = 0;
+  long long bytes = 0;
+  otz_rate_add(&rate, 0, 0);
+  for (int c = 0; c < 40; c++) {
+    for (int i = 0; i < chunks; i++) {
+      t += interval;
+      otz_rate_add(&rate, bytes += chunk, t);
+    }
+    if (c >= 20)
+      g_assert_cmpfloat(fabs(otz_rate_value(&rate) - average), <=, bound * average);
+    t += silence - interval;
+  }
+}
+
+static void test_eta_bursty_rate(void) {
+  bursty_rates(0.6, 0.4, 5.0 * MB, 0.05);
+  bursty_rates(0.6, 1.9, 5.0 * MB, 0.10);
+  bursty_rates(0.6, 4.9, 5.0 * MB, 0.10);
+}
+
+static double display_flow(OtzEtaDisplay *d, double raw, double from, double to) {
+  double shown = 0;
+  for (double t = from; t <= to + 1e-9; t += 0.1)
+    shown = otz_eta_display_update(d, raw, t, TRUE);
+  return shown;
+}
+
+static void test_eta_display(void) {
+  /* Data once a second under noise: a steady countdown. */
+  OtzEtaDisplay d = {0};
+  otz_eta_display_update(&d, 300, 0, TRUE);
+  double previous = 300;
+  for (int t = 1; t <= 60; t++) {
+    double raw = 300.0 - t + (t % 2 == 0 ? 12 : -12);
+    double shown = otz_eta_display_update(&d, raw, t, TRUE);
+    g_assert_cmpfloat(shown, <=, previous);
+    g_assert_cmpfloat(fabs(shown - (300.0 - t)), <=, 2);
+    previous = shown;
+  }
+
+  /* Continuous flow: rises slowly, falls fast. */
+  OtzEtaDisplay same = {0}, up = {0}, down = {0};
+  display_flow(&same, 100, 0, 3);
+  display_flow(&up, 100, 0, 3);
+  display_flow(&down, 100, 0, 3);
+  double base = display_flow(&same, 100, 3.1, 5);
+  double rose = display_flow(&up, 150, 3.1, 5) - base;
+  double fell = base - display_flow(&down, 50, 3.1, 5);
+  g_assert_cmpfloat(rose, >, 0);
+  g_assert_cmpfloat(rose, <, 50 * 0.2);
+  g_assert_cmpfloat(fell, >, rose * 2);
+
+  /* Under half: shown at the next correction point. */
+  OtzEtaDisplay snap = {0};
+  display_flow(&snap, 100, 0, 3);
+  g_assert_cmpfloat_with_epsilon(otz_eta_display_update(&snap, 30, 3.1, TRUE), 30, 1e-9);
+
+  /* End of a burst corrects to the raw of its last sample, not the current. */
+  OtzEtaDisplay burst = {0};
+  otz_eta_display_update(&burst, 100, 0, TRUE);
+  otz_eta_display_update(&burst, 30, 0.5, TRUE);
+  g_assert_cmpfloat_with_epsilon(otz_eta_display_update(&burst, 500, 1, FALSE), 99, 1e-9);
+  g_assert_cmpfloat_with_epsilon(otz_eta_display_update(&burst, 500, 1.5, FALSE), 30,
+                                 1e-9);
+  g_assert_cmpfloat_with_epsilon(otz_eta_display_update(&burst, 500, 2.5, FALSE), 29,
+                                 1e-9);
+
+  /* No correction point: countdown only. */
+  OtzEtaDisplay plain = {0};
+  otz_eta_display_update(&plain, 100, 0, TRUE);
+  g_assert_cmpfloat(otz_eta_display_update(&plain, 200, 0.9, TRUE), ==, 99.1);
+}
+
+/* ------------------------------------------- realistic runs (chunk lists) */
+
+typedef struct {
+  int ms;
+  long long bytes;
+} EtaChunk;
+
+typedef struct {
+  GArray *records; /* EtaRecord per poll */
+  GArray *texts;   /* (t, rounded seconds) at each change of the shown text */
+  double end;
+} EtaRun;
+
+static int rounded_seconds(double seconds) {
+  int h, m, s;
+  otz_eta_round(seconds, &h, &m, &s);
+  return h * 3600 + m * 60 + s;
+}
+
+/* The truth is the time of the last chunk; the text changes at most once a
+ * second, at once on a status change (as ui.c does). */
+static EtaRun eta_simulate(GArray *chunks) {
+  long long total = 0;
+  for (guint i = 0; i < chunks->len; i++) total += g_array_index(chunks, EtaChunk, i).bytes;
+  int end_ms = g_array_index(chunks, EtaChunk, chunks->len - 1).ms;
+  EtaRun run = {g_array_new(FALSE, FALSE, sizeof(EtaRecord)),
+                g_array_new(FALSE, FALSE, sizeof(double) * 2), end_ms / 1000.0};
+  OtzEta eta;
+  otz_eta_init(&eta);
+  long long net = 0;
+  guint next = 0;
+  double text_t = -10;
+  int text_status = -1, text_value = -1;
+  for (int ms = POLL_MS; ms <= end_ms + POLL_MS; ms += POLL_MS) {
+    while (next < chunks->len && g_array_index(chunks, EtaChunk, next).ms <= ms)
+      net += g_array_index(chunks, EtaChunk, next++).bytes;
+    double t = ms / 1000.0, shown;
+    OtzEtaStatus status =
+        otz_eta_tick(&eta, t, net, total - net, 0, FALSE, FALSE, FALSE, &shown);
+    EtaRecord record = {t, shown, status};
+    g_array_append_val(run.records, record);
+    if ((int)status == text_status && t - text_t < 1) continue;
+    text_status = status;
+    text_t = t;
+    int value = shown >= 0 ? rounded_seconds(shown) : -1;
+    if (value >= 0 && value != text_value) {
+      double change[2] = {t, value};
+      g_array_append_val(run.texts, change);
+    }
+    text_value = value;
+  }
+  g_array_unref(chunks);
+  return run;
+}
+
+static void eta_run_clear(EtaRun *run) {
+  g_array_unref(run->records);
+  g_array_unref(run->texts);
+}
+
+static double run_error(const EtaRun *run, const EtaRecord *r) {
+  return fabs(r->shown - (run->end - r->t)) / (run->end - r->t);
+}
+
+static double run_first_shown_t(const EtaRun *run) {
+  for (guint i = 0; i < run->records->len; i++) {
+    EtaRecord *r = &g_array_index(run->records, EtaRecord, i);
+    if (r->shown >= 0) return r->t;
+  }
+  g_assert_not_reached();
+}
+
+static double run_first_error(const EtaRun *run) {
+  for (guint i = 0; i < run->records->len; i++) {
+    EtaRecord *r = &g_array_index(run->records, EtaRecord, i);
+    if (r->shown >= 0) return run_error(run, r);
+  }
+  g_assert_not_reached();
+}
+
+/* While at least 60 s remain: in bursts the end is quantized to cycles. */
+static double run_max_error(const EtaRun *run, double from) {
+  double worst = 0;
+  for (guint i = 0; i < run->records->len; i++) {
+    EtaRecord *r = &g_array_index(run->records, EtaRecord, i);
+    if (r->shown >= 0 && r->t >= from && run->end - r->t >= 60)
+      worst = MAX(worst, run_error(run, r));
+  }
+  return worst;
+}
+
+static double run_error_at(const EtaRun *run, double t) {
+  const EtaRecord *last = NULL;
+  for (guint i = 0; i < run->records->len; i++) {
+    EtaRecord *r = &g_array_index(run->records, EtaRecord, i);
+    if (r->shown >= 0 && r->t <= t + 1e-9) last = r;
+  }
+  g_assert_nonnull(last);
+  return run_error(run, last);
+}
+
+static int run_text_increases(const EtaRun *run, double until) {
+  int count = 0;
+  for (guint i = 1; i < run->texts->len; i++) {
+    double *now = &g_array_index(run->texts, double, 2 * i);
+    double *before = &g_array_index(run->texts, double, 2 * (i - 1));
+    if (now[0] > until) break;
+    if (now[1] > before[1]) count++;
+  }
+  return count;
+}
+
+static void add_chunk(GArray *chunks, int ms, long long bytes) {
+  EtaChunk chunk = {ms, bytes};
+  g_array_append_val(chunks, chunk);
+}
+
+/* A chunk every 100 ms at `rate`, with fixed-seed noise of +-jitter. */
+static GArray *steady_chunks(long long total, long long rate, double jitter) {
+  GArray *chunks = g_array_new(FALSE, FALSE, sizeof(EtaChunk));
+  GRand *random = g_rand_new_with_seed(7);
+  long long sent = 0;
+  for (int ms = 100; sent < total; ms += 100) {
+    double factor = 1 + jitter * (2 * g_rand_double(random) - 1);
+    long long bytes = MIN(llround(rate / 10.0 * factor), total - sent);
+    add_chunk(chunks, ms, bytes);
+    sent += bytes;
+  }
+  g_rand_free(random);
+  return chunks;
+}
+
+/* 5 MB/s on average: `on` chunks 100 ms apart, then the next gap of `offs`
+ * (cyclic) until the following chunk. */
+static GArray *bursty_chunks(const double *offs, int n_offs, int on) {
+  const long long total = 2000 * MB;
+  double mean = 0;
+  for (int i = 0; i < n_offs; i++) mean += offs[i] / n_offs;
+  long long chunk = llround(5.0 * MB * ((on - 1) * 0.1 + mean) / on);
+  GArray *chunks = g_array_new(FALSE, FALSE, sizeof(EtaChunk));
+  long long sent = 0;
+  int ms = 0;
+  for (int c = 0; sent < total; c++) {
+    ms += (int)lround(offs[c % n_offs] * 1000);
+    for (int i = 0; i < on && sent < total; i++) {
+      if (i > 0) ms += 100;
+      long long bytes = MIN(chunk, total - sent);
+      add_chunk(chunks, ms, bytes);
+      sent += bytes;
+    }
+  }
+  return chunks;
+}
+
+/* (seconds, rate) segments; rate 0 is silence; the last one runs to the end. */
+static GArray *segment_chunks(const long long (*segments)[2], int count, long long total) {
+  GArray *chunks = g_array_new(FALSE, FALSE, sizeof(EtaChunk));
+  long long sent = 0;
+  int start = 0;
+  for (int s = 0; s < count; s++) {
+    int end = start + (int)segments[s][0] * 1000;
+    for (int ms = start + 100; ms <= end && sent < total; ms += 100) {
+      if (segments[s][1] == 0) continue;
+      long long bytes = MIN(segments[s][1] / 10, total - sent);
+      add_chunk(chunks, ms, bytes);
+      sent += bytes;
+    }
+    start = end;
+  }
+  return chunks;
+}
+
+static void test_eta_sim_steady(void) {
+  EtaRun run = eta_simulate(steady_chunks(3000 * MB, 5 * MB, 0.4));
+  g_test_message("steady 5 MB/s +-40%%: text increases %d, max error %.1f%%",
+                 run_text_increases(&run, INFINITY), run_max_error(&run, 10) * 100);
+  g_assert_cmpint(run_text_increases(&run, INFINITY), ==, 0);
+  g_assert_cmpfloat(run_max_error(&run, 10), <, 0.10);
+  eta_run_clear(&run);
+}
+
+static void test_eta_sim_bursty(void) {
+  static const double off49[] = {4.9}, off19[] = {1.9}, off20[] = {2.0};
+  static const double off60[] = {6.0}, off90[] = {9.0};
+  static const double mixed[] = {4.8, 5.1, 4.9, 5.3};
+
+  EtaRun run = eta_simulate(bursty_chunks(off49, 1, 6));
+  double e49 = run_max_error(&run, run_first_shown_t(&run) + 20);
+  eta_run_clear(&run);
+  run = eta_simulate(bursty_chunks(off19, 1, 6));
+  double e19 = run_max_error(&run, run_first_shown_t(&run) + 20);
+  eta_run_clear(&run);
+  run = eta_simulate(bursty_chunks(off20, 1, 6));
+  double first20 = run_first_error(&run);
+  int up20 = run_text_increases(&run, 120);
+  eta_run_clear(&run);
+  run = eta_simulate(bursty_chunks(off49, 1, 30));
+  int up3_49 = run_text_increases(&run, 120);
+  eta_run_clear(&run);
+  run = eta_simulate(bursty_chunks(off60, 1, 6));
+  double e60 = run_max_error(&run, 60);
+  eta_run_clear(&run);
+  run = eta_simulate(bursty_chunks(off90, 1, 6));
+  double e90 = run_max_error(&run, 60);
+  eta_run_clear(&run);
+  run = eta_simulate(bursty_chunks(mixed, 4, 6));
+  double emixed = run_max_error(&run, 60);
+  eta_run_clear(&run);
+
+  g_test_message("bursty 0.6/4.9 %.1f%%, 0.6/1.9 %.1f%%, 0.6/2.0 first %.1f%% with %d "
+                 "rises, 3/4.9 %d rises, 0.6/6.0 %.1f%%, 0.6/9.0 %.1f%%, mixed %.1f%%",
+                 e49 * 100, e19 * 100, first20 * 100, up20, up3_49, e60 * 100, e90 * 100,
+                 emixed * 100);
+  g_assert_cmpfloat(e49, <, 0.15);
+  g_assert_cmpfloat(e19, <, 0.10);
+  g_assert_cmpfloat(first20, <, 0.20);
+  g_assert_cmpint(up20, <=, 3);
+  g_assert_cmpint(up3_49, <=, 3);
+  g_assert_cmpfloat(e60, <, 0.15);
+  g_assert_cmpfloat(e90, <, 0.15);
+  g_assert_cmpfloat(emixed, <, 0.15);
+}
+
+static void test_eta_once_per_second(void) {
+  const double phases[] = {0, 0.05, 0.95};
+  for (int phase = 0; phase < 3; phase++) {
+    for (int direction = 0; direction < 2; direction++) {
+      long long from = direction ? MB : 5 * MB;
+      long long to = direction ? 5 * MB : MB;
+      long long total = 2000 * MB, bytes = 0;
+      OtzEta eta;
+      otz_eta_init(&eta);
+      double shown;
+      for (int second = 1; second <= 400; second++) {
+        bytes += second <= 20 ? from : to;
+        otz_eta_tick(&eta, second, bytes, total - bytes, 0, 0, 0, 0, &shown);
+        OtzEtaStatus status = otz_eta_tick(&eta, second + phases[phase], bytes,
+                                          total - bytes, 0, 0, 0, 0, &shown);
+        if (second >= 120) {
+          double expected = (double)(total - bytes) / to;
+          g_assert_cmpint(status, ==, OTZ_ETA_ESTIMATING);
+          g_assert_cmpfloat(fabs(shown - expected), <=, expected * 0.15);
+        }
+      }
+    }
+  }
+}
+
+static void test_eta_sim_rate_change(void) {
+  static const long long down[][2] = {{30, 10 * MB}, {100000, 5 * MB}};
+  static const long long up[][2] = {{30, 5 * MB}, {100000, 10 * MB}};
+  EtaRun run = eta_simulate(segment_chunks(down, 2, 3000 * MB));
+  double e_down = run_error_at(&run, 75);
+  eta_run_clear(&run);
+  run = eta_simulate(segment_chunks(up, 2, 3000 * MB));
+  double e_up = run_error_at(&run, 75);
+  eta_run_clear(&run);
+  g_test_message("rate change at +45 s: 10->5 %.1f%%, 5->10 %.1f%%", e_down * 100,
+                 e_up * 100);
+  g_assert_cmpfloat(e_down, <, 0.10);
+  g_assert_cmpfloat(e_up, <, 0.10);
+}
+
+static void test_eta_sim_stalls(void) {
+  static const long long stall12[][2] = {{20, 10 * MB}, {12, 0}, {100000, 10 * MB}};
+  static const long long stall45[][2] = {{20, 10 * MB}, {45, 0}, {100000, 10 * MB}};
+  EtaRun run = eta_simulate(segment_chunks(stall12, 3, 2000 * MB));
+  double worst = 0;
+  for (guint i = 0; i < run.records->len; i++) {
+    EtaRecord *r = &g_array_index(run.records, EtaRecord, i);
+    if (r->t <= 32 || r->shown < 0) continue;
+    worst = MAX(worst, r->shown / (run.end - r->t + 12) - 1);
+    g_assert_cmpfloat(r->shown, <=, (run.end - r->t + 12) * 1.1);
+  }
+  eta_run_clear(&run);
+
+  run = eta_simulate(segment_chunks(stall45, 3, 2000 * MB));
+  const EtaRecord *first = NULL, *back = NULL;
+  for (guint i = 0; i < run.records->len; i++) {
+    EtaRecord *r = &g_array_index(run.records, EtaRecord, i);
+    if (r->t <= 65.05) continue;
+    if (first == NULL) first = r;
+    if (back == NULL && r->shown >= 0) back = r;
+  }
+  g_assert_cmpint(first->status, ==, OTZ_ETA_CALCULATING);
+  double error = run_error(&run, back);
+  g_test_message("12 s stall: worst %+.1f%% over truth+12 s; 45 s stall: back at "
+                 "%.2f s, %.1f%% from truth",
+                 worst * 100, back->t, error * 100);
+  g_assert_cmpfloat(error, <, 0.15);
+  eta_run_clear(&run);
+}
+
+/* The bucket table of formatRemainingTimeHebrew. */
+static void test_eta_format_table(void) {
+  static const struct {
+    double seconds;
+    const char *text;
+  } cases[] = {
+      {0, "עוד כמה שניות"},
+      {4.7, "עוד כמה שניות"},
+      {4.9, "עוד כמה שניות"},
+      {5, "נותרו כ-5 שניות"},
+      {44, "נותרו כ-45 שניות"},
+      {59, "נותרה כדקה"},
+      {60, "נותרה כדקה"},
+      {90, "נותרו כדקה ו-30 שניות"},
+      {200, "נותרו כ-3 דקות ו-20 שניות"},
+      {300, "נותרו כ-5 דקות"},
+      {599, "נותרו כ-10 דקות"},
+      {600, "נותרו כ-10 דקות"},
+      {1830, "נותרו כ-31 דקות"},
+      {3599, "נותרה כשעה"},
+      {3600, "נותרה כשעה"},
+      {4500, "נותרו כשעה ו-15 דקות"},
+      {7200, "נותרו כשעתיים"},
+      {7500, "נותרו כשעתיים ו-5 דקות"},
+      {3 * 3600 + 20 * 60, "נותרו כ-3 שעות ו-20 דקות"},
+  };
+  otz_set_english(FALSE);
+  for (gsize i = 0; i < G_N_ELEMENTS(cases); i++) {
+    g_autofree char *text = otz_time_left_text(cases[i].seconds);
+    g_assert_cmpstr(text, ==, cases[i].text);
+  }
+}
+
+static void test_eta_round(void) {
+  static const struct {
+    double seconds;
+    int h, m, s;
+  } cases[] = {
+      {0, 0, 0, 0},       {4.9, 0, 0, 0},    {5, 0, 0, 5},     {33, 0, 0, 35},
+      {58, 0, 1, 0},      {60, 0, 1, 0},     {94, 0, 1, 30},   {125, 0, 2, 10},
+      {599, 0, 10, 0},    {600, 0, 10, 0},   {2669, 0, 44, 0}, {3599, 1, 0, 0},
+      {3600, 1, 0, 0},    {5000, 1, 25, 0},  {7190, 2, 0, 0},  {9000, 2, 30, 0},
+  };
+  for (gsize i = 0; i < G_N_ELEMENTS(cases); i++) {
+    int h, m, s;
+    otz_eta_round(cases[i].seconds, &h, &m, &s);
+    g_test_message("%.1f -> %d:%d:%d", cases[i].seconds, h, m, s);
+    g_assert_cmpint(h, ==, cases[i].h);
+    g_assert_cmpint(m, ==, cases[i].m);
+    g_assert_cmpint(s, ==, cases[i].s);
+  }
 }
 
 int main(int argc, char **argv) {
@@ -1240,5 +1967,24 @@ int main(int argc, char **argv) {
   g_test_add_func("/release/offline-errors", test_offline_errors);
   g_test_add_func("/texts/complete", test_texts_complete);
   g_test_add_func("/texts/format", test_texts_format);
+  g_test_add_func("/eta/work-rates", test_eta_work_rates);
+  g_test_add_func("/eta/warm-up", test_eta_warm_up);
+  g_test_add_func("/eta/not-network", test_eta_not_network);
+  g_test_add_func("/eta/known-pause", test_eta_known_pause);
+  g_test_add_func("/eta/stall-status", test_eta_stall_status);
+  g_test_add_func("/eta/speed", test_eta_speed);
+  g_test_add_func("/eta/short-silences", test_eta_short_silences);
+  g_test_add_func("/eta/stall-recovery", test_eta_stall_recovery);
+  g_test_add_func("/eta/rate-change", test_eta_rate_change);
+  g_test_add_func("/eta/planned-steps", test_eta_planned_steps);
+  g_test_add_func("/eta/bursty-rate", test_eta_bursty_rate);
+  g_test_add_func("/eta/display", test_eta_display);
+  g_test_add_func("/eta/sim-steady", test_eta_sim_steady);
+  g_test_add_func("/eta/sim-bursty", test_eta_sim_bursty);
+  g_test_add_func("/eta/once-per-second", test_eta_once_per_second);
+  g_test_add_func("/eta/sim-rate-change", test_eta_sim_rate_change);
+  g_test_add_func("/eta/sim-stalls", test_eta_sim_stalls);
+  g_test_add_func("/eta/format-table", test_eta_format_table);
+  g_test_add_func("/eta/round", test_eta_round);
   return g_test_run();
 }

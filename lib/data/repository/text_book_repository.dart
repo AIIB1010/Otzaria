@@ -58,6 +58,13 @@ class TextBookRepository {
     SqliteDataProvider? sqliteProvider,
   }) : _sqliteProvider = sqliteProvider ?? SqliteDataProvider.instance;
 
+  Future<bool> supportsContinuousReadingMode(TextBook book) =>
+      FileSystemData.instance.supportsContinuousReadingMode(
+        book.title,
+        categoryId: book.categoryId,
+        fileType: book.fileType,
+      );
+
   Future<String> getBookContent(TextBook book) async {
     // מהדורה חלופית: נטענת אך ורק משאילתת ה-overlay של version_line — בלי
     // ליפול בשקט לנוסח הממוזג (שהיה מוצג בשם המהדורה). כישלון = טקסט ריק.

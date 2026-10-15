@@ -23,7 +23,6 @@ import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/view/combined_view/combined_book_screen.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import '../../helpers/memory_settings_cache.dart';
 
@@ -132,8 +131,6 @@ void main() {
         selectedIndex: null,
         pinLeftPane: false,
         searchText: '',
-        scrollController: ItemScrollController(),
-        positionsListener: ItemPositionsListener.create(),
       ),
     );
     await tester.pump();

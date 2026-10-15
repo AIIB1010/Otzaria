@@ -246,8 +246,6 @@ TextBookLoaded _loadedStateWithNotesAndCommentary() {
     selectedIndex: 0,
     pinLeftPane: false,
     searchText: '',
-    scrollController: ItemScrollController(),
-    positionsListener: ItemPositionsListener.create(),
   );
 }
 

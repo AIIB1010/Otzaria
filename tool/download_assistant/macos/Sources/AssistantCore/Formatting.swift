@@ -27,64 +27,69 @@ public func humanSpeed(_ bytesPerSecond: Double, english: Bool = false) -> Strin
     return ltrUnit(text, english: english)
 }
 
-/// כמו HumanDuration של Windows: שעות שלמות ודקות מעוגלות.
-public func humanRemaining(_ seconds: TimeInterval, english: Bool = false) -> String {
-    if seconds < 60 { return english ? "less than a minute" : "פחות מדקה" }
-    let whole = Int64(seconds)
-    var hours = whole / 3600
-    var minutes = (whole % 3600 + 30) / 60
-    if minutes == 60 {
-        hours += 1
-        minutes = 0
+/// השניות שאחרי עיגול התצוגה: 0 (= "כמה שניות") מתחת ל-5, ומעל זה לפי דלי הערך.
+public func roundedRemainingSeconds(_ seconds: TimeInterval) -> Int {
+    let value = seconds.isFinite ? min(max(0, seconds), 999 * 3600) : 999 * 3600
+    if value < 5 { return 0 }
+    if value < 60 { return Int((value / 5).rounded()) * 5 }
+    if value < 600 { return Int((value / 10).rounded()) * 10 }
+    if value < 3600 { return Int((value / 60).rounded()) * 60 }
+    return Int((value / 300).rounded()) * 300
+}
+
+/// משפט הזמן שנותר, מעוגל לפי גודלו. עיגול לעולם אינו מגיע ל-0 כל עוד נותרה עבודה.
+public func remainingText(_ seconds: TimeInterval, english: Bool = false) -> String {
+    let value = seconds.isFinite ? min(max(0, seconds), 999 * 3600) : 999 * 3600
+    if value < 5 { return english ? "a few seconds left" : "עוד כמה שניות" }
+    if value < 60 {
+        let rounded = Int((value / 5).rounded()) * 5
+        if rounded < 60 { return english ? "about \(rounded) seconds left" : "נותרו כ-\(rounded) שניות" }
     }
-    var text = ""
-    if hours == 1 {
-        text = english ? "1 hour" : "שעה"
-    } else if hours == 2 {
-        text = english ? "2 hours" : "שעתיים"
-    } else if hours > 2 {
-        text = english ? "\(hours) hours" : "\(hours) שעות"
+    if value < 600 {
+        let rounded = Int((value / 10).rounded()) * 10
+        if rounded < 600 {
+            let minutes = minutesText(rounded / 60, english: english)
+            let rest = rounded % 60
+            if rest == 0 { return approximately(minutes, english: english) }
+            return english
+                ? approximately("\(minutes) \(rest) seconds", english: true)
+                : approximately("\(minutes) ו-\(rest) שניות", english: false)
+        }
     }
-    if minutes == 0 { return text }
-    let minutesText = minutes == 1
-        ? (english ? "1 minute" : "דקה")
-        : (english ? "\(minutes) minutes" : "\(minutes) דקות")
-    if text.isEmpty { return minutesText }
-    return english ? "\(text) \(minutesText)" : "\(text) ו-\(minutesText)"
+    if value < 3600 {
+        let rounded = Int((value / 60).rounded())
+        if rounded < 60 { return approximately(minutesText(rounded, english: english), english: english) }
+    }
+    let totalMinutes = Int((value / 300).rounded()) * 5
+    let hours = totalMinutes / 60
+    let minutes = totalMinutes % 60
+    let hoursText: String
+    switch hours {
+    case 1: hoursText = english ? "1 hour" : "שעה"
+    case 2: hoursText = english ? "2 hours" : "שעתיים"
+    default: hoursText = english ? "\(hours) hours" : "\(hours) שעות"
+    }
+    if minutes == 0 { return approximately(hoursText, english: english) }
+    let minutesPart = minutesText(minutes, english: english)
+    return english
+        ? approximately("\(hoursText) \(minutesPart)", english: true)
+        : approximately("\(hoursText) ו-\(minutesPart)", english: false)
+}
+
+private func minutesText(_ minutes: Int, english: Bool) -> String {
+    if minutes == 1 { return english ? "1 minute" : "דקה" }
+    return english ? "\(minutes) minutes" : "\(minutes) דקות"
+}
+
+/// "כ-" לפני ספרה ו"כ" צמוד לפני מילה; "נותרה" רק לדקה או לשעה לבדן.
+private func approximately(_ text: String, english: Bool) -> String {
+    if english { return "about \(text) left" }
+    let verb = text == "דקה" || text == "שעה" ? "נותרה" : "נותרו"
+    let prefix = text.first.map { $0.isNumber } == true ? "כ-" : "כ"
+    return "\(verb) \(prefix)\(text)"
 }
 
 /// ערך משמאל לימין (גודל, נתיב, גרסה) בתוך משפט עברי.
 public func ltrUnit(_ text: String, english: Bool) -> String {
     english ? text : "\u{202A}" + text + "\u{202C}"
-}
-
-/// מהירות כממוצע נע על ~5 שניות, וזמן משוער לסיום.
-public struct SpeedMeter {
-    public let window: TimeInterval
-    private var samples: [(time: TimeInterval, bytes: Int64)] = []
-
-    public init(window: TimeInterval = 5) {
-        self.window = window
-    }
-
-    /// `bytes` הוא מונה מצטבר של בתים שירדו בריצה הזאת.
-    public mutating func record(time: TimeInterval, bytes: Int64) {
-        samples.append((time, bytes))
-        while let first = samples.first, time - first.time > window, samples.count > 2 {
-            samples.removeFirst()
-        }
-    }
-
-    /// nil עד שנצבר מספיק זמן למדידה.
-    public var bytesPerSecond: Double? {
-        guard let first = samples.first, let last = samples.last else { return nil }
-        let span = last.time - first.time
-        guard span >= 0.5 else { return nil }
-        return Double(last.bytes - first.bytes) / span
-    }
-
-    public func secondsRemaining(_ remainingBytes: Int64) -> TimeInterval? {
-        guard let speed = bytesPerSecond, speed > 0 else { return nil }
-        return Double(max(0, remainingBytes)) / speed
-    }
 }

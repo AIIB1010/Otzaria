@@ -34,6 +34,7 @@ import 'package:otzaria/settings/services/backup/backup_rotation.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/library/bloc/library_bloc.dart';
 import 'package:otzaria/library/bloc/library_state.dart';
+import 'package:otzaria/library_update/changes_notes/library_changes_notes.dart';
 import 'package:otzaria/navigation/bloc/navigation_bloc.dart';
 import 'package:otzaria/navigation/bloc/navigation_event.dart';
 import 'package:otzaria/services/data_collection_service.dart';
@@ -369,6 +370,7 @@ class _SystemSettingsTabState extends State<SystemSettingsTab> {
   String? _appVersion;
   String? _libraryVersion;
   int? _bookCount;
+  bool _hasLibraryChanges = false;
   static const _backupFolderName = 'תיקיית גיבוי';
 
   String _resolvedBackupPath = '';
@@ -378,6 +380,8 @@ class _SystemSettingsTabState extends State<SystemSettingsTab> {
   void initState() {
     super.initState();
     _loadVersionInfo();
+    _refreshLibraryChanges();
+    LibraryChangesNotes.instance.revision.addListener(_refreshLibraryChanges);
     _loadBackupStatus();
     _loadResolvedBackupPath();
     AppPaths.getDefaultBackupPath().then((p) {
@@ -419,6 +423,23 @@ class _SystemSettingsTabState extends State<SystemSettingsTab> {
       _libraryVersion = libVersion;
       _bookCount = count;
     });
+  }
+
+  Future<void> _refreshLibraryChanges() async {
+    final has = await LibraryChangesNotes.instance.store.hasAny().catchError(
+      (_) => false,
+    );
+    if (mounted && has != _hasLibraryChanges) {
+      setState(() => _hasLibraryChanges = has);
+    }
+  }
+
+  @override
+  void dispose() {
+    LibraryChangesNotes.instance.revision.removeListener(
+      _refreshLibraryChanges,
+    );
+    super.dispose();
   }
 
   Future<void> _loadBackupStatus() async {
@@ -753,6 +774,12 @@ class _SystemSettingsTabState extends State<SystemSettingsTab> {
                 )
               : context.settingsText('טוען...'),
           actions: [
+            if (_hasLibraryChanges)
+              ActionButton.ghost(
+                icon: FluentIcons.sparkle_24_regular,
+                text: context.settingsText('מה חדש בגרסת הספרייה'),
+                onPressed: () => LibraryChangesNotes.instance.showAll(context),
+              ),
             if (_bookCount != null)
               ActionButton.ghost(
                 icon: OtzariaIcons.list_24_regular,

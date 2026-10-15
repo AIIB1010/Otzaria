@@ -365,10 +365,7 @@ void main() {
         await waitFor((state) => state.updateCounter > revision);
         expect(bound.toJson()['initalIndex'], 12122);
         expect(bound.index, 12122);
-        expect(
-          (bound.bloc.state as TextBookLoaded).visibleIndices.first,
-          12122,
-        );
+        expect(bound.lines.position.value?.topLine, 12122);
       },
     );
     test(

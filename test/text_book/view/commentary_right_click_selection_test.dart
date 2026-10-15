@@ -23,7 +23,6 @@ import 'package:otzaria/utils/ui/context_menu_utils.dart';
 import 'package:otzaria/text_display/models/text_display_profile.dart';
 import 'package:otzaria/widgets/misc/app_menu_exports.dart';
 import 'package:otzaria/widgets/misc/progressive_scrolling.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../../test_helpers/memory_cache_provider.dart';
 
 // שני היבטים של באג לחיצה ימנית במפרשים בצד ובכרטיסיית המפרשים:
@@ -637,8 +636,6 @@ TextBookLoaded _loadedState() {
     selectedIndex: 0,
     pinLeftPane: false,
     searchText: '',
-    scrollController: ItemScrollController(),
-    positionsListener: ItemPositionsListener.create(),
   );
 }
 

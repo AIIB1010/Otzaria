@@ -68,9 +68,7 @@ import 'package:otzaria/book_common/selection/selection_hit_test.dart';
 import 'package:otzaria/text_book/view/selection/selected_text_copy.dart';
 import 'package:otzaria/book_common/selection/selected_text_restore.dart';
 import 'package:otzaria/tools/dictionary/repository/dictionary_lookup_repository.dart';
-import 'package:otzaria/plugins/services/plugin_highlight_registry.dart';
 import 'package:otzaria/plugins/services/plugin_highlight_reveal_service.dart';
-import 'package:otzaria/plugins/services/plugin_highlight_renderer.dart';
 import 'package:otzaria/plugins/services/plugin_runtime_dispatcher.dart';
 import 'package:otzaria/plugins/models/plugin_book_identity.dart';
 import 'package:otzaria/text_book/view/selection/selection_sync_controller.dart';
@@ -80,15 +78,15 @@ import 'package:otzaria/text_book/utils/inline_notes_utils.dart'
     as inline_notes;
 import 'package:otzaria/book_common/utils/link_anchor_markers.dart';
 import 'package:otzaria/text_book/utils/link_preview_utils.dart';
-import 'package:otzaria/widgets/misc/inline_link_targets.dart';
 import 'package:otzaria/text_book/utils/numbered_note_markers.dart';
 import 'package:otzaria/text_book/utils/reading_segments.dart';
-import 'package:otzaria/text_book/utils/reading_segment_navigation.dart';
-import 'package:otzaria/text_book/view/widgets/continuous_reading_paragraph.dart';
+import 'package:otzaria/text_book/view/reader_line/reader_line_item.dart';
+import 'package:otzaria/text_book/view/reader_line/reader_line_render.dart';
+import 'package:otzaria/text_book/view/reader_line/reader_line_spec.dart';
+import 'package:otzaria/text_book/view/widgets/unloaded_paragraph_placeholder.dart';
 import 'package:otzaria/text_display/text_display_exports.dart';
-import 'package:otzaria/theme/theme_exports.dart';
-import 'package:otzaria/utils/text/html_link_handler.dart';
 import 'package:otzaria/widgets/misc/link_preview_overlay.dart';
+import 'package:otzaria/text_book/view/reading_viewport/line_scroll_controller.dart';
 
 /// מחזירה האם אירוע המקלדת צריך להניע גלילה/ניווט שורה בצורת הדף.
 ///
@@ -363,11 +361,15 @@ class SimpleTextViewer extends StatefulWidget {
   final double fontSize;
   final String? fontFamily;
   final Function(OpenedTab) openBookCallback;
+
+  /// גלילה ומיקום של טקסט ראשי, בשורות מקור. בלעדיו נוצר אחד פנימי.
+  final LineScrollController? lines;
+
+  /// בקרי הרשימה של מפרש; לטקסט ראשי הם באים מ-[lines].
   final ItemScrollController? scrollController;
   final ItemPositionsListener? positionsListener;
 
-  /// גלילה יחסית בפיקסלים. הטקסט הראשי לוקח אותו מה-state; מפרש שמסונכרן
-  /// ברציפות מקבל כאן controller משלו, ובלעדיו הסנכרון נופל לקפיצות.
+  /// גלילה יחסית בפיקסלים של מפרש; בלעדיו הסנכרון הרציף נופל לקפיצות.
   final ScrollOffsetController? scrollOffsetController;
   final bool isMainText; // האם זה הטקסט המרכזי או מפרש
   final String? title; // כותרת (לכותרת עליונה)
@@ -421,6 +423,7 @@ class SimpleTextViewer extends StatefulWidget {
     required this.fontSize,
     this.fontFamily,
     required this.openBookCallback,
+    this.lines,
     this.scrollController,
     this.positionsListener,
     this.scrollOffsetController,
@@ -474,6 +477,13 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
 
   late final ItemScrollController _scrollController;
   late final ItemPositionsListener _positionsListener;
+  ScrollOffsetController? _offsetController;
+  LineScrollController? _ownedLines;
+  ReadingViewportBinding? _viewportBinding;
+
+  /// קיים לטקסט ראשי בלבד.
+  LineScrollController? get _lines =>
+      widget.isMainText ? (widget.lines ?? _ownedLines) : null;
   FocusNode? _keyboardFocusNode;
   bool _shouldPreserveKeyboardFocus = false;
 
@@ -503,9 +513,6 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
   int? _selectionStartColumn;
   int? _selectionPointerColumn;
   int? _selectionPointerLineIndex;
-  int _initialScrollRestoreAttempts = 0;
-  bool? _lastContinuousReadingMode;
-  int? _pendingDisplayModeRestoreLineIndex;
   final DictionaryLookupRepository _dictionaryLookupRepository =
       DictionaryLookupRepository.instance;
   final ParagraphCommentatorsCache _paragraphCommentatorsCache =
@@ -978,9 +985,17 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
   @override
   void initState() {
     super.initState();
-    _scrollController = widget.scrollController ?? ItemScrollController();
-    _positionsListener =
-        widget.positionsListener ?? ItemPositionsListener.create();
+    if (widget.isMainText) {
+      final lines = widget.lines ?? (_ownedLines = LineScrollController());
+      _scrollController = lines.itemController;
+      _positionsListener = lines.positionsListener;
+      _offsetController = lines.offsetController;
+    } else {
+      _scrollController = widget.scrollController ?? ItemScrollController();
+      _positionsListener =
+          widget.positionsListener ?? ItemPositionsListener.create();
+      _offsetController = widget.scrollOffsetController;
+    }
     _selectionFocusNode = FocusNode(debugLabel: 'SelectionAreaFocus');
     _resolvedKeyboardFocusNode;
     final dynamicTab = widget.tab;
@@ -1026,7 +1041,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
           () => _requestKeyboardFocus('tab-content-focus'),
         );
       }
-      _scheduleInitialScrollRestore();
+      _attachViewport();
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) {
@@ -1064,15 +1079,17 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
         highlight.bookId != tab.book.title) {
       return;
     }
+    final lines = _lines;
+    if (lines == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scrollController.isAttached) {
-        return;
-      }
-      _scrollController.scrollTo(
-        index: _segmentIndexForSourceLine(highlight.sectionIndex),
-        alignment: .35,
-        duration: const Duration(milliseconds: 450),
-        curve: Curves.easeInOut,
+      if (!mounted) return;
+      unawaited(
+        lines.scrollToLine(
+          highlight.sectionIndex,
+          alignment: .35,
+          duration: const Duration(milliseconds: 450),
+          curve: Curves.easeInOut,
+        ),
       );
     });
   }
@@ -1152,6 +1169,9 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
       );
     }
     _cancelPendingPreview();
+    final binding = _viewportBinding;
+    if (binding != null) _lines?.detach(binding);
+    _ownedLines?.dispose();
     if (widget.isMainText) LinkPreviewOverlay.dismiss();
     widget.selectionSyncController?.removeListener(
       _handleExternalSelectionChange,
@@ -1291,134 +1311,49 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     }
   }
 
-  void _scheduleInitialScrollRestore() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+  Widget _trackUserScroll(Widget list) => _lines?.trackUserScroll(list) ?? list;
 
-      final restored = _scrollToCurrentPosition();
-      if (restored) {
-        return;
-      }
-      if (_initialScrollRestoreAttempts >= 10) {
-        return;
-      }
-
-      _initialScrollRestoreAttempts++;
-      Future.delayed(
-        const Duration(milliseconds: 50),
-        _scheduleInitialScrollRestore,
-      );
-    });
-  }
-
-  /// גלילה למיקום הנוכחי (visibleIndices או selectedIndex)
-  bool _scrollToCurrentPosition() {
+  /// מחבר את הטקסט הראשי ל-[LineScrollController] וממקם אותו בשורה הנוכחית.
+  void _attachViewport() {
+    final lines = _lines;
+    if (lines == null) return;
     final bloc = context.read<TextBookBloc>();
+    final binding = ReadingViewportBinding(
+      segments: () {
+        final state = bloc.state;
+        return state is TextBookLoaded ? readingSegmentsOf(state) : null;
+      },
+      viewportExtent: _viewportExtent,
+    );
+    _viewportBinding = binding;
+    lines.attach(binding);
+    if (lines.hasPendingTarget) return;
     final state = bloc.state;
-    if (state is! TextBookLoaded || !_scrollController.isAttached) {
-      return false;
-    }
-
-    final targetIndex = state.visibleIndices.isNotEmpty
-        ? state.visibleIndices.first
-        : state.selectedIndex;
-
-    if (targetIndex == null || targetIndex >= widget.content.length) {
-      return false;
-    }
-
-    _scrollController.jumpTo(
-      index: state.readingSegments.isNotEmpty
-          ? segmentIndexForLine(state.readingSegments, targetIndex)
-          : targetIndex,
-    );
-    return true;
-  }
-
-  /// שומר את המיקום (שורת מקור) בעת מעבר בין מצב רגיל לרציף ולהפך.
-  void _preserveScrollAfterDisplayModeChange(TextBookLoaded state) {
-    final continuous = state.continuousReadingMode;
-    final previousContinuous = _lastContinuousReadingMode;
-    _lastContinuousReadingMode = continuous;
-
-    if (!widget.isMainText ||
-        !widget.useInternalScroll ||
-        previousContinuous == null ||
-        previousContinuous == continuous) {
+    if (state is! TextBookLoaded) return;
+    final tab = widget.tab;
+    final target = tab is TextBookTab
+        ? tab.index
+        : state.visibleIndices.firstOrNull ?? state.selectedIndex;
+    // הרשימה נפתחת בראש הספר; רק יעד אחר דורש קפיצה.
+    if (target == null || target <= 0 || target >= widget.content.length) {
       return;
     }
-
-    final targetIndex = state.visibleIndices.isNotEmpty
-        ? state.visibleIndices.first
-        : state.selectedIndex;
-    if (targetIndex == null ||
-        targetIndex < 0 ||
-        targetIndex >= widget.content.length) {
-      return;
-    }
-
-    _pendingDisplayModeRestoreLineIndex = targetIndex;
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted ||
-          _pendingDisplayModeRestoreLineIndex != targetIndex ||
-          !_scrollController.isAttached) {
-        return;
-      }
-
-      await scrollToSourceLine(
-        scrollController: _scrollController,
-        scrollOffsetController: state.scrollOffsetController,
-        positionsListener: _positionsListener,
-        segments: state.readingSegments,
-        lineIndex: targetIndex,
-        viewportExtent:
-            context.size?.height ?? MediaQuery.sizeOf(context).height,
-        duration: Duration.zero,
-      );
-
-      if (mounted && _pendingDisplayModeRestoreLineIndex == targetIndex) {
-        _pendingDisplayModeRestoreLineIndex = null;
-      }
-    });
+    unawaited(lines.jumpToLine(target, alignment: 0));
   }
 
-  List<int> _sourceIndicesForVisiblePositions(
-    Iterable<ItemPosition> itemPositions,
-  ) {
-    final positions = itemPositions.toList();
-    if (!widget.isMainText) {
-      // מפרשים אינם משתמשים במצב רציף.
-      return positions.map((position) => position.index).toSet().toList()
-        ..sort();
-    }
+  /// נקרא רק בניווט, אחרי הפריסה — לא מתוך initState.
+  double _viewportExtent() =>
+      _disposed ? 0 : context.size?.height ?? MediaQuery.sizeOf(context).height;
 
-    final state = context.read<TextBookBloc>().state;
-    if (state is! TextBookLoaded ||
-        !state.continuousReadingMode ||
-        state.readingSegments.isEmpty) {
-      return positions.map((position) => position.index).toSet().toList()
-        ..sort();
-    }
-
-    return sourceLineIndicesForSegmentViewports(
-      state.readingSegments,
-      positions.map(
-        (position) => ReadingSegmentViewport(
-          segmentIndex: position.index,
-          leadingEdge: position.itemLeadingEdge,
-          trailingEdge: position.itemTrailingEdge,
-        ),
-      ),
-    );
-  }
-
-  /// ממיר שורת מקור לאינדקס הסגמנט המתאים לגלילה.
-  int _segmentIndexForSourceLine(int lineIndex) {
-    final state = context.read<TextBookBloc>().state;
-    if (state is! TextBookLoaded || state.readingSegments.isEmpty) {
-      return lineIndex;
-    }
-    return segmentIndexForLine(state.readingSegments, lineIndex);
+  /// השורות הגלויות: בטקסט ראשי מהמיקום הנמדד, במפרש לפי פריטי הרשימה.
+  List<int> _visibleSourceLines() {
+    final lines = _lines;
+    if (lines != null) return lines.position.value?.visibleLines ?? const [];
+    return _positionsListener.itemPositions.value
+        .map((position) => position.index)
+        .toSet()
+        .toList()
+      ..sort();
   }
 
   /// היעד של הטור. טור מפרש אינו תנ"ך, ולכן חל עליו פרופיל המפרשים
@@ -1459,11 +1394,8 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
   }
 
   List<int> _selectionSourceIndices() {
-    final visiblePositions = _positionsListener.itemPositions.value.toList();
-
-    if (visiblePositions.isNotEmpty) {
-      return _sourceIndicesForVisiblePositions(visiblePositions);
-    }
+    final visible = _visibleSourceLines();
+    if (visible.isNotEmpty) return visible;
 
     return List<int>.generate(widget.content.length, (index) => index);
   }
@@ -1541,6 +1473,13 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
       selectedText: persistedText,
       visibleLines: renderedLines,
       preferredLine: previousIndex == null ? null : previousIndex - baseIndex,
+      paragraphs: widget.isMainText
+          ? readerSelectionParagraphs(
+              layout: readingLayoutOf(textBookState),
+              lines: widget.content,
+              baseIndex: baseIndex,
+            )
+          : null,
     );
     final restoredText = restored.text;
 
@@ -1634,8 +1573,9 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
   bool _shouldPreserveSelectionAt(
     Offset globalPosition,
     int lineIndex,
-    BuildContext lineContext,
-  ) {
+    BuildContext lineContext, {
+    ReaderLineHit? hit,
+  }) {
     final start = _selectionLineStart;
     final end = _selectionLineEnd;
     if (start == null || end == null) return false;
@@ -1647,7 +1587,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     if (selectedText == null || selectedText.isEmpty) {
       return false; // אין בחירה פעילה — אין מה לשמר
     }
-    final root = lineContext.findRenderObject();
+    final root = hit?.root ?? lineContext.findRenderObject();
     if (root == null) {
       return true; // יש בחירה אך אי אפשר לבדוק גאומטרית — סלחני
     }
@@ -1671,6 +1611,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
       selectedSegment: segment,
       edge: edge,
       segmentStartHint: _selectionStartColumn,
+      lineRange: hit?.lineRange,
     );
     return onSelection ?? true; // לא הוכרע — סלחני
   }
@@ -1711,9 +1652,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
       return false;
     }
 
-    final liveVisibleIndices = _sourceIndicesForVisiblePositions(
-      _positionsListener.itemPositions.value,
-    );
+    final liveVisibleIndices = _visibleSourceLines();
     final currentIndex = resolvePageShapeNavigationBaseIndex(
       selectedIndex: state.selectedIndex,
       liveVisibleIndices: liveVisibleIndices,
@@ -1726,13 +1665,13 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
         return true;
       }
       context.read<TextBookBloc>().add(UpdateSelectedIndex(nextIndex));
-      if (_scrollController.isAttached) {
-        _scrollController.scrollTo(
-          index: _segmentIndexForSourceLine(nextIndex),
+      unawaited(
+        _lines?.scrollToLine(
+          nextIndex,
           duration: const Duration(milliseconds: 200),
           alignment: 0.5,
-        );
-      }
+        ),
+      );
       _requestKeyboardFocusAfterFrame('navigation-arrow-down');
       return true;
     }
@@ -1743,13 +1682,13 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
         return true;
       }
       context.read<TextBookBloc>().add(UpdateSelectedIndex(prevIndex));
-      if (_scrollController.isAttached) {
-        _scrollController.scrollTo(
-          index: _segmentIndexForSourceLine(prevIndex),
+      unawaited(
+        _lines?.scrollToLine(
+          prevIndex,
           duration: const Duration(milliseconds: 200),
           alignment: 0.5,
-        );
-      }
+        ),
+      );
       _requestKeyboardFocusAfterFrame('navigation-arrow-up');
       return true;
     }
@@ -1757,13 +1696,13 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     if (logicalKey == LogicalKeyboardKey.pageDown) {
       final nextIndex = (currentIndex + 10).clamp(0, widget.content.length - 1);
       context.read<TextBookBloc>().add(UpdateSelectedIndex(nextIndex));
-      if (_scrollController.isAttached) {
-        _scrollController.scrollTo(
-          index: _segmentIndexForSourceLine(nextIndex),
+      unawaited(
+        _lines?.scrollToLine(
+          nextIndex,
           duration: const Duration(milliseconds: 300),
           alignment: 0.5,
-        );
-      }
+        ),
+      );
       _requestKeyboardFocusAfterFrame('navigation-page-down');
       return true;
     }
@@ -1771,25 +1710,26 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     if (logicalKey == LogicalKeyboardKey.pageUp) {
       final prevIndex = (currentIndex - 10).clamp(0, widget.content.length - 1);
       context.read<TextBookBloc>().add(UpdateSelectedIndex(prevIndex));
-      if (_scrollController.isAttached) {
-        _scrollController.scrollTo(
-          index: _segmentIndexForSourceLine(prevIndex),
+      unawaited(
+        _lines?.scrollToLine(
+          prevIndex,
           duration: const Duration(milliseconds: 300),
           alignment: 0.5,
-        );
-      }
+        ),
+      );
       _requestKeyboardFocusAfterFrame('navigation-page-up');
       return true;
     }
 
     if (logicalKey == LogicalKeyboardKey.home && isControlPressed) {
       context.read<TextBookBloc>().add(const UpdateSelectedIndex(0));
-      if (_scrollController.isAttached) {
-        _scrollController.scrollTo(
-          index: _segmentIndexForSourceLine(0),
+      unawaited(
+        _lines?.scrollToLine(
+          0,
+          alignment: 0,
           duration: const Duration(milliseconds: 300),
-        );
-      }
+        ),
+      );
       _requestKeyboardFocusAfterFrame('navigation-home');
       return true;
     }
@@ -1797,20 +1737,19 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     if (logicalKey == LogicalKeyboardKey.end && isControlPressed) {
       final lastIndex = widget.content.length - 1;
       context.read<TextBookBloc>().add(UpdateSelectedIndex(lastIndex));
-      if (_scrollController.isAttached) {
-        _scrollController.scrollTo(
-          index: _segmentIndexForSourceLine(lastIndex),
+      unawaited(
+        _lines?.scrollToLine(
+          lastIndex,
+          alignment: 0,
           duration: const Duration(milliseconds: 300),
-        );
-      }
+        ),
+      );
       _requestKeyboardFocusAfterFrame('navigation-end');
       return true;
     }
 
     if (logicalKey == LogicalKeyboardKey.space) {
-      final visibleSourceIndices = _sourceIndicesForVisiblePositions(
-        _positionsListener.itemPositions.value,
-      );
+      final visibleSourceIndices = _visibleSourceLines();
       final pageSize = visibleSourceIndices.isNotEmpty
           ? visibleSourceIndices.length
           : 10;
@@ -1821,13 +1760,13 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
       );
       if (targetIndex == currentIndex) return true;
       context.read<TextBookBloc>().add(UpdateSelectedIndex(targetIndex));
-      if (_scrollController.isAttached) {
-        _scrollController.scrollTo(
-          index: _segmentIndexForSourceLine(targetIndex),
+      unawaited(
+        _lines?.scrollToLine(
+          targetIndex,
           duration: const Duration(milliseconds: 300),
           alignment: 0.0,
-        );
-      }
+        ),
+      );
       _requestKeyboardFocusAfterFrame('navigation-space');
       return true;
     }
@@ -1841,8 +1780,9 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     int index,
     BuildContext menuContext,
     Offset tapPosition,
-    String? capturedText,
-  ) {
+    String? capturedText, {
+    TextRange? lineRange,
+  }) {
     // גם לקישורים: linksByLine מכסה רק את חלון הטעינה סביב האזור הנראה.
     if (widget.isMainText) _prefetchParagraphCommentators(state, index);
     List<AppContextMenuEntry> commentatorItems = [];
@@ -2057,6 +1997,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
           tapPosition: tapPosition,
           menuContext: menuContext,
           selectionContext: 'reader-page-shape-selection',
+          lineRange: lineRange,
         ),
       );
     } else {
@@ -2593,15 +2534,12 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
                       noteMap.putIfAbsent(line, () => []).add(note);
                     }
                   }
-                  _preserveScrollAfterDisplayModeChange(state);
                   final continuous =
                       widget.isMainText && state.continuousReadingMode;
                   final segments = widget.isMainText
-                      ? state.readingSegments
-                      : const <ReadingSegment>[];
-                  final itemCount = segments.isNotEmpty
-                      ? segments.length
-                      : widget.content.length;
+                      ? readingSegmentsOf(state)
+                      : null;
+                  final itemCount = segments?.length ?? widget.content.length;
                   return RtlSelectionShortcuts(
                     child: SelectableRegion(
                       key: _selectionRegionKey,
@@ -2710,9 +2648,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
                                 ? ScrollablePositionedListScrollbar(
                                     scrollController: _scrollController,
                                     itemPositionsListener: _positionsListener,
-                                    offsetController: widget.isMainText
-                                        ? state.scrollOffsetController
-                                        : widget.scrollOffsetController,
+                                    offsetController: _offsetController,
                                     itemCount: itemCount,
                                     labelForIndex: widget.labelForIndex,
                                     child: SmoothWheelScroll(
@@ -2721,26 +2657,37 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
                                         enabled: _savedSelectedText == null,
                                         scrollController: _scrollController,
                                         positionsListener: _positionsListener,
-                                        child: ScrollablePositionedList.builder(
-                                          itemScrollController:
-                                              _scrollController,
-                                          itemPositionsListener:
-                                              _positionsListener,
-                                          scrollOffsetController:
-                                              widget.isMainText
-                                              ? state.scrollOffsetController
-                                              : widget.scrollOffsetController,
-                                          itemCount: itemCount,
-                                          padding: const EdgeInsets.all(4),
-                                          itemBuilder: (context, index) =>
-                                              _buildLineItem(
+                                        child: _trackUserScroll(
+                                          ScrollablePositionedList.builder(
+                                            itemScrollController:
+                                                _scrollController,
+                                            itemPositionsListener:
+                                                _positionsListener,
+                                            scrollOffsetController:
+                                                _offsetController,
+                                            itemCount: itemCount,
+                                            padding: const EdgeInsets.all(4),
+                                            itemBuilder: (context, index) {
+                                              final item = _buildLineItem(
                                                 context,
                                                 index,
                                                 state,
                                                 noteMap,
                                                 segments,
                                                 continuous,
-                                              ),
+                                              );
+                                              final lines = _lines;
+                                              return lines == null ||
+                                                      segments == null
+                                                  ? item
+                                                  : wrapReaderItem(
+                                                      item: index,
+                                                      layout: segments.layout,
+                                                      boxes: lines.itemBoxes,
+                                                      child: item,
+                                                    );
+                                            },
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -2781,7 +2728,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     int index,
     TextBookLoaded state,
     Map<int, List<PersonalNote>> noteMap,
-    List<ReadingSegment> segments,
+    ReadingSegments? segments,
     bool continuous,
   ) {
     final line = _buildLine(
@@ -2789,7 +2736,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
       state,
       context,
       noteMap,
-      segments.isNotEmpty && index < segments.length ? segments[index] : null,
+      segments != null && index < segments.length ? segments[index] : null,
       continuous,
     );
     final sourceBannerKind = _sourceBannerKind;
@@ -2818,549 +2765,291 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     bool continuous,
   ) {
     final primaryLineIndex = segment?.startLineIndex ?? index;
-    final isContinuousParagraph =
+    final isMultiLine =
         continuous &&
         segment != null &&
         !segment.isHeader &&
         segment.sourceLineIndices.length > 1;
-    // ריבוי-בחירה: הקטע נחשב נבחר אם שורת מקור כלשהי שבו נמצאת ב-selectedIndices.
-    final isSelected =
-        widget.isMainText &&
-        state.selectedIndices.any(
-          (sel) => segment?.containsLine(sel) ?? (sel == primaryLineIndex),
-        );
-    final isHighlighted =
-        widget.isMainText &&
-        state.highlightedLine != null &&
-        (segment?.containsLine(state.highlightedLine!) ??
-            state.highlightedLine == primaryLineIndex);
-    // permanentHighlightLine מדגיש רקע צהוב כאשר אין highlightText (?mark בלבד)
-    final isPermanentHighlight =
-        widget.isMainText &&
-        state.permanentHighlightLine != null &&
-        (segment?.containsLine(state.permanentHighlightLine!) ??
-            state.permanentHighlightLine == primaryLineIndex) &&
-        state.highlightText.isEmpty;
+    if (isMultiLine && !segment.isLoaded) {
+      return UnloadedParagraphPlaceholder(
+        lineCount: segment.sourceLineIndices.length,
+        fontSize: widget.fontSize,
+      );
+    }
+    final itemLines = segment?.sourceLineIndices ?? [primaryLineIndex];
+    bool inItem(int line) =>
+        segment?.containsLine(line) ?? line == primaryLineIndex;
+    final selectedLines = widget.isMainText
+        ? {
+            for (final selected in state.selectedIndices)
+              if (inItem(selected)) selected,
+          }
+        : const <int>{};
+    final isSelected = selectedLines.isNotEmpty;
     // נתפס בזמן BUILD (כמו selectedText ב-ValueListenableBuilder של Combined),
     // כך שגם אם onSelectionChanged(null) ירוץ לפני menuBuilder, ה-closure
     // כבר סגור על הערך הנכון מהבנייה האחרונה.
     final savedTextAtBuild = _savedSelectedText;
 
-    // בדיקה חדשה - האם השורה מודגשת כפרשן קשור (מקומי)
-    final isCommentaryHighlighted =
-        !widget.isMainText &&
-        (widget.highlightedIndices?.contains(index) ?? false);
-
     final theme = Theme.of(context);
-    final backgroundColor = () {
-      if (isPermanentHighlight) {
-        return AppColors.permanentHighlight;
-      }
-      if (isHighlighted) {
-        return theme.colorScheme.secondaryContainer.withAlpha(
-          (0.4 * 255).round(),
-        );
-      }
-      if (isCommentaryHighlighted) {
-        // Only commentary highlights paint the background; selected paragraphs use a gutter marker.
-        return AppSurfaces.paragraphSelectionBackground(theme.colorScheme);
-      }
-      return null;
-    }();
+    // ברקע ובסמן של פריט רב-שורתי מטפלות השורות עצמן.
+    final backgroundColor = isMultiLine
+        ? null
+        : readerLineBackgroundColor(
+            readerLineMarks(
+              state,
+              primaryLineIndex,
+              isMainText: widget.isMainText,
+              isRelated: widget.highlightedIndices?.contains(index) ?? false,
+            ).background,
+            theme.colorScheme,
+          );
 
     final notesForLine =
         noteMap[primaryLineIndex + 1] ?? const <PersonalNote>[];
 
-    // EnhancedGestureDetector ולא GestureDetector רגיל: לחיצה משולשת לבחירת
-    // פסקה ב-SelectableRegion חייבת לא לזלוג ל-onTap שמאפס את הבחירה.
-    return EnhancedGestureDetector(
-      behavior: HitTestBehavior.translucent,
-      // במצב רציף לחיצה רגילה לא בוחרת שורה — לחיצות פר-שורה מטופלות
-      // בתוך ContinuousReadingParagraph (recognizer לכל שורה).
-      onSingleTap: widget.isMainText && !isContinuousParagraph
-          ? () {
-              _requestKeyboardFocus('line-tap-$primaryLineIndex');
-              // איפוס הטקסט השמור
-              setState(() {
-                _savedSelectedText = null;
-                _savedSelectedIndex = null;
-                _selectionLineStart = null;
-                _selectionLineEnd = null;
-                _selectionStartColumn = null;
-              });
-              // עדכון selectedIndex רק בטקסט המרכזי
-              if (isSelected) {
-                context.read<TextBookBloc>().add(
-                  const UpdateSelectedIndex(null),
-                );
-              } else {
-                context.read<TextBookBloc>().add(
-                  UpdateSelectedIndex(primaryLineIndex),
-                );
-              }
-            }
-          : null,
-      onCtrlClick: widget.isMainText && !isContinuousParagraph
-          ? () {
-              // Ctrl+Click → הוספה/הסרה של הקטע מבחירה מרובה
-              _requestKeyboardFocus('line-tap-$primaryLineIndex');
-              context.read<TextBookBloc>().add(
-                UpdateSelectedIndex(primaryLineIndex, additive: true),
-              );
-            }
-          : null,
-      onDoubleTap: !widget.isMainText && widget.bookTitle != null
-          ? () {
-              // לחיצה כפולה במפרש - פתיחה בטאב נפרד
-              widget.openBookCallback(
-                TextBookTab(
-                  book: TextBook(title: widget.bookTitle!),
-                  index: primaryLineIndex,
-                  openLeftPane:
-                      (Settings.getValue<bool>('key-pin-sidebar') ?? false) ||
-                      (Settings.getValue<bool>('key-default-sidebar-open') ??
-                          false),
+    ReaderLineHit? hitAt(BuildContext itemContext, Offset globalPosition) =>
+        readerItemHit(itemContext, globalPosition, isMultiLine: isMultiLine);
+
+    int? lineAtPointer() => readerItemPointerLine(
+      pointerLine: _selectionPointerLineIndex,
+      inItem: inItem,
+      isMultiLine: isMultiLine,
+      primaryLine: primaryLineIndex,
+    );
+
+    final Widget gutterChild = AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeInOut,
+      decoration: BoxDecoration(color: backgroundColor),
+      // Paint selection over the paragraph without changing text margins.
+      padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
+      child: BlocBuilder<SettingsBloc, SettingsState>(
+        builder: (context, settingsState) {
+          final lineContext = _readerLineContext(
+            state,
+            settingsState,
+            noteMap,
+          );
+          if (isMultiLine) {
+            return _buildMultiLineItem(itemLines, state, lineContext, noteMap);
+          }
+          final textWidget = _lineTextWidget(
+            buildReaderLineSpec(primaryLineIndex, lineContext),
+            state,
+            notesForLine,
+          );
+          // בטור מפרש רש"י: לעזי רש"י מתחת לשורה (מסתתר לבד אם אין).
+          // בדיקת הכותרת כאן חוסכת בניית תת-הבלוק בכל שורה של טור שאינו רש"י.
+          if (!widget.isMainText &&
+              widget.bookTitle != null &&
+              isRashiTitle(widget.bookTitle!)) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                textWidget,
+                LaazCommentarySubBlock.forLine(
+                  rashiBookTitle: widget.bookTitle!,
+                  rashiLineIndex: primaryLineIndex + 1,
+                  baseFontSize: widget.fontSize,
                 ),
-              );
-            }
-          : null,
-      child: Listener(
-        onPointerDown: (event) {
-          if (event.buttons != kPrimaryMouseButton) return;
-          _focusKeyboardAfterPointerDown();
-          final root = context.findRenderObject();
-          if (root != null) {
-            _selectionPointerLineIndex = primaryLineIndex;
-            _selectionPointerColumn = renderedTextOffsetAtPosition(
-              root: root,
-              globalPosition: event.position,
+              ],
             );
           }
+          return textWidget;
         },
-        child: AppContextMenuRegion(
-          // שמירת האינדקס דרך ה-Listener של AppContextMenuRegion (מחוסן מהזירה),
-          // כך שגם כשלחיצה ימנית חוסמת את SelectableRegion ושומרת בחירה — האינדקס
-          // עדיין נשמר עבור פעולות התפריט.
-          onSecondaryTapDown: (details) {
-            _secondaryTapDownAt = DateTime.now();
-            final root = context.findRenderObject();
-            final selectedTextAtSecondaryTap =
-                _savedSelectedText?.trim().isNotEmpty == true
-                ? _savedSelectedText
-                : savedTextAtBuild;
-            final occurrenceStart =
-                root == null || selectedTextAtSecondaryTap == null
-                ? null
-                : renderedSelectionStartAtPosition(
-                    root: root,
-                    globalPosition: details.globalPosition,
-                    selectedSegment: selectedTextAtSecondaryTap,
-                  );
-            setState(() {
-              _contextMenuSelectedText = selectedTextAtSecondaryTap;
-              _savedSelectedIndex = primaryLineIndex;
-              if (occurrenceStart != null) {
-                _selectionStartColumn = occurrenceStart;
+      ),
+    );
+
+    // EnhancedGestureDetector ולא GestureDetector רגיל: לחיצה משולשת לבחירת
+    // פסקה ב-SelectableRegion חייבת לא לזלוג ל-onTap שמאפס את הבחירה.
+    return Builder(
+      builder: (itemContext) => EnhancedGestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onSingleTap: widget.isMainText
+            ? () {
+                final line = lineAtPointer();
+                if (line == null) return;
+                _requestKeyboardFocus('line-tap-$line');
+                // איפוס הטקסט השמור
+                setState(() {
+                  _savedSelectedText = null;
+                  _savedSelectedIndex = null;
+                  _selectionLineStart = null;
+                  _selectionLineEnd = null;
+                  _selectionStartColumn = null;
+                });
+                context.read<TextBookBloc>().add(
+                  UpdateSelectedIndex(
+                    state.selectedIndices.contains(line) ? null : line,
+                  ),
+                );
               }
-            });
-          },
-          // לחיצה ימנית על הטקסט המסומן (כולל הרווח שבין שורות-תצוגה של שורת-מקור
-          // שנשברה) לא תשחרר את הבחירה; לחיצה על חלק לא-מסומן מבטלת כרגיל.
-          shouldPreserveSelectionOnSecondaryTap: (globalPosition) =>
-              _shouldPreserveSelectionAt(
-                globalPosition,
-                primaryLineIndex,
-                context,
-              ),
-          menuBuilder: (menuCtx, tapPos) {
-            final currentSelectedText =
-                _contextMenuSelectedText?.trim().isNotEmpty == true
-                ? _contextMenuSelectedText
-                : _savedSelectedText?.trim().isNotEmpty == true
-                ? _savedSelectedText
-                : savedTextAtBuild;
-            return [
-              ...ContextMenuUtils.buildInlineLinkContextMenuEntries(
-                menuCtx,
-                tapPos,
-              ),
-              ..._buildContextMenu(
-                state,
-                primaryLineIndex,
-                menuCtx,
-                tapPos,
-                currentSelectedText,
-              ),
-            ];
-          },
-          child: CustomPaint(
-            foregroundPainter: isSelected
-                ? SelectionGutterPainter(theme.colorScheme.primary)
-                : null,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeInOut,
-              decoration: BoxDecoration(color: backgroundColor),
-              // Paint selection over the paragraph without changing text margins.
-              padding: const EdgeInsets.symmetric(
-                horizontal: 4.0,
-                vertical: 2.0,
-              ),
-              child: BlocBuilder<SettingsBloc, SettingsState>(
-                builder: (context, settingsState) {
-                  // במצב רציף — פסקה מכמה שורות מקור.
-                  if (isContinuousParagraph) {
-                    return _buildContinuousSegmentContent(
-                      segment: segment,
-                      state: state,
-                      settingsState: settingsState,
-                      noteMap: noteMap,
-                    );
-                  }
-
-                  // קישורי inline שייכים לטקסט הראשי; סימוני הערות שייכים גם למפרש.
-                  final inlineLinks =
-                      widget.isMainText &&
-                          settingsState.enableHtmlLinks &&
-                          state.book.versionTitle == null
-                      ? (state.linksByLine[primaryLineIndex + 1] ??
-                                const <Link>[])
-                            .where(
-                              (link) => link.start != null && link.end != null,
-                            )
-                            .toList()
-                      : const <Link>[];
-
-                  final hasOwnAnchors = widget.anchorLinksByLine != null;
-                  var data = widget.content[primaryLineIndex];
-                  if (widget.isMainText) {
-                    // קישורי inline ראשונים — האופסטים שלהם גולמיים.
-                    data = _injectPreviewMarkers(
-                      injectInlineLinks(data, inlineLinks),
-                      primaryLineIndex,
-                      state,
-                    );
-                  } else if (hasOwnAnchors) {
-                    data = _injectOwnAnchorMarkers(
-                      data,
-                      primaryLineIndex,
-                      state,
-                    );
-                  }
-
-                  // הדגשת טקסט ממוקד: highlightText מופעל רק בשורה permanentHighlightLine
-                  final searchText = widget.isMainText
-                      ? ((state.highlightText.isNotEmpty &&
-                                state.permanentHighlightLine == index)
-                            ? state.highlightText
-                            : state.searchText)
-                      : '';
-
-                  // סימוני הערות אישיות — אחרונים.
-                  final annotatedData = notesForLine.isNotEmpty
-                      ? buildAnnotatedLineHtml(
-                          rawLine: data,
-                          sourceLine: widget.content[primaryLineIndex],
-                          notesForLine: notesForLine,
-                          lineIndex0: primaryLineIndex,
-                          underlineColor: Theme.of(context).colorScheme.primary,
-                        )
-                      : data;
-
-                  // מצב הניקוד/פיסוק של הטאב חל גם על טורי המפרשים.
-                  final textWidget = SmartTextWidget(
-                    text: annotatedData,
-                    highlightBookId: widget.isMainText
-                        ? state.book.title
-                        : null,
-                    highlightBookUid: widget.isMainText
-                        ? PluginBookIdentity.uidOf(state.book)
-                        : null,
-                    highlightBookDbId: widget.isMainText ? state.book.id : null,
-                    highlightBookType: widget.isMainText
-                        ? PluginBookIdentity.typeOf(state.book)
-                        : null,
-                    highlightBookSource: widget.isMainText
-                        ? PluginBookIdentity.sourceOf(state.book)
-                        : null,
-                    highlightSectionIndex: widget.isMainText
-                        ? primaryLineIndex
-                        : null,
-                    highlightSourceText: widget.isMainText ? data : null,
-                    widgetKey: ValueKey('html_simple_text_$primaryLineIndex'),
-                    settings: RenderSettings.fromProfile(
-                      _displayProfile(state),
-                      searchText: searchText,
-                      highlightYellowBackground:
-                          widget.isMainText &&
-                          state.highlightText.isNotEmpty &&
-                          state.permanentHighlightLine == index,
-                      searchOptions: widget.isMainText
-                          ? state.searchOptions
-                          : const {},
-                      alternativeWords: widget.isMainText
-                          ? state.alternativeWords
-                          : const {},
-                      spacingValues: widget.isMainText
-                          ? state.spacingValues
-                          : const {},
-                      isFuzzySearch:
-                          widget.isMainText &&
-                          state.searchMode == SearchMode.fuzzy,
-                      searchMode: widget.isMainText
-                          ? state.searchMode
-                          : SearchMode.exact,
-                      searchDistance: widget.isMainText
-                          ? state.searchDistance
-                          : 0,
-                      matchPolicy: widget.isMainText
-                          ? state.matchPolicy
-                          : SearchMatchPolicy.standard,
-                      partialWordHighlight:
-                          widget.isMainText && !state.searchWholeWord,
-                      isSearchResultLine:
-                          widget.isMainText &&
-                          state.lineParticipatesInSearchHighlight(
-                            primaryLineIndex,
-                          ),
-                      previousLineText: widget.isMainText
-                          ? state.searchResultNeighbour(
-                              primaryLineIndex,
-                              next: false,
-                            )
-                          : null,
-                      nextLineText: widget.isMainText
-                          ? state.searchResultNeighbour(
-                              primaryLineIndex,
-                              next: true,
-                            )
-                          : null,
-                      fontSize: widget.fontSize,
-                      fontFamily: widget.fontFamily ?? settingsState.fontFamily,
-                      fontWeight:
-                          (widget.isMainText
-                              ? settingsState.fontBold
-                              : settingsState.commentatorsFontBold)
-                          ? FontWeight.bold
-                          : null,
-                      lineHeight: settingsState.lineHeight,
-                    ),
-                    onOpenBook: widget.openBookCallback,
-                    onNoteTap: notesForLine.isEmpty
-                        ? null
-                        : widget.isMainText
-                        ? (line) => _onInlineNoteTap(line)
-                        : (_) {
-                            final openInSidebar =
-                                widget.onOpenCommentaryPersonalNote;
-                            if (openInSidebar != null &&
-                                widget.bookTitle != null) {
-                              openInSidebar(
-                                _commentaryNotesKey(widget.bookTitle!),
-                                widget.reportBook?.categoryId,
-                                primaryLineIndex + 1,
-                              );
-                            } else {
-                              showPersonalNotesDialog(
-                                context: context,
-                                notes: notesForLine,
-                              );
-                            }
-                          },
-                    onAnchorTap: widget.isMainText || hasOwnAnchors
-                        ? _handlePreviewTap
-                        : null,
-                    onAnchorHover: widget.isMainText || hasOwnAnchors
-                        ? _handlePreviewHover
-                        : null,
-                    onAnchorHoverExit: widget.isMainText || hasOwnAnchors
-                        ? _handlePreviewHoverExit
-                        : null,
-                    onTouchPreview: widget.isMainText || hasOwnAnchors
-                        ? _handleTouchPreview
-                        : null,
+            : null,
+        onCtrlClick: widget.isMainText
+            ? () {
+                // Ctrl+Click → הוספה/הסרה של השורה מבחירה מרובה
+                final line = lineAtPointer();
+                if (line == null) return;
+                _requestKeyboardFocus('line-tap-$line');
+                context.read<TextBookBloc>().add(
+                  UpdateSelectedIndex(line, additive: true),
+                );
+              }
+            : null,
+        onDoubleTap: !widget.isMainText && widget.bookTitle != null
+            ? () {
+                // לחיצה כפולה במפרש - פתיחה בטאב נפרד
+                widget.openBookCallback(
+                  TextBookTab(
+                    book: TextBook(title: widget.bookTitle!),
+                    index: primaryLineIndex,
+                    openLeftPane:
+                        (Settings.getValue<bool>('key-pin-sidebar') ?? false) ||
+                        (Settings.getValue<bool>('key-default-sidebar-open') ??
+                            false),
+                  ),
+                );
+              }
+            : null,
+        child: Listener(
+          onPointerDown: (event) {
+            if (event.buttons != kPrimaryMouseButton) return;
+            _focusKeyboardAfterPointerDown();
+            final hit = hitAt(itemContext, event.position);
+            final root = context.findRenderObject();
+            _selectionPointerLineIndex = isMultiLine
+                ? hit?.lineIndex
+                : primaryLineIndex;
+            _selectionPointerColumn = hit != null || isMultiLine
+                ? hit?.column
+                : root == null
+                ? null
+                : renderedTextOffsetAtPosition(
+                    root: root,
+                    globalPosition: event.position,
                   );
-
-                  // בטור מפרש רש"י: לעזי רש"י מתחת לשורה (מסתתר לבד אם אין).
-                  // בדיקת הכותרת כאן חוסכת בניית תת-הבלוק בכל שורה של טור שאינו רש"י.
-                  if (!widget.isMainText &&
-                      widget.bookTitle != null &&
-                      isRashiTitle(widget.bookTitle!)) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        textWidget,
-                        LaazCommentarySubBlock.forLine(
-                          rashiBookTitle: widget.bookTitle!,
-                          rashiLineIndex: primaryLineIndex + 1,
-                          baseFontSize: widget.fontSize,
-                        ),
-                      ],
+          },
+          child: AppContextMenuRegion(
+            // שמירת האינדקס דרך ה-Listener של AppContextMenuRegion (מחוסן מהזירה),
+            // כך שגם כשלחיצה ימנית חוסמת את SelectableRegion ושומרת בחירה — האינדקס
+            // עדיין נשמר עבור פעולות התפריט.
+            onSecondaryTapDown: (details) {
+              _secondaryTapDownAt = DateTime.now();
+              final hit = hitAt(itemContext, details.globalPosition);
+              final root = hit?.root ?? context.findRenderObject();
+              final selectedTextAtSecondaryTap =
+                  _savedSelectedText?.trim().isNotEmpty == true
+                  ? _savedSelectedText
+                  : savedTextAtBuild;
+              final occurrenceStart =
+                  root == null || selectedTextAtSecondaryTap == null
+                  ? null
+                  : renderedSelectionStartAtPosition(
+                      root: root,
+                      globalPosition: details.globalPosition,
+                      selectedSegment: selectedTextAtSecondaryTap,
+                      lineRange: hit?.lineRange,
                     );
-                  }
-                  return textWidget;
-                },
-              ),
-            ),
+              setState(() {
+                _contextMenuSelectedText = selectedTextAtSecondaryTap;
+                _savedSelectedIndex = hit?.lineIndex ?? primaryLineIndex;
+                if (occurrenceStart != null) {
+                  _selectionStartColumn = occurrenceStart;
+                }
+              });
+            },
+            // לחיצה ימנית על הטקסט המסומן (כולל הרווח שבין שורות-תצוגה של שורת-מקור
+            // שנשברה) לא תשחרר את הבחירה; לחיצה על חלק לא-מסומן מבטלת כרגיל.
+            shouldPreserveSelectionOnSecondaryTap: (globalPosition) {
+              final hit = hitAt(itemContext, globalPosition);
+              return _shouldPreserveSelectionAt(
+                globalPosition,
+                hit?.lineIndex ?? primaryLineIndex,
+                context,
+                hit: hit,
+              );
+            },
+            menuBuilder: (menuCtx, tapPos) {
+              final hit = hitAt(itemContext, tapPos);
+              final currentSelectedText =
+                  _contextMenuSelectedText?.trim().isNotEmpty == true
+                  ? _contextMenuSelectedText
+                  : _savedSelectedText?.trim().isNotEmpty == true
+                  ? _savedSelectedText
+                  : savedTextAtBuild;
+              return [
+                ...ContextMenuUtils.buildInlineLinkContextMenuEntries(
+                  menuCtx,
+                  tapPos,
+                ),
+                ..._buildContextMenu(
+                  state,
+                  hit?.lineIndex ?? primaryLineIndex,
+                  menuCtx,
+                  tapPos,
+                  currentSelectedText,
+                  lineRange: hit?.lineRange,
+                ),
+              ];
+            },
+            child: isMultiLine
+                ? ReaderLineGutter(
+                    color: theme.colorScheme.primary,
+                    selectedLines: selectedLines,
+                    foreground: true,
+                    child: gutterChild,
+                  )
+                : CustomPaint(
+                    foregroundPainter: isSelected
+                        ? SelectionGutterPainter(theme.colorScheme.primary)
+                        : null,
+                    child: gutterChild,
+                  ),
           ),
         ),
       ),
     );
   }
 
-  // ─── מצב קריאה רציף — רינדור פסקה מ-segment ────────────────────────────
-  // הערה: כל הלוגיקה כאן היא רינדור בלבד. החיפוש/קישורים/הניקוד מופעלים
-  // על הטקסט המקורי של כל שורה (לפני המיזוג), ורק התוצאות (HTML) מוצגות
-  // יחד. כך החיפוש פר-שורה ממשיך לעבוד.
+  ReaderLineContext _readerLineContext(
+    TextBookLoaded state,
+    SettingsState settingsState,
+    Map<int, List<PersonalNote>> noteMap,
+  ) => ReaderLineContext(
+    state: state,
+    lines: widget.content,
+    profile: _displayProfile(state),
+    isMainText: widget.isMainText,
+    fontSize: widget.fontSize,
+    fontFamily: widget.fontFamily ?? settingsState.fontFamily,
+    fontWeight:
+        (widget.isMainText
+            ? settingsState.fontBold
+            : settingsState.commentatorsFontBold)
+        ? FontWeight.bold
+        : null,
+    lineHeight: settingsState.lineHeight,
+    isRelated: widget.isMainText
+        ? null
+        : (line) => widget.highlightedIndices?.contains(line) ?? false,
+    lineHtml: (line) => _lineHtml(
+      line,
+      state,
+      settingsState,
+      noteMap[line + 1] ?? const <PersonalNote>[],
+    ),
+  );
 
-  Widget _buildContinuousSegmentContent({
-    required ReadingSegment segment,
-    required TextBookLoaded state,
-    required SettingsState settingsState,
-    required Map<int, List<PersonalNote>> noteMap,
-  }) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final baseStyle = TextStyle(
-      fontSize: widget.fontSize,
-      fontFamily: AppFonts.renderFontFamily(
-        widget.fontFamily ?? settingsState.fontFamily,
-      ),
-      height: settingsState.lineHeight,
-      color: colorScheme.onSurface,
-    );
-    return ListenableBuilder(
-      listenable: Listenable.merge([
-        PluginHighlightRegistry.instance,
-        PluginHighlightRevealService.instance,
-      ]),
-      builder: (context, _) {
-        final paragraphLines = _buildContinuousParagraphLines(
-          segment: segment,
-          state: state,
-          settingsState: settingsState,
-          baseTextStyle: baseStyle,
-          noteMap: noteMap,
-        );
-
-        return ContinuousReadingParagraph(
-          lines: paragraphLines,
-          baseStyle: baseStyle,
-          linkStyle: TextStyle(
-            color: colorScheme.primary,
-            decoration: TextDecoration.underline,
-          ),
-          anchorActiveBackground: colorScheme.primaryContainer,
-          onMiddleClickUrl: (url) =>
-              HtmlLinkHandler.openLinkInBackground(context, url),
-          onTapUrl: (url) async {
-            final touchPosition = touchLinkTapPosition();
-            if (widget.isMainText &&
-                touchPosition != null &&
-                isTouchPreviewUrl(url)) {
-              _handleTouchPreview(url, touchPosition);
-              return true;
-            }
-            if (url.startsWith('otzaria://anchor')) {
-              return _handlePreviewTap(url);
-            }
-            if (url.startsWith('otzaria://book-note')) return true;
-            if (url.startsWith('otzaria://note-marker')) return true;
-            if (url.startsWith('otzaria://note')) {
-              final line = int.tryParse(
-                Uri.tryParse(url)?.queryParameters['line'] ?? '',
-              );
-              if (line != null) _onInlineNoteTap(line);
-              return true;
-            }
-            return HtmlLinkHandler.handleLink(
-              context,
-              url,
-              (tab) => widget.openBookCallback(tab),
-            );
-          },
-          onAnchorHover: widget.isMainText ? _handlePreviewHover : null,
-          onAnchorExit: widget.isMainText ? _handlePreviewHoverExit : null,
-          onLineTap: (lineIndex) {
-            final isCtrl =
-                HardwareKeyboard.instance.isControlPressed ||
-                HardwareKeyboard.instance.isMetaPressed;
-            _requestKeyboardFocus('line-tap-$lineIndex');
-            setState(() {
-              _savedSelectedText = null;
-              _savedSelectedIndex = lineIndex;
-              _selectionLineStart = null;
-              _selectionLineEnd = null;
-              _selectionStartColumn = null;
-            });
-            if (isCtrl) {
-              context.read<TextBookBloc>().add(
-                UpdateSelectedIndex(lineIndex, additive: true),
-              );
-            } else if (state.selectedIndex == lineIndex) {
-              context.read<TextBookBloc>().add(const UpdateSelectedIndex(null));
-            } else {
-              context.read<TextBookBloc>().add(UpdateSelectedIndex(lineIndex));
-            }
-          },
-          onLineSecondaryTap: (lineIndex) {
-            setState(() {
-              _savedSelectedIndex = lineIndex;
-            });
-          },
-        );
-      },
-    );
-  }
-
-  List<ContinuousReadingParagraphLine> _buildContinuousParagraphLines({
-    required ReadingSegment segment,
-    required TextBookLoaded state,
-    required SettingsState settingsState,
-    required TextStyle baseTextStyle,
-    required Map<int, List<PersonalNote>> noteMap,
-  }) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final lines = <ContinuousReadingParagraphLine>[];
-    for (final lineIndex in segment.sourceLineIndices) {
-      if (lineIndex < 0 || lineIndex >= widget.content.length) {
-        continue;
-      }
-      final backgroundColor = state.highlightedLine == lineIndex
-          ? colorScheme.secondaryContainer.withAlpha((0.4 * 255).round())
-          : null;
-      final style = backgroundColor == null
-          ? baseTextStyle
-          : baseTextStyle.copyWith(backgroundColor: backgroundColor);
-      final rendering = _continuousLineRendering(
-        widget.content[lineIndex],
-        lineIndex: lineIndex,
-        state: state,
-        settingsState: settingsState,
-        notesForLine: noteMap[lineIndex + 1] ?? const <PersonalNote>[],
-      );
-
-      lines.add(
-        ContinuousReadingParagraphLine(
-          lineIndex: lineIndex,
-          text: utils.stripHtmlIfNeeded(rendering.html).trim(),
-          htmlText: rendering.html,
-          style: AppFonts.taamimSafeStyle(style, rendering.html),
-          frameRanges: rendering.ranges,
-        ),
-      );
-    }
-
-    return lines;
-  }
-
-  ({String html, List<PluginHighlightRenderedRange> ranges})
-  _continuousLineRendering(
-    String rawText, {
-    required int lineIndex,
-    required TextBookLoaded state,
-    required SettingsState settingsState,
-    required List<PersonalNote> notesForLine,
-  }) {
+  /// השורה עם כל ההזרקות, לפני עיבוד התצוגה.
+  String _lineHtml(
+    int lineIndex,
+    TextBookLoaded state,
+    SettingsState settingsState,
+    List<PersonalNote> notesForLine,
+  ) {
+    final rawText = widget.content[lineIndex];
+    // קישורי inline שייכים לטקסט הראשי; סימוני הערות שייכים גם למפרש.
     final inlineLinks =
         widget.isMainText &&
             settingsState.enableHtmlLinks &&
@@ -3369,92 +3058,99 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
               .where((link) => link.start != null && link.end != null)
               .toList()
         : const <Link>[];
-    // קישורי inline ראשונים — האופסטים שלהם גולמיים.
-    var textWithLinks = widget.isMainText
-        ? _injectPreviewMarkers(
-            injectInlineLinks(rawText, inlineLinks),
-            lineIndex,
-            state,
-          )
-        : rawText;
-    if (widget.isMainText && notesForLine.isNotEmpty) {
-      textWithLinks = buildAnnotatedLineHtml(
-        rawLine: textWithLinks,
-        sourceLine: rawText,
-        notesForLine: notesForLine,
-        lineIndex0: lineIndex,
-        underlineColor: Theme.of(context).colorScheme.primary,
+    var data = rawText;
+    if (widget.isMainText) {
+      // קישורי inline ראשונים — האופסטים שלהם גולמיים.
+      data = _injectPreviewMarkers(
+        injectInlineLinks(data, inlineLinks),
+        lineIndex,
+        state,
       );
+    } else if (widget.anchorLinksByLine != null) {
+      data = _injectOwnAnchorMarkers(data, lineIndex, state);
     }
-    final isPinpointTarget =
-        widget.isMainText &&
-        state.pinpointHighlightIndex == lineIndex &&
-        state.pinpointHighlightText != null &&
-        state.pinpointHighlightText!.isNotEmpty;
-    final hasPinpoint =
-        widget.isMainText && state.pinpointHighlightIndex != null;
-    final searchText = isPinpointTarget
-        ? state.pinpointHighlightText!
-        : (hasPinpoint ? '' : (widget.isMainText ? state.searchText : ''));
-    final useStateSearchSettings = widget.isMainText && !hasPinpoint;
-    final effectiveSearchMode = useStateSearchSettings
-        ? state.searchMode
-        : SearchMode.exact;
-
-    final renderSettings = RenderSettings.fromProfile(
-      _displayProfile(state),
-      searchText: searchText,
-      searchOptions: useStateSearchSettings ? state.searchOptions : const {},
-      alternativeWords: useStateSearchSettings
-          ? state.alternativeWords
-          : const {},
-      spacingValues: useStateSearchSettings ? state.spacingValues : const {},
-      isFuzzySearch: effectiveSearchMode == SearchMode.fuzzy,
-      searchMode: effectiveSearchMode,
-      searchDistance: useStateSearchSettings ? state.searchDistance : 0,
-      matchPolicy: useStateSearchSettings
-          ? state.matchPolicy
-          : SearchMatchPolicy.standard,
-      partialWordHighlight: useStateSearchSettings && !state.searchWholeWord,
-      isSearchResultLine:
-          useStateSearchSettings &&
-          state.lineParticipatesInSearchHighlight(lineIndex),
-      previousLineText: useStateSearchSettings
-          ? state.searchResultNeighbour(lineIndex, next: false)
-          : null,
-      nextLineText: useStateSearchSettings
-          ? state.searchResultNeighbour(lineIndex, next: true)
-          : null,
-      fontSize: widget.fontSize,
-      fontFamily: widget.fontFamily ?? settingsState.fontFamily,
-      fontWeight:
-          (widget.isMainText
-              ? settingsState.fontBold
-              : settingsState.commentatorsFontBold)
-          ? FontWeight.bold
-          : null,
-      lineHeight: settingsState.lineHeight,
-    );
-    final processedHtml = TextRendererService.processText(
-      textWithLinks.trim(),
-      renderSettings,
-    );
-    if (!widget.isMainText) {
-      return (html: processedHtml, ranges: const []);
-    }
-    return const PluginHighlightRenderer().renderWithRanges(
-      bookId: state.book.title,
-      sectionIndex: lineIndex,
-      rawText: rawText,
-      processedHtml: processedHtml,
-      highlights: PluginHighlightRegistry.instance.getAllHighlights(
-        bookId: state.book.title,
-        sectionIndex: lineIndex,
-        bookUid: PluginBookIdentity.uidOf(state.book),
-      ),
-      revealedHighlightId: PluginHighlightRevealService.instance.highlightId,
+    // סימוני הערות אישיות — אחרונים.
+    return buildAnnotatedLineHtml(
+      rawLine: data,
+      sourceLine: rawText,
+      notesForLine: notesForLine,
+      lineIndex0: lineIndex,
+      underlineColor: Theme.of(context).colorScheme.primary,
     );
   }
+
+  /// מצב הניקוד/פיסוק של הטאב חל גם על טורי המפרשים.
+  Widget _lineTextWidget(
+    ReaderLineSpec spec,
+    TextBookLoaded state,
+    List<PersonalNote> notesForLine,
+  ) {
+    final lineIndex = spec.lineIndex;
+    final main = widget.isMainText;
+    final hasOwnAnchors = widget.anchorLinksByLine != null;
+    return SmartTextWidget(
+      text: spec.html,
+      highlightBookId: main ? state.book.title : null,
+      highlightBookUid: main ? PluginBookIdentity.uidOf(state.book) : null,
+      highlightBookDbId: main ? state.book.id : null,
+      highlightBookType: main ? PluginBookIdentity.typeOf(state.book) : null,
+      highlightBookSource: main
+          ? PluginBookIdentity.sourceOf(state.book)
+          : null,
+      highlightSectionIndex: main ? lineIndex : null,
+      highlightSourceText: main ? spec.sourceText : null,
+      widgetKey: ValueKey('html_simple_text_$lineIndex'),
+      settings: spec.settings,
+      onOpenBook: widget.openBookCallback,
+      onNoteTap: notesForLine.isEmpty
+          ? null
+          : main
+          ? (line) => _onInlineNoteTap(line)
+          : (_) {
+              final openInSidebar = widget.onOpenCommentaryPersonalNote;
+              if (openInSidebar != null && widget.bookTitle != null) {
+                openInSidebar(
+                  _commentaryNotesKey(widget.bookTitle!),
+                  widget.reportBook?.categoryId,
+                  lineIndex + 1,
+                );
+              } else {
+                showPersonalNotesDialog(context: context, notes: notesForLine);
+              }
+            },
+      onAnchorTap: main || hasOwnAnchors ? _handlePreviewTap : null,
+      onAnchorHover: main || hasOwnAnchors ? _handlePreviewHover : null,
+      onAnchorHoverExit: main || hasOwnAnchors ? _handlePreviewHoverExit : null,
+      onTouchPreview: main || hasOwnAnchors ? _handleTouchPreview : null,
+    );
+  }
+
+  /// פריט של כמה שורות: רצפים ממוזגים לפסקה, ושורות-בלוק בנפרד.
+  Widget _buildMultiLineItem(
+    List<int> itemLines,
+    TextBookLoaded state,
+    ReaderLineContext lineContext,
+    Map<int, List<PersonalNote>> noteMap,
+  ) => buildReaderMultiLineItem(
+    context,
+    itemLines: itemLines,
+    lineContext: lineContext,
+    blockText: (spec) => _lineTextWidget(
+      spec,
+      state,
+      noteMap[spec.lineIndex + 1] ?? const <PersonalNote>[],
+    ),
+    onTapUrl: (url) => handleReaderParagraphUrl(
+      context,
+      url,
+      onTouchPreview: _handleTouchPreview,
+      onAnchorTap: _handlePreviewTap,
+      onNoteTap: _onInlineNoteTap,
+      openBook: (tab) => widget.openBookCallback(tab),
+    ),
+    onAnchorHover: _handlePreviewHover,
+    onAnchorExit: _handlePreviewHoverExit,
+  );
 
   /// בניית תפריט החלפת מפרש
   List<AppContextMenuEntry> _buildCommentatorSwitchMenu(TextBookLoaded state) {

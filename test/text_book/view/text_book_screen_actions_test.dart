@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:otzaria/shortcuts/shortcut_helper.dart';
 import 'package:otzaria/shortcuts/shortcut_validator.dart';
-import 'dart:math';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
@@ -47,8 +46,6 @@ import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/utils/book_versions_action.dart';
-import 'package:otzaria/text_book/utils/reading_segments.dart';
-import 'package:otzaria/widgets/lists/jump_aware_item_scroll_controller.dart';
 import 'package:otzaria/text_book/view/splited_view/splited_view_screen.dart';
 import 'package:otzaria/text_book/view/text_book_screen.dart';
 import 'package:otzaria/tools/shamor_zachor/providers/shamor_zachor_data_provider.dart';
@@ -95,15 +92,9 @@ void main() {
       'next TOC toolbar command preserves the source line for an external reader',
       (tester) async {
         final book = TextBook(title: 'ספר בדיקה');
-        final controller = JumpAwareItemScrollController();
         final loaded = _loadedState(book).copyWith(
-          scrollController: controller,
           continuousReadingMode: true,
-          readingSegments: buildReadingSegments([
-            'שורה א',
-            'שורה ב',
-            'שורה ג',
-          ], continuous: true),
+          content: const ['שורה א', 'שורה ב', 'שורה ג'],
           tableOfContents: [
             TocEntry(text: 'פרק ב', index: 2, level: 1),
           ],
@@ -137,9 +128,7 @@ void main() {
           isInCombinedView: false,
         );
         final targets = <int>[];
-        controller.externalScroll = (index, {int? sourceLineIndex}) async {
-          targets.add(sourceLineIndex ?? index);
-        };
+        tab.lines.externalNavigator = (line) async => targets.add(line);
         await tester.tap(find.byTooltip('הדף/פרק הבא'));
         await tester.pump();
         expect(targets, [2]);
@@ -677,11 +666,10 @@ void main() {
       });
 
       final book = TextBook(title: 'ספר בדיקה', categoryId: 7);
-      final state = _loadedState(book);
-      // הנוסח נפתח בשורה שגלולה כרגע לראש התצוגה, לא ב-tab.index שבו נפתח הספר.
-      (state.positionsListener.itemPositions as dynamic).value = const [
-        ItemPosition(index: 42, itemLeadingEdge: 0.1, itemTrailingEdge: 0.6),
-      ];
+      final state = _loadedState(
+        book,
+        content: List.generate(120, (i) => 'שורה מספר $i'),
+      );
       final bloc = _TestTextBookBloc(state);
       final tab = TextBookTab(book: book, index: 0, blocOverride: bloc);
       final tabsBloc = _TestTabsBloc(
@@ -713,6 +701,11 @@ void main() {
         tourCubit: tourCubit,
         isInCombinedView: false,
       );
+      // הנוסח נפתח בשורה שגלולה כרגע לראש התצוגה, לא בשורה שבה נפתח הספר.
+      final navigation = tab.lines.jumpToLine(42);
+      await tester.pumpAndSettle();
+      await navigation;
+      expect(tab.index, 42);
 
       await tester.tap(find.byIcon(FluentIcons.more_vertical_24_regular));
       await tester.pumpAndSettle();
@@ -1537,13 +1530,18 @@ void main() {
 
   group('ניווט בין קטעים בקיצור (issue #1516)', () {
     Future<(TextBookTab, TextBookLoaded)> pumpLongBook(
-      WidgetTester tester,
-    ) async {
+      WidgetTester tester, {
+      bool continuous = false,
+    }) async {
       final book = TextBook(title: 'ספר בדיקה');
-      final state = _loadedState(
-        book,
-        content: List.generate(200, (i) => 'שורה מספר $i'),
-      );
+      final state =
+          _loadedState(
+            book,
+            content: List.generate(200, (i) => 'שורה מספר $i'),
+          ).copyWith(
+            supportsContinuousReadingMode: true,
+            continuousReadingMode: continuous,
+          );
       final bloc = _TestTextBookBloc(state);
       final tab = TextBookTab(book: book, index: 0, blocOverride: bloc);
       final tabsBloc = _TestTabsBloc(
@@ -1573,10 +1571,7 @@ void main() {
         tourCubit: tourCubit,
         isInCombinedView: false,
       );
-      final wired = state.copyWith(
-        scrollController: tab.scrollController,
-        positionsListener: tab.positionsListener,
-      );
+      final wired = state.copyWith();
       bloc.emitStateForTest(wired);
       await tester.pumpAndSettle();
       return (tab, wired);
@@ -1631,12 +1626,57 @@ void main() {
       }
       await tester.pumpAndSettle();
 
-      final top = state.positionsListener.itemPositions.value
-          .where((p) => p.itemTrailingEdge > 0)
-          .map((p) => p.index)
-          .reduce(min);
-      expect(top, 10);
+      expect(tab.index, 10);
+      expect(state.content, hasLength(200));
     });
+
+    testWidgets('במצב רציף "הקטע הבא/הקודם" זז שורת מקור אחת', (tester) async {
+      final (tab, _) = await pumpLongBook(tester, continuous: true);
+      final navigation = tab.lines.jumpToLine(40);
+      await tester.pumpAndSettle();
+      await navigation;
+      expect(tab.index, 40);
+
+      tab.navNextSegmentNotifier.value++;
+      await tester.pumpAndSettle();
+      expect(tab.index, 41);
+
+      tab.navPreviousSegmentNotifier.value++;
+      tab.navPreviousSegmentNotifier.value++;
+      await tester.pumpAndSettle();
+      expect(tab.index, 39);
+    });
+
+    for (final continuous in [false, true]) {
+      testWidgets(
+        'Ctrl+End ו-Ctrl+Home גוללים לקצות הספר '
+        '(${continuous ? 'רציף' : 'רגיל'})',
+        (tester) async {
+          final (tab, _) = await pumpLongBook(tester, continuous: continuous);
+          await tester.tap(find.byType(ScrollablePositionedList));
+          await tester.pump(kDoubleTapTimeout);
+          final modifier = Platform.isMacOS
+              ? LogicalKeyboardKey.metaLeft
+              : LogicalKeyboardKey.controlLeft;
+
+          await tester.sendKeyDownEvent(modifier);
+          await tester.sendKeyEvent(LogicalKeyboardKey.end);
+          await tester.sendKeyUpEvent(modifier);
+          // גלילה מונפשת של 300ms נמשכת פריימים רבים; קפיצה מתייצבת מיד.
+          final frames = await tester.pumpAndSettle(
+            const Duration(milliseconds: 20),
+          );
+          expect(frames, greaterThanOrEqualTo(10));
+          expect(tab.lines.position.value?.visibleLines, contains(199));
+
+          await tester.sendKeyDownEvent(modifier);
+          await tester.sendKeyEvent(LogicalKeyboardKey.home);
+          await tester.sendKeyUpEvent(modifier);
+          await tester.pumpAndSettle();
+          expect(tab.index, 0);
+        },
+      );
+    }
 
     testWidgets('גלילה ידנית מבטלת יעד ניווט ממתין', (tester) async {
       final (tab, state) = await pumpLongBook(tester);
@@ -1649,25 +1689,21 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      int topVisibleIndex() => state.positionsListener.itemPositions.value
-          .where((position) => position.itemTrailingEdge > 0)
-          .map((position) => position.index)
-          .reduce(min);
-
-      final topAfterManualScroll = topVisibleIndex();
+      final topAfterManualScroll = tab.index;
       expect(topAfterManualScroll, greaterThan(1));
+      expect(state.content, hasLength(200));
 
       tab.navNextSegmentNotifier.value++;
       await tester.pumpAndSettle();
 
-      expect(topVisibleIndex(), topAfterManualScroll + 1);
+      expect(tab.index, topAfterManualScroll + 1);
     });
   });
   group('קיצורי מקלדת יוצאים מהשורה שהכותרת מציגה (issue #2231)', () {
     late TextBookTab tab;
-    late _RecordingScrollController scrollController;
+    late List<int> navigations;
 
-    // אחרי ניווט, שורה 1 על קו העוגן ושארית שורה 0 נשארת מעליו.
+    // קורא חיצוני מדווח ששורה 1 היא המיקום הנוכחי.
     Future<void> pumpAfterTocJump(WidgetTester tester) async {
       await Settings.setValue<String>(
         ShortcutValidator.addBookmarkKey,
@@ -1677,14 +1713,13 @@ void main() {
         ShortcutValidator.togglePdfViewKey,
         'ctrl+j',
       );
-      scrollController = _RecordingScrollController();
+      navigations = [];
       final book = _NoTocBook();
       final state = _loadedState(book, content: const ['א', 'ב', 'ג']).copyWith(
         visibleIndices: const [1],
         tableOfContents: [
           for (var i = 0; i < 3; i++) TocEntry(text: 'פרק $i', index: i),
         ],
-        scrollController: scrollController,
       );
       final bloc = _TestTextBookBloc(state);
       tab = TextBookTab(book: book, index: 1, blocOverride: bloc);
@@ -1715,13 +1750,8 @@ void main() {
         tourCubit: tourCubit,
         isInCombinedView: false,
       );
-      (state.positionsListener.itemPositions
-              as ValueNotifier<Iterable<ItemPosition>>)
-          .value = const [
-        ItemPosition(index: 0, itemLeadingEdge: -0.5, itemTrailingEdge: 0.03),
-        ItemPosition(index: 1, itemLeadingEdge: 0.05, itemTrailingEdge: 0.3),
-        ItemPosition(index: 2, itemLeadingEdge: 0.3, itemTrailingEdge: 0.6),
-      ];
+      tab.lines.externalNavigator = (line) async => navigations.add(line);
+      tab.lines.reportExternalLine(1);
     }
 
     Future<void> sendCtrl(WidgetTester tester, LogicalKeyboardKey key) async {
@@ -1743,7 +1773,6 @@ void main() {
 
     testWidgets('קיצור המעבר ל-PDF יוצא מהשורה שבכותרת', (tester) async {
       await pumpAfterTocJump(tester);
-      tab.index = 0;
       await sendCtrl(tester, LogicalKeyboardKey.keyJ);
       expect(tab.index, 1);
     });
@@ -1752,14 +1781,14 @@ void main() {
       await pumpAfterTocJump(tester);
       tab.navNextTocNotifier.value++;
       await tester.pump();
-      expect(scrollController.scrolledTo, [2]);
+      expect(navigations, [2]);
     });
 
     testWidgets('"כותרת הקודמת" חוזרת לכותרת שלפני המוצגת', (tester) async {
       await pumpAfterTocJump(tester);
       tab.navPreviousTocNotifier.value++;
       await tester.pump();
-      expect(scrollController.scrolledTo, [0]);
+      expect(navigations, [0]);
     });
   });
 }
@@ -1878,8 +1907,6 @@ TextBookLoaded _loadedState(
     pinLeftPane: false,
     searchText: '',
     currentTitle: 'סימן א',
-    scrollController: ItemScrollController(),
-    positionsListener: ItemPositionsListener.create(),
     searchMode: SearchMode.exact,
   );
 }
@@ -1987,19 +2014,6 @@ class _TestBookmarkBloc extends Cubit<BookmarkState> implements BookmarkBloc {
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-class _RecordingScrollController extends ItemScrollController {
-  final List<int> scrolledTo = [];
-
-  @override
-  Future<void> scrollTo({
-    required int index,
-    double alignment = 0,
-    required Duration duration,
-    Curve curve = Curves.linear,
-    List<double> opacityAnimationWeights = const [40, 20, 40],
-  }) async => scrolledTo.add(index);
 }
 
 /// תוכן עניינים ריק לספר, כדי ש-refFromIndex לא יפנה לקבצים.

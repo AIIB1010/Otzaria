@@ -155,9 +155,13 @@ public final class DownloadEngine: NSObject, URLSessionDataDelegate {
         // המקום בתור נשמר בזמן ההמתנה: ניסיון חוזר אינו מוסיף חיבור רביעי.
         DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
             self.queue.addOperation {
-                if !self.ended { self.start(job) }
+                guard !self.ended else { return }
+                self.start(job)
+                self.report(force: true)
             }
         }
+        // ההעברה כבר הוסרה: הדיווח מוציא את הקובץ מהפעילים, וההמתנה משהה את האומדן.
+        report(force: true)
     }
 
     // MARK: - קובץ אחד

@@ -17,7 +17,6 @@ import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/view/commentary_list_base.dart';
 import 'package:otzaria/text_book/view/tabbed_commentary_panel.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../../test_helpers/memory_cache_provider.dart';
 
 // רגרסיה לפי https://otzaria.org/forum/post/11182 (תוקן ב-c48fbe286):
@@ -206,8 +205,6 @@ TextBookLoaded _twoGroupsState() {
     selectedIndex: 0,
     pinLeftPane: false,
     searchText: '',
-    scrollController: ItemScrollController(),
-    positionsListener: ItemPositionsListener.create(),
   );
 }
 
@@ -242,8 +239,6 @@ TextBookLoaded _loadedStateA() {
     selectedIndex: 0,
     pinLeftPane: false,
     searchText: '',
-    scrollController: ItemScrollController(),
-    positionsListener: ItemPositionsListener.create(),
   );
 }
 
@@ -280,8 +275,6 @@ TextBookLoaded _loadedStateB() {
     selectedIndex: 1,
     pinLeftPane: false,
     searchText: '',
-    scrollController: ItemScrollController(),
-    positionsListener: ItemPositionsListener.create(),
   );
 }
 

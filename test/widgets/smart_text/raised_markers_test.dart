@@ -512,7 +512,6 @@ void main() {
                       ),
                     ],
                     baseStyle: base,
-                    onLineTap: (_) {},
                   ),
                 ),
               ),
@@ -658,6 +657,38 @@ void main() {
         ),
         isEmpty,
       );
+    });
+
+    test('שני sup בטווח-ציטוט מחולצים בנפרד והטקסט ביניהם נשאר בגוף', () {
+      final html = TextRendererService.processText(
+        '<a class="link-anchor-range" href="otzaria://anchor?ref=0_0&range=1">'
+        '<sup>1</sup> טקסט רגיל <sup>2</sup></a><sup>3</sup>',
+        const RenderSettings(),
+      );
+      final markers = RaisedMarkers.extract(html);
+      expect(markers.map((marker) => marker.text), [
+        '${lri}1$pdi',
+        '${lri}2$pdi',
+        '${lri}3$pdi',
+      ]);
+      expect(markers.map((marker) => marker.clickable), [true, true, false]);
+      expect(markers.map((marker) => marker.useLinkColor), [true, true, false]);
+    });
+
+    test('הדגשת חיפוש בתוך sup מקושר אינה מקצרת את הסימון', () {
+      final html = TextRendererService.processText(
+        '<a class="link-anchor-range" href="otzaria://anchor?ref=0_0&range=1">'
+        '<sup>12</sup> גוף <sup>13</sup></a>',
+        const RenderSettings(searchText: '1', partialWordHighlight: true),
+      );
+      expect(html, contains('<span style="color: red">1</span>'));
+      final markers = RaisedMarkers.extract(html);
+      expect(markers.map((marker) => marker.text), [
+        '${lri}12$pdi',
+        '${lri}13$pdi',
+      ]);
+      expect(markers.every((marker) => marker.clickable), isTrue);
+      expect(markers.every((marker) => marker.useLinkColor), isTrue);
     });
 
     test('סמן עוגן עגול שומר על יחס ההקטנה של עצמו בלבד', () {
@@ -822,6 +853,54 @@ void main() {
       expect(tapped, 'otzaria://anchor?ref=5_0');
     });
 
+    testWidgets('sup שעטוף בטווח-עוגן מצויר בצבע קישור ולחיץ (#2358)', (
+      tester,
+    ) async {
+      String? tapped;
+      final overlay = await pump(
+        tester,
+        'ובני ישראל יוצאים ביד רמה והמצרים רודפים אחריהם '
+        'וישיגו אותם חונים על הים <a class="link-anchor-range" '
+        'href="otzaria://anchor?ref=5_0&range=1"><sup>4</sup></a> ואחרי',
+        width: 320,
+        onAnchorTap: (url) => tapped = url,
+      );
+      final placement = overlay.debugPlacements().single;
+      expect(placement.marker.useLinkColor, isTrue);
+      await tester.tapAt(overlay.localToGlobal(raisedOnlyPoint(placement)));
+      await tester.pump();
+      expect(tapped, 'otzaria://anchor?ref=5_0&range=1');
+    });
+
+    testWidgets('שני sup בטווח-עוגן נשארים מורמים ולחיצים בסדר RTL', (
+      tester,
+    ) async {
+      final tapped = <String>[];
+      final overlay = await pump(
+        tester,
+        'לפני <a class="link-anchor-range" '
+        'href="otzaria://anchor?ref=5_0&range=1">'
+        '<sup>1</sup> טקסט רגיל <sup>2</sup></a> אחרי',
+        width: 700,
+        onAnchorTap: tapped.add,
+      );
+      final placements = overlay.debugPlacements();
+      expect(placements.map((placement) => placement.marker.text), [
+        '${lri}1$pdi',
+        '${lri}2$pdi',
+      ]);
+      expect(
+        placements.first.paintRect.left,
+        greaterThan(placements.last.paintRect.left),
+      );
+      for (final placement in placements) {
+        expect(placement.marker.useLinkColor, isTrue);
+        await tester.tapAt(overlay.localToGlobal(raisedOnlyPoint(placement)));
+        await tester.pump();
+      }
+      expect(tapped, List.filled(2, 'otzaria://anchor?ref=5_0&range=1'));
+    });
+
     testWidgets('ריחוף על הציור המורם מפעיל את תצוגת העוגן', (tester) async {
       final hovered = <String>[];
       final overlay = await pump(
@@ -929,7 +1008,6 @@ void main() {
                       ),
                     ],
                     baseStyle: const TextStyle(fontSize: 20),
-                    onLineTap: (_) {},
                     onTapUrl: (url) async {
                       tapped.add(url);
                       return true;

@@ -4,6 +4,7 @@ import 'package:otzaria/text_book/view/widgets/selection_gutter_painter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:otzaria/models/links.dart';
 import 'package:otzaria/data/repository/text_book_repository.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -28,7 +29,8 @@ import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/view/combined_view/combined_book_screen.dart';
 import 'package:otzaria/user_content_import/repository/user_content_repository.dart';
 import 'package:otzaria/user_content_import/services/user_headings_builder.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+import 'package:otzaria/text_book/view/reader_line/reader_line_render.dart';
+import 'package:otzaria/text_book/view/selection/selected_text_copy.dart';
 import 'package:otzaria/widgets/misc/app_context_menu.dart';
 
 import '../../../test_helpers/memory_cache_provider.dart';
@@ -128,6 +130,7 @@ void main() {
   Future<void> pumpBook(
     WidgetTester tester, {
     bool preview = false,
+    bool continuous = false,
     ValueChanged<String?>? onSelectionChanged,
   }) async {
     final book = TextBook(
@@ -157,8 +160,7 @@ void main() {
         selectedIndices: const {1},
         pinLeftPane: false,
         searchText: '',
-        scrollController: ItemScrollController(),
-        positionsListener: ItemPositionsListener.create(),
+        continuousReadingMode: continuous,
       ),
     );
     final personalNotesBloc = _TestPersonalNotesBloc(
@@ -231,6 +233,95 @@ void main() {
       );
     },
   );
+
+  testWidgets('בפסקה רציפה הכותרת מוצגת בתוך הזרימה לפני השורה שלה', (
+    tester,
+  ) async {
+    await pumpBook(tester, continuous: true);
+    final paragraphs = tester.allRenderObjects
+        .whereType<RenderParagraph>()
+        .where((p) => p.text.toPlainText().contains('פרשת נח'))
+        .toList();
+    expect(paragraphs, hasLength(1));
+    final text = paragraphs.single.text.toPlainText();
+    expect(text, contains('ונח מצא חן'));
+    expect(
+      text.indexOf('פרשת נח'),
+      allOf(
+        greaterThan(text.indexOf('ונח מצא חן')),
+        lessThan(text.indexOf('אלה תולדת נח')),
+      ),
+    );
+    // הכותרת אינה חלק מטווח השורה: לחיצה עליה נזקפת לשורה שהיא פותחת.
+    final lines = tester.renderObject<RenderReaderParagraphLines>(
+      find.byType(ReaderParagraphLines),
+    );
+    expect(lines.rangeForLine(1)!.textInside(text), _content[1]);
+    final offset = text.indexOf('פרשת נח');
+    final box = paragraphs.single
+        .getBoxesForSelection(
+          TextSelection(baseOffset: offset, extentOffset: offset + 2),
+        )
+        .first
+        .toRect();
+    final hit = lines.locate(paragraphs.single.localToGlobal(box.center));
+    expect(hit?.lineIndex, 1);
+    expect(hit?.column, 0);
+  });
+
+  testWidgets('בפסקה רציפה הכותרת שבזרימה אינה נכללת בבחירה ובהעתקה', (
+    tester,
+  ) async {
+    final copied = <String>[];
+    debugSelectedTextCopyHandler = (content) => copied.add(content.plainText);
+    addTearDown(() => debugSelectedTextCopyHandler = null);
+    String? selectedText;
+    await pumpBook(
+      tester,
+      continuous: true,
+      onSelectionChanged: (text) => selectedText = text,
+    );
+    final paragraph = tester.allRenderObjects
+        .whereType<RenderParagraph>()
+        .singleWhere((p) => p.text.toPlainText().contains('פרשת נח'));
+    final plain = paragraph.text.toPlainText();
+    Rect wordRect(String word) {
+      final offset = plain.indexOf(word);
+      final box = paragraph
+          .getBoxesForSelection(
+            TextSelection(
+              baseOffset: offset,
+              extentOffset: offset + word.length,
+            ),
+          )
+          .first
+          .toRect();
+      return Rect.fromPoints(
+        paragraph.localToGlobal(box.topLeft),
+        paragraph.localToGlobal(box.bottomRight),
+      );
+    }
+
+    final from = wordRect('מצא');
+    final to = wordRect('תולדת');
+    final gesture = await tester.startGesture(
+      Offset(from.right - 1, from.center.dy),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
+    await gesture.moveTo(Offset(to.left + 1, to.center.dy));
+    await tester.pump();
+    await gesture.up();
+    await tester.pump();
+    expect(selectedText, 'מצא חן בעיני ה׳ (ט) אלה תולדת');
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    await tester.pump();
+    expect(copied, ['מצא חן בעיני ה׳ (ט) אלה תולדת']);
+  });
 
   for (final preview in [false, true]) {
     for (final cross in <bool?>[null, false, true]) {

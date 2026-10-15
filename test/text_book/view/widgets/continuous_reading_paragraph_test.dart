@@ -12,6 +12,7 @@ import 'package:otzaria/plugins/models/plugin_reader_selection.dart';
 import 'package:otzaria/plugins/models/text_source_map.dart';
 import 'package:otzaria/plugins/services/plugin_highlight_renderer.dart';
 import 'package:otzaria/plugins/view/plugin_highlight_frame_overlay.dart';
+import 'package:otzaria/text_book/view/reader_line/reader_line_render.dart';
 import 'package:otzaria/text_book/view/widgets/continuous_reading_paragraph.dart';
 import 'package:otzaria/theme/app_fonts.dart';
 import 'package:otzaria/widgets/smart_text/raised_markers.dart';
@@ -37,7 +38,6 @@ void main() {
                   ),
                 ],
                 baseStyle: TextStyle(fontSize: 20),
-                onLineTap: _noopLineTap,
               ),
             ),
           ),
@@ -64,7 +64,6 @@ void main() {
                   ),
                 ],
                 baseStyle: TextStyle(fontSize: 20),
-                onLineTap: _noopLineTap,
               ),
             ),
           ),
@@ -91,7 +90,6 @@ void main() {
                 ],
                 baseStyle: TextStyle(fontSize: 20),
                 textAlign: TextAlign.center,
-                onLineTap: _noopLineTap,
               ),
             ),
           ),
@@ -125,7 +123,6 @@ void main() {
                     ],
                     baseStyle: const TextStyle(fontSize: 20),
                     textAlign: align,
-                    onLineTap: _noopLineTap,
                   ),
                 ),
               ),
@@ -176,7 +173,6 @@ void main() {
                     ],
                     baseStyle: const TextStyle(fontSize: 20),
                     textAlign: align,
-                    onLineTap: _noopLineTap,
                   ),
                 ),
               ),
@@ -218,7 +214,6 @@ void main() {
                   ),
                 ],
                 baseStyle: TextStyle(fontSize: 20),
-                onLineTap: _noopLineTap,
               ),
             ),
           ),
@@ -240,7 +235,6 @@ void main() {
               child: ContinuousReadingParagraph(
                 lines: [],
                 baseStyle: TextStyle(fontSize: 20),
-                onLineTap: _noopLineTap,
               ),
             ),
           ),
@@ -266,7 +260,6 @@ void main() {
                   ),
                 ],
                 baseStyle: TextStyle(fontSize: 20),
-                onLineTap: _noopLineTap,
               ),
             ),
           ),
@@ -301,7 +294,6 @@ void main() {
                   ),
                 ],
                 baseStyle: TextStyle(fontSize: 20),
-                onLineTap: _noopLineTap,
               ),
             ),
           ),
@@ -334,7 +326,6 @@ void main() {
                   ),
                 ],
                 baseStyle: TextStyle(fontSize: 20),
-                onLineTap: _noopLineTap,
               ),
             ),
           ),
@@ -367,7 +358,6 @@ void main() {
                   ),
                 ],
                 baseStyle: TextStyle(fontSize: 20),
-                onLineTap: _noopLineTap,
               ),
             ),
           ),
@@ -402,7 +392,6 @@ void main() {
                         ),
                     ],
                     baseStyle: const TextStyle(fontSize: 18),
-                    onLineTap: _noopLineTap,
                   ),
                 ),
               ),
@@ -446,7 +435,6 @@ void main() {
                 ),
               ],
               baseStyle: const TextStyle(fontSize: 20),
-              onLineTap: _noopLineTap,
             ),
           ),
         ),
@@ -457,6 +445,131 @@ void main() {
       );
       expect(overlay.ranges.single.start, 3);
       expect(overlay.ranges.single.end, 4);
+    });
+  });
+
+  group('מפת השורות', () {
+    testWidgets('טווחי השורות נמדדים מהספאנים בפועל, כולל <br>', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: ContinuousReadingParagraph(
+              lines: [
+                ContinuousReadingParagraphLine(
+                  lineIndex: 4,
+                  htmlText: 'אב<b>ג</b>',
+                  style: TextStyle(fontSize: 20),
+                ),
+                ContinuousReadingParagraphLine(
+                  lineIndex: 5,
+                  htmlText: 'ד<br>  הו',
+                  style: TextStyle(fontSize: 20),
+                  heading: 'כותרת',
+                ),
+              ],
+              baseStyle: TextStyle(fontSize: 20),
+            ),
+          ),
+        ),
+      );
+      final lines = tester.renderObject<RenderReaderParagraphLines>(
+        find.byType(ReaderParagraphLines),
+      );
+      final text = lines.paragraph!.text.toPlainText();
+      expect(text, 'אבג כותרת ד\n  הו');
+      expect(lines.rangeForLine(4)!.textInside(text), 'אבג');
+      expect(lines.rangeForLine(5)!.textInside(text), 'ד\n  הו');
+    });
+
+    testWidgets('טווח מסגרת בשורה מאוחרת אחרי <br> ורווחים מצביע על האות', (
+      tester,
+    ) async {
+      final highlight = _frameHighlight();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ContinuousReadingParagraph(
+              lines: [
+                const ContinuousReadingParagraphLine(
+                  lineIndex: 0,
+                  text: 'אב',
+                  style: TextStyle(fontSize: 20),
+                ),
+                ContinuousReadingParagraphLine(
+                  lineIndex: 1,
+                  htmlText: 'א<br>  ב ג',
+                  style: const TextStyle(fontSize: 20),
+                  // ב-graphemes של צמתי הטקסט: "א" ואז "  ב ג" — ה-ג באינדקס 5.
+                  frameRanges: [
+                    PluginHighlightRenderedRange(
+                      start: 5,
+                      end: 6,
+                      highlight: highlight,
+                    ),
+                  ],
+                ),
+              ],
+              baseStyle: const TextStyle(fontSize: 20),
+            ),
+          ),
+        ),
+      );
+      final range = tester
+          .widget<PluginHighlightFrameOverlay>(
+            find.byType(PluginHighlightFrameOverlay),
+          )
+          .ranges
+          .single;
+      final graphemes = tester
+          .renderObject<RenderReaderParagraphLines>(
+            find.byType(ReaderParagraphLines),
+          )
+          .paragraph!
+          .text
+          .toPlainText()
+          .characters
+          .toList();
+      expect(graphemes.sublist(range.start, range.end).join(), 'ג');
+    });
+
+    testWidgets('רקע שורה מצויר בשכבה ולא כסגנון הספאנים', (tester) async {
+      const color = Color(0xFF123456);
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: ContinuousReadingParagraph(
+              lines: [
+                ContinuousReadingParagraphLine(
+                  lineIndex: 0,
+                  text: 'ראשונה',
+                  style: TextStyle(fontSize: 20),
+                ),
+                ContinuousReadingParagraphLine(
+                  lineIndex: 1,
+                  text: 'שנייה',
+                  style: TextStyle(fontSize: 20),
+                  background: color,
+                ),
+              ],
+              baseStyle: TextStyle(fontSize: 20),
+            ),
+          ),
+        ),
+      );
+      final lines = tester.renderObject<RenderReaderParagraphLines>(
+        find.byType(ReaderParagraphLines),
+      );
+      expect(lines.lines.map((l) => l.background), [null, color]);
+      expect(lines.lineRects(1), isNotEmpty);
+      final richText = tester.widget<RichText>(find.byType(RichText));
+      var anyBackground = false;
+      richText.text.visitChildren((span) {
+        if (span.style?.backgroundColor != null) anyBackground = true;
+        return true;
+      });
+      expect(anyBackground, isFalse);
     });
   });
 
@@ -1096,8 +1209,6 @@ List<TextStyle> _flattenStyles(List<InlineSpan> spans) {
   spans.forEach(visit);
   return result;
 }
-
-void _noopLineTap(int lineIndex) {}
 
 PluginHighlight _frameHighlight() {
   const context = PluginAnchorContext(

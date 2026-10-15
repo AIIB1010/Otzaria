@@ -560,9 +560,18 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
         ApplyMarkHighlight(
           highlightText: effectiveHighlight,
           permanentHighlightLine: effectiveLine,
-          scrollToIndex: effectiveLine,
         ),
       );
+      if (effectiveLine != null) {
+        unawaited(
+          targetText.lines.scrollToLine(
+            effectiveLine,
+            alignment: 0,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          ),
+        );
+      }
     }
 
     if (targetText.bloc.state is TextBookLoaded) {
@@ -705,61 +714,18 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
       final targetText = _resolveTextBookTab(existingTab, incomingTab);
       if (targetText == null) return;
       final targetIndex = incomingTab.index;
-      // עדכון אינדקס הטאב מיידית - חשוב משתי סיבות:
-      // 1. saveTabs רץ ב‑finally של ה‑handler ועלול להישמר על המיקום הישן.
-      // 2. אם המסך עוד לא בנה את הרשימה (scrollController לא מחובר), הקריאה
-      //    הבאה ל‑initState/load תפתח באינדקס הזה.
-      targetText.index = targetIndex;
-      if (PluginTextReaderRegistry.instance.usesPlugin(targetText)) {
-        // toJson derives index from the loaded BLoC. Synchronize before saving
-        // or notifying the plugin so it cannot restore the previous location.
-        final currentState = targetText.bloc.state;
-        if (currentState is TextBookLoaded &&
-            (currentState.visibleIndices.isEmpty ||
-                currentState.visibleIndices.first != targetIndex)) {
-          final updated = targetText.bloc.stream.firstWhere(
-            (state) =>
-                state is TextBookLoaded &&
-                state.visibleIndices.isNotEmpty &&
-                state.visibleIndices.first == targetIndex,
-          );
-          targetText.bloc.add(UpdateVisibleIndecies([targetIndex]));
-          await updated.timeout(const Duration(seconds: 2));
-        }
+      // יעד שנקבע לפני שהקורא מחובר נשמר ומבוצע בחיבור; tab.index מתעדכן מיד.
+      final navigation = targetText.lines.scrollToLine(
+        targetIndex,
+        alignment: 0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+      if (!PluginTextReaderRegistry.instance.usesPlugin(targetText)) {
+        unawaited(navigation);
         return;
       }
-
-      Future<void> dispatch() async {
-        // ApplyPinpointHighlight (אם קודם) כבר גלל. כאן מטפלים במקרה שאין
-        // pinpoint אבל יש בקשת ניווט. הקונטרולר עשוי להיות לא מחובר גם
-        // כש‑state הוא Loaded (הרשימה עדיין לא קיבלה את הפריימים הראשונים),
-        // לכן מנסים שוב ושוב עד שמחובר או עד timeout סביר.
-        for (var attempt = 0; attempt < 30; attempt++) {
-          if (targetText.bloc.isClosed) return;
-          if (targetText.bloc.scrollController.isAttached) {
-            targetText.bloc.scrollController.scrollTo(
-              index: targetIndex,
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
-            );
-            return;
-          }
-          await Future<void>.delayed(const Duration(milliseconds: 50));
-        }
-      }
-
-      if (targetText.bloc.state is TextBookLoaded) {
-        unawaited(dispatch());
-        return;
-      }
-
-      late StreamSubscription<TextBookState> sub;
-      sub = targetText.bloc.stream.listen((state) {
-        if (state is TextBookLoaded) {
-          unawaited(dispatch());
-          sub.cancel();
-        }
-      });
+      await navigation;
     }
   }
 

@@ -7,7 +7,6 @@ import 'package:otzaria/models/links.dart';
 import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import '../../test_helpers/memory_cache_provider.dart';
 
@@ -59,14 +58,10 @@ void main() {
   test('פתיחת הניווט מרעננת קישורים לאחר מרוץ טעינה וגלילה', () async {
     await Settings.init(cacheProvider: MemoryCacheProvider());
     final book = TextBook(title: 'ספר בדיקה');
-    final controller = ItemScrollController();
-    final positions = ItemPositionsListener.create();
     final repository = _LinksRepository();
     final bloc = TextBookBloc(
       repository: repository,
       initialState: TextBookInitial.named(book, 0, false, const []),
-      scrollController: controller,
-      positionsListener: positions,
     );
     addTearDown(bloc.close);
     final initiallyLoaded = bloc.stream.firstWhere(

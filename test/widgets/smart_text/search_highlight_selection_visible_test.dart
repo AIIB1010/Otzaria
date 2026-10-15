@@ -87,7 +87,6 @@ Future<void> main() async {
                       ),
                     ],
                     baseStyle: style,
-                    onLineTap: (_) {},
                   )
                 : SmartTextWidget(
                     // תג לא נתמך מכריח מעבר דרך HtmlWidget.

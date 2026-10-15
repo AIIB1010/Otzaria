@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -20,11 +21,10 @@ import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
-import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:otzaria/text_book/view/combined_view/combined_book_screen.dart';
+import 'package:otzaria/text_book/view/reader_line/reader_line_render.dart';
 import 'package:otzaria/text_book/view/widgets/continuous_reading_paragraph.dart';
 import 'package:otzaria/text_book/view/widgets/selection_gutter_painter.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../../../test_helpers/memory_cache_provider.dart';
 
 // issue #875 — במצב קריאה רציפה כרטיס המפרשים נבנה בתחתית הפסקה הממוזגת
@@ -69,14 +69,11 @@ TextBookLoaded _continuousState({
     selectedIndices: selectedIndex == null ? const {} : {selectedIndex},
     pinLeftPane: false,
     searchText: '',
-    scrollController: ItemScrollController(),
-    positionsListener: ItemPositionsListener.create(),
     continuousReadingMode: true,
-    readingSegments: buildReadingSegments(_content, continuous: true),
   );
 }
 
-Future<void> _pumpContinuousView(
+Future<_TestTextBookBloc> _pumpContinuousView(
   WidgetTester tester,
   TextBookLoaded state, {
   bool simple = false,
@@ -129,6 +126,7 @@ Future<void> _pumpContinuousView(
     ),
   );
   await tester.pump();
+  return textBookBloc;
 }
 
 List<List<int>> _paragraphLineIndices(WidgetTester tester) => tester
@@ -142,10 +140,28 @@ List<List<int>> _paragraphLineIndices(WidgetTester tester) => tester
 
 Finder _selectionMarkers() => find.byWidgetPredicate(
   (widget) =>
-      widget is CustomPaint &&
-      (widget.painter is SelectionGutterPainter ||
-          widget.foregroundPainter is SelectionGutterPainter),
+      (widget is CustomPaint &&
+          (widget.painter is SelectionGutterPainter ||
+              widget.foregroundPainter is SelectionGutterPainter)) ||
+      (widget is ReaderLineGutter && widget.selectedLines.isNotEmpty),
 );
+
+Rect _textRect(WidgetTester tester, String text) {
+  final paragraph = tester.allRenderObjects
+      .whereType<RenderParagraph>()
+      .firstWhere((p) => p.text.toPlainText().contains(text));
+  final offset = paragraph.text.toPlainText().indexOf(text);
+  final box = paragraph
+      .getBoxesForSelection(
+        TextSelection(baseOffset: offset, extentOffset: offset + text.length),
+      )
+      .first
+      .toRect();
+  return Rect.fromPoints(
+    paragraph.localToGlobal(box.topLeft),
+    paragraph.localToGlobal(box.bottomRight),
+  );
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -162,10 +178,6 @@ void main() {
         tester,
         _continuousState(selectedIndex: 1, linksByLine: const {}).copyWith(
           continuousReadingMode: continuous,
-          readingSegments: buildReadingSegments(
-            _content,
-            continuous: continuous,
-          ),
         ),
         simple: true,
       );
@@ -277,20 +289,55 @@ void main() {
     );
     final card = find.byKey(const ValueKey('commentary_card_1'));
     expect(card, findsOneWidget);
-    expect(
-      find.ancestor(of: card, matching: _selectionMarkers()),
-      findsNothing,
-    );
     final cardRect = tester.getRect(card);
-    final markers = _selectionMarkers();
-    expect(markers, findsNWidgets(2));
-    for (final element in markers.evaluate()) {
-      final markerRect = tester.getRect(
-        find.byElementPredicate((e) => e == element),
-      );
-      expect(markerRect.overlaps(cardRect), isFalse);
-      expect((element.widget as CustomPaint).foregroundPainter, isNull);
-    }
+    final gutterFinder = _selectionMarkers();
+    expect(gutterFinder, findsOneWidget);
+    // הסמן מצויר מתחת לטקסט ונמתח רק לאורך השורה הנבחרת — לא על הכרטיס.
+    expect(tester.widget<ReaderLineGutter>(gutterFinder).foreground, isFalse);
+    final gutter = tester.renderObject<RenderReaderLineGutter>(gutterFinder);
+    final bars = gutter
+        .barRects()
+        .map(
+          (rect) => Rect.fromPoints(
+            gutter.localToGlobal(rect.topLeft),
+            gutter.localToGlobal(rect.bottomRight),
+          ),
+        )
+        .toList();
+    expect(bars, hasLength(1));
+    expect(bars.single.overlaps(cardRect), isFalse);
+    final lineRect = _textRect(tester, 'שורה שניה');
+    expect(bars.single.top, lessThanOrEqualTo(lineRect.top + 0.5));
+    expect(bars.single.bottom, greaterThanOrEqualTo(lineRect.bottom - 0.5));
+    expect(
+      bars.single.contains(_textRect(tester, 'שורה ראשונה').center),
+      isFalse,
+    );
+  });
+
+  testWidgets('לחיצה בתוך כרטיס המפרשים אינה משנה את בחירת השורה', (
+    tester,
+  ) async {
+    final bloc = await _pumpContinuousView(
+      tester,
+      _continuousState(selectedIndex: 1),
+    );
+    final card = find.byKey(const ValueKey('commentary_card_1'));
+    expect(card, findsOneWidget);
+    final center = tester.getRect(card).center;
+    await tester.tapAt(center, kind: PointerDeviceKind.mouse);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tapAt(center, kind: PointerDeviceKind.mouse);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tapAt(center, kind: PointerDeviceKind.mouse);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.tapAt(center, kind: PointerDeviceKind.mouse);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(bloc.received.whereType<UpdateSelectedIndex>(), isEmpty);
+    expect(card, findsOneWidget);
   });
 
   testWidgets('ללא בחירה — פסקה אחת שלמה ובלי כרטיס מפרשים', (tester) async {
@@ -337,8 +384,10 @@ void main() {
 class _TestTextBookBloc extends Bloc<TextBookEvent, TextBookState>
     implements TextBookBloc {
   _TestTextBookBloc(super.initialState) {
-    on<TextBookEvent>((event, emit) {});
+    on<TextBookEvent>((event, emit) => received.add(event));
   }
+
+  final received = <TextBookEvent>[];
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

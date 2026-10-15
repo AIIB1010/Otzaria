@@ -15,10 +15,10 @@ import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/utils/section_search_utils.dart';
 import 'package:otzaria/text_book/view/text_book_search_screen.dart';
 import 'package:otzaria_search_engine/otzaria_search_engine.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import '../../support/search_engine_test_init.dart';
 import '../../test_helpers/memory_cache_provider.dart';
+import 'package:otzaria/text_book/view/reading_viewport/line_scroll_controller.dart';
 
 /// issue #1053 — חיווי חיתוך בסרגל תוצאות החיפוש בספר: כשהחיפוש נעצר
 /// בתקרת התוצאות, הכיתוב הופך ל"מוצגות N התוצאות הראשונות" במקום
@@ -66,7 +66,7 @@ Future<void> main() async {
           child: Scaffold(
             body: TextBookSearchView(
               contentLoader: () async => const ['שורה א'],
-              scrollControler: ItemScrollController(),
+              lines: LineScrollController(),
               focusNode: focusNode,
               closeLeftPaneCallback: () {},
               initialQuery: initialQuery,
@@ -205,7 +205,5 @@ TextBookLoaded _loadedState() {
     selectedIndex: 0,
     pinLeftPane: false,
     searchText: '',
-    scrollController: ItemScrollController(),
-    positionsListener: ItemPositionsListener.create(),
   );
 }
