@@ -133,6 +133,45 @@ void main() {
       );
     });
 
+    test('קישורים (primary) מובחנים מהטקסט בערכות נייטרליות (#2589)', () {
+      for (final seed in [AppSeedColors.white, AppSeedColors.grey]) {
+        for (final brightness in Brightness.values) {
+          final cs = AppThemeData.createColorScheme(seed, brightness);
+          final name = '${AppSeedColors.nameOf(seed)} $brightness';
+          expect(
+            _contrastRatio(cs.primary, cs.onSurface),
+            greaterThanOrEqualTo(2.0),
+            reason:
+                '$name: primary ${cs.primary} מול onSurface ${cs.onSurface}',
+          );
+          expect(
+            _contrastRatio(cs.primary, cs.surface),
+            greaterThanOrEqualTo(4.5),
+            reason: '$name: primary ${cs.primary} מול surface ${cs.surface}',
+          );
+        }
+      }
+    });
+
+    test('primary של צבעי בסיס עם גוון לא משתנה (#2589)', () {
+      for (final option in AppSeedColors.options) {
+        if (HSLColor.fromColor(option.color).saturation < 0.1) continue;
+        for (final brightness in Brightness.values) {
+          final cs = AppThemeData.createColorScheme(option.color, brightness);
+          final base = ColorScheme.fromSeed(
+            seedColor: option.color,
+            brightness: brightness,
+          );
+          expect(
+            cs.primary,
+            base.primary,
+            reason: '${option.name} $brightness',
+          );
+          expect(cs.onPrimary, base.onPrimary, reason: option.name);
+        }
+      }
+    });
+
     test('secondaryContainer עם onSurface/onSurfaceVariant תמיד קריא', () {
       // רכיבים על secondaryContainer משתמשים בזוגות צבעים אלה.
       for (final option in AppSeedColors.options) {
