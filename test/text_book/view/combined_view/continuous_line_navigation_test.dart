@@ -30,7 +30,7 @@ const int _chapters = 30;
 const int _verses = 10;
 final List<String> _lines = [
   for (var chapter = 1; chapter <= _chapters; chapter++) ...[
-    '<h2>פרק $chapter</h2>',
+    '<h2 id="chapter$chapter">פרק $chapter</h2>',
     for (var verse = 1; verse <= _verses; verse++)
       'פסוק $verse בפרק $chapter: דברי הברית אשר צוה לכרת את בני ישראל '
           'בארץ מואב מלבד הברית אשר כרת אתם בחרב',
@@ -45,7 +45,7 @@ List<bool> _window(int start, int end) => [
 
 TextBookLoaded _state(List<bool> loaded, {bool continuous = true}) {
   return TextBookLoaded(
-    book: TextBook(title: 'ספר ניווט'),
+    book: _NavigationBook(),
     showLeftPane: false,
     content: [
       for (var i = 0; i < _lines.length; i++) loaded[i] ? _lines[i] : '',
@@ -70,6 +70,16 @@ TextBookLoaded _state(List<bool> loaded, {bool continuous = true}) {
 
 final _all = _window(0, _lines.length - 1);
 
+class _NavigationBook extends TextBook {
+  _NavigationBook() : super(title: 'ספר ניווט');
+
+  @override
+  Future<List<TocEntry>> get tableOfContents async => [
+    for (var chapter = 1; chapter <= _chapters; chapter++)
+      TocEntry(text: 'פרק $chapter', index: _line(chapter, 0)),
+  ];
+}
+
 class _Fixture {
   _Fixture(this.tab, this.bloc);
   final TextBookTab tab;
@@ -81,6 +91,8 @@ Future<_Fixture> _mount(
   WidgetTester tester,
   TextBookLoaded initial, {
   int index = 0,
+  bool preview = false,
+  bool outerScope = false,
   void Function(TextBookTab tab)? beforeMount,
 }) async {
   final bloc = _TestTextBookBloc(initial);
@@ -92,6 +104,15 @@ Future<_Fixture> _mount(
   addTearDown(settings.close);
   addTearDown(tab.dispose);
   beforeMount?.call(tab);
+  final view = CombinedView(
+    data: initial.content,
+    openBookCallback: (_) {},
+    openLeftPaneTab: (_, {searchText}) {},
+    textSize: 18,
+    showCommentaryAsExpansionTiles: true,
+    isPreviewMode: preview,
+    tab: tab,
+  );
   await tester.pumpWidget(
     MaterialApp(
       home: MultiBlocProvider(
@@ -101,14 +122,9 @@ Future<_Fixture> _mount(
           BlocProvider<SettingsBloc>.value(value: settings),
         ],
         child: Scaffold(
-          body: CombinedView(
-            data: initial.content,
-            openBookCallback: (_) {},
-            openLeftPaneTab: (_, {searchText}) {},
-            textSize: 18,
-            showCommentaryAsExpansionTiles: true,
-            tab: tab,
-          ),
+          body: outerScope
+              ? LineScrollScope(controller: tab.lines, child: view)
+              : view,
         ),
       ),
     ),
@@ -141,6 +157,30 @@ void main() {
   setUpAll(() async {
     await Settings.init(cacheProvider: MemoryCacheProvider());
   });
+
+  for (final preview in [true, false]) {
+    for (final url in ['#chapter21', '#פרק 21']) {
+      testWidgets('קישור $url בפסקה רציפה מנווט (תצוגה מקדימה: $preview)', (
+        tester,
+      ) async {
+        final fixture = await _mount(
+          tester,
+          _state(_all),
+          preview: preview,
+          outerScope: !preview,
+        );
+        final paragraph = tester.widget<ContinuousReadingParagraph>(
+          find.byType(ContinuousReadingParagraph).first,
+        );
+
+        final navigation = paragraph.onTapUrl!(url);
+        await tester.pumpAndSettle();
+        expect(await navigation, isTrue);
+        expect(fixture.tab.index, _line(21, 0));
+        expect(_lineEdge(fixture, _line(21, 0)), _onAnchor);
+      });
+    }
+  }
 
   testWidgets('ניווט לשורה באמצע פסקה נוחת על השורה ולא על תחילת הפסקה', (
     tester,

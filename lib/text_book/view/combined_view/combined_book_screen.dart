@@ -2410,6 +2410,7 @@ class _CombinedViewState extends State<CombinedView> {
                               );
                               final content = isMultiLine
                                   ? _buildMultiLineItem(
+                                      itemContext,
                                       itemLines,
                                       state,
                                       lineContext,
@@ -2728,6 +2729,7 @@ class _CombinedViewState extends State<CombinedView> {
   /// פריט של כמה שורות: רצפים ממוזגים לפסקה, שורות-בלוק בנפרד, וכרטיס
   /// המפרשים מתחת לשורה [commentaryAfter].
   Widget _buildMultiLineItem(
+    BuildContext context,
     List<int> itemLines,
     TextBookLoaded state,
     ReaderLineContext lineContext,

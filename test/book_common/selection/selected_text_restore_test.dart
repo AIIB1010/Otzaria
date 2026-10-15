@@ -611,6 +611,54 @@ void main() {
       expect(restored.endLine, 0);
     });
 
+    for (final selected in [
+      'אָב כּוֹתֶרֶת מְנֻקֶּדֶת גַּד',
+      'אָב כוֹתֶרֶת מְנֻקֶּדֶת גַּד',
+    ]) {
+      test('כותרת מנוקדת מושמטת מבחירה רציפה: $selected', () {
+        final restored = restoreSelectedTextLineBreaksDetailed(
+          selectedText: selected,
+          visibleLines: const ['אָב', 'גַּד'],
+          paragraphs: (
+            joinsNext: (line) => line == 0,
+            headingAt: (line) => line == 1 ? 'כּוֹתֶרֶת מְנֻקֶּדֶת' : null,
+          ),
+        );
+
+        expect(restored, (
+          text: 'אָב גַּד',
+          startLine: 0,
+          endLine: 1,
+          startColumn: 0,
+          ambiguous: false,
+        ));
+      });
+    }
+
+    for (final gap in ['', ' ', '\n', '\u00a0']) {
+      test(
+        'ניקוד בסוף שורה נשמר בחיבור רציף כשחסר ניקוד אחר: ${gap.codeUnits}',
+        () {
+          final restored = restoreSelectedTextLineBreaksDetailed(
+            selectedText: 'אָבּ$gapגַד',
+            visibleLines: const ['אָבּ', 'גַּד'],
+            paragraphs: (
+              joinsNext: (line) => line == 0,
+              headingAt: (_) => null,
+            ),
+          );
+
+          expect(restored, (
+            text: 'אָבּ גַד',
+            startLine: 0,
+            endLine: 1,
+            startColumn: 0,
+            ambiguous: false,
+          ));
+        },
+      );
+    }
+
     test('בלי מבנה פסקאות (מצב רגיל) — מעבר שורה בכל גבול', () {
       final restored = restoreSelectedTextLineBreaksDetailed(
         selectedText: 'דהוזחט',

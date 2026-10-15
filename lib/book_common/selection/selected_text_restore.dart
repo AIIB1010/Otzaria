@@ -456,7 +456,9 @@ RestoredSelection? _restoreExact(
     selectedIndexMap[k],
   );
   bool visibleHasGap(int pos) => _hasWhitespaceBetween(
-    visibleLines[lineOfChar[pos]],
+    headingChar[pos]
+        ? paragraphs!.headingAt(lineOfChar[pos])!
+        : visibleLines[lineOfChar[pos]],
     columnOfChar[pos - 1],
     columnOfChar[pos],
   );
@@ -508,6 +510,11 @@ RestoredSelection? _restoreExact(
       if (line == previousLine) {
         result.write(gap);
       } else if (joins(previousLine, line)) {
+        for (final unit in gap.codeUnits.where(
+          (unit) => !_isWhitespace(unit),
+        )) {
+          result.writeCharCode(unit);
+        }
         result.write(' ');
       } else {
         result.write(gap);
