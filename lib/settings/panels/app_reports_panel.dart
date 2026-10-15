@@ -1,11 +1,11 @@
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:otzaria/app_report/models/app_report.dart';
-import 'package:otzaria/app_report/repository/app_report_redactor.dart';
 import 'package:otzaria/app_report/services/app_report_service.dart';
 import 'package:otzaria/app_report/services/crash_report_decision.dart';
 import 'package:otzaria/app_report/view/app_report_dialog.dart';
 import 'package:otzaria/app_report/view/app_report_result_snack.dart';
+import 'package:otzaria/app_report/view/widgets/app_report_images_section.dart';
 import 'package:otzaria/core/messages/report_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/settings/l10n/settings_l10n_exports.dart';
@@ -15,6 +15,7 @@ import 'package:otzaria/theme/theme_exports.dart';
 import 'package:otzaria/widgets/text/rtl_text_field.dart';
 import 'package:otzaria/widgets/widgets_exports.dart';
 import 'package:otzaria_icons/otzaria_icons.dart';
+import 'package:otzaria_report_contract/otzaria_report_contract.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// דיווחים על התוכנה בחלון ניהול הדיווחים: פתיחת הטופס, מצב הדיווח אחרי
@@ -261,9 +262,20 @@ class _AppReportsPanelState extends State<AppReportsPanel> {
     final issueUrl = report.issueUrl;
     return buildSentReportTile(
       context,
-      icon: FluentIcons.checkmark_24_regular,
+      icon: report.isCarriedByOfflineUpdate
+          ? carriedReportIcon
+          : FluentIcons.checkmark_24_regular,
       title: report.title,
-      subtitle: _summaryLine(context, report),
+      subtitle: report.isCarriedByOfflineUpdate
+          ? [
+              ?carriedReportStatus(
+                context,
+                carried: true,
+                carriedAt: report.carriedAt,
+              ),
+              _summaryLine(context, report, withDate: false),
+            ].join(' · ')
+          : _summaryLine(context, report),
       onView: () => _showDetails(report, sent: true),
       onDelete: () => _deleteSent(report),
       extraAction: issueUrl == null || issueUrl.isEmpty
@@ -282,12 +294,15 @@ class _AppReportsPanelState extends State<AppReportsPanel> {
     );
   }
 
-  String _summaryLine(BuildContext context, AppReport report) {
-    final date = report.sentAt ?? report.createdAt;
-    final local = date.toLocal();
+  String _summaryLine(
+    BuildContext context,
+    AppReport report, {
+    bool withDate = true,
+  }) {
+    final local = (report.sentAt ?? report.createdAt).toLocal();
     final parts = [
       _typeLabel(context, report.type),
-      '${local.day}.${local.month}.${local.year}',
+      if (withDate) '${local.day}.${local.month}.${local.year}',
       if (report.issueNumber != null) '#${report.issueNumber}',
       if (report.merged) context.settingsText('צורף לדיווח קיים'),
     ];
@@ -329,9 +344,12 @@ class _AppReportsPanelState extends State<AppReportsPanel> {
     }
     await showSingleActionDialog(
       context: context,
-      title: context.settingsText(
-        sent ? 'פרטי דיווח שנשלח' : 'פרטי דיווח שמור',
-      ),
+      title: sent
+          ? sentReportDetailsTitle(
+              context,
+              carried: report.isCarriedByOfflineUpdate,
+            )
+          : context.settingsText('פרטי דיווח שמור'),
       content: buffer.toString().trimRight(),
       confirmText: context.settingsText('סגור'),
     );
@@ -390,7 +408,8 @@ class _AppReportsPanelState extends State<AppReportsPanel> {
                 value.title != report.title ||
                 value.description != report.description ||
                 value.stepsToReproduce != report.stepsToReproduce ||
-                value.reporterEmail != report.reporterEmail;
+                value.reporterEmail != report.reporterEmail ||
+                !listEquals(value.images, report.images);
           },
         ),
       ),
@@ -506,6 +525,7 @@ class _AppReportEditFieldsState extends State<AppReportEditFields> {
     text: widget.report.stepsToReproduce,
   );
   late final _email = TextEditingController(text: widget.report.reporterEmail);
+  late List<AppReportImage> _images = widget.report.images;
 
   @override
   void dispose() {
@@ -523,6 +543,7 @@ class _AppReportEditFieldsState extends State<AppReportEditFields> {
       description: _description.text,
       stepsToReproduce: _steps.text,
       reporterEmail: _email.text.trim(),
+      images: _images,
     ),
   );
 
@@ -599,6 +620,14 @@ class _AppReportEditFieldsState extends State<AppReportEditFields> {
               isDense: true,
             ),
           ),
+        ),
+        const SizedBox(height: 12),
+        AppReportImagesSection(
+          images: _images,
+          onChanged: (images) {
+            setState(() => _images = List.unmodifiable(images));
+            _notifyChanged();
+          },
         ),
       ],
     );

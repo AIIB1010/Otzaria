@@ -93,6 +93,8 @@ import 'package:otzaria/settings/settings_exports.dart';
 import 'package:otzaria/library_update/bloc/library_update_bloc.dart';
 import 'package:otzaria/library_update/library_update_work_status.dart';
 import 'package:otzaria/library_update/changes_notes/library_changes_notes.dart';
+import 'package:otzaria/plugins/services/plugin_install_results_log.dart';
+import 'package:otzaria/plugins/services/plugin_install_report_service.dart';
 import 'package:otzaria/theme/app_surfaces.dart';
 import 'package:otzaria/utils/ui/fullscreen_helper.dart';
 import 'package:otzaria/widgets/dialogs/app_dialogs.dart';
@@ -412,7 +414,8 @@ class MainWindowScreenState extends State<MainWindowScreen>
   _pluginInstallDialogQueue = SequentialDialogQueue(_showPluginInstallDialog);
 
   bool _hasInitializedPageController = false;
-  bool _isProcessingExternalActivations = false;
+  late final CoalescingDrainRunner _externalActivationDrainRunner =
+      CoalescingDrainRunner(_drainPendingExternalActivations);
 
   /// מונע הערמת פופאפים כשמגיעים כמה קישורי `info` בזה אחר זה.
   bool _isShowingInfoReport = false;
@@ -1317,12 +1320,11 @@ class MainWindowScreenState extends State<MainWindowScreen>
     });
   }
 
-  Future<void> _processPendingExternalActivations() async {
-    if (!mounted || _isProcessingExternalActivations) {
-      return;
-    }
+  Future<void> _processPendingExternalActivations() =>
+      _externalActivationDrainRunner.run();
 
-    _isProcessingExternalActivations = true;
+  Future<void> _drainPendingExternalActivations() async {
+    if (!mounted) return;
     try {
       final pendingUris = await _externalActivationQueue.drainUriStrings();
       for (final uriString in pendingUris) {
@@ -1330,8 +1332,6 @@ class MainWindowScreenState extends State<MainWindowScreen>
       }
     } catch (e, stackTrace) {
       debugPrint('External activation polling failed: $e\n$stackTrace');
-    } finally {
-      _isProcessingExternalActivations = false;
     }
   }
 
@@ -1412,7 +1412,18 @@ class MainWindowScreenState extends State<MainWindowScreen>
       if (uri == null) return false;
 
       final action = ExternalUriRouter.parseUri(uri);
-      if (action == null) return false;
+      if (action == null) {
+        // מי שמסר את התוסף (המעדכן הלא-מקוון) ממתין לתוצאה גם כשהנתיב נדחה.
+        final rejected = ExternalUriRouter.rejectedLocalInstall(uri);
+        if (rejected != null) {
+          await PluginInstallResultsLog.instance.append(
+            path: rejected.path,
+            outcome: PluginInstallOutcome.failed,
+            message: rejected.reason,
+          );
+        }
+        return false;
+      }
 
       // "חלון חדש" לא ביקש חלון קיים — הרמת חלון שרירותי (אולי מוסתר) מפתיעה.
       if (action is! OpenNewWindowAction) await _bringWindowToFront();
@@ -1541,7 +1552,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
           ),
         );
       } else {
-        bloc.add(LoadPlugins());
+        bloc.add(PluginOverwriteDeclined(state.archivePath));
       }
     } else if (state is PluginSystemDuplicateNameDetected) {
       final versions = state.duplicates.map((p) => p.version).join(', ');
@@ -1600,6 +1611,20 @@ class MainWindowScreenState extends State<MainWindowScreen>
       case OpenPdfBookAction():
         return await _openPdfBookByExternalId(action);
       case InstallPluginAction(:final request):
+        if (!await verifySaferModePassword(context)) {
+          final report = request.reportContext;
+          if (report != null) {
+            unawaited(
+              PluginInstallReportService.report(
+                report,
+                success: false,
+                errorMessage: 'ההתקנה נחסמה במצב סייפר',
+              ),
+            );
+          }
+          return false;
+        }
+        if (!mounted) return false;
         context.read<PluginSystemBloc>().add(
           InstallRemotePluginRequested(
             request.downloadUri.toString(),
@@ -1609,8 +1634,18 @@ class MainWindowScreenState extends State<MainWindowScreen>
         );
         return true;
       case InstallLocalPluginAction(:final archivePath):
+        if (!await verifySaferModePassword(context)) {
+          // מי שמסר את הקובץ (המעדכן הלא-מקוון) ממתין לתוצאה.
+          await PluginInstallResultsLog.instance.append(
+            path: archivePath,
+            outcome: PluginInstallOutcome.cancelled,
+            message: 'ההתקנה נחסמה במצב סייפר',
+          );
+          return false;
+        }
+        if (!mounted) return false;
         context.read<PluginSystemBloc>().add(
-          InstallPluginRequested(archivePath),
+          InstallPluginRequested(archivePath, recordsResult: true),
         );
         return true;
       case RunSearchAction(:final query, smart: true):

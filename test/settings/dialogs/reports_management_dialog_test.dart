@@ -1,14 +1,12 @@
 import 'dart:io';
 
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/app_report/services/app_report_service.dart';
-import 'package:otzaria/app_report/models/app_report.dart';
 import 'package:otzaria/app_report/view/app_report_dialog.dart';
-import 'package:otzaria/models/direct_error_report.dart';
-import 'package:otzaria/plugins/models/plugin_report_record.dart';
 import 'package:otzaria/settings/panels/reports_card.dart';
 import 'package:otzaria/settings/search/settings_search_registry.dart';
 import 'package:otzaria/settings/tabs/system_settings_tab.dart';
@@ -19,8 +17,10 @@ import 'package:otzaria/settings/engine/settings_engine_exports.dart';
 import 'package:otzaria/settings/panels/app_reports_panel.dart';
 import 'package:otzaria/settings/panels/error_reports_panel.dart';
 import 'package:otzaria/settings/panels/plugin_reports_panel.dart';
+import 'package:otzaria/settings/panels/report_panel_widgets.dart';
 import 'package:otzaria/plugins/services/plugin_report_service.dart';
 import 'package:otzaria/services/direct_error_report_service.dart';
+import 'package:otzaria_report_contract/otzaria_report_contract.dart';
 
 class _FakeSettingsBloc extends Bloc<SettingsEvent, SettingsState>
     implements SettingsBloc {
@@ -108,6 +108,7 @@ void main() {
     WidgetTester tester,
     ReportsTab tab, {
     bool sent = false,
+    Map<String, dynamic> extra = const {},
   }) async {
     final (kind, payload) = switch (tab) {
       ReportsTab.books => (
@@ -151,7 +152,9 @@ void main() {
         ).toJson(),
       ),
     };
-    await tester.runAsync(() => PendingReportStore.instance.add(kind, payload));
+    await tester.runAsync(
+      () => PendingReportStore.instance.add(kind, {...payload, ...extra}),
+    );
   }
 
   Future<void> tapVisible(WidgetTester tester, String text) async {
@@ -330,6 +333,55 @@ void main() {
     await tapVisible(tester, 'דיווחים שנשלחו');
     expect(find.text('ספר בדיקה'), findsOneWidget);
   });
+
+  for (final tab in ReportsTab.values) {
+    testWidgets('${tab.name}: a report carried by Otzaria Updates says so', (
+      tester,
+    ) async {
+      await addReport(
+        tester,
+        tab,
+        sent: true,
+        extra: const {
+          'carriedBy': 'offline-update',
+          'carriedAt': '2026-10-12T10:00:00Z',
+        },
+      );
+      await pumpDialog(tester, tab);
+      await tapVisible(tester, 'דיווחים שנשלחו');
+      final local = DateTime.utc(2026, 10, 12, 10).toLocal();
+      expect(
+        find.textContaining(
+          'הועבר לשליחה דרך עדכוני אוצריא · '
+          '${local.day}.${local.month}.${local.year}',
+        ),
+        findsOneWidget,
+      );
+      expect(find.byIcon(carriedReportIcon), findsOneWidget);
+      expect(find.byIcon(FluentIcons.checkmark_24_regular), findsNothing);
+      if (tab == ReportsTab.app) {
+        // created 1.1.2026; only the carried date is shown.
+        expect(find.textContaining('1.1.2026'), findsNothing);
+      }
+
+      await tapVisible(tester, 'צפה');
+      expect(find.text('הועבר לשליחה דרך עדכוני אוצריא'), findsOneWidget);
+      expect(find.text('פרטי דיווח שנשלח'), findsNothing);
+    });
+
+    testWidgets('${tab.name}: a report Otzaria sent has no carried status', (
+      tester,
+    ) async {
+      await addReport(tester, tab, sent: true);
+      await pumpDialog(tester, tab);
+      await tapVisible(tester, 'דיווחים שנשלחו');
+      expect(find.textContaining('עדכוני אוצריא'), findsNothing);
+      expect(find.byIcon(carriedReportIcon), findsNothing);
+
+      await tapVisible(tester, 'צפה');
+      expect(find.text('פרטי דיווח שנשלח'), findsOneWidget);
+    });
+  }
 
   test('ReportCounts.load sums saved reports per kind', () async {
     final tmp = Directory.systemTemp.createTempSync('otzaria_report_counts_');

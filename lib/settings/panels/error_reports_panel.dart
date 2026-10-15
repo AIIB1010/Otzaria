@@ -6,7 +6,6 @@ import 'package:otzaria/core/messages/report_messages.dart';
 import 'package:otzaria/settings/l10n/settings_l10n_exports.dart';
 import 'package:otzaria/settings/panels/report_panel_widgets.dart';
 import 'package:otzaria/core/ui_snack.dart';
-import 'package:otzaria/models/direct_error_report.dart';
 import 'package:otzaria/text_book/view/text_correction_editor.dart';
 import 'package:otzaria/services/direct_error_report_service.dart';
 import 'package:otzaria/widgets/widgets_exports.dart';
@@ -15,7 +14,7 @@ import 'package:otzaria/widgets/text/rtl_text_field.dart';
 import 'package:otzaria/settings/widgets/settings_widgets_exports.dart';
 import 'package:otzaria/theme/theme_exports.dart';
 import 'package:otzaria/text_book/view/error_report_dialog.dart';
-import 'package:otzaria/utils/canonical_json.dart';
+import 'package:otzaria_report_contract/otzaria_report_contract.dart';
 
 /// Direct error reports on books: identification email, offline queueing,
 /// the saved queue and the sent history.
@@ -430,9 +429,12 @@ class _ErrorReportsPanelState extends State<ErrorReportsPanel> {
   }) async {
     await ErrorReportHelper.showDirectReportDetailsDialog(
       context,
-      title: context.settingsText(
-        sent ? 'פרטי דיווח שנשלח' : 'פרטי דיווח שמור',
-      ),
+      title: sent
+          ? sentReportDetailsTitle(
+              context,
+              carried: report.isCarriedByOfflineUpdate,
+            )
+          : context.settingsText('פרטי דיווח שמור'),
       report: report,
     );
   }
@@ -504,11 +506,20 @@ class _ErrorReportsPanelState extends State<ErrorReportsPanel> {
   Widget _buildSentReportTile(BuildContext context, DirectErrorReport report) =>
       buildSentReportTile(
         context,
-        icon: report.rejectionReason == null
+        icon: report.isCarriedByOfflineUpdate
+            ? carriedReportIcon
+            : report.rejectionReason == null
             ? FluentIcons.checkmark_24_regular
             : FluentIcons.error_circle_24_regular,
         title: report.bookTitle,
-        subtitle: _reportSummary(context, report),
+        subtitle: [
+          ?carriedReportStatus(
+            context,
+            carried: report.isCarriedByOfflineUpdate,
+            carriedAt: report.carriedAt,
+          ),
+          _reportSummary(context, report),
+        ].join(' · '),
         onView: () => _showReportDetails(report, sent: true),
         onDelete: () => _deleteSentReport(report),
       );

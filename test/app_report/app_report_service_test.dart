@@ -8,14 +8,13 @@ import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:otzaria/app_report/models/app_report.dart';
-import 'package:otzaria/app_report/models/app_report_image.dart';
-import 'package:otzaria/app_report/models/app_report_minidump.dart';
+import 'package:otzaria/app_report/models/app_report_draft.dart';
 import 'package:otzaria/app_report/services/app_report_service.dart';
 import 'package:otzaria/core/user_state/pending_report_store.dart';
 import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/services/sent_reports_counter.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
+import 'package:otzaria_report_contract/otzaria_report_contract.dart';
 
 AppReport _report({String? id, String title = 'באג'}) => AppReport(
   reportId: id ?? AppReport.generateReportId(),
@@ -72,6 +71,91 @@ void main() {
     reportStore: store,
     sentCounter: SentReportsCounter.inMemory(),
   );
+
+  test('טיוטה: נשמרת אחת, נטענת עם התמונות, ולא נכנסת לתור', () async {
+    final service = build(MockClient((_) async => _json(500, {})));
+    final image = AppReportImage(
+      bytes: Uint8List.fromList([1, 2, 3]),
+      fileName: 'shot.png',
+      mimeType: 'image/png',
+    );
+    await service.saveDraft(
+      const AppReportDraft(
+        type: AppReportType.bug,
+        title: 'ראשונה',
+        description: '',
+        steps: '',
+        email: '',
+      ),
+    );
+    final draft = AppReportDraft(
+      type: AppReportType.suggestion,
+      title: 'שנייה',
+      description: 'תיאור',
+      steps: 'שלב',
+      email: 'a@b.com',
+      includeDiagnostics: false,
+      images: [image],
+    );
+    await service.saveDraft(draft);
+
+    final loaded = (await service.loadDraft())!;
+    expect(loaded.title, 'שנייה');
+    expect(loaded.type, AppReportType.suggestion);
+    expect(loaded.steps, 'שלב');
+    expect(loaded.includeDiagnostics, isFalse);
+    expect(loaded.images.single.fileName, 'shot.png');
+    expect(loaded.images.single.bytes, [1, 2, 3]);
+    expect(await store.countByKind(AppReportService.draftKind), 1);
+    expect(await service.getPendingReportsCount(), 0);
+    expect(await service.flushPendingReports(), 0);
+
+    await service.deleteDraft();
+    expect(await service.loadDraft(), isNull);
+  });
+
+  AppReportDraft draft(String title) => AppReportDraft(
+    type: AppReportType.bug,
+    title: title,
+    description: '',
+    steps: '',
+    email: '',
+  );
+
+  test('שמירות טיוטה מקבילות משני חיבורים משאירות טיוטה אחת', () async {
+    final service = build(MockClient((_) async => _json(500, {})));
+    final secondDb = UserStateDatabase.openAt(
+      '${tmp.path}${Platform.pathSeparator}user_state.db',
+    );
+    addTearDown(secondDb.close);
+    final second = AppReportService(
+      reportStore: PendingReportStore(database: secondDb),
+    );
+    await service.saveDraft(draft('קודמת'));
+    await Future.wait([
+      service.saveDraft(draft('ראשונה')),
+      second.saveDraft(draft('שנייה')),
+    ]);
+
+    expect(await store.countByKind(AppReportService.draftKind), 1);
+    expect((await service.loadDraft())?.title, 'שנייה');
+  });
+
+  test('כשל בהחלפת טיוטה משמר את הטיוטה הקודמת', () async {
+    final service = build(MockClient((_) async => _json(500, {})));
+    await service.saveDraft(draft('קודמת'));
+    final connection = await db.database;
+    connection.execute("""
+      CREATE TRIGGER reject_draft BEFORE INSERT ON pending_reports
+      WHEN NEW.kind = '${AppReportService.draftKind}'
+      BEGIN SELECT RAISE(ABORT, 'simulated insert failure'); END
+    """);
+
+    await expectLater(service.saveDraft(draft('חדשה')), throwsA(anything));
+
+    expect((await service.loadDraft())?.title, 'קודמת');
+    expect(await store.countByKind(AppReportService.draftKind), 1);
+  });
 
   test('200: נשלח, שדות ה-issue נשמרים בהיסטוריה בלי צרופות', () async {
     Map<String, dynamic>? sentBody;

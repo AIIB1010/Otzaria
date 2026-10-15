@@ -88,6 +88,7 @@ import 'package:otzaria/utils/navigation/book_open_coordinator.dart';
 
 import 'package:otzaria_search_engine/otzaria_search_engine.dart';
 import 'package:otzaria/core/app_paths.dart';
+import 'package:otzaria/core/otzaria_capabilities.dart';
 import 'package:otzaria/core/data_root_writability_warning.dart';
 import 'package:otzaria/core/cli_command.dart';
 import 'package:otzaria/core/ui_snack.dart';
@@ -516,14 +517,9 @@ Future<void> _initializeSentry() async {
 Future<void> _runAppBootstrap() async {
   // Check for single instance - skip on Apple platforms (macOS/iOS) due to sandbox restrictions
   if (!Platform.isMacOS && !Platform.isIOS) {
-    // שם התהליך משמש רק לשם קובץ ה-pid. בלעדיו החבילה מריצה tasklist/ps
-    // באופן חוסם לפני runApp — במחשב שסוכן סינון מאט בו יצירת תהליכים זה
-    // עיכב את העלייה בעשרות שניות (issue #989). חייב לגזור אותו כמו החבילה
-    // (שם ה-EXE בלי סיומת), אחרת מופע ישן וחדש לא יזהו זה את זה.
-    FlutterSingleInstance.processName ??= Platform.resolvedExecutable
-        .split(Platform.pathSeparator)
-        .last
-        .replaceAll(RegExp(r'\.exe$', caseSensitive: false), '');
+    // שם התהליך משמש רק לשם קובץ ה-pid; בלעדיו החבילה מריצה tasklist/ps
+    // חוסם (issue #989). לעותק מותקן הוא שם ה-EXE, כדי שמופע ישן וחדש יזהו זה את זה.
+    FlutterSingleInstance.processName ??= AppPaths.singleInstanceKey();
     FlutterSingleInstance flutterSingleInstance = FlutterSingleInstance();
     bool isFirstInstance = await StartupTimeline.instance.phase(
       'singleInstance',
@@ -928,6 +924,7 @@ Future<void> _initializeRestartableRuntime() async {
   unawaited(_runDeferredCrashCheck());
   unawaited(_runDeferredAttachedLibraries());
   unawaited(_runDeferredLibraryChangesNotes());
+  unawaited(_runDeferredCapabilitiesWrite());
 }
 
 /// כשקונטיינמנט ה-Job Object לא הוקם, תהליכי msedgewebview2.exe שורדים את
@@ -1234,6 +1231,23 @@ Future<void> _runDeferredAttachedLibraries() async {
   AttachedLibrariesRepository.instance.changes.listen(
     (_) => unawaited(_syncExternalLinkIndex()),
   );
+}
+
+Future<void> _runDeferredCapabilitiesWrite() async {
+  // פר-תהליך: קובץ אחד לשורש הנתונים, וחלון משני היה כותב אותו שוב.
+  if (WindowRole.isSecondary) return;
+  try {
+    await _mainWindowRevealedCompleter.future.timeout(
+      const Duration(seconds: 20),
+    );
+  } on TimeoutException {
+    // ממשיכים בכל זאת — אחרת המעדכן הלא-מקוון לא יראה את היכולות.
+  }
+  try {
+    await OtzariaCapabilities.writeForCurrentProcess();
+  } catch (error, stackTrace) {
+    _logNonFatalInitializationError('Capabilities file', error, stackTrace);
+  }
 }
 
 /// Runs after the attached-library scan so every pinned source is known. The

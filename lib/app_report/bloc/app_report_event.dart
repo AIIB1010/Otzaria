@@ -1,6 +1,5 @@
 import 'package:equatable/equatable.dart';
-import 'package:otzaria/app_report/models/app_report.dart';
-import 'package:otzaria/app_report/models/app_report_image.dart';
+import 'package:otzaria_report_contract/otzaria_report_contract.dart';
 
 /// אירועי טופס הדיווח על התוכנה.
 sealed class AppReportEvent extends Equatable {
@@ -102,4 +101,14 @@ class AppReportImagesChanged extends AppReportEvent {
 
 class AppReportSubmitted extends AppReportEvent {
   const AppReportSubmitted();
+}
+
+/// שמירת הטופס כטיוטה, להשלמה ולשליחה בפתיחה הבאה.
+class AppReportDraftSaved extends AppReportEvent {
+  const AppReportDraftSaved();
+}
+
+/// מחיקת הטיוטה השמורה וניקוי הטופס.
+class AppReportDraftDiscarded extends AppReportEvent {
+  const AppReportDraftDiscarded();
 }
