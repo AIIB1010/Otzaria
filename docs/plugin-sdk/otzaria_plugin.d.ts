@@ -422,6 +422,14 @@ export interface NetworkFetchParams {
   timeoutMs?: number;
 }
 
+export interface NetworkFetchFileParams {
+  url: string;
+  /** ברירת מחדל 50MB; מקסימום 100MB. חריגה: `error.too_large`. */
+  maxBytes?: number;
+  /** ברירת מחדל 120,000; מקסימום 600,000 מילישניות. */
+  timeoutMs?: number;
+}
+
 export type NetworkFetchStreamChunk =
   | {
       sequence: number;
@@ -1826,6 +1834,24 @@ export interface UserFileHandle {
 }
 
 /**
+ * תוצאת `network.fetchFile` — קובץ במטמון זמני, token לקריאה בלבד. בניגוד ל-
+ * `UserFileHandle`, הקובץ עלול להימחק (מכסה, יממה, הסרת התוסף), ולכן אין להניח
+ * שה-token שורד: אחרי `error.not_found` מורידים שוב.
+ * `fs.resolveFileUrl`, `fs.readTextFile` ו-`fs.revokeFile` על token כזה דורשים
+ * גם את `fs.user_files.read`.
+ */
+export interface RemoteFileHandle {
+  /** מזהה אטום לקובץ במטמון. */
+  token: string;
+  /** URL מ-loopback, תקף לריצה הנוכחית בלבד (הפורט מתחלף). */
+  url: string;
+  name: string;
+  size: number;
+  /** סוג התוכן ששרת הקבצים מגיש, לפי סיומת השם ולא לפי תוכן הקובץ. */
+  mime: string;
+}
+
+/**
  * תוצאת `fs.pickUserFile`. בביטול חוזר `{ cancelled: true }` בלבד, ולכן זהו
  * union ולא אובייקט עם שדות אופציונליים.
  */
@@ -2231,6 +2257,7 @@ export type OtzariaMethod =
   | 'ui.showWarning'
   | 'ui.pickFolder'
   | 'ui.print'
+  | 'ui.printFile'
   | 'ui.exportPdf'
   | 'ui.setUnsavedChanges'
   | 'fs.extractZip'
@@ -2287,6 +2314,7 @@ export type OtzariaMethod =
   | 'database.batchQuery'
   | 'network.fetchStream'
   | 'network.download'
+  | 'network.fetchFile'
   | 'fs.pickUserFile'
   | 'fs.resolveFileUrl'
   | 'fs.readTextFile'
@@ -2428,6 +2456,23 @@ export interface OtzariaGlobal {
     method: 'search.endFieldSession',
     payload: { sessionId: string; submit?: boolean }
   ): Promise<OtzariaResponse<boolean>>;
+
+  /** מוריד קובץ מ-URL מותר למטמון זמני פרטי, בלי לשמור בתיקיית המשתמש. */
+  call(
+    method: 'network.fetchFile',
+    payload: NetworkFetchFileParams
+  ): Promise<OtzariaResponse<RemoteFileHandle>>;
+
+  /**
+   * Opens Otzaria's print screen (page range, preview, layout, then the system
+   * print dialog) on a PDF the plugin was granted (a file token). Needs a user
+   * gesture; waits for the screen to close without the generic 30-second RPC
+   * timeout. `printed` is true when the user printed or exported.
+   */
+  call(
+    method: 'ui.printFile',
+    payload: { token: string; jobName?: string }
+  ): Promise<OtzariaResponse<{ printed: boolean }>>;
 
   call(
     method: 'feedback.submitBookCorrection',

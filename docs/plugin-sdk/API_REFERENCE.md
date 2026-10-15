@@ -175,6 +175,7 @@ if (response.success) {
 | `library.setProviderBooks` | 0.9.98 |
 | `network.fetchStream` | 0.9.97 |
 | `network.download` | 0.9.93 |
+| `network.fetchFile` | 0.9.99 |
 | `search.fullText` | 0.9.89 |
 | `search.query` | 0.9.97 |
 | `search.getOptions` | 0.9.97 |
@@ -248,6 +249,7 @@ if (response.success) {
 | `ui.showWarning` | 0.9.89 |
 | `ui.pickFolder` | 0.9.93 |
 | `ui.print` | 0.9.97 |
+| `ui.printFile` | 0.9.99 |
 | `ui.exportPdf` | 0.9.97 |
 | `ui.setUnsavedChanges` | 0.9.97 |
 | `fs.extractZip` | 0.9.93 |
@@ -1399,6 +1401,67 @@ if (folder.success && folder.data.path) {
 שגיאות אפשריות: `error.permission_denied` (אין הרשאת network.access),
 `error.forbidden` (URL לא ברשימת ההיתר, או `destPath` מחוץ לתיקייה מאושרת),
 `error.invalid_params` (URL חסר/לא תקין), `error.internal` (כשל הורדה).
+
+### `network.fetchFile`
+**הרשאה:** `network.access` (או `network.localhost` ליעד מקומי) · **מגרסה:** 0.9.99
+
+מורידה קובץ מ-URL מותר **בלי לשמור אותו בתיקיית המשתמש**: הקובץ נשמר במטמון
+זמני פרטי של התוסף, והתוסף מקבל עליו `token` לקריאה בלבד, מאותו סוג ש-
+[`fs.pickUserFile`](#fspickuserfile) מחזיר. לכן כל מה שעובד על token כזה עובד
+גם כאן — `<iframe>`/PDF.js על ה-`url`, [`fs.resolveFileUrl`](#fsresolvefileurl),
+[`fs.readTextFile`](#fsreadtextfile), [`ui.printFile`](#uiprintfile) ו-
+[`fs.revokeFile`](#fsrevokefile). התוסף אינו מקבל נתיב דיסק.
+
+> **הרשאות:** `network.fetchFile`, `<iframe>` על ה-`url` ו-`ui.printFile` דורשים
+> רק את הרשאת הרשת. `fs.resolveFileUrl`, `fs.readTextFile` ו-`fs.revokeFile`
+> דורשים, כמו תמיד, גם את `fs.user_files.read` (הצהרה במניפסט והענקה); תוסף
+> שאינו מצהיר עליה אינו יכול לשחרר קובץ בעצמו, והמטמון מתפנה לפי המכסה, אחרי
+> יממה או בהסרת התוסף (ראו להלן).
+
+פרמטרים: `url` (חובה; אותה בדיקת הרשאה, allowlist ו-redirects כמו
+`network.download` — גם יעד redirect בודק את הרשאת הרשת המתאימה לו, כך שהפניה
+מאתר מותר ל-`127.0.0.1` נחסמת בלי `network.localhost`), `maxBytes` (תקרת גודל לקובץ; ברירת מחדל 50MB, מקסימום
+100MB) ו-`timeoutMs` (חסם זמן להורדה כולה; ברירת מחדל 120,000, מקסימום
+600,000). קובץ שחורג מהתקרה — כבר לפי `Content-Length`, ואם הוא חסר תוך כדי
+ההורדה — נמחק ומוחזרת `error.too_large`; הורדה שנכשלה באמצע אינה משאירה
+קובץ חלקי.
+
+```javascript
+const { data } = await Otzaria.call('network.fetchFile', {
+  url: 'https://example.org/books/sample.pdf',
+  maxBytes: 30 * 1024 * 1024  // אופציונלי
+});
+// { token, url, name: "sample.pdf", size: 1048576, mime: "application/pdf" }
+document.querySelector('iframe').src = data.url;
+```
+
+רינדור PDF בתוך `<iframe>` עובד רק ב-Windows/macOS; ב-Android/Linux יש לרנדר
+עם PDF.js (שמבצע `fetch` מה-`url`).
+
+הערות:
+- **הקובץ נשאר במטמון זמני פרטי עד שמשהו מוחק אותו.** אוצריא אינה מנקה את
+  המטמון ביציאה, וה-`token` נשמר בין הפעלות; הקובץ נמחק רק ב-`fs.revokeFile`
+  (קראו לו כשסיימתם), בפינוי מהמכסה (כ-256MB לכל תוסף, הוותיקים קודם),
+  בהסרה, בכיבוי, באיפוס נתונים או בשלילת ההרשאה `fs.user_files.read`
+  מהתוסף, או בניקוי של הורדה ראשונה אחרי הפעלה של אוצריא אם הקובץ ותיק מיממה.
+  עד אז הוא נשאר בדיסק, וגם `fs.resolveFileUrl` ממשיך לעבוד אחרי הפעלה מחדש.
+  **אל תניחו שה-`token` שורד:** אחרי כל אחד מהמחיקות האלה
+  `fs.resolveFileUrl` מחזיר `error.not_found` — הורידו שוב.
+- עד שלוש הורדות במקביל לתוסף; הורדה נוספת מוחזרת ב-`error.too_many_requests`.
+- שם הקובץ נגזר מה-URL ומנוקה: עד 60 תווים (הסיומת נשמרת), בלי נקודות ורווחים
+  בסוף, ושם התקן שמור של ווינדוס (`CON`, `NUL`…) מקבל קו תחתון בהתחלה.
+- **סוג התוכן נקבע לפי סיומת השם, לא לפי תוכן הקובץ.** `mime` הוא מה ששרת
+  הקבצים של אוצריא מגיש ל-`<iframe>`, והוא נגזר מהסיומת בלבד. תשובה מסוג
+  `application/pdf` שה-URL שלה אינו מסתיים ב-`.pdf` נשמרת עם הסיומת; סוג אחר
+  בלי סיומת מוגש כ-`application/octet-stream`, וקובץ שסיומתו אינה מתאימה לתוכנו
+  (למשל דף שגיאה של שרת שנשמר כ-`.pdf`) מוגש לפי הסיומת. בדקו את התוכן בעצמכם
+  אם הוא חשוב לכם.
+
+שגיאות אפשריות: `error.permission_denied`, `error.forbidden` (URL או redirect
+לא ברשימת ההיתר), `error.invalid_params` (`url` חסר/לא תקין, `maxBytes` או
+`timeoutMs` שאינם שלמים חיוביים או מעל התקרה), `error.too_large`,
+`error.timeout`, `error.too_many_requests`, `error.internal` (כשל הורדה, כולל
+סטטוס HTTP שאינו 2xx, או כשל בכתיבת הקובץ).
 
 ---
 
@@ -3147,6 +3210,45 @@ const res = await Otzaria.call('ui.print', {
 > הנייר שהמשתמש יבחר שם — הדף לא נפרס מחדש. בקשו גודל רק כשהתוסף באמת תלוי
 > בו; אחרת השאירו את השדה ריק ותנו למשתמש לשלוט.
 
+### `ui.printFile`
+**הרשאה:** (אין — מסך ההדפסה של אוצריא הוא שער ההסכמה) · **מגרסה:** 0.9.99
+
+מדפיסה קובץ PDF שהוענק לתוסף — `token` של [`fs.pickUserFile`](#fspickuserfile),
+[`fs.openFolderFile`](#fsopenfolderfile) או [`network.fetchFile`](#networkfetchfile).
+`ui.print` מדפיסה את דף התוסף עצמו, ו-`iframe.contentWindow.print()` נכשל
+ב-`SecurityError` כי ה-PDF בא מ-origin אחר; זו הדרך להדפיס את הקובץ.
+
+אוצריא פותחת עליו את מסך ההדפסה שלה — אותו מסך שכפתור ההדפסה בקורא ה-PDF
+פותח: בחירת טווח עמודים, תצוגה מקדימה, כיוון וגודל דף, כמה עמודים בגיליון,
+ובסוף דיאלוג ההדפסה של המערכת (במצב סייפר — בחירת המדפסת שלו). המשתמש יכול גם
+לייצא את הטווח לקובץ PDF. התוסף אינו מקבל את התוכן, ואינו יכול לקבוע את
+הטווח או את העימוד — הם בידי המשתמש.
+
+הקריאה ממתינה לסגירת המסך ללא פסק הזמן הכללי של 30 שניות. מחזירה
+`{ printed: true }` אם המשתמש הדפיס או ייצא, ו-`{ printed: false }` אם סגר את
+המסך או ביטל. `jobName` אופציונלי (ברירת מחדל: שם הקובץ); הוא שם עבודת
+ההדפסה ושם הקובץ המוצע בייצוא, ומוצג בכותרת המסך.
+
+```javascript
+printButton.onclick = async () => {
+  const res = await Otzaria.call('ui.printFile', { token, jobName: 'הגהה' });
+  // res.data = { printed: true } — הודפס/יוצא; { printed: false } — בוטל
+};
+```
+
+הערות:
+- **דורשת מחוות משתמש ודיאלוג אחד בכל רגע**, כמו [`ui.print`](#uiprint) וכמו
+  [`reader.printRange`](#readerprintrange) (ראו ההערה בסוף הפרק). המסך הוא
+  דיאלוג מודאלי של האפליקציה שחוסם את החלון הראשי, ולכן הוא נפתח רק מלחיצה של
+  המשתמש, גם אם "הדפס" הסופי נלחץ בתוכו.
+- רק קובץ PDF: סיומת `.pdf` ו-`%PDF-` ב-1024 הבייטים הראשונים (דף שגיאה של שרת
+  שנשמר בשם `.pdf` אינו עובר); אחרת `error.unsupported`. `token` לא מוכר,
+  של תוסף אחר או של קובץ שנמחק — `error.not_found`. כשאין חלון ראשי שאפשר
+  להציג בו את המסך או שאי אפשר לקרוא את הקובץ — `error.unavailable`.
+- `jobName` חייב להיות מחרוזת (אחרת `error.invalid_params`); תווי בקרה מוסרים
+  ממנו והוא נחתך ל-120 תווים.
+- התצוגה המקדימה מציגה עד 60 עמודים; ההדפסה והייצוא כוללים את כל הטווח.
+
 ### `ui.exportPdf`
 **הרשאה:** (אין — דיאלוג „שמור בשם” של המערכת הוא שער ההסכמה)
 
@@ -3215,7 +3317,7 @@ async function save() {
 }
 ```
 
-> **`ui.print` ו-`ui.exportPdf` דורשות פעולת משתמש מפורשת.** אוצריא בודקת ישירות ב-WebView
+> **`ui.print`, `ui.printFile` ו-`ui.exportPdf` דורשות פעולת משתמש מפורשת.** אוצריא בודקת ישירות ב-WebView
 > אם קיימת הפעלת-משתמש חולפת (`navigator.userActivation`), ולכן אין דרך
 > לזייף אותה מתוך התוסף. קריאה מטעינת הדף, מטיימר, או אחרי שרשרת `await`
 > ארוכה — מוחזרת ב-`error.forbidden`. קראו להן ישירות מתוך מטפל לחיצה.
@@ -3411,7 +3513,10 @@ const { data } = await Otzaria.call('fs.stat', { path: 'cache/index.json' });
 >
 > **PDF/בינארי גדול:** הקובץ מוגש דרך שרת `localhost` פנימי (`http://127.0.0.1`)
 > עם תמיכת `Range`. הבייטים **אינם** עוברים דרך גשר ה-JS. מציבים את ה-`url`
-> שמתקבל ב-`<iframe>`/PDF.js (או `fetch`). שימו לב: רינדור PDF ב-`<iframe>`
+> שמתקבל ב-`<iframe>`/PDF.js (או `fetch`). שרת הקבצים מתיר הטמעה ב-`<iframe>`
+> רק מדף תוסף (`file://` או `otzaria-plugin://`, דרך `frame-ancestors`), מגרסה 0.9.99; בגרסאות
+> קודמות הוא שלח `X-Frame-Options: SAMEORIGIN` וה-`<iframe>` נחסם — שם יש
+> לטעון עם `fetch` ← `Blob` ← `iframe src=blob:`. שימו לב: רינדור PDF ב-`<iframe>`
 > מובנה עובד רק ב-Windows/macOS — לתאימות מלאה (Android/Linux) יש לרנדר עם
 > PDF.js, ש-`fetch` מה-`url` בעצמו.
 
