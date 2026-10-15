@@ -12,6 +12,7 @@ class _Settings implements SettingsRepository {
 
 class _RecordingNotifications implements NotificationService {
   final scheduledIds = <int>[];
+  final scheduledMinutes = <int>[];
   final scheduledDates = <DateTime>[];
   final cancelled = <int>[];
 
@@ -34,6 +35,7 @@ class _RecordingNotifications implements NotificationService {
     bool soundEnabled = true,
   }) async {
     scheduledIds.add(id);
+    scheduledMinutes.add(reminderMinutes);
     scheduledDates.add(eventDate);
   }
 
@@ -86,5 +88,52 @@ void main() {
     await scheduler.cancelZmanAlert('sunrise');
 
     expect(notifications.cancelled.toSet(), scheduled);
+  });
+  int notificationId(String timeId, DateTime date) =>
+      '$timeId|${date.year}${date.month.toString().padLeft(2, '0')}${date.day.toString().padLeft(2, '0')}'
+          .hashCode &
+      0x7fffffff;
+
+  test('שבת ויו״ט שומרים דקות שונות ומתוזמנים רק בצאת היום המתאים', () async {
+    final scheduler = CalendarAlertScheduler(
+      notifications: notifications,
+      settings: _Settings(),
+      now: () => DateTime(2026, 4, 1),
+    );
+    await scheduler.rescheduleZmanAlerts(const {
+      'motzeiShabbos': ZmanAlertPreference(
+        minutesBefore: 30,
+        displayName: 'מוצאי שבת',
+      ),
+      'motzeiYomTov': ZmanAlertPreference(
+        minutesBefore: 15,
+        displayName: 'מוצאי יום טוב',
+      ),
+    }, 'ירושלים');
+    expect(notifications.scheduledDates, isNotEmpty);
+    expect(notifications.scheduledMinutes, containsAll([30, 15]));
+    for (var i = 0; i < notifications.scheduledDates.length; i++) {
+      final date = notifications.scheduledDates[i];
+      final saturday = date.weekday == DateTime.saturday;
+      final timeId = saturday ? 'motzeiShabbos' : 'motzeiYomTov';
+      expect(notifications.scheduledIds[i], notificationId(timeId, date));
+      expect(notifications.scheduledMinutes[i], saturday ? 30 : 15);
+      if (!saturday) {
+        expect(
+          DateTime(date.year, date.month, date.day),
+          isIn([DateTime(2026, 4, 2), DateTime(2026, 4, 8)]),
+        );
+      }
+    }
+    notifications.cancelled.clear();
+    await scheduler.cancelZmanAlert('motzeiYomTov');
+    expect(notifications.cancelled.toSet(), {
+      for (var i = 0; i <= 45; i++)
+        notificationId('motzeiYomTov', DateTime(2026, 4, 1 + i)),
+    });
+    expect(
+      notifications.cancelled,
+      isNot(contains(notificationId('motzeiShabbos', DateTime(2026, 4, 4)))),
+    );
   });
 }

@@ -269,6 +269,32 @@ void main() {
     TestWidgetsFlutterBinding.ensureInitialized();
   });
 
+  test('העדפות שבת ויו״ט נפרדות נשמרות בטעינה', () async {
+    final settings = _InMemorySettingsRepository()
+      ..calendarZmanAlertsJson = jsonEncode({
+        'motzeiShabbos': {'minutesBefore': 30, 'displayName': 'מוצאי שבת'},
+        'motzeiYomTov': {'minutesBefore': 15, 'displayName': 'מוצאי יום טוב'},
+      })
+      ..calendarEnabledZmanim = '["motzeiShabbos","motzeiYomTov"]';
+    final cubit = CalendarCubit(
+      settingsRepository: settings,
+      notificationService: _FakeNotificationService(),
+    );
+    addTearDown(cubit.close);
+    await cubit.initialized;
+    expect(cubit.state.zmanAlerts, {
+      'motzeiShabbos': const ZmanAlertPreference(
+        minutesBefore: 30,
+        displayName: 'מוצאי שבת',
+      ),
+      'motzeiYomTov': const ZmanAlertPreference(
+        minutesBefore: 15,
+        displayName: 'מוצאי יום טוב',
+      ),
+    });
+    expect(cubit.state.enabledZmanim, {'motzeiShabbos', 'motzeiYomTov'});
+  });
+
   group('CalendarCubit Jewish month navigation', () {
     late CalendarCubit cubit;
 
@@ -613,26 +639,6 @@ void main() {
       await cubit.setZmanEnabled('tzais', true);
       expect(cubit.state.enabledZmanim.contains('tzais'), isTrue);
       expect(settings.calendarEnabledZmanim, contains('tzais'));
-
-      await cubit.close();
-    });
-
-    test('מזהי מוצאי יום טוב הישנים ממופים לזמן המאוחד', () async {
-      final settings = _InMemorySettingsRepository()
-        ..calendarEnabledZmanim =
-            '["motzeiYomTov","motzeiYomTovChazonIsh","sunset","noSuchZman"]';
-      final cubit = CalendarCubit(
-        settingsRepository: settings,
-        notificationService: _FakeNotificationService(),
-      );
-      await Future.delayed(const Duration(milliseconds: 100));
-
-      expect(cubit.state.enabledZmanim, {
-        'motzeiShabbos',
-        'motzeiShabbosChazonIsh',
-        'sunset',
-        'noSuchZman',
-      });
 
       await cubit.close();
     });

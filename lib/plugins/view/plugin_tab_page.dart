@@ -348,24 +348,6 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
 
   Map<String, String>? _lastShortcuts;
 
-  /// שאר הגופנים המובנים, אחרי ה-boot. כישלון כאן אינו כישלון של התוסף.
-  Future<void> _injectDeferredFontFaces(
-    InAppWebViewController controller,
-    Set<String> injected,
-  ) async {
-    try {
-      final css = await buildPluginFontFaceCss(
-        pluginDeferredFontFamilies(injected),
-      );
-      if (!mounted || css.isEmpty) return;
-      await controller.evaluateJavascript(
-        source: buildPluginFontFaceScript(jsonEncode(css)),
-      );
-    } catch (e) {
-      debugPrint('Plugin [${widget.plugin.pluginId}] deferred fonts: $e');
-    }
-  }
-
   /// מזריק לתוסף את קיצורי הניווט לפי ההגדרה הנוכחית של המשתמש.
   Future<void> _pushHostShortcuts(InAppWebViewController controller) async {
     final shortcuts = context.read<SettingsBloc>().state.shortcuts;
@@ -635,10 +617,9 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
           // לוכד theme לפני ה-await (context חייב להישמר synchronously)
           final theme = buildThemePayload(context);
 
-          // @font-face לגופני ה-theme, כדי שה-WebView יפענח שמות כמו
-          // 'FrankRuhlCLM' (אחרת ב-macOS ה-fallback לעברית נראה דקורטיבי).
-          final themeFontFamilies = pluginThemeFontFamilies();
-          final fontFaceCss = await buildPluginFontFaceCss(themeFontFamilies);
+          // כל הגופנים חייבים להירשם לפני boot, כדי שתוספים יוכלו לטעון
+          // ולמדוד אותם מתוך plugin.ready בלי ליפול לגופן חלופי.
+          final fontFaceCss = await buildPluginFontFaceCss();
           if (!mounted) return;
 
           // Use cached PackageInfo — avoids async gap crossing a dispose
@@ -689,7 +670,6 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
           if (mounted && _awaitingFirstBoot) {
             setState(() => _awaitingFirstBoot = false);
           }
-          unawaited(_injectDeferredFontFaces(controller, themeFontFamilies));
         } catch (e, st) {
           // Boot ב-Dart נכשל — התהליך חי, לא קריסה native. מנקים את ה-canary
           // כדי שלא נחסום בהפעלה הבאה תוסף שפשוט החזיר שגיאת אתחול רגילה.

@@ -19,11 +19,7 @@ void main() {
 
   group('buildPluginFontFaceCss', () {
     test('כל הגופנים המובנים נשלחים, לא רק שני הנבחרים בהגדרות', () async {
-      final theme = pluginThemeFontFamilies();
-      final css = [
-        await buildPluginFontFaceCss(theme),
-        await buildPluginFontFaceCss(pluginDeferredFontFamilies(theme)),
-      ].join('\n');
+      final css = await buildPluginFontFaceCss();
       for (final family in AppFonts.fontPaths.keys) {
         expect(
           css,
@@ -33,32 +29,8 @@ void main() {
       }
     });
 
-    test('לפני ה-boot נשלחים רק גופני ה-theme, והשאר בלי כפילות', () async {
-      final typography = _typography();
-      final theme = pluginThemeFontFamilies();
-      expect(theme, {
-        typography['fontFamily'],
-        typography['commentatorsFontFamily'],
-        typography['uiFontFamily'],
-      });
-
-      final eager = await buildPluginFontFaceCss(theme);
-      final deferred = await buildPluginFontFaceCss(
-        pluginDeferredFontFamilies(theme),
-      );
-      for (final family in AppFonts.fontPaths.keys) {
-        final rule = "font-family:'$family'";
-        expect(eager.contains(rule), theme.contains(family), reason: family);
-        expect(
-          deferred.contains(rule),
-          !theme.contains(family),
-          reason: family,
-        );
-      }
-    });
-
     test('גופן עם קובץ בולד נפרד מקבל גם face של 700', () async {
-      final css = await buildPluginFontFaceCss(AppFonts.fontPaths.keys);
+      final css = await buildPluginFontFaceCss();
       final rules = css
           .split('\n')
           .where((r) => r.contains("font-family:'FrankRuhlCLM'"))
@@ -69,7 +41,7 @@ void main() {
     });
 
     test('גופן משתנה מקבל טווח משקלים ולא משקל בודד', () async {
-      final css = await buildPluginFontFaceCss(AppFonts.fontPaths.keys);
+      final css = await buildPluginFontFaceCss();
       for (final family in AppFonts.variableWeightFonts) {
         if (!AppFonts.fontPaths.containsKey(family)) continue;
         final rule = css
@@ -80,7 +52,7 @@ void main() {
     });
 
     test('גופן שאינו משתנה ואין לו קובץ בולד מקבל face יחיד', () async {
-      final css = await buildPluginFontFaceCss(AppFonts.fontPaths.keys);
+      final css = await buildPluginFontFaceCss();
       final rules = css
           .split('\n')
           .where((r) => r.contains("font-family:'Shofar'"))
@@ -138,7 +110,7 @@ void main() {
 
   group('typography ב-theme payload', () {
     test('ברירת המחדל היא משפחה שנשלחת בפועל כ-@font-face', () async {
-      final css = await buildPluginFontFaceCss(pluginThemeFontFamilies());
+      final css = await buildPluginFontFaceCss();
       final typography = _typography();
       expect(css, contains("font-family:'${typography['fontFamily']}'"));
       expect(
@@ -153,7 +125,7 @@ void main() {
       final typography = _typography();
       expect(typography['uiFontFamily'], isNot(typography['fontFamily']));
       expect(
-        await buildPluginFontFaceCss(pluginThemeFontFamilies()),
+        await buildPluginFontFaceCss(),
         contains("font-family:'${typography['uiFontFamily']}'"),
       );
     });

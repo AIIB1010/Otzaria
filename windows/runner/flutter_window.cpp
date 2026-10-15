@@ -1055,14 +1055,6 @@ bool FlutterWindow::OnCreate() {
       [this](const flutter::MethodCall<flutter::EncodableValue>& call,
              std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
                  result) {
-        if (call.method_name() == "setFreezeContext") {
-          if (const auto* context =
-                  std::get_if<std::string>(call.arguments())) {
-            startup_watchdog::SetContext(*context);
-          }
-          result->Success();
-          return;
-        }
         if (call.method_name() == "jobObjectStatus") {
           flutter::EncodableMap status;
           status[flutter::EncodableValue("ready")] =
@@ -1168,7 +1160,8 @@ bool FlutterWindow::OnCreate() {
           return;
         }
         if (call.method_name() == "close") {
-          startup_watchdog::EnterRuntimeMode();
+          // החלון נחשף — הניטור סיים את תפקידו.
+          startup_watchdog::RequestStop();
           // Defer the actual reveal until the engine *presents* the next
           // frame (raster output reaching the swapchain) — by then the
           // window is at its final size/state (Dart sends "close" after

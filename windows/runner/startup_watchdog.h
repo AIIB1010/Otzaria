@@ -1,10 +1,8 @@
 #ifndef RUNNER_STARTUP_WATCHDOG_H_
 #define RUNNER_STARTUP_WATCHDOG_H_
 
-#include <string>
-
-// גלאי תקיעות של ה-thread הראשי, בעלייה ובזמן השימוש. ב-Windows ה-UI isolate
-// של Dart רץ על ה-thread הזה, ולכן קוד סינכרוני חוסם גם פריימים וגם טיימרים.
+// גלאי תקיעות של ה-thread הראשי בעלייה. ב-Windows ה-UI isolate של Dart רץ על
+// ה-thread הזה, ולכן קוד נייטיב סינכרוני חוסם גם את הפריימים וגם את הטיימרים.
 namespace startup_watchdog {
 
 // מתחיל את הניטור. יש לקרוא מה-thread הראשי לפני לולאת ההודעות.
@@ -13,13 +11,7 @@ void Start();
 // מרענן את snapshot המודולים בנקודה בטוחה ב-thread הראשי.
 void RefreshModules();
 
-// עובר לניטור קיפאון בזמן השימוש. יש לקרוא מה-thread הראשי בחשיפת החלון.
-void EnterRuntimeMode();
-
-// מה שהמשתמש רואה כעת, לצירוף לדוחות הקיפאון.
-void SetContext(const std::string& context);
-
-// מבקש עצירה בלי להמתין ל-watcher.
+// מבקש עצירה בלי להמתין ל-watcher. יש לקרוא במסלול חשיפת החלון.
 void RequestStop();
 
 // משלים עצירה ושחרור משאבים ביציאה. בטוח לקריאה חוזרת.

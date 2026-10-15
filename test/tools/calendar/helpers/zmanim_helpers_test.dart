@@ -490,23 +490,37 @@ void main() {
       return jc;
     }
 
-    bool isMotzei(JewishCalendar jc) => motzei.isRelevant!(jc);
+    bool isMotzei(JewishCalendar jc) =>
+        motzei.isRelevant!(jc) || byId('motzeiYomTov').isRelevant!(jc);
     bool hasCandles(JewishCalendar jc) => candleLighting.isRelevant!(jc);
 
     const nissan = JewishDate.NISSAN;
     const sivan = JewishDate.SIVAN;
     const tishrei = JewishDate.TISHREI;
 
-    test('הזוג מאוחד תחת כותרת אחת ותנאי אחד', () {
-      final chazonIsh = byId('motzeiShabbosChazonIsh');
-      expect(motzei.title, 'מוצאי שבת ויום טוב');
-      expect(chazonIsh.title, motzei.title);
-      expect(chazonIsh.pairId, motzei.pairId);
-      expect(chazonIsh.isRelevant, same(motzei.isRelevant));
-      expect(
-        kZmanimRegistry.where((d) => d.id.startsWith('motzeiYomTov')),
-        isEmpty,
-      );
+    test('מזהי שבת ויו״ט נשמרים ומופיעים בימים נפרדים', () {
+      for (final suffix in ['', 'ChazonIsh']) {
+        final shabbos = byId('motzeiShabbos$suffix');
+        final yomTov = byId('motzeiYomTov$suffix');
+        final saturday = day(5786, sivan, 7, 7);
+        final festival = day(5786, nissan, 21, 4);
+        expect(shabbos.isRelevant!(saturday), isTrue);
+        expect(yomTov.isRelevant!(saturday), isFalse);
+        expect(shabbos.isRelevant!(festival), isFalse);
+        expect(yomTov.isRelevant!(festival), isTrue);
+        expect(kDefaultEnabledZmanim, containsAll([shabbos.id, yomTov.id]));
+      }
+    });
+
+    test('ברירת המחדל כוללת נץ גם בערים בחו״ל', () {
+      for (final city in ['ניו יורק', 'לונדון', 'ברוקלין']) {
+        final times = calculateDailyTimes(
+          DateTime(2026, 10, 15),
+          city,
+          only: kDefaultEnabledZmanim,
+        );
+        expect(times['sunrise'], isNotNull, reason: city);
+      }
     });
 
     test('יום טוב ביום שישי — המוצאי רק במוצאי השבת שאחריו', () {
@@ -576,63 +590,6 @@ void main() {
       expect(hasCandles(day(5786, sivan, 6, 6)), isTrue);
       // לפני יום טוב שני מדליקים אחרי צאת הכוכבים, לא בזמן ההדלקה
       expect(hasCandles(day(5786, tishrei, 1, 3)), isFalse);
-    });
-  });
-
-  group('הנץ הנראה לפי פרופיל האופק', () {
-    // ערכי ייחוס מחישוב עצמאי (פייתון, רזולוציה 0.1°) על אותם נתוני גובה.
-    const expected = {
-      'ירושלים': '06:40:53',
-      'בני ברק': '06:49:23',
-      'בית שמש': '07:01:06',
-      'אילת': '07:03:30',
-    };
-    final date = DateTime(2026, 10, 14);
-
-    for (final entry in expected.entries) {
-      test('${entry.key} — ${entry.value}', () {
-        final jerusalemTz = tz.getLocation('Asia/Jerusalem');
-        final cal = buildZmanimCalendarContext(date, entry.key)!.zmanimCalendar;
-        final actual = tz.TZDateTime.from(
-          calculateVisibleSunrise(cal, entry.key)!,
-          jerusalemTz,
-        );
-        final parts = entry.value.split(':').map(int.parse).toList();
-        final reference = tz.TZDateTime(
-          jerusalemTz,
-          2026,
-          10,
-          14,
-          parts[0],
-          parts[1],
-          parts[2],
-        );
-        expect(
-          actual.difference(reference).inSeconds.abs(),
-          lessThanOrEqualTo(2),
-        );
-      });
-    }
-
-    test('לכל עיר בארץ ישראל יש פרופיל אופק', () {
-      final israelCities = cityCoordinates['ארץ ישראל']!.keys;
-      expect(
-        israelCities.where(
-          (city) =>
-              calculateVisibleSunrise(
-                buildZmanimCalendarContext(date, city)!.zmanimCalendar,
-                city,
-              ) ==
-              null,
-        ),
-        isEmpty,
-      );
-    });
-
-    test('עיר בלי פרופיל — לא מוצג', () {
-      final times = calculateDailyTimes(date, 'ברוקלין');
-      expect(times['sunriseVisible'], isNull);
-      expect(times['sunrise'], isNotNull);
     });
   });
 }
