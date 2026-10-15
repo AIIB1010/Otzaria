@@ -37,6 +37,8 @@ void main() {
   test('DLL מאוחר מזוהה ממיפוי רק אחרי חידוש ה-thread הראשי', () {
     final start = source.indexOf('std::string DescribeAddress(');
     final end = source.indexOf('\n}', start);
+    expect(start, greaterThanOrEqualTo(0));
+    expect(end, greaterThan(start));
     final describe = source.substring(start, end);
     expect(describe, contains('::VirtualQuery('));
     expect(describe, contains('info.Type == MEM_IMAGE'));
@@ -48,6 +50,8 @@ void main() {
 
     final captureStart = source.indexOf('bool CaptureMainThreadStack(');
     final captureEnd = source.indexOf('\n}', captureStart);
+    expect(captureStart, greaterThanOrEqualTo(0));
+    expect(captureEnd, greaterThan(captureStart));
     final capture = source.substring(captureStart, captureEnd);
     expect(capture, contains('::ResumeThread(g_main_thread);'));
     expect(capture, isNot(contains('DescribeAddress(')));
@@ -55,10 +59,10 @@ void main() {
     expect(capture, isNot(contains('VirtualQuery')));
 
     final watcher = source.substring(source.indexOf('void WatcherLoop()'));
-    expect(
-      watcher.indexOf('ReportStall('),
-      greaterThan(watcher.indexOf('CaptureMainThreadStack(&frames);')),
-    );
+    final captureCall = watcher.indexOf('CaptureMainThreadStack(&frames);');
+    final reportCall = watcher.indexOf('ReportStall(');
+    expect(captureCall, greaterThanOrEqualTo(0));
+    expect(reportCall, greaterThan(captureCall));
     expect(RegExp(r'\bDescribeAddress\(').allMatches(source), hasLength(2));
   });
 
@@ -72,7 +76,15 @@ void main() {
   });
 
   test('חשיפה מבקשת עצירה והיציאה משלימה join', () {
-    expect(windowSource, contains('startup_watchdog::RequestStop();'));
+    final revealStart = windowSource.indexOf(
+      'if (call.method_name() == "close")',
+    );
+    expect(revealStart, greaterThanOrEqualTo(0));
+    final reveal = windowSource.substring(
+      revealStart,
+      windowSource.indexOf('result->Success();', revealStart),
+    );
+    expect(reveal, contains('startup_watchdog::RequestStop();'));
     final stop = source.substring(source.indexOf('void Stop()'));
     expect(stop, contains('RequestStop();'));
     expect(stop, contains('g_watcher.joinable()'));

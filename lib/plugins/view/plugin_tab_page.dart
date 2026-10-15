@@ -45,6 +45,7 @@ import 'package:otzaria/settings/settings_exports.dart';
 import 'package:otzaria/utils/ui/fullscreen_helper.dart';
 import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/plugins/services/plugin_text_reader_registry.dart';
+import 'package:otzaria/widgets/feedback/loading_indicator.dart';
 
 /// קוד JS שמעדכן בתוסף את רשימת קיצורי התוכנה שהוא מעביר חזרה.
 @visibleForTesting
@@ -105,6 +106,18 @@ Set<Factory<OneSequenceGestureRecognizer>>? pluginTabWebViewGestureRecognizers({
   };
 }
 
+/// ה-WebView ומעליו מחוון טעינה. רשימת הילדים קבועה, כך שהסתרת המחוון אינה
+/// מחליפה את ההורה של ה-WebView — החלפה כזו הורסת אותו וטוענת מאפס.
+@visibleForTesting
+Widget buildPluginTabBody({required Widget webView, required bool loading}) =>
+    Stack(
+      fit: StackFit.passthrough,
+      children: [
+        webView,
+        Visibility(visible: loading, child: const LoadingIndicator()),
+      ],
+    );
+
 class PluginTabPage extends StatefulWidget {
   final InstalledPlugin plugin;
   final TextBookTab? readerTab;
@@ -164,6 +177,9 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
 
   /// GlobalKey ל-InAppWebView — שורד החלפת הורה באותו פריים בלי טעינה מחדש.
   final GlobalKey _webViewKey = GlobalKey();
+
+  /// רק לפתיחה הראשונה: בטעינה מחדש הדף הקודם נשאר מוצג עד שהחדש מצויר.
+  bool _awaitingFirstBoot = true;
   bool _hasError = false;
   String? _devErrorMessage;
 
@@ -415,7 +431,7 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
         future: _prereqFuture ??= _resolveWebViewPrerequisites(),
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
-            return const SizedBox.shrink();
+            return const LoadingIndicator();
           }
           if (snapshot.hasError) {
             debugPrint('WebView prerequisites init error: ${snapshot.error}');
@@ -601,9 +617,8 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
           // לוכד theme לפני ה-await (context חייב להישמר synchronously)
           final theme = buildThemePayload(context);
 
-          // טוען CSS עם @font-face לגופנים המובנים, כדי שה-WebView
-          // יוכל לפענח שמות כמו 'FrankRuhlCLM' שמגיעים ב-theme payload
-          // (אחרת ב-macOS ה-fallback של המערכת לעברית נראה דקורטיבי).
+          // כל הגופנים חייבים להירשם לפני boot, כדי שתוספים יוכלו לטעון
+          // ולמדוד אותם מתוך plugin.ready בלי ליפול לגופן חלופי.
           final fontFaceCss = await buildPluginFontFaceCss();
           if (!mounted) return;
 
@@ -652,6 +667,9 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
             widget.plugin.pluginId,
             instanceId: widget.instanceId,
           );
+          if (mounted && _awaitingFirstBoot) {
+            setState(() => _awaitingFirstBoot = false);
+          }
         } catch (e, st) {
           // Boot ב-Dart נכשל — התהליך חי, לא קריסה native. מנקים את ה-canary
           // כדי שלא נחסום בהפעלה הבאה תוסף שפשוט החזיר שגיאת אתחול רגילה.
@@ -728,7 +746,10 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
             instanceId: widget.instanceId,
           ),
         ),
-        child: webView,
+        child: buildPluginTabBody(
+          webView: webView,
+          loading: _awaitingFirstBoot,
+        ),
       ),
     );
   }
@@ -761,7 +782,7 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
       if (await WebViewEnvironmentHolder.checkDataFolderWritable() != null) {
         return _WebViewPrereqStatus.dataFolderNotWritable;
       }
-      await WebViewEnvironmentHolder.initialize();
+      await WebViewEnvironmentHolder.initialize(dataFolderChecked: true);
     }
     return _WebViewPrereqStatus.ready;
   }

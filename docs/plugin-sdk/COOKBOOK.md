@@ -23,7 +23,7 @@
 
 `FrankRuhlCLM` · `TaameyDavidCLM` · `Shofar` · `NotoRashiHebrew` · `KeterYG` · `NotoSerifHebrew` · `Tinos` · `Rubik` · `TaameyAshkenaz`
 
-> מוזרקים רק הגופן הראשי וגופן המפרשים **שנבחרו בהגדרות**. אם המשתמש בחר גופן מערכת (לא מובנה) — ההזרקה מדלגת, וה-WebView נופל ל-fallback של ה-CSS. לכן **תמיד** השאר `'David', serif` בסוף שרשרת ה-`font-family`.
+> גופן מערכת (לא מובנה) מוזרק רק כשהמשתמש בחר בו בהגדרות. משפחה שלא הוזרקה נופלת ל-fallback של ה-CSS. לכן **תמיד** השאר `'David', serif` בסוף שרשרת ה-`font-family`.
 
 ### מתכון א' — להפנות לגופן מובנה בשם
 

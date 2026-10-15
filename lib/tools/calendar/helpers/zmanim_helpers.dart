@@ -357,13 +357,18 @@ bool _isErevPesach(JewishCalendar jc) =>
 
 // ב-JewishCalendar הימים ממוספרים 1=ראשון..7=שבת, כך שיום שישי = 6.
 bool _isErevShabbosOrYomTov(JewishCalendar jc) =>
-    jc.getDayOfWeek() == 6 || jc.isErevYomTov();
+    jc.getDayOfWeek() == 6 || (jc.isErevYomTov() && jc.getDayOfWeek() != 7);
 
 bool _isMotzeiShabbos(JewishCalendar jc) =>
-    jc.isAssurBemelacha() && jc.getDayOfWeek() == 7;
+    jc.isAssurBemelacha() &&
+    jc.getDayOfWeek() == 7 &&
+    !jc.isTomorrowShabbosOrYomTov();
 
 bool _isMotzeiYomTov(JewishCalendar jc) =>
-    jc.isAssurBemelacha() && jc.isYomTov() && jc.getDayOfWeek() != 7;
+    jc.isAssurBemelacha() &&
+    jc.isYomTov() &&
+    jc.getDayOfWeek() != 7 &&
+    !jc.isTomorrowShabbosOrYomTov();
 
 bool _isTaanisNotYomKippur(JewishCalendar jc) =>
     jc.isTaanis() && jc.getYomTovIndex() != JewishCalendar.YOM_KIPPUR;

@@ -269,6 +269,32 @@ void main() {
     TestWidgetsFlutterBinding.ensureInitialized();
   });
 
+  test('העדפות שבת ויו״ט נפרדות נשמרות בטעינה', () async {
+    final settings = _InMemorySettingsRepository()
+      ..calendarZmanAlertsJson = jsonEncode({
+        'motzeiShabbos': {'minutesBefore': 30, 'displayName': 'מוצאי שבת'},
+        'motzeiYomTov': {'minutesBefore': 15, 'displayName': 'מוצאי יום טוב'},
+      })
+      ..calendarEnabledZmanim = '["motzeiShabbos","motzeiYomTov"]';
+    final cubit = CalendarCubit(
+      settingsRepository: settings,
+      notificationService: _FakeNotificationService(),
+    );
+    addTearDown(cubit.close);
+    await cubit.initialized;
+    expect(cubit.state.zmanAlerts, {
+      'motzeiShabbos': const ZmanAlertPreference(
+        minutesBefore: 30,
+        displayName: 'מוצאי שבת',
+      ),
+      'motzeiYomTov': const ZmanAlertPreference(
+        minutesBefore: 15,
+        displayName: 'מוצאי יום טוב',
+      ),
+    });
+    expect(cubit.state.enabledZmanim, {'motzeiShabbos', 'motzeiYomTov'});
+  });
+
   group('CalendarCubit Jewish month navigation', () {
     late CalendarCubit cubit;
 
