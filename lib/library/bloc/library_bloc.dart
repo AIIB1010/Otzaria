@@ -135,11 +135,18 @@ class LibraryBloc extends Bloc<LibraryEvent, LibraryState> {
         '📚 LibraryBloc: State emitted with isLoading=false',
         name: 'LibraryBloc',
       );
-    } catch (e) {
+    } catch (e, stackTrace) {
       developer.log(
         '📚 LibraryBloc: Error loading library: $e',
         name: 'LibraryBloc',
       );
+      try {
+        ErrorLogFile.append(
+          title: 'כשל טעינת הספרייה',
+          error: e,
+          stackTrace: stackTrace,
+        );
+      } catch (_) {}
       emit(
         state.copyWith(
           error: e.toString(),
@@ -373,7 +380,14 @@ class LibraryBloc extends Bloc<LibraryEvent, LibraryState> {
         ),
       );
       _repeatSearch(hadResults);
-    } catch (e) {
+    } catch (e, stackTrace) {
+      try {
+        ErrorLogFile.append(
+          title: 'כשל רענון הספרייה',
+          error: e,
+          stackTrace: stackTrace,
+        );
+      } catch (_) {}
       emit(
         state.copyWith(
           error: e.toString(),

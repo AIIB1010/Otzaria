@@ -1369,18 +1369,18 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/pdfrx"
-      ref: d9320ba9a402b50acfee119ab58541b0896d3118
-      resolved-ref: d9320ba9a402b50acfee119ab58541b0896d3118
-      url: "https://github.com/Y-PLONI/pdfrx"
+      ref: "9854a7239bd75027fd2628ab4ab0e0ba275d1637"
+      resolved-ref: "9854a7239bd75027fd2628ab4ab0e0ba275d1637"
+      url: "https://github.com/palmoni5/pdfrx"
     source: git
     version: "2.6.5"
   pdfrx_engine:
     dependency: "direct overridden"
     description:
       path: "packages/pdfrx_engine"
-      ref: d9320ba9a402b50acfee119ab58541b0896d3118
-      resolved-ref: d9320ba9a402b50acfee119ab58541b0896d3118
-      url: "https://github.com/Y-PLONI/pdfrx"
+      ref: "9854a7239bd75027fd2628ab4ab0e0ba275d1637"
+      resolved-ref: "9854a7239bd75027fd2628ab4ab0e0ba275d1637"
+      url: "https://github.com/palmoni5/pdfrx"
     source: git
     version: "0.6.1"
   petitparser:
