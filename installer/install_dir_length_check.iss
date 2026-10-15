@@ -34,6 +34,5 @@ begin
   Result := Length(WizardDirValue) > {#MaxInstallDirLength};
   if Result then
     InstTellSuppressible(CustomMessage('InstallDirTooLongTitle'),
-      FmtMessage(CustomMessage('InstallDirTooLongText'),
-        [IntToStr(Length(WizardDirValue)), IntToStr({#MaxInstallDirLength})]));
+      FmtMessage(CustomMessage('InstallDirTooLongText'), [IntToStr(Length(WizardDirValue)), IntToStr({#MaxInstallDirLength})]));
 end;
