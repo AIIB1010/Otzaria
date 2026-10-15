@@ -48,6 +48,8 @@ import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/utils/book_versions_action.dart';
 import 'package:otzaria/text_book/view/splited_view/splited_view_screen.dart';
 import 'package:otzaria/text_book/view/text_book_screen.dart';
+import 'package:otzaria/text_book/view/page_shape/simple_text_viewer.dart'
+    show isTextInputFocusNode;
 import 'package:otzaria/tools/shamor_zachor/providers/shamor_zachor_data_provider.dart';
 import 'package:otzaria/tools/shamor_zachor/providers/shamor_zachor_progress_provider.dart';
 import 'package:otzaria/tour/bloc/tour_cubit.dart';
@@ -1721,7 +1723,8 @@ void main() {
           for (var i = 0; i < 3; i++) TocEntry(text: 'פרק $i', index: i),
         ],
       );
-      final bloc = _TestTextBookBloc(state);
+      // repository מזויף - לשונית החיפוש שבחלונית קוראת אותו.
+      final bloc = _ExportTextBookBloc(state, content: 'א\nב\nג');
       tab = TextBookTab(book: book, index: 1, blocOverride: bloc);
       final tabsBloc = _TestTabsBloc(
         TabsState(tabs: [tab], currentTabIndex: 0),
@@ -1775,6 +1778,42 @@ void main() {
       await pumpAfterTocJump(tester);
       await sendCtrl(tester, LogicalKeyboardKey.keyJ);
       expect(tab.index, 1);
+    });
+
+    testWidgets('Home/End לבד קופצים לקצות הספר (issue #2140)', (
+      tester,
+    ) async {
+      await pumpAfterTocJump(tester);
+      await tester.sendKeyEvent(LogicalKeyboardKey.end);
+      await tester.sendKeyEvent(LogicalKeyboardKey.home);
+      await sendCtrl(tester, LogicalKeyboardKey.end);
+      // Shift+End שייך לבחירת טקסט.
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.end);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pump();
+      expect(navigations, [2, 0, 2]);
+    });
+
+    testWidgets('Home/End בשדה קלט בחלונית אינם גוללים את הספר', (
+      tester,
+    ) async {
+      await pumpAfterTocJump(tester);
+      final bloc = tab.bloc as _TestTextBookBloc;
+      bloc.emitStateForTest(
+        (bloc.state as TextBookLoaded).copyWith(showLeftPane: true),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('חיפוש'));
+      await tester.pumpAndSettle();
+      expect(
+        isTextInputFocusNode(FocusManager.instance.primaryFocus),
+        isTrue,
+        reason: 'שדה החיפוש שבחלונית אמור להיות ממוקד',
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.end);
+      await sendCtrl(tester, LogicalKeyboardKey.home);
+      expect(navigations, isEmpty);
     });
 
     testWidgets('"כותרת הבאה" עוברת את הכותרת שמוצגת', (tester) async {
