@@ -75,7 +75,7 @@ public enum SnapshotScenarios {
             model.status = PreparationStatus(
                 phase: .downloading, title: PreparationStatus.downloadingTitle, detail: name,
                 doneBytes: 1_288_490_188, totalBytes: 3_758_096_384,
-                bytesPerSecond: 7_654_604, secondsRemaining: 44 * 60
+                bytesPerSecond: 7_654_604, eta: .remaining(44 * 60)
             )
         }
         add("joining") { model in
@@ -163,7 +163,7 @@ public enum SnapshotScenarios {
             model.status = PreparationStatus(
                 phase: .downloading, title: PreparationStatus.downloadingTitle,
                 detail: manifest.component(withId: "otzaria-macos")?.displayName(english: s.english) ?? "",
-                doneBytes: 40_000_000, totalBytes: 90_177_536, bytesPerSecond: 5_000_000, secondsRemaining: 10
+                doneBytes: 40_000_000, totalBytes: 90_177_536, bytesPerSecond: 5_000_000, eta: .remaining(10)
             )
             model.requestStop()
         }
@@ -173,7 +173,7 @@ public enum SnapshotScenarios {
             model.status = PreparationStatus(
                 phase: .downloading, title: PreparationStatus.downloadingTitle,
                 detail: manifest.component(withId: "otzaria-macos")?.displayName(english: s.english) ?? "",
-                doneBytes: 40_000_000, totalBytes: 90_177_536, bytesPerSecond: 5_000_000, secondsRemaining: 10
+                doneBytes: 40_000_000, totalBytes: 90_177_536, bytesPerSecond: 5_000_000, eta: .remaining(10)
             )
             _ = model.requestClose()
         }

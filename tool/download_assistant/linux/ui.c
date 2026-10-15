@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "download.h"
+#include "eta.h"
 #include "otz_common.h"
 #include "paths.h"
 #include "release.h"
@@ -38,8 +39,6 @@ typedef enum {
 typedef enum { MODE_THIS, MODE_OTHER } Mode;
 
 #define CUSTOM_ID "custom"
-#define SPEED_WINDOW_US (5 * G_USEC_PER_SEC)
-#define MAX_SAMPLES 64
 
 /* The opening (assistant_art.isi: AA_BOOK_*, AA_RISE_*, AA_TITLE_*), in ms. */
 #define HERO_FADE_MS 250.0
@@ -54,10 +53,6 @@ typedef struct {
   char *platform, *architecture, *format;
 } Target;
 
-typedef struct {
-  gint64 time, bytes;
-} Sample;
-
 typedef struct Ui Ui;
 typedef void (*UiAction)(Ui *ui);
 
@@ -68,6 +63,7 @@ typedef struct {
   guint files_done, files_total;
   char *detail;
   double speed, eta; /* -1 until measured */
+  gboolean waiting;  /* no data for a while: the connection, not the ETA */
 } Status;
 
 struct Ui {
@@ -123,10 +119,15 @@ struct Ui {
   GPtrArray *job_ids;
   Target job_target;
   GCancellable *cancel;
-  guint tick_id;
+  guint tick_id, tick_count;
   gint64 started_us;
-  Sample samples[MAX_SAMPLES];
-  int sample_count;
+  OtzEta eta;
+  OtzWorkRates work;
+  OtzPhase eta_phase;
+  gint64 eta_phase_done;
+  gint64 text_us;
+  OtzPhase text_phase;
+  OtzEtaStatus text_status;
   GHashTable *file_names;
   Status status;
   gboolean closing;
@@ -1206,16 +1207,16 @@ static void update_working(Ui *ui) {
     default: caption = g_strdup(otz_tr(S_PREPARING)); break;
   }
   otz_label_set(ui->w_caption, caption);
+  g_autofree char *left = s->eta >= 0 ? otz_time_left_text(s->eta) : NULL;
   g_autofree char *speed = NULL;
-  if (s->phase == OTZ_PHASE_DOWNLOAD && s->speed > 0) {
-    g_autofree char *rate = otz_speed_text(s->speed);
-    if (s->eta >= 0) {
-      g_autofree char *eta = otz_duration_text(s->eta);
-      g_autofree char *left = otz_trf(S_TIME_LEFT, eta, NULL);
-      speed = g_strconcat(rate, " · ", left, NULL);
-    } else {
-      speed = g_steal_pointer(&rate);
-    }
+  if (s->phase == OTZ_PHASE_DOWNLOAD && s->waiting) {
+    speed = g_strdup(otz_tr(S_WAITING_CONNECTION));
+  } else if (s->phase == OTZ_PHASE_DOWNLOAD) {
+    const char *eta = left != NULL ? left : otz_tr(S_ETA_CALCULATING);
+    g_autofree char *rate = s->speed > 0 ? otz_speed_text(s->speed) : NULL;
+    speed = rate != NULL ? g_strconcat(rate, " · ", eta, NULL) : g_strdup(eta);
+  } else {
+    speed = g_steal_pointer(&left);
   }
   otz_label_set(ui->w_speed, speed != NULL ? speed : " ");
   g_autofree char *done = otz_size_text(s->done);
@@ -1763,18 +1764,52 @@ static void request_stop_connecting(Ui *ui) {
 
 /* ------------------------------------------------------------- job */
 
-static double current_speed(Ui *ui, gint64 now, gint64 bytes) {
-  if (ui->sample_count == MAX_SAMPLES) {
-    memmove(ui->samples, ui->samples + 1, sizeof(Sample) * (MAX_SAMPLES - 1));
-    ui->sample_count--;
+/* Seconds of the running post-download step's rest and of the planned ones. */
+static double post_seconds(Ui *ui, const OtzProgress *p, double now) {
+  OtzWorkRates *work = &ui->work;
+  double later = otz_work_seconds(work, p->later_copy, p->later_hash);
+  gint64 left = MAX(p->phase_total - p->phase_done, 0);
+  switch (p->phase) {
+    case OTZ_PHASE_ASSEMBLE:
+      otz_work_sample(work, OTZ_WORK_COPY, now, p->phase_done);
+      return otz_work_seconds(work, MIN(left, p->step_copy), 0) + later;
+    case OTZ_PHASE_PLACE: /* not measured: usually an instant hard link */
+      return otz_work_seconds(work, MIN(left, p->step_copy), 0) + later;
+    case OTZ_PHASE_VERIFY_ASSEMBLY:
+      otz_work_sample(work, OTZ_WORK_HASH, now, p->phase_done);
+      return otz_work_seconds(work, 0, left) + later;
+    default: return later;
   }
-  ui->samples[ui->sample_count++] = (Sample){now, bytes};
-  int oldest = 0;
-  while (oldest < ui->sample_count - 1 && now - ui->samples[oldest].time > SPEED_WINDOW_US)
-    oldest++;
-  gint64 span = now - ui->samples[oldest].time;
-  if (span < G_USEC_PER_SEC) return -1;
-  return (double)(bytes - ui->samples[oldest].bytes) * G_USEC_PER_SEC / span;
+}
+
+static void update_eta(Ui *ui, const OtzProgress *p) {
+  double now = g_get_monotonic_time() / (double)G_USEC_PER_SEC;
+  double shown = -1;
+  OtzEtaStatus status = OTZ_ETA_CALCULATING;
+  gboolean phase = p->phase == OTZ_PHASE_ASSEMBLE ||
+                   p->phase == OTZ_PHASE_VERIFY_ASSEMBLY || p->phase == OTZ_PHASE_PLACE;
+  if (phase || p->phase == OTZ_PHASE_DOWNLOAD) {
+    gboolean phase_fresh = p->phase != ui->eta_phase || p->phase_done != ui->eta_phase_done;
+    /* A question on screen, or every thread re-hashing or backing off. */
+    gboolean paused = ui->dialog_open || (p->workers > 0 && p->waiting >= p->workers);
+    status = otz_eta_tick(&ui->eta, now, p->network_bytes,
+                          phase ? 0 : MAX(p->download_total - p->download_done, 0),
+                          post_seconds(ui, p, now), phase, phase_fresh, paused, &shown);
+  }
+  ui->eta_phase = p->phase;
+  ui->eta_phase_done = p->phase_done;
+
+  Status *s = &ui->status;
+  gint64 now_us = g_get_monotonic_time();
+  if (p->phase == ui->text_phase && status == ui->text_status &&
+      now_us - ui->text_us < G_USEC_PER_SEC)
+    return;
+  ui->text_phase = p->phase;
+  ui->text_status = status;
+  ui->text_us = now_us;
+  s->waiting = status == OTZ_ETA_STALLED;
+  s->eta = shown;
+  s->speed = p->phase == OTZ_PHASE_DOWNLOAD ? otz_eta_speed(&ui->eta) : -1;
 }
 
 static gboolean on_tick(gpointer data) {
@@ -1789,18 +1824,17 @@ static gboolean on_tick(gpointer data) {
   s->detail = g_strdup(p.detail);
   s->files_done = p.files_done;
   s->files_total = p.files_total;
-  s->speed = s->eta = -1;
   if (p.phase == OTZ_PHASE_DOWNLOAD) {
     s->done = p.download_done;
     s->total = p.download_total;
-    s->speed = current_speed(ui, g_get_monotonic_time(), p.download_done);
-    if (s->speed > 0) s->eta = (p.download_total - p.download_done) / s->speed;
   } else {
     s->done = p.phase_done;
     s->total = p.phase_total;
   }
+  update_eta(ui, &p);
   otz_progress_clear(&p);
-  update_working(ui);
+  /* The estimate polls every 100 ms, like network chunks; the page needs less. */
+  if (ui->tick_count++ % 3 == 0) update_working(ui);
   return G_SOURCE_CONTINUE;
 }
 
@@ -1917,14 +1951,22 @@ static void start(Ui *ui) {
   ui->page_id = PAGE_WORKING;
   g_free(ui->status.detail);
   memset(&ui->status, 0, sizeof ui->status);
+  ui->status.eta = ui->status.speed = -1;
   ui->failed_while_loading = FALSE;
   ui->started_us = g_get_monotonic_time();
-  ui->sample_count = 0;
+  otz_eta_init(&ui->eta);
+  ui->eta_phase = OTZ_PHASE_CHECK;
+  ui->eta_phase_done = 0;
+  otz_work_init(&ui->work);
+  ui->text_us = 0;
+  ui->text_phase = OTZ_PHASE_DONE;
+  ui->text_status = OTZ_ETA_CALCULATING;
   build_file_names(ui);
   show_page(ui);
   g_clear_object(&ui->cancel);
   ui->cancel = g_cancellable_new();
-  ui->tick_id = g_timeout_add(250, on_tick, ui);
+  ui->tick_count = 0;
+  ui->tick_id = g_timeout_add(100, on_tick, ui);
   otz_job_run_async(ui->job, ui->cancel, on_job_done, ui);
 }
 
@@ -2222,7 +2264,7 @@ static void s_status(Ui *ui, OtzPhase phase, const char *id, gint64 done, gint64
   g_ptr_array_add(ui->job_ids, g_strdup(id));
   build_file_names(ui);
   ui->status = (Status){TRUE, phase, done, total, 0, 4, g_strdup(component_asset(id)),
-                        speed, eta};
+                        speed, eta, FALSE};
   ui->page_id = PAGE_WORKING;
   show_page(ui);
 }

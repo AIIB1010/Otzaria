@@ -3,6 +3,7 @@
 #include <stdarg.h>
 #include <string.h>
 
+#include "eta.h"
 #include "otz_common.h"
 
 #define RLM "\xE2\x80\x8F"
@@ -99,7 +100,7 @@ static const char *const hebrew[S_COUNT] = {
                         "יישמר.",
     [S_DOWNLOADING_ITEM] = "מוריד: %1 (%2 מתוך %3)",
     [S_DOWNLOADED_OF] = "ירדו %1 מתוך %2",
-    [S_TIME_LEFT] = "נותרו %1",
+    [S_TIME_LEFT] = "נותרו כ-%1",
     [S_SIZE_OF] = "%1 מתוך %2",
     [S_WORK_TITLE] = "הכנת ההתקנה",
     [S_WORK_DESC] = "רגע, מכינים את הקבצים.",
@@ -181,12 +182,17 @@ static const char *const hebrew[S_COUNT] = {
     [S_ERR_WRITE_JOINED] = "לא ניתן היה לכתוב את הקובץ המאוחד. ייתכן שאין מספיק מקום "
                            "פנוי.",
     [S_OUTPUT_SUBFOLDER] = "אוצריא להתקנה ל-%1",
-    [S_DURATION_UNDER_MINUTE] = "פחות מדקה",
+    [S_TIME_LEFT_FEW] = "עוד כמה שניות",
+    [S_TIME_LEFT_WORD] = "נותרו כ%1",
+    [S_TIME_LEFT_SINGLE] = "נותרה כ%1",
+    [S_ETA_CALCULATING] = "מחשב את הזמן הנותר…",
+    [S_WAITING_CONNECTION] = "ממתין לחיבור…",
     [S_DURATION_HOUR] = "שעה",
     [S_DURATION_TWO_HOURS] = "שעתיים",
     [S_DURATION_HOURS] = "%1 שעות",
     [S_DURATION_MINUTE] = "דקה",
     [S_DURATION_MINUTES] = "%1 דקות",
+    [S_DURATION_SECONDS] = "%1 שניות",
     [S_DURATION_JOIN] = "%1 ו-%2",
 };
 
@@ -287,7 +293,7 @@ static const char *const english_texts[S_COUNT] = {
                         "stop at any time — whatever was already downloaded is kept.",
     [S_DOWNLOADING_ITEM] = "Downloading: %1 (%2 of %3)",
     [S_DOWNLOADED_OF] = "%1 of %2 downloaded",
-    [S_TIME_LEFT] = "%1 left",
+    [S_TIME_LEFT] = "about %1 left",
     [S_SIZE_OF] = "%1 of %2",
     [S_WORK_TITLE] = "Preparing the installation",
     [S_WORK_DESC] = "One moment, preparing the files.",
@@ -383,12 +389,17 @@ static const char *const english_texts[S_COUNT] = {
     [S_ERR_WRITE_JOINED] = "Couldn't write the joined file. There may not be enough "
                            "free space.",
     [S_OUTPUT_SUBFOLDER] = "Otzaria setup for %1",
-    [S_DURATION_UNDER_MINUTE] = "less than a minute",
+    [S_TIME_LEFT_FEW] = "a few seconds left",
+    [S_TIME_LEFT_WORD] = "about %1 left",
+    [S_TIME_LEFT_SINGLE] = "about %1 left",
+    [S_ETA_CALCULATING] = "Calculating time left…",
+    [S_WAITING_CONNECTION] = "Waiting for the connection…",
     [S_DURATION_HOUR] = "1 hour",
     [S_DURATION_TWO_HOURS] = "2 hours",
     [S_DURATION_HOURS] = "%1 hours",
     [S_DURATION_MINUTE] = "1 minute",
     [S_DURATION_MINUTES] = "%1 minutes",
+    [S_DURATION_SECONDS] = "%1 seconds",
     [S_DURATION_JOIN] = "%1 %2",
 };
 
@@ -492,29 +503,36 @@ char *otz_speed_text(double bytes_per_second) {
   return otz_ltr(text);
 }
 
-/* Whole hours and rounded minutes, like HumanDuration on Windows. */
-char *otz_duration_text(double seconds) {
-  if (seconds < 60) return g_strdup(otz_tr(S_DURATION_UNDER_MINUTE));
-  gint64 whole = (gint64)seconds;
-  gint64 hours = whole / 3600;
-  gint64 minutes = (whole % 3600 + 30) / 60;
-  if (minutes == 60) {
-    hours++;
-    minutes = 0;
+static char *count_text(OtzString key, int count) {
+  g_autofree char *number = g_strdup_printf("%d", count);
+  return otz_trf(key, number, NULL);
+}
+
+char *otz_time_left_text(double seconds) {
+  int hours, minutes, secs;
+  otz_eta_round(seconds, &hours, &minutes, &secs);
+  g_autofree char *big = NULL;
+  g_autofree char *small = NULL;
+  if (hours > 0) {
+    big = hours == 1   ? g_strdup(otz_tr(S_DURATION_HOUR))
+          : hours == 2 ? g_strdup(otz_tr(S_DURATION_TWO_HOURS))
+                       : count_text(S_DURATION_HOURS, hours);
+    if (minutes > 0) small = count_text(S_DURATION_MINUTES, minutes);
+  } else if (minutes > 0) {
+    big = minutes == 1 ? g_strdup(otz_tr(S_DURATION_MINUTE))
+                       : count_text(S_DURATION_MINUTES, minutes);
+    if (secs > 0) small = count_text(S_DURATION_SECONDS, secs);
+  } else if (secs > 0) {
+    big = count_text(S_DURATION_SECONDS, secs);
+  } else {
+    return g_strdup(otz_tr(S_TIME_LEFT_FEW));
   }
-  g_autofree char *hours_text = NULL;
-  if (hours == 1) {
-    hours_text = g_strdup(otz_tr(S_DURATION_HOUR));
-  } else if (hours == 2) {
-    hours_text = g_strdup(otz_tr(S_DURATION_TWO_HOURS));
-  } else if (hours > 2) {
-    g_autofree char *count = g_strdup_printf("%" G_GINT64_FORMAT, hours);
-    hours_text = otz_trf(S_DURATION_HOURS, count, NULL);
-  }
-  if (minutes == 0) return g_strdup(hours_text != NULL ? hours_text : "");
-  g_autofree char *count = g_strdup_printf("%" G_GINT64_FORMAT, minutes);
-  g_autofree char *minutes_text = minutes == 1 ? g_strdup(otz_tr(S_DURATION_MINUTE))
-                                               : otz_trf(S_DURATION_MINUTES, count, NULL);
-  if (hours_text == NULL) return g_steal_pointer(&minutes_text);
-  return otz_trf(S_DURATION_JOIN, hours_text, minutes_text, NULL);
+  g_autofree char *amount =
+      small != NULL ? otz_trf(S_DURATION_JOIN, big, small, NULL) : g_strdup(big);
+  /* Hebrew: "כ" joins a word ("כשעה"), "כ-" a number; a lone hour or minute
+   * takes "נותרה". */
+  gboolean word = hours == 1 || hours == 2 || (hours == 0 && minutes == 1);
+  gboolean single = small == NULL && (hours == 1 || (hours == 0 && minutes == 1));
+  return otz_trf(single ? S_TIME_LEFT_SINGLE : word ? S_TIME_LEFT_WORD : S_TIME_LEFT,
+                 amount, NULL);
 }

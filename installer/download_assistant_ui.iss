@@ -372,17 +372,19 @@ begin
     Page := WorkPage;
   Caption := Page.Msg1Label.Caption;
   Bytes := Page.Msg2Label.Caption;
-  if Source <> UiSrcDownload then
-  begin
-    Bar := Page.ProgressBar;
-    exit;
-  end;
-  Bytes := DownloadStatus;
+  if Source = UiSrcDownload then
+    Bytes := DownloadStatus;
+  { "בתים · מהירות · זמן": מה שאחרי הבתים בשורה השנייה, גם בחיבור החלקים. }
   P := Pos(' · ', Bytes);
   if P > 0 then
   begin
     Speed := Copy(Bytes, P + 3, Length(Bytes));
     Bytes := Copy(Bytes, 1, P - 1);
+  end;
+  if Source <> UiSrcDownload then
+  begin
+    Bar := Page.ProgressBar;
+    exit;
   end;
   Fraction := UiDownloadFraction();
   Known := ProgressTotal > 0;
@@ -1000,21 +1002,32 @@ end;
 { Inno מקבל סגירה רק בעמוד שיש בו "ביטול". בעמודי ההתקדמות השאלה נשאלת כאן,
   והסגירה מחכה עד שהשלב חוזר לעמוד רגיל (UiCloseIfRequested). }
 procedure UiRequestClose();
+var
+  WasPaused: Boolean;
 begin
   if UiPage = wpFinished then
     UiClickReal(WizardForm.NextButton)
   else if WizardForm.CancelButton.CanFocus then
     PostMessage(WizardForm.Handle, UiWmSysCommand, UiScClose, 0)
-  else if UiAskExit() then
+  else
   begin
-    UiClosing := True;
-    StopRequested := True;
+    WasPaused := SpeedHold();
+    try
+      if UiAskExit() then
+      begin
+        UiClosing := True;
+        StopRequested := True;
+      end;
+    finally
+      SpeedRelease(WasPaused);
+    end;
   end;
 end;
 
 procedure UiButtonClick(Sender: TObject);
 var
   I: Integer;
+  WasPaused: Boolean;
 begin
   { בזמן דו-שיח החלון מושבת; לחיצה שבכל זאת הגיעה הייתה פותחת שאלה שנייה. }
   if UiIsWindowEnabled(WizardForm.Handle) = 0 then
@@ -1030,9 +1043,17 @@ begin
               CustomMessage('ConnectStopYes'), CustomMessage('ConnectStopNo'), True) then
               StopRequested := True;
           end
-          else if UiAsk(CustomMessage('StopTitle'), CustomMessage('StopText'),
-            CustomMessage('StopYes'), CustomMessage('StopNo'), True) then
-            StopRequested := True;
+          else
+          begin
+            WasPaused := SpeedHold();
+            try
+              if UiAsk(CustomMessage('StopTitle'), CustomMessage('StopText'),
+                CustomMessage('StopYes'), CustomMessage('StopNo'), True) then
+                StopRequested := True;
+            finally
+              SpeedRelease(WasPaused);
+            end;
+          end;
         UiBtnRetry:
           begin
             UiHideFailure();

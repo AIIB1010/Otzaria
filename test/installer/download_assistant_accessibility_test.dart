@@ -203,7 +203,11 @@ void main() {
   test('ההתקדמות והסיום שומרים תיאור עברי, נתיבים וגלילה בעיצוב', () {
     expect(
       routine(native, 'function OnDownloadProgress('),
-      contains('DownloadStatus := Status;'),
+      contains('ShowDownloadStatus();'),
+    );
+    expect(
+      routine(native, 'procedure ShowDownloadStatus('),
+      contains('DownloadStatus :='),
     );
     final progress = routine(script, 'function UiAdapterProgress(');
     expect(progress, contains('DownloadStatus'));
