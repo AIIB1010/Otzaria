@@ -773,6 +773,47 @@ List<Map<String, dynamic>> _loadBookLinksRowsInIsolate({
   }
 }
 
+/// השאילתה הקדמית של [_loadBookLinkTargetsSummaryRowsInIsolate]: מספר
+/// הקישורים לפי (שם ספר-יעד, שם סוג חיבור).
+@visibleForTesting
+String bookLinkTargetsForwardSql({
+  required bool hasLinkRanges,
+  required String suppressedFilter,
+}) {
+  // קישור-טווח נספר פעם לכל שורה מכוסה — כמו בטעינת הקישורים המלאה, כדי
+  // שסיווג "מפרש נדיר" לפי הספירה יישאר שקול.
+  final coverageArm = hasLinkRanges
+      ? '''
+          UNION ALL
+          SELECT lc.linkId FROM link_coverage lc
+          JOIN link cl ON cl.id = lc.linkId
+          WHERE lc.side = 0 AND cl.sourceBookId = ?'''
+      : '';
+  return '''
+        WITH anchors(linkId) AS (
+          SELECT id FROM link WHERE sourceBookId = ?
+          $coverageArm
+        ),
+        -- ספירה לפי מזהים לפני ה-JOIN לשמות: שליפת ספר ושם סוג לכל קישור
+        -- (עשרות אלפים בספר גדול) היא רוב זמן השאילתה.
+        counts AS (
+          SELECT l.targetBookId, l.connectionTypeId, COUNT(*) AS n
+          FROM anchors a
+          JOIN link l ON l.id = a.linkId
+          WHERE 1=1
+            $suppressedFilter
+          GROUP BY l.targetBookId, l.connectionTypeId
+        )
+        SELECT tb.title as targetBookTitle,
+               ct.name as connectionTypeName,
+               SUM(c.n) as linkCount
+        FROM counts c
+        JOIN book tb ON c.targetBookId = tb.id
+        LEFT JOIN connection_type ct ON c.connectionTypeId = ct.id
+        GROUP BY tb.title, ct.name
+      ''';
+}
+
 /// Top-level worker לסיכום קישורי ספר לפי (ספר-יעד, סוג חיבור) — שאילתת
 /// GROUP BY זולה במקום למשוך עשרות אלפי שורות קישורים לדארט.
 ({List<Map<String, dynamic>> rows, int? maxSourceLineIndex})
@@ -804,36 +845,13 @@ _loadBookLinkTargetsSummaryRowsInIsolate({
       displayedSide: 0,
     );
 
-    // קישור-טווח נספר פעם לכל שורה מכוסה — כמו בטעינת הקישורים המלאה, כדי
-    // שסיווג "מפרש נדיר" לפי הספירה יישאר שקול.
-    final coverageArm = hasLinkRanges
-        ? '''
-          UNION ALL
-          SELECT lc.linkId FROM link_coverage lc
-          JOIN link cl ON cl.id = lc.linkId
-          WHERE lc.side = 0 AND cl.sourceBookId = ?'''
-        : '';
-    final forwardRows = db
-        .select(
-          '''
-        WITH anchors(linkId) AS (
-          SELECT id FROM link WHERE sourceBookId = ?
-          $coverageArm
-        )
-        SELECT tb.title as targetBookTitle,
-               ct.name as connectionTypeName,
-               COUNT(*) as linkCount
-        FROM anchors a
-        JOIN link l ON l.id = a.linkId
-        JOIN book tb ON l.targetBookId = tb.id
-        LEFT JOIN connection_type ct ON l.connectionTypeId = ct.id
-        WHERE 1=1
-          $forwardSuppressed
-        GROUP BY tb.title, ct.name
-      ''',
-          [bookId, if (hasLinkRanges) bookId],
-        )
-        .toMapList();
+    final forwardRows = db.select(
+      bookLinkTargetsForwardSql(
+        hasLinkRanges: hasLinkRanges,
+        suppressedFilter: forwardSuppressed,
+      ),
+      [bookId, if (hasLinkRanges) bookId],
+    ).toMapList();
 
     // הזרוע ההפוכה — סופרת שורות link בלבד, בלי זרוע ה-coverage שיש
     // ל-_loadInverseSourceRows, ולכן היא נמוכה ממנה. הצרכן היחיד
