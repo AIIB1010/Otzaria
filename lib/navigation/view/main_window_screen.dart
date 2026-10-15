@@ -46,6 +46,7 @@ import 'package:otzaria/library/models/library.dart' as library_model;
 import 'package:otzaria/library/hidden/hidden_library_store.dart';
 import 'package:otzaria/search/models/search_configuration.dart';
 import 'package:otzaria/search/view/search_dialog.dart';
+import 'package:otzaria/semantic_search/models/semantic_result_item.dart';
 import 'package:otzaria/semantic_search/repository/semantic_search_repository.dart';
 import 'package:otzaria/semantic_search/semantic_work_status.dart';
 import 'package:otzaria/library/view/library_browser.dart';
@@ -105,6 +106,7 @@ import 'package:otzaria/tabs/bloc/tabs_event.dart';
 import 'package:otzaria/tabs/bloc/tabs_state.dart';
 import 'package:otzaria/tabs/models/combined_tab.dart';
 import 'package:otzaria/tabs/models/searching_tab.dart';
+import 'package:otzaria/tabs/models/semantic_search_tab.dart';
 import 'package:otzaria/tabs/models/tab.dart';
 import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/tabs/models/pdf_tab.dart';
@@ -1611,6 +1613,9 @@ class MainWindowScreenState extends State<MainWindowScreen>
           InstallPluginRequested(archivePath),
         );
         return true;
+      case RunSearchAction(:final query, smart: true):
+        _runExternalSemanticSearch(query);
+        return true;
       case RunSearchAction(:final query, :final mode):
         _runExternalSearch(query, mode: mode);
         return true;
@@ -1750,6 +1755,16 @@ class MainWindowScreenState extends State<MainWindowScreen>
     context.read<NavigationBloc>().add(const NavigateToScreen(Screen.search));
     // ה-UpdateSearchQuery נשלח אוטומטית מ-TantivyFullTextSearch.initState
     // ברגע שהלשונית מוצגת לראשונה. ראה tantivy_full_text_search.dart:130-134.
+  }
+
+  /// הכרטיסייה עצמה מציגה הסכמה או הורדה חסרות, כמו חיפוש חכם מהדיאלוג.
+  void _runExternalSemanticSearch(String query) {
+    final tab = SemanticSearchTab(
+      runOnFirstShow: true,
+      options: SemanticQueryOptions(query: query),
+    );
+    context.read<TabsBloc>().add(AddTab(tab));
+    context.read<NavigationBloc>().add(const NavigateToScreen(Screen.search));
   }
 
   Future<bool> _openBookByExternalId(OpenBookAction action) async {
