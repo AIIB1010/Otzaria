@@ -4095,11 +4095,18 @@ class MainWindowScreenState extends State<MainWindowScreen>
   }
 
   /// סוגר כל דיאלוג/תפריט פתוח מעל מסך הבית, כדי שחלוניות לא ייערמו זו על זו.
-  void _closeRootOverlayRoutes(BuildContext context) {
+  bool _closeRootOverlayRoutes(BuildContext context) {
+    var blocked = false;
     final navigator = Navigator.of(context, rootNavigator: true);
     if (navigator.canPop()) {
-      navigator.popUntil((route) => route.isFirst);
+      navigator.popUntil((route) {
+        blocked =
+            !route.isFirst &&
+            route.popDisposition == RoutePopDisposition.doNotPop;
+        return route.isFirst || blocked;
+      });
     }
+    return !blocked;
   }
 
   /// פותח את דיאלוג החיפוש במסלול שעוקב אחרי `_isSearchOpen`, כדי שקיצור
@@ -4122,7 +4129,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
       return;
     }
 
-    _closeRootOverlayRoutes(context);
+    if (!_closeRootOverlayRoutes(context)) return;
     final navigationBloc = context.read<NavigationBloc>();
     setState(() => _isSearchOpen = true);
 
@@ -4156,7 +4163,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
       return;
     }
 
-    _closeRootOverlayRoutes(context);
+    if (!_closeRootOverlayRoutes(context)) return;
     final navigationBloc = context.read<NavigationBloc>();
     setState(() => _isFindRefOpen = true);
 

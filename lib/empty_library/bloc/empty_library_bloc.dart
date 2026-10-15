@@ -143,6 +143,7 @@ class EmptyLibraryBloc extends Bloc<EmptyLibraryEvent, EmptyLibraryState> {
     required EmptyLibraryState Function(Object error) onError,
     Future<void> Function()? afterReplacement,
   }) async {
+    emit(const EmptyLibraryLoading());
     String? backupDir;
     var writeSessionStarted = false;
     LibrarySuspension? suspension;
@@ -474,6 +475,7 @@ class EmptyLibraryBloc extends Bloc<EmptyLibraryEvent, EmptyLibraryState> {
     Emitter<EmptyLibraryState> emit,
   ) async {
     final target = event.targetPath;
+    emit(EmptyLibraryLoading(selectedPath: target));
     String? backupDir;
     var writeSessionStarted = false;
     LibrarySuspension? suspension;
@@ -985,7 +987,18 @@ class EmptyLibraryBloc extends Bloc<EmptyLibraryEvent, EmptyLibraryState> {
     Emitter<EmptyLibraryState> emit,
   ) async {
     _downloadDisabledReason = await _checkSpaceForDownload();
-    emit(EmptyLibraryInitial(downloadDisabledReason: _downloadDisabledReason));
+    if (state is EmptyLibraryInitial) {
+      emit(
+        EmptyLibraryInitial(downloadDisabledReason: _downloadDisabledReason),
+      );
+    } else if (state is EmptyLibraryError) {
+      emit(
+        _error(
+          errorMessage: state.errorMessage,
+          selectedPath: state.selectedPath,
+        ),
+      );
+    }
   }
 
   /// שומר את מיקום האחסון שנבחר ומריץ מחדש את בדיקת המקום הפנוי עבור היעד
@@ -1011,6 +1024,7 @@ class EmptyLibraryBloc extends Bloc<EmptyLibraryEvent, EmptyLibraryState> {
     DownloadLibraryRequested event,
     Emitter<EmptyLibraryState> emit,
   ) async {
+    emit(EmptyLibraryLoading(selectedPath: event.targetPath));
     try {
       final libraryPath =
           event.targetPath ??

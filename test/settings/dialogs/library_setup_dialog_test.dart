@@ -6,6 +6,10 @@ import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:otzaria/core/windowing/library_suspension_marker.dart';
+import 'package:otzaria/library_update/services/library_access_gate.dart';
 import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/ui_snack.dart';
@@ -63,15 +67,18 @@ Future<void> _openSetup(
   await tester.pumpAndSettle();
 }
 
-Future<void> _openUpdate(WidgetTester tester) async {
+Future<void> _openUpdate(
+  WidgetTester tester, {
+  String root = '/lib',
+}) async {
   await tester.binding.setSurfaceSize(const Size(1200, 900));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(
     _host(
       (ctx) => showLibrarySetupDialog(
         context: ctx,
-        defaultTargetPath: '/lib',
-        currentLibraryPath: '/lib/books',
+        defaultTargetPath: root,
+        currentLibraryPath: p.join(root, 'books'),
       ),
     ),
   );
@@ -174,6 +181,39 @@ class _MemoryFolder extends PackageFolder {
   @override
   Stream<List<int>> openRead(PackageFileEntry entry) =>
       Stream.value(files[entry.name]!);
+}
+
+class _PreparingGate extends LibraryAccessGate {
+  _PreparingGate({this.failPreparation = false})
+    : super(
+        selfAccess: LibraryAccessRoutine(
+          suspend: () async {},
+          resume: (_) async {},
+        ),
+        renameProbe: false,
+      );
+
+  final bool failPreparation;
+  final preparing = Completer<void>();
+  final proceed = Completer<void>();
+  final resumed = Completer<bool>();
+
+  @override
+  Future<void> verifyReleased(String dbPath) async {
+    await super.verifyReleased(dbPath);
+    preparing.complete();
+    await proceed.future;
+    if (failPreparation) throw StateError('preparation failed');
+  }
+
+  @override
+  Future<void> resumeAll(
+    LibrarySuspension suspension, {
+    required bool dbReplaced,
+  }) async {
+    await super.resumeAll(suspension, dbReplaced: dbReplaced);
+    resumed.complete(dbReplaced);
+  }
 }
 
 void main() {
@@ -484,6 +524,157 @@ void main() {
         expect(find.text('בחר קובץ ספרייה'), findsNothing);
       },
     );
+  });
+
+  group('החלפה פעילה שומרת את הדיאלוג פתוח', () {
+    for (final outcome in ['success', 'cancel', 'preparation failure']) {
+      testWidgets('הכנה, Back, Esc ו-X: $outcome', (tester) async {
+        final temp = (await tester.runAsync(
+          () => Directory.systemTemp.createTemp('library_lifecycle_'),
+        ))!;
+        final books = Directory(p.join(temp.path, 'books'));
+        final db = File(p.join(books.path, DatabaseConstants.databaseFileName));
+        final lex = File(
+          p.join(books.path, DatabaseConstants.lexicalDatabaseFileName),
+        );
+        await tester.runAsync(() async {
+          await books.create();
+          await db.writeAsString('old-db');
+          await lex.writeAsString('old-lex');
+        });
+        await Settings.init(cacheProvider: MemoryCacheProvider());
+        await Settings.setValue<String>(
+          SettingsRepository.keyLibraryPath,
+          books.path,
+        );
+        EmptyLibraryBloc.tempRootOverride = temp.path;
+        final gate = _PreparingGate(
+          failPreparation: outcome == 'preparation failure',
+        );
+        final staging = Completer<void>();
+        final finishStaging = Completer<void>();
+        final checkSpace = Completer<String?>();
+        late EmptyLibraryBloc bloc;
+        bloc = (await tester.runAsync(
+          () async => EmptyLibraryBloc(
+            accessGate: gate,
+            downloadSpaceChecker: (_) => checkSpace.future,
+            packageImporter: LibraryPackageImporter(
+              diskSpace: (_) async => DiskSpaceInfo.unknown,
+              rawRunner: (job, {required onProgress, required cancel}) async {
+                onProgress(LibraryComponent.libraryDb, 1, 2);
+                staging.complete();
+                await finishStaging.future;
+                if (ffi.Pointer<ffi.Uint8>.fromAddress(cancel.address).value !=
+                    0) {
+                  throw const LibraryImportCancelled();
+                }
+                await extractRawAssetJob(
+                  job,
+                  openZstd: () => throw StateError('plain assets only'),
+                  onProgress: onProgress,
+                );
+              },
+            ),
+          ),
+        ))!;
+        debugCreateLibrarySetupBloc = () => bloc;
+        debugPickAndroidSourceFolder = () async => _MemoryFolder('SAF', {
+          DatabaseConstants.databaseFileName: utf8.encode('new-db'),
+          DatabaseConstants.lexicalDatabaseFileName: utf8.encode('new-lex'),
+        });
+        debugAndroidStorageChoices = () async => [
+          (isRemovable: true, root: temp.path),
+        ];
+        Future<void> pumpUntil(bool Function() done) async {
+          for (var i = 0; i < 300 && !done(); i++) {
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 10)),
+            );
+            await tester.pump(const Duration(milliseconds: 10));
+          }
+          expect(done(), isTrue, reason: bloc.state.toString());
+        }
+
+        addTearDown(() async {
+          if (!checkSpace.isCompleted) checkSpace.complete(null);
+          if (!gate.proceed.isCompleted) gate.proceed.complete();
+          if (!finishStaging.isCompleted) finishStaging.complete();
+          if (gate.preparing.isCompleted) {
+            await pumpUntil(() => gate.resumed.isCompleted);
+          }
+          await tester.pumpWidget(const SizedBox());
+          debugCreateLibrarySetupBloc = null;
+          debugPickAndroidSourceFolder = null;
+          debugAndroidStorageChoices = null;
+          EmptyLibraryBloc.tempRootOverride = null;
+          LibrarySuspensionMarker.resetForTesting();
+          await tester.runAsync(() => temp.delete(recursive: true));
+        });
+
+        await _openUpdate(tester, root: temp.path);
+        await _select(tester, 'החלפת הספרייה בספרייה אחרת');
+        await _select(tester, 'בחירת תיקייה מהמחשב');
+        await tester.tap(find.text('בחר תיקייה'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('אישור'));
+        await pumpUntil(() => gate.preparing.isCompleted);
+        expect(bloc.state.isLoading, isTrue);
+        expect(find.text('ביטול'), findsNothing);
+
+        // בדיקת מקום שהחלה בפתיחת הדיאלוג אינה מחזירה אותו למצב בחירה.
+        checkSpace.complete(null);
+        await tester.pump();
+        expect(bloc.state.isLoading, isTrue);
+        final closeButton = find.widgetWithIcon(
+          IconButton,
+          FluentIcons.dismiss_24_regular,
+        );
+        expect(tester.widget<IconButton>(closeButton).onPressed, isNull);
+        await tester.binding.handlePopRoute();
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pump();
+        expect(find.byType(AppCustomContentDialog), findsOneWidget);
+        expect(bloc.isClosed, isFalse);
+
+        gate.proceed.complete();
+        if (outcome != 'preparation failure') {
+          await pumpUntil(() => staging.isCompleted);
+          await tester.binding.handlePopRoute();
+          await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+          await tester.pump();
+          expect(bloc.isClosed, isFalse);
+          if (outcome == 'cancel') {
+            await tester.tap(find.text('ביטול'));
+            await tester.pump();
+          }
+          finishStaging.complete();
+        }
+        await pumpUntil(() => gate.resumed.isCompleted);
+        expect(await gate.resumed.future, outcome == 'success');
+        expect(
+          await tester.runAsync(db.readAsString),
+          outcome == 'success' ? 'new-db' : 'old-db',
+        );
+        expect(
+          await tester.runAsync(lex.readAsString),
+          outcome == 'success' ? 'new-lex' : 'old-lex',
+        );
+        expect(LibrarySuspensionMarker.isRegistered, isFalse);
+        if (outcome == 'success') {
+          await pumpUntil(
+            () => find.text('הספרייה הותקנה').evaluate().isNotEmpty,
+          );
+          await tester.tap(find.text('סגור'));
+        } else {
+          expect(bloc.state, isA<EmptyLibraryError>());
+          expect(_actionOnPressed(tester, 'ביטול'), isNotNull);
+          await tester.tap(find.text('ביטול'));
+        }
+        await tester.pumpAndSettle();
+        expect(find.byType(AppCustomContentDialog), findsNothing);
+      });
+    }
   });
 
   group('בחירת תיקייה שאינה ניתנת לקריאה (issue #1219)', () {
