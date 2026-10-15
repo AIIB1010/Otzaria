@@ -482,54 +482,25 @@ class ContextMenuUtils {
     }
 
     try {
-      final clipboard = SystemClipboard.instance;
-      if (clipboard != null) {
-        final settingsState = context.read<SettingsBloc>().state;
-        if (link != null && settingsState.copyWithHeaders != 'none') {
-          // ספר הכותרת נגזר מה-link (headerBookOverride), ולכן ההעתקה עם
-          // כותרות עובדת גם בחלונית ה-PDF שאין בה TextBookBloc.
-          await copySelectedTextForBook(
-            plainText: plainText,
-            selectedIndex: link.index2 - 1,
-            sourceContent: [plainText],
-            textBookState: _maybeTextBookState(context),
-            settingsState: settingsState,
-            fontFamily: settingsState.commentatorsFontFamily,
-            fontSize: fontSize,
-            headerBookOverride: _targetBookFromLink(link),
-            removeNikud: removeNikud,
-            copyProfile: copyProfile,
-            plainTextOnly: plainTextOnly,
-          );
-          return;
-        }
-
-        final finalPlainText = CopyUtils.applyCopyPreferences(
-          text: plainText,
-          replaceHolyNames: settingsState.replaceHolyNames,
-          holyNameStyle: settingsState.holyNameStyle,
-          removeNikud: removeNikud,
-          profile: copyProfile,
-        );
-
-        final item = DataWriterItem();
-        item.add(Formats.plainText(finalPlainText));
-        if (!plainTextOnly) {
-          final htmlText = CopyUtils.buildStyledHtml(
-            htmlText: finalPlainText,
-            fontFamily: settingsState.commentatorsFontFamily,
-            fontSize: fontSize,
-          );
-          item.add(Formats.htmlText(htmlText));
-        }
-
-        await clipboard.write([item]);
-        UiSnack.show(
-          plainTextOnly
-              ? CommonMessages.plainTextCopied
-              : CommonMessages.textCopiedShort,
-        );
-      }
+      final settingsState = context.read<SettingsBloc>().state;
+      // ערוץ ההעתקה של המפרשים חל כמו בגוף הספר. ספר הכותרת נגזר מה-link,
+      // ולכן הכותרות עובדות גם בחלונית ה-PDF; בלי link אין כותרת מקור.
+      await copySelectedTextForBook(
+        plainText: plainText,
+        selectedIndex: link == null ? null : link.index2 - 1,
+        sourceContent: [plainText],
+        textBookState: _maybeTextBookState(context),
+        settingsState: link == null
+            ? settingsState.copyWith(copyWithHeaders: 'none')
+            : settingsState,
+        fontFamily: settingsState.commentatorsFontFamily,
+        fontSize: fontSize,
+        headerBookOverride: link == null ? null : _targetBookFromLink(link),
+        removeNikud: removeNikud,
+        copyProfile: copyProfile,
+        copyTarget: TextTarget.commentary,
+        plainTextOnly: plainTextOnly,
+      );
     } catch (e) {
       debugPrint('Error copying text: $e');
       UiSnack.showError(CommonMessages.textCopyError);
