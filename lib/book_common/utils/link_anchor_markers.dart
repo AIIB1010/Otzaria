@@ -143,7 +143,8 @@ String injectLinkAnchorMarkers({
         // עטיפה בתוך <sup> משאירה אותו sup עם markup (WidgetSpan שמתחלף ב-RTL).
         if (rawStart >= 5 &&
             rawLine.startsWith('<sup>', rawStart - 5) &&
-            rawLine.startsWith('</sup>', rawEnd)) {
+            rawLine.startsWith('</sup>', rawEnd) &&
+            rawLine.indexOf('</sup>', rawStart) == rawEnd) {
           rawStart -= 5;
           rawEnd += 6;
         }

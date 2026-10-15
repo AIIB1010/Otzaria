@@ -988,4 +988,42 @@ void main() {
       expect(RegExp('class="raised-sup"').allMatches(rendered), hasLength(2));
     },
   );
+
+  for (final rawOffsets in [false, true]) {
+    test('טווח שחוצה שני sup אינו מורחב ($rawOffsets)', () {
+      const line = 'לפני<sup>1</sup> טקסט רגיל <sup>2</sup>אחרי';
+      final start = line.indexOf('1');
+      final end = line.indexOf('2') + 1;
+      final html = injectLinkAnchorMarkers(
+        rawLine: line,
+        anchorLinks: [
+          Link(
+            heRef: 'הערות א',
+            index1: 1,
+            path2: 'הערות',
+            index2: 1,
+            connectionType: 'commentary',
+            anchorStart: rawOffsets ? line.indexOf('<sup>') : 4,
+            anchorEnd: rawOffsets ? line.lastIndexOf('</sup>') + 6 : 17,
+            anchorOffsetsAreRaw: rawOffsets,
+          ),
+        ],
+        styleIndexByCommentator: const {},
+        lineIndex: 0,
+      );
+      expect(
+        html,
+        wrapHtmlRanges(line, [
+          HtmlWrapRange(
+            start: start,
+            end: end,
+            openTag:
+                '<a class="link-anchor-range" '
+                'href="otzaria://anchor?ref=0_0&range=1">',
+            closeTag: '</a>',
+          ),
+        ]),
+      );
+    });
+  }
 }
