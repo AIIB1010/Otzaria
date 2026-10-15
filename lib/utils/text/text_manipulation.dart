@@ -1235,9 +1235,11 @@ String highLight(
     isSearchResultLine: isSearchResultLine,
     isFuzzy: isFuzzy,
   );
+  // מילה בודדת מותאמת בתוך טוקן אחד ולא יכולה לחצות את המעבר בין השורות.
   if (currentIndex == -1 &&
       !yellowBackground &&
-      matchPolicy.hasStandardWordMatching) {
+      matchPolicy.hasStandardWordMatching &&
+      compiled.boundaryEligible.length > 1) {
     final crossing = [
       if (nextLine != null)
         ..._crossLineMatches(
