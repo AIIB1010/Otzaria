@@ -2991,15 +2991,17 @@ class MainWindowScreenState extends State<MainWindowScreen>
                     context.read<IndexingBloc>().add(
                       DropOrphanedIndexEntries(library),
                     );
-                    unawaited(
-                      PersonalNotesUserBookKeys()
-                          .assignPending(library)
-                          .catchError(
-                            (Object e) => debugPrint(
-                              'Personal notes user-book keys failed: $e',
+                    if (state.error == null) {
+                      unawaited(
+                        PersonalNotesUserBookKeys()
+                            .assignPending(library)
+                            .catchError(
+                              (Object e) => debugPrint(
+                                'Personal notes user-book keys failed: $e',
+                              ),
                             ),
-                          ),
-                    );
+                      );
+                    }
                   }),
                 );
               }

@@ -98,7 +98,7 @@ TextBook? findTextBookForPersonalNotesKey(Library library, String key) {
 }
 
 Iterable<Book> _candidates(Library library, String title, BookSource? source) =>
-    library.getAllBooks().where(
+    library.getIndexableBooks().where(
       (b) =>
           b.title == title &&
           (source == null ? b.source.isOfficial : b.source == source),

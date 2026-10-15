@@ -88,7 +88,7 @@ class AppContextMenuRegionState extends State<AppContextMenuRegion> {
   /// חלונית תצוגה מקדימה שקובעה תזוז איתו בזמן גלילת הדף.
   OverlayScrollAnchor? _menuOpenScrollAnchor;
 
-  List<MenuController> _submenuControllers = const [];
+  final _submenuControllers = <MenuController, int>{};
 
   @override
   void dispose() {
@@ -104,12 +104,17 @@ class AppContextMenuRegionState extends State<AppContextMenuRegion> {
       return KeyEventResult.ignored;
     }
     if (event is KeyDownEvent) {
-      final openSubmenus = _submenuControllers.where((c) => c.isOpen).toList();
+      final openSubmenus = _submenuControllers.entries
+          .where((entry) => entry.key.isOpen)
+          .toList();
       if (openSubmenus.isEmpty) {
         _closeContextMenu();
       } else {
-        for (final controller in openSubmenus) {
-          controller.close();
+        final deepest = openSubmenus
+            .map((entry) => entry.value)
+            .reduce((a, b) => a > b ? a : b);
+        for (final entry in openSubmenus) {
+          if (entry.value == deepest) entry.key.close();
         }
       }
     }
@@ -118,7 +123,7 @@ class AppContextMenuRegionState extends State<AppContextMenuRegion> {
 
   void _removeContextMenuOverlay() {
     EscapeLayers.remove(_handleEscape);
-    _submenuControllers = const [];
+    _submenuControllers.clear();
     _menuOverlayEntry?.remove();
     _menuOverlayEntry = null;
     _currentMenuOffset = null;
@@ -322,10 +327,11 @@ class AppContextMenuRegionState extends State<AppContextMenuRegion> {
 
     _removeContextMenuOverlay();
     _currentMenuOffset = menuOffset;
-    _submenuControllers = [
-      ...submenuControllers.values,
-      for (final controllers in iconRowControllers.values) ...controllers,
-    ];
+    _submenuControllers.addAll({
+      for (final controller in submenuControllers.values) controller: 0,
+      for (final controllers in iconRowControllers.values)
+        for (final controller in controllers) controller: 0,
+    });
 
     _menuOverlayEntry = OverlayEntry(
       builder: (overlayContext) {
@@ -612,6 +618,7 @@ class AppContextMenuRegionState extends State<AppContextMenuRegion> {
     AppMenuMetrics metrics,
     double maxWidth,
     VoidCallback rebuildSubmenu,
+    int depth,
   ) {
     final submenuContentMaxWidth = maxWidth - metrics.itemPadding.horizontal;
 
@@ -638,6 +645,7 @@ class AppContextMenuRegionState extends State<AppContextMenuRegion> {
         key: null,
         contentMaxWidth: submenuContentMaxWidth,
         submenuMaxWidth: submenuContentMaxWidth,
+        depth: depth,
       );
       if (submenu != null) return submenu;
 
@@ -662,6 +670,7 @@ class AppContextMenuRegionState extends State<AppContextMenuRegion> {
     required double contentMaxWidth,
     required double submenuMaxWidth,
     Map<AppContextMenuEntry, MenuController>? submenuControllers,
+    int depth = 0,
   }) {
     final childrenBuilder = entry.childrenBuilder;
     final rawChildren = entry.children;
@@ -697,7 +706,8 @@ class AppContextMenuRegionState extends State<AppContextMenuRegion> {
       );
     }
 
-    final controller = submenuControllers?[entry];
+    final controller = submenuControllers?[entry] ?? MenuController();
+    _submenuControllers[controller] = depth;
     return _LazyAppSubmenuButton(
       key: key,
       entry: entry,
@@ -720,6 +730,7 @@ class AppContextMenuRegionState extends State<AppContextMenuRegion> {
             metrics,
             submenuMaxWidth,
             rebuildSubmenu,
+            depth + 1,
           ),
     );
   }

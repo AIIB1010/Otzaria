@@ -1,6 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:bloc_test/bloc_test.dart';
+import 'package:file_picker/file_picker.dart';
+// ignore: depend_on_referenced_packages
+import 'package:plugin_platform_interface/plugin_platform_interface.dart';
+import 'package:otzaria/core/app_paths.dart';
+import 'package:otzaria/personal_notes/services/personal_notes_import_export_service.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -26,6 +32,45 @@ import 'package:otzaria/personal_notes/widgets/personal_note_content_view.dart';
 import 'package:otzaria/settings/engine/settings_bloc.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
 import '../test_helpers/memory_cache_provider.dart';
+
+final class _ImportFile extends PlatformFile {
+  @override
+  String get name => 'notes.json';
+  @override
+  Uri get uri => Uri.file('/notes.json');
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _ImportPicker extends FilePickerPlatform with MockPlatformInterfaceMixin {
+  @override
+  Future<PlatformFile?> pickFile({
+    String? dialogTitle,
+    String? initialDirectory,
+    FileType type = FileType.any,
+    List<String>? allowedExtensions,
+    Function(FilePickerStatus)? onFileLoading,
+    int compressionQuality = 0,
+    AndroidOptions androidOptions = const AndroidOptions(),
+    DarwinOptions darwinOptions = const DarwinOptions(),
+    WindowsOptions windowsOptions = const WindowsOptions(),
+    LinuxOptions linuxOptions = const LinuxOptions(),
+    WebOptions webOptions = const WebOptions(),
+  }) async => _ImportFile();
+}
+
+class _ImportedNotesService extends PersonalNotesImportExportService {
+  @override
+  Future<NotesImportSummary> importFromFile({
+    required String path,
+    required NotesImportConflictStrategy strategy,
+  }) async => const NotesImportSummary(
+    inserted: 1,
+    updated: 0,
+    skipped: 0,
+    duplicated: 0,
+  );
+}
 
 class MockLibraryBloc extends MockBloc<LibraryEvent, LibraryState>
     implements LibraryBloc {}
@@ -210,6 +255,101 @@ void main() {
   setUpAll(() async {
     await Settings.init(cacheProvider: MemoryCacheProvider());
   });
+
+  for (final readiness in ['loading', 'error', 'ready']) {
+    testWidgets('import waits for a complete catalog: $readiness', (
+      tester,
+    ) async {
+      final database = PersonalNotesDatabase.instance;
+      late Directory root;
+      await tester.runAsync(() async {
+        await database.close();
+        root = await Directory.systemTemp.createTemp('notes_readiness_');
+        AppPaths.debugOverrideDataRootPath(root.path);
+        final now = DateTime(2026);
+        await database.insertNote(
+          PersonalNote(
+            id: 'legacy',
+            bookId: 'יומן',
+            lineNumber: 1,
+            displayTitle: 'שורה',
+            lastKnownLineNumber: null,
+            status: PersonalNoteStatus.located,
+            content: 'הערה',
+            contentPlain: 'הערה',
+            contentFormat: PersonalNoteContentFormat.plain,
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
+      });
+      final previousPicker = FilePickerPlatform.instance;
+      FilePickerPlatform.instance = _ImportPicker();
+      addTearDown(() async {
+        FilePickerPlatform.instance = previousPicker;
+        await database.close();
+        AppPaths.debugOverrideDataRootPath(null);
+        await root.delete(recursive: true);
+      });
+      final repository = FakePersonalNotesRepository(
+        books: [],
+        notesByBookId: {},
+      );
+      final notesBloc = PersonalNotesBloc(repository: repository);
+      final settingsBloc = SettingsBloc(repository: SettingsRepository());
+      final libraryBloc = MockLibraryBloc();
+      addTearDown(notesBloc.close);
+      addTearDown(settingsBloc.close);
+      addTearDown(libraryBloc.close);
+      whenListen(
+        libraryBloc,
+        const Stream<LibraryState>.empty(),
+        initialState: LibraryState(
+          library: Library(categories: [])
+            ..books.add(TextBook(title: 'יומן', source: BookSource.user)),
+          isLoading: readiness == 'loading',
+          error: readiness == 'error' ? 'טעינת הקטלוג נכשלה' : null,
+        ),
+      );
+      await tester.pumpWidget(
+        MultiBlocProvider(
+          providers: [
+            RepositoryProvider<SettingsRepository>.value(
+              value: SettingsRepository(),
+            ),
+            BlocProvider<SettingsBloc>.value(value: settingsBloc),
+            BlocProvider<LibraryBloc>.value(value: libraryBloc),
+            BlocProvider<PersonalNotesBloc>.value(value: notesBloc),
+          ],
+          child: MaterialApp(
+            navigatorKey: navigatorKey,
+            home: Scaffold(
+              body: PersonalNotesManagerScreen(
+                repository: repository,
+                importExportService: _ImportedNotesService(),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.byTooltip('ייבוא הערות'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.text('מזג'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      final target = readiness == 'ready' ? 'יומן|user' : 'יומן';
+      expect((await database.loadNotes(target)).map((note) => note.id), [
+        'legacy',
+      ]);
+      expect(await database.userBookKeysPending(), readiness != 'ready');
+      UiSnack.hide();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(seconds: 1));
+    });
+  }
 
   testWidgets('טוען הערות כבר בכניסה הראשונה למסך', (tester) async {
     final note = PersonalNote(

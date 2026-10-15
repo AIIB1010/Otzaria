@@ -9,9 +9,7 @@ import 'package:otzaria/personal_notes/utils/personal_notes_book_key.dart';
 
 typedef PersonalNotesBookContentLoader = Future<String> Function(Book book);
 
-/// משייך לספר אישי הערות שנשמרו תחת הכותרת בלבד, לפני שלספר אישי היה מפתח
-/// `|user` משלו. כותרת שקיימת רק כספר אישי עוברת אליו כולה; כותרת שקיימת גם
-/// כספר רשמי — רק הערה שהטקסט שלה נמצא בשורתה בספר האישי ולא בספר הרשמי.
+/// משייך הערות ישנות לספר האישי רק כשהכותרת בלעדית לו או שהטקסט מתאים לו בלבד.
 class PersonalNotesUserBookKeys {
   PersonalNotesUserBookKeys({
     PersonalNotesDatabase? database,
@@ -33,55 +31,74 @@ class PersonalNotesUserBookKeys {
         categoryId: book.categoryId,
       );
 
-  /// משייך את ההערות הממתינות לפי הקטלוג [library]; לא עושה דבר אחרי שכבר רץ.
-  Future<void> assignPending(Library library) =>
-      _running ??= _assign(library).whenComplete(() => _running = null);
+  /// משייך את ההערות הממתינות לפי הקטלוג המלא והטעון [library].
+  Future<void> assignPending(Library library) async {
+    while (_running != null) {
+      await _running;
+    }
+    final running = _running = _assign(library);
+    try {
+      await running;
+    } finally {
+      _running = null;
+    }
+  }
 
   Future<void> _assign(Library library) async {
-    final officialTitles = <String>{};
+    if (!await _database.userBookKeysPending()) return;
     final userBooks = <String, Book>{};
-    for (final book in library.getAllBooks()) {
-      if (book.source.isOfficial) {
-        officialTitles.add(book.title);
-      } else if (book.source.isUser) {
+    for (final book in library.getIndexableBooks()) {
+      if (book.source.isUser) {
         userBooks.putIfAbsent(book.title, () => book);
       }
     }
-    // בלי ספרים רשמיים הקטלוג עוד לא נטען, וכל כותרת הייתה נראית אישית בלבד.
-    if (userBooks.isEmpty || officialTitles.isEmpty) return;
-    if (!await _database.userBookKeysPending()) return;
+    if (userBooks.isEmpty) return;
+    final generation = await _database.userBookKeysGeneration();
+    var complete = true;
 
     for (final info in await _database.listBooksWithNotes()) {
       final key = info.bookId;
-      final userBook = userBooks[key];
-      if (userBook == null || parsePersonalNotesBookKey(key).source != null) {
+      if (!userBooks.containsKey(key) ||
+          parsePersonalNotesBookKey(key).source != null) {
         continue;
       }
+      final userBook = findBookForPersonalNotesKey(
+        library,
+        personalNotesBookKey(userBooks[key]!),
+      )!;
       final notes = await _database.loadNotes(key);
       final officialBook = findBookForPersonalNotesKey(library, key);
       final moved = officialBook == null
           ? notes
           : await _userBookNotes(notes, key, officialBook, userBook);
-      await _database.moveNotesToBook(
-        moved.map((note) => note.id),
+      if (moved == null) {
+        complete = false;
+        continue;
+      }
+      final movedAll = await _database.moveNotesToBook(
+        moved,
         personalNotesBookKey(userBook),
       );
+      complete &= movedAll;
     }
-    await _database.setUserBookKeysPending(false);
+    if (complete) {
+      await _database.setUserBookKeysPending(false, ifGeneration: generation);
+    }
   }
 
-  Future<List<PersonalNote>> _userBookNotes(
+  Future<List<PersonalNote>?> _userBookNotes(
     List<PersonalNote> notes,
     String key,
     Book officialBook,
     Book userBook,
   ) async {
+    if (officialBook is PdfBook || userBook is PdfBook) return const [];
     final officialLines = splitBookContentIntoLines(
       await _loadContent(officialBook),
     );
     final userLines = splitBookContentIntoLines(await _loadContent(userBook));
-    // ספר בלי טקסט (PDF או כשל טעינה) אינו מאפשר הכרעה; ההערות נשארות ברשמי.
-    if (officialLines.isEmpty || userLines.isEmpty) return const [];
+    // תוכן חסר אינו הכרעה: צריך לנסות שוב אחרי שהספר נגיש.
+    if (officialLines.isEmpty || userLines.isEmpty) return null;
     return [
       for (final note in notes)
         if (_matches(note, userLines, key) &&

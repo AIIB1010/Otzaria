@@ -1,4 +1,7 @@
+import 'dart:async';
 import 'dart:io';
+
+import 'package:otzaria/data/sqlite/sqlite3_api.dart';
 
 import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -144,13 +147,14 @@ void main() {
     expect(await idsUnder('ביצה'), {'user'});
   });
 
-  test('a catalog without official books is not ready and waits', () async {
+  test('a loaded library with only user books migrates its notes', () async {
     await database.insertNote(_note('a', 'יומן', 1, 'רשימה ראשונה'));
 
     await migration().assignPending(_library([userOnly]));
 
-    expect(await idsUnder('יומן'), {'a'});
-    expect(await database.userBookKeysPending(), isTrue);
+    expect(await idsUnder('יומן'), isEmpty);
+    expect(await idsUnder('יומן|user'), {'a'});
+    expect(await database.userBookKeysPending(), isFalse);
   });
 
   test('notes already keyed by source are left alone', () async {
@@ -164,4 +168,145 @@ void main() {
     expect(await idsUnder('ביצה|db:lib-a'), {'attached'});
     expect(await idsUnder('ביצה|user'), {'mine'});
   });
+  test(
+    'missing book content keeps migration pending for a later retry',
+    () async {
+      await database.insertNote(_note('user', 'ביצה', 2, 'שורה אישית ייחודית'));
+      final library = _library([officialBeitza, userBeitza]);
+
+      await migration(
+        content: {'ביצה': contents['ביצה']!},
+      ).assignPending(library);
+      expect(await database.userBookKeysPending(), isTrue);
+      await migration().assignPending(library);
+
+      expect(await idsUnder('ביצה|user'), {'user'});
+      expect(await database.userBookKeysPending(), isFalse);
+    },
+  );
+
+  test(
+    'a secondary personal text version is migrated instead of its PDF',
+    () async {
+      await database.insertNote(_note('user', 'ביצה', 2, 'שורה אישית ייחודית'));
+      final library = _library([
+        officialBeitza,
+        PdfBook(title: 'ביצה', path: '/ביצה.pdf', source: BookSource.user),
+      ])..offTreeBooks = [userBeitza];
+      final loaded = <Book>[];
+      await PersonalNotesUserBookKeys(
+        loadContent: (book) async {
+          loaded.add(book);
+          return contents[personalNotesBookKey(book)]!;
+        },
+      ).assignPending(library);
+
+      expect(loaded, [officialBeitza, userBeitza]);
+      expect(await idsUnder('ביצה|user'), {'user'});
+    },
+  );
+
+  test('PDF ambiguity is final and does not load book text', () async {
+    await database.insertNote(_note('pdf', 'ביצה', 2, 'שורה אישית ייחודית'));
+    final pdf = PdfBook(
+      title: 'ביצה',
+      path: '/ביצה.pdf',
+      source: BookSource.user,
+    );
+    await PersonalNotesUserBookKeys(
+      loadContent: (_) async {
+        fail('PDF notes cannot be assigned by matching text');
+      },
+    ).assignPending(_library([officialBeitza, pdf]));
+
+    expect(await idsUnder('ביצה'), {'pdf'});
+    expect(await database.userBookKeysPending(), isFalse);
+  });
+
+  test(
+    'an import during content loading is assigned after the current run',
+    () async {
+      await database.insertNote(
+        _note('first', 'ביצה', 2, 'שורה אישית ייחודית'),
+      );
+      final loading = Completer<void>();
+      final release = Completer<void>();
+      final first = PersonalNotesUserBookKeys(
+        loadContent: (book) async {
+          if (!loading.isCompleted) {
+            loading.complete();
+            await release.future;
+          }
+          return contents[personalNotesBookKey(book)]!;
+        },
+      ).assignPending(_library([officialBeitza, userBeitza, userOnly]));
+      await loading.future;
+      await database.batchInsertNotes([
+        _note('imported', 'יומן', 1, 'רשימה ראשונה'),
+      ]);
+      final imported = migration().assignPending(
+        _library([officialBeitza, userBeitza, userOnly]),
+      );
+      release.complete();
+      await Future.wait([first, imported]);
+
+      expect(await idsUnder('ביצה|user'), {'first'});
+      expect(await idsUnder('יומן|user'), {'imported'});
+      expect(await database.userBookKeysPending(), isFalse);
+    },
+  );
+
+  test(
+    'a note replaced during content loading is checked again before moving',
+    () async {
+      await database.insertNote(
+        _note('same-id', 'ביצה', 2, 'שורה אישית ייחודית'),
+      );
+      final loading = Completer<void>();
+      final release = Completer<void>();
+      final library = _library([officialBeitza, userBeitza]);
+      final running = PersonalNotesUserBookKeys(
+        loadContent: (book) async {
+          if (!loading.isCompleted) {
+            loading.complete();
+            await release.future;
+          }
+          return contents[personalNotesBookKey(book)]!;
+        },
+      ).assignPending(library);
+      await loading.future;
+      final replacement = _note('same-id', 'ביצה', 1, 'שנולדה ביום טוב');
+      await database.insertNote(replacement);
+      release.complete();
+      await running;
+
+      expect(await database.loadNotes('ביצה'), [replacement]);
+      expect(await idsUnder('ביצה|user'), isEmpty);
+      expect(await database.userBookKeysPending(), isTrue);
+      await migration().assignPending(library);
+      expect(await database.loadNotes('ביצה'), [replacement]);
+      expect(await database.userBookKeysPending(), isFalse);
+    },
+  );
+
+  test(
+    'an import from another SQLite connection cannot be marked complete',
+    () async {
+      final generation = await database.userBookKeysGeneration();
+      final other = sqlite3.open(
+        await AppPaths.resolveNotesDbPath('personal_notes.db'),
+      );
+      try {
+        other.execute(
+          'UPDATE personal_notes_user_book_keys SET generation = generation + 1',
+        );
+        await database.setUserBookKeysPending(false, ifGeneration: generation);
+        expect(await database.userBookKeysPending(), isTrue);
+        await database.close();
+        expect(await database.userBookKeysPending(), isTrue);
+      } finally {
+        other.close();
+      }
+    },
+  );
 }

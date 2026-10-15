@@ -689,8 +689,11 @@ class _PersonalNotesManagerScreenState
     );
 
     if (!mounted) return;
-    final library = context.read<LibraryBloc>().state.library;
-    if (library != null) {
+    final libraryState = context.read<LibraryBloc>().state;
+    final library = libraryState.library;
+    if (library != null &&
+        !libraryState.isLoading &&
+        libraryState.error == null) {
       await PersonalNotesUserBookKeys().assignPending(library);
       if (!mounted) return;
     }

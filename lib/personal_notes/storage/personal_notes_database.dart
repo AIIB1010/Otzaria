@@ -29,8 +29,7 @@ class PersonalNotesDatabase {
   static const _columnCreatedAt = 'created_at';
   static const _columnUpdatedAt = 'updated_at';
 
-  // user_version: הערות ישנות של ספרים אישיים שויכו כבר למפתח `|user`.
-  static const _userBookKeysAssignedVersion = 1;
+  static const _tableUserBookKeys = 'personal_notes_user_book_keys';
 
   PersonalNotesDatabase._();
 
@@ -62,6 +61,14 @@ class PersonalNotesDatabase {
 
   /// Create the database schema
   void _createSchema(Database db) {
+    db.execute('''
+      CREATE TABLE IF NOT EXISTS $_tableUserBookKeys (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        generation INTEGER NOT NULL,
+        completed_generation INTEGER NOT NULL
+      )
+    ''');
+    db.execute('INSERT OR IGNORE INTO $_tableUserBookKeys VALUES (1, 0, -1)');
     db.execute('''
       CREATE TABLE IF NOT EXISTS $_tableNotes (
         $_columnId TEXT PRIMARY KEY,
@@ -220,39 +227,62 @@ class PersonalNotesDatabase {
   /// האם הערות תחת כותרת בלבד עדיין ממתינות לשיוך לספר אישי.
   Future<bool> userBookKeysPending() async {
     final db = await database;
-    final version = db.select('PRAGMA user_version').first.values.first as int;
-    return version < _userBookKeysAssignedVersion;
+    final row = db.select('SELECT * FROM $_tableUserBookKeys').first;
+    return row['generation'] != row['completed_generation'];
+  }
+
+  /// דור השיוך נשמר במסד כדי לזהות גם ייבוא מחלון אחר.
+  Future<int> userBookKeysGeneration() async {
+    final db = await database;
+    final row = db.select('SELECT generation FROM $_tableUserBookKeys').first;
+    return row['generation'] as int;
   }
 
   /// [pending] false אחרי השיוך; true אחרי שחזור או ייבוא של הערות ישנות.
-  Future<void> setUserBookKeysPending(bool pending) async {
+  /// [ifGeneration] משאיר בקשות ייבוא חדשות ממתינות לריצה הבאה.
+  Future<void> setUserBookKeysPending(bool pending, {int? ifGeneration}) async {
     final db = await database;
     db.execute(
-      'PRAGMA user_version = ${pending ? 0 : _userBookKeysAssignedVersion}',
+      pending
+          ? 'UPDATE $_tableUserBookKeys SET generation = generation + 1'
+          : 'UPDATE $_tableUserBookKeys SET completed_generation = generation '
+                'WHERE (? IS NULL OR generation = ?)',
+      pending ? const [] : [ifGeneration, ifGeneration],
     );
   }
 
-  /// מעביר את ההערות [noteIds] למפתח הספר [bookId].
-  Future<void> moveNotesToBook(Iterable<String> noteIds, String bookId) async {
-    final ids = noteIds.toSet();
-    if (ids.isEmpty) return;
+  /// מעביר את [notes] למפתח [bookId] רק אם לא השתנו; מחזיר false אם נדרשת הכרעה מחדש.
+  Future<bool> moveNotesToBook(
+    Iterable<PersonalNote> notes,
+    String bookId,
+  ) async {
+    final expected = {for (final note in notes) note.id: note};
+    if (expected.isEmpty) return true;
     final db = await database;
-    final changedBooks = <String>{bookId};
+    final changedBooks = <String>{};
+    var complete = true;
     withTransaction(db, () {
-      for (final id in ids) {
+      for (final note in expected.values) {
         final rows = db.select(
-          'SELECT $_columnBookId FROM $_tableNotes WHERE $_columnId = ?',
-          [id],
+          'SELECT * FROM $_tableNotes WHERE $_columnId = ?',
+          [note.id],
         );
         if (rows.isEmpty) continue;
-        changedBooks.add(rows.first[_columnBookId] as String);
+        final current = _noteFromMap(rows.first);
+        if (current.bookId == bookId) continue;
+        if (current != note) {
+          complete = false;
+          continue;
+        }
+        changedBooks.addAll([current.bookId, bookId]);
         db.execute(
           'UPDATE $_tableNotes SET $_columnBookId = ? WHERE $_columnId = ?',
-          [bookId, id],
+          [bookId, note.id],
         );
       }
     });
     _notifyChanges(changedBooks);
+    return complete;
   }
 
   /// Batch insert multiple notes (for bulk restore/import)

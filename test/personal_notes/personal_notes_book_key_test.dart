@@ -81,6 +81,35 @@ void main() {
     expect(findTextBookForPersonalNotesKey(library, 'יומן'), isNull);
   });
 
+  test(
+    'source keys find secondary text versions outside the category tree',
+    () {
+      final official = TextBook(id: 1, title: 'ביצה', categoryId: 1);
+      final user = TextBook(
+        id: 2,
+        title: 'ביצה',
+        categoryId: 7,
+        source: BookSource.user,
+      );
+      final attached = TextBook(
+        id: 3,
+        title: 'ביצה',
+        categoryId: 8,
+        source: attachedSource,
+      );
+      final library = _library([official])..offTreeBooks = [user, attached];
+
+      expect(findBookForPersonalNotesKey(library, 'ביצה'), same(official));
+      expect(findBookForPersonalNotesKey(library, 'ביצה|user'), same(user));
+      expect(findTextBookForPersonalNotesKey(library, 'ביצה|user'), same(user));
+      expect(
+        findBookForPersonalNotesKey(library, 'ביצה|db:lib-a'),
+        same(attached),
+      );
+      expect(findBookForPersonalNotesKey(library, 'ביצה|db:lib-b'), isNull);
+    },
+  );
+
   test('attached PDF resolves as a book but not as a text book', () {
     final pdf = PdfBook(
       id: 2,

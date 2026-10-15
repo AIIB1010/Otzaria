@@ -1541,7 +1541,10 @@ void main() {
   testWidgets('Home/End לבד קופצים לקצות הספר בצורת הדף (issue #2140)', (
     tester,
   ) async {
-    final textBookBloc = _RecordingTextBookBloc(_loadedState());
+    final content = List.generate(60, (i) => 'שורה $i');
+    final textBookBloc = _RecordingTextBookBloc(
+      _loadedState().copyWith(content: content),
+    );
     final personalNotesBloc = _TestPersonalNotesBloc(
       PersonalNotesState(
         isLoading: false,
@@ -1565,7 +1568,7 @@ void main() {
           ],
           child: Scaffold(
             body: SimpleTextViewer(
-              content: List.generate(60, (i) => 'שורה $i'),
+              content: content,
               fontSize: 18,
               openBookCallback: (_) {},
               isMainText: true,
