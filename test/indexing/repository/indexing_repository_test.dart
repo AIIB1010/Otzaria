@@ -6,6 +6,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show ValueNotifier;
+import 'package:flutter/material.dart' show MaterialApp, SizedBox;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flutter_settings_screens/flutter_settings_screens.dart';
@@ -13,6 +14,8 @@ import 'package:otzaria/attached_libraries/models/attached_library.dart';
 import 'package:otzaria/attached_libraries/repository/attached_library_registry.dart';
 import 'package:otzaria/core/app_paths.dart';
 import 'package:otzaria/core/error_log_file.dart';
+import 'package:otzaria/core/messages/library_messages.dart';
+import 'package:otzaria/core/ui_snack.dart' show navigatorKey;
 import 'package:otzaria/data/data_providers/db_read_worker.dart';
 import 'package:otzaria/data/data_providers/sqlite_data_provider.dart';
 import 'package:otzaria/data/data_providers/user_books_database_holder.dart';
@@ -1821,6 +1824,40 @@ void main() {
       expect(engine.addedDocuments, isEmpty);
       expect(provider.isIndexing.value, isFalse);
     });
+
+    testWidgets(
+      'אינדקס שדורש בנייה מחדש אינו מדווח ככשל פתיחה (issue #2603)',
+      (tester) async {
+        // אינדקס מסכמה ישנה נפתח בכוונה על אינדקס זמני — אין כאן כשל פתיחה,
+        // וההודעה "נסה להפעיל מחדש" שלחה את המשתמש לפתרון שאינו עוזר.
+        await tester.pumpWidget(
+          MaterialApp(navigatorKey: navigatorKey, home: const SizedBox()),
+        );
+        final provider = FakeTantivyDataProvider(
+          indexedFilePaths: {},
+          requiresManualReindexValue: true,
+        )..isTempFallback = true;
+        final library = _buildLibrary(bavliBooks: const [('שבת', 1)]);
+        final repository = IndexingRepository(provider);
+
+        final runs = [
+          await repository.indexAllBooks(library, onProgress: (_, _) {}),
+          await repository.indexBooks(
+            library.getAllBooks(),
+            library,
+            onProgress: (_, _) {},
+          ),
+          await repository.reconcileIndexWithLibrary(
+            library,
+            onProgress: (_, _) {},
+          ),
+        ];
+        await tester.pump();
+
+        expect(runs.map((run) => run.completed), everyElement(isFalse));
+        expect(find.text(LibraryMessages.searchIndexOpenFailed), findsNothing);
+      },
+    );
 
     test('לא מדלג ב-fast path כשנדרש manual reindex', () async {
       final library = _buildLibrary(bavliBooks: const [('שבת', 1)]);
