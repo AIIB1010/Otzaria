@@ -259,7 +259,14 @@ RestoredSelection restoreSelectedTextLineBreaksDetailed({
     return withoutLocation(selectedText);
   }
 
-  final exact = _restoreExact(selectedText, visibleLines, preferredLine);
+  final exact =
+      _restoreExact(selectedText, visibleLines, preferredLine) ??
+      _restoreExact(
+        selectedText,
+        visibleLines,
+        preferredLine,
+        isIgnored: _isWhitespaceOrMark,
+      );
   if (exact != null) {
     return exact;
   }
@@ -379,18 +386,19 @@ bool _isWhitespaceOrMark(int codeUnit) =>
 bool _hasWhitespaceBetween(String text, int from, int to) =>
     text.substring(from + 1, to).codeUnits.any(_isWhitespace);
 
-/// התאמה מדויקת על התווים שאינם רווח בלבד — בבחירה יש NBSP/רווח-דק ו-\n
-/// (מ-&nbsp;/<br>) שהשורות המרונדרות מכווצות לרווח רגיל.
+/// התאמה על התווים שאינם [isIgnored]; ברירת המחדל מתעלמת רק מרווחים,
+/// כולל NBSP, רווח-דק ומעברי שורה שהשורות המרונדרות מכווצות.
 RestoredSelection? _restoreExact(
   String selectedText,
   List<String> visibleLines,
-  int? preferredLine,
-) {
+  int? preferredLine, {
+  bool Function(int) isIgnored = _isWhitespace,
+}) {
   // הבחירה ללא תווי רווח + מיפוי כל תו לאינדקסו במחרוזת המקורית.
   final selectedIndexMap = <int>[];
   final selectedBuffer = StringBuffer();
   for (var i = 0; i < selectedText.length; i++) {
-    if (!_isWhitespaceOrMark(selectedText.codeUnitAt(i))) {
+    if (!isIgnored(selectedText.codeUnitAt(i))) {
       selectedBuffer.write(selectedText[i]);
       selectedIndexMap.add(i);
     }
@@ -413,7 +421,7 @@ RestoredSelection? _restoreExact(
   for (var lineIndex = 0; lineIndex < visibleLines.length; lineIndex++) {
     final line = visibleLines[lineIndex];
     for (var i = 0; i < line.length; i++) {
-      if (!_isWhitespaceOrMark(line.codeUnitAt(i))) {
+      if (!isIgnored(line.codeUnitAt(i))) {
         visibleBuffer.write(line[i]);
         lineOfChar.add(lineIndex);
         columnOfChar.add(i);
