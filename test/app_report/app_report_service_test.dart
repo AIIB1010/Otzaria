@@ -114,6 +114,49 @@ void main() {
     expect(await service.loadDraft(), isNull);
   });
 
+  AppReportDraft draft(String title) => AppReportDraft(
+    type: AppReportType.bug,
+    title: title,
+    description: '',
+    steps: '',
+    email: '',
+  );
+
+  test('שמירות טיוטה מקבילות משני חיבורים משאירות טיוטה אחת', () async {
+    final service = build(MockClient((_) async => _json(500, {})));
+    final secondDb = UserStateDatabase.openAt(
+      '${tmp.path}${Platform.pathSeparator}user_state.db',
+    );
+    addTearDown(secondDb.close);
+    final second = AppReportService(
+      reportStore: PendingReportStore(database: secondDb),
+    );
+    await service.saveDraft(draft('קודמת'));
+    await Future.wait([
+      service.saveDraft(draft('ראשונה')),
+      second.saveDraft(draft('שנייה')),
+    ]);
+
+    expect(await store.countByKind(AppReportService.draftKind), 1);
+    expect((await service.loadDraft())?.title, 'שנייה');
+  });
+
+  test('כשל בהחלפת טיוטה משמר את הטיוטה הקודמת', () async {
+    final service = build(MockClient((_) async => _json(500, {})));
+    await service.saveDraft(draft('קודמת'));
+    final connection = await db.database;
+    connection.execute("""
+      CREATE TRIGGER reject_draft BEFORE INSERT ON pending_reports
+      WHEN NEW.kind = '${AppReportService.draftKind}'
+      BEGIN SELECT RAISE(ABORT, 'simulated insert failure'); END
+    """);
+
+    await expectLater(service.saveDraft(draft('חדשה')), throwsA(anything));
+
+    expect((await service.loadDraft())?.title, 'קודמת');
+    expect(await store.countByKind(AppReportService.draftKind), 1);
+  });
+
   test('200: נשלח, שדות ה-issue נשמרים בהיסטוריה בלי צרופות', () async {
     Map<String, dynamic>? sentBody;
     final service = build(

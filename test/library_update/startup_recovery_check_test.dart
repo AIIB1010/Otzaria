@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:otzaria/data/sqlite/sqlite3_api.dart';
 import 'package:otzaria/library_update/services/startup_recovery_check.dart';
 import 'package:seforim_library_updater/seforim_library_updater.dart';
 
@@ -156,40 +157,64 @@ void main() {
     expect(File(dbPath).readAsStringSync(), 'fake-db');
   });
 
-  group('שאריות של המעדכן הלא-מקוון', () {
-    test('מסד חסר — <db>.old חוזר לשמו', () async {
+  test(
+    'שחזור בעלייה אינו משנה קובצי .old או sidecars ללא בעלות ידועה',
+    () async {
+      for (final emptyMain in [false, true]) {
+        if (File(dbPath).existsSync()) File(dbPath).deleteSync();
+        if (emptyMain) File(dbPath).writeAsStringSync('');
+        File('$dbPath.old').writeAsStringSync('retired-db');
+        for (final suffix in ['-wal', '-shm', '-journal']) {
+          File('$dbPath$suffix').writeAsStringSync('preserve$suffix');
+        }
+
+        await buildCheck(quickCheckResult: true).run(dbPath);
+
+        expect(File(dbPath).existsSync(), emptyMain);
+        if (emptyMain) expect(File(dbPath).lengthSync(), 0);
+        expect(File('$dbPath.old').readAsStringSync(), 'retired-db');
+        for (final suffix in ['-wal', '-shm', '-journal']) {
+          expect(File('$dbPath$suffix').readAsStringSync(), 'preserve$suffix');
+        }
+      }
+    },
+  );
+  for (final emptyMain in [false, true]) {
+    test('WAL שמור של .old נשמר כשמסד ${emptyMain ? 'ריק' : 'חסר'}', () async {
+      final sourcePath = '${tmp.path}/source.db';
+      final source = sqlite3.open(sourcePath);
+      try {
+        source.execute('PRAGMA journal_mode=WAL');
+        source.execute('CREATE TABLE books (id INTEGER PRIMARY KEY)');
+        source.execute('INSERT INTO books VALUES (1)');
+        source.execute('PRAGMA wal_checkpoint(TRUNCATE)');
+        source.execute('INSERT INTO books VALUES (2)');
+        File(sourcePath).copySync('$dbPath.old');
+        for (final suffix in ['-wal', '-shm']) {
+          File('$sourcePath$suffix').copySync('$dbPath$suffix');
+        }
+      } finally {
+        source.close();
+      }
       File(dbPath).deleteSync();
-      File('$dbPath.old').writeAsStringSync('retired-db');
+      if (emptyMain) File(dbPath).writeAsStringSync('');
+      final wal = File('$dbPath-wal').readAsBytesSync();
 
-      await runAndVerify(buildCheck(quickCheckResult: true));
+      await buildCheck(quickCheckResult: true).run(dbPath);
 
-      expect(File(dbPath).readAsStringSync(), 'retired-db');
-      expect(File('$dbPath.old').existsSync(), isFalse);
-    });
-
-    test('מסד באורך 0 — מוחלף ב-<db>.old ושאריותיו נמחקות', () async {
-      File(dbPath).writeAsStringSync('');
-      File('$dbPath-wal').writeAsStringSync('stale-wal');
-      File('$dbPath-shm').writeAsStringSync('stale-shm');
-      File('$dbPath.old').writeAsStringSync('retired-db');
-
-      await runAndVerify(buildCheck(quickCheckResult: true));
-
-      expect(File(dbPath).readAsStringSync(), 'retired-db');
-      expect(File('$dbPath-wal').existsSync(), isFalse);
-      expect(File('$dbPath-shm').existsSync(), isFalse);
-    });
-
-    test('מסד תקין — <db>.old ו-<db>.unverified אינם נוגעים בו', () async {
-      File('$dbPath.old').writeAsStringSync('retired-db');
-      File('$dbPath.unverified').writeAsStringSync('{"version":7}');
-
-      await runAndVerify(buildCheck(quickCheckResult: true));
-
-      expect(File(dbPath).readAsStringSync(), 'fake-db');
+      expect(File('$dbPath-wal').readAsBytesSync(), wal);
       expect(File('$dbPath.old').existsSync(), isTrue);
-      expect(File('$dbPath.unverified').existsSync(), isTrue);
-      expect(quickCheckRuns, 0);
+      if (emptyMain) File(dbPath).deleteSync();
+      File('$dbPath.old').renameSync(dbPath);
+      final restored = sqlite3.open(dbPath);
+      try {
+        expect(restored.select('SELECT id FROM books').map((r) => r['id']), [
+          1,
+          2,
+        ]);
+      } finally {
+        restored.close();
+      }
     });
-  });
+  }
 }

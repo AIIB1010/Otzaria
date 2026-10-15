@@ -243,10 +243,8 @@ class AppReportService {
     return row == null ? null : AppReportDraft.fromJson(row.payload);
   }
 
-  Future<void> saveDraft(AppReportDraft draft) async {
-    await _reports.deleteAllOfKind(draftKind);
-    await _reports.add(draftKind, draft.toJson());
-  }
+  Future<void> saveDraft(AppReportDraft draft) =>
+      _reports.replaceKind(draftKind, draft.toJson());
 
   Future<void> deleteDraft() => _reports.deleteAllOfKind(draftKind);
 

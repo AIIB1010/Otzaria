@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -94,10 +96,13 @@ void main() {
       await tester.pump();
     }
 
-    Future<void> pressCtrlV(WidgetTester tester) async {
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    Future<void> pressPaste(WidgetTester tester) async {
+      final modifier = Platform.isMacOS
+          ? LogicalKeyboardKey.metaLeft
+          : LogicalKeyboardKey.controlLeft;
+      await tester.sendKeyDownEvent(modifier);
       await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyUpEvent(modifier);
       await tester.pump();
     }
 
@@ -121,11 +126,11 @@ void main() {
       expect(find.byKey(const ValueKey('app-report-image-0')), findsOneWidget);
     });
 
-    testWidgets('Ctrl+V מצרף את התמונה שבלוח', (tester) async {
+    testWidgets('קיצור הדבקה מצרף את התמונה שבלוח', (tester) async {
       final sources = _FakeSources(clipboard: [_image('screenshot-1.png')]);
       await pump(tester, sources);
 
-      await pressCtrlV(tester);
+      await pressPaste(tester);
 
       expect(images.map((i) => i.fileName), ['screenshot-1.png']);
       expect(sources.clipboardReads, [false]);
@@ -137,7 +142,7 @@ void main() {
       final sources = _FakeSources(clipboard: [_image('shot.png')]);
       await pump(tester, sources, withTextField: true);
 
-      await pressCtrlV(tester);
+      await pressPaste(tester);
 
       expect(sources.clipboardReads, [true]);
       expect(images, hasLength(1));
