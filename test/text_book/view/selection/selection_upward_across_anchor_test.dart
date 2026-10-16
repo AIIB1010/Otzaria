@@ -256,6 +256,30 @@ void main() {
     expect(selected, isNot(contains('או ירוק')));
   });
 
+  testWidgets('גרירה מהשוליים שמימין לפסקה בוחרת את תחילתה (issue #2072)', (
+    tester,
+  ) async {
+    await pumpScrolledView(tester);
+    final bet = lineRect(tester, 2);
+    final y = bet.top + 8;
+
+    final gesture = await tester.startGesture(
+      Offset(bet.right + 4, y),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
+    await gesture.moveTo(Offset(bet.right - 60, y));
+    await tester.pump();
+    final selected = scrollableRegistrar(
+      tester,
+    ).selectables.map((s) => s.getSelectedContent()?.plainText ?? '').join();
+    await gesture.up();
+    await tester.pump();
+
+    expect(selected, startsWith('(ב)'));
+    expect(selected, isNot(contains('אדמומית')));
+  });
+
   testWidgets('כל פריט ברשימה עטוף ב-ViewportAlignedSelectionContainer', (
     tester,
   ) async {

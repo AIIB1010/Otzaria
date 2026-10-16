@@ -21,7 +21,7 @@ class ViewportAlignedSelectionContainer extends StatefulWidget {
 
 class _ViewportAlignedSelectionContainerState
     extends State<ViewportAlignedSelectionContainer> {
-  final _delegate = StaticSelectionContainerDelegate();
+  final _delegate = _MarginToLineEdgeDelegate();
 
   @override
   void dispose() {
@@ -36,6 +36,40 @@ class _ViewportAlignedSelectionContainerState
     return SelectionContainer(
       delegate: _delegate,
       child: _ViewportAlignedBox(child: widget.child),
+    );
+  }
+}
+
+/// נקודת גרירה בשוליים שלצד הטקסט נצמדת לקצה השורה שבגובהה: Flutter מסווג
+/// אותה לפי LTR, ובפסקה RTL עוגן הבחירה נפל בסוף הפסקה (issue #2072).
+class _MarginToLineEdgeDelegate extends StaticSelectionContainerDelegate {
+  @override
+  SelectionResult handleSelectionEdgeUpdate(SelectionEdgeUpdateEvent event) {
+    final p = event.globalPosition;
+    final text = [
+      for (final s in selectables)
+        MatrixUtils.transformRect(
+          s.getTransformTo(null),
+          s.boundingBoxes.reduce((a, b) => a.expandToInclude(b)),
+        ),
+    ].fold<Rect?>(null, (all, r) => all?.expandToInclude(r) ?? r);
+    if (text == null ||
+        p.dy < text.top ||
+        p.dy >= text.bottom ||
+        text.contains(p)) {
+      return super.handleSelectionEdgeUpdate(event);
+    }
+    final edgeEvent = event.type == SelectionEventType.startEdgeUpdate
+        ? SelectionEdgeUpdateEvent.forStart
+        : SelectionEdgeUpdateEvent.forEnd;
+    return super.handleSelectionEdgeUpdate(
+      edgeEvent(
+        globalPosition: Offset(
+          p.dx < text.left ? text.left : text.right - 1,
+          p.dy,
+        ),
+        granularity: event.granularity,
+      ),
     );
   }
 }
