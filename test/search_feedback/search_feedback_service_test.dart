@@ -124,6 +124,49 @@ void main() {
   bool hasQueueFiles() =>
       dir.existsSync() && dir.listSync().any((e) => e.path.endsWith('.jsonl'));
 
+  test(
+    'legacy queued query is redacted before signed HTTP without changing passages',
+    () async {
+      final service = await grantedService();
+      online = false;
+      await recordOne(service);
+      final name = (await service.queue.sealAndList()).single;
+      final file = File('${dir.path}/$name');
+      final lines = const LineSplitter().convert(await file.readAsString());
+      final event = jsonDecode(lines[1]) as Map<String, dynamic>;
+      event.addAll({
+        'query': 'שו"ת person+private@example.com תורה',
+        'queryLength': 500,
+        'queryWordCount': 99,
+        'result': {'passageText': 'אמר דוד תורה person@example.com'},
+      });
+      await file.writeAsString('${lines.first}\n${jsonEncode(event)}\n');
+      online = true;
+      await service.flush();
+      final request = eventRequests().single;
+      final body = jsonDecode(request.body) as Map;
+      final sent = (body['events'] as List).single as Map;
+      expect(sent['query'], 'שו"ת <email> תורה');
+      expect(sent['queryLength'], 'שו"ת <email> תורה'.length);
+      expect(sent['queryWordCount'], 3);
+      expect(sent['eventId'], event['eventId']);
+      expect(sent['searchSessionId'], event['searchSessionId']);
+      expect(sent['result'], event['result']);
+      final identity = await SearchFeedbackIdentityStore(
+        () async => dir,
+      ).load();
+      expect(
+        ed.VerifyKey(identity!.publicKey).verify(
+          signature: ed.Signature(
+            base64Decode(request.headers['X-Otzaria-Signature']!),
+          ),
+          message: request.bodyBytes,
+        ),
+        isTrue,
+      );
+    },
+  );
+
   group('consent', () {
     test('without consent nothing is queued or sent', () async {
       final service = makeService();

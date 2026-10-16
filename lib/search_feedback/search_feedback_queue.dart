@@ -778,7 +778,8 @@ class _DiskQueue {
           contextJson: contextJson,
           eventLines: [
             for (final line in lines.skip(1))
-              if (_isFreshEvent(line, notBefore)) line,
+              if (_isFreshEvent(line, notBefore))
+                redactSearchFeedbackEventLine(line),
           ],
         );
       });
