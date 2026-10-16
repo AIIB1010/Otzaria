@@ -686,6 +686,65 @@ void main() {
     expect(install.modelIdentityJson, bundledModelJson());
   });
 
+  for (final payload in <String?>[null, 'short']) {
+    test('מניפסט ישן ללא קובץ תואם מאפשר גילוי חלונות ($payload)', () async {
+      write(
+        staged(kSemanticImportVectorsFolderName, _manifestName),
+        _manifest(),
+      );
+      if (payload != null) {
+        write(staged(kSemanticImportVectorsFolderName, _segmentName), payload);
+      }
+      // Model files alone must not give the old vector family priority.
+      write(staged(kSemanticModelFolderName, 'model.onnx'), 'model');
+      final importer = SemanticStagedImport(() async => paths());
+      final windows = SemanticStagedImport.parseStagedManifest(
+        utf8.encode(_manifest(family: SemanticVectorsFamily.windows)),
+        30,
+        _windowsFirst,
+      )!;
+      var onlineCalled = false;
+
+      final release = await importer.locate(
+        30,
+        offline: false,
+        candidates: _windowsFirst,
+        online: () async {
+          onlineCalled = true;
+          return windows;
+        },
+      );
+
+      expect(onlineCalled, isTrue);
+      expect(release, windows);
+    });
+  }
+
+  test('מניפסט מוכן עם מבנה segment שגוי נדחה וממשיכים לרשת', () async {
+    final manifest = jsonDecode(_manifest()) as Map<String, dynamic>;
+    manifest['segment'] = 'invalid shape';
+    write(
+      staged(kSemanticImportVectorsFolderName, _manifestName),
+      jsonEncode(manifest),
+    );
+    final importer = SemanticStagedImport(() async => paths());
+    var onlineCalled = false;
+
+    expect(
+      await importer.locate(
+        30,
+        offline: false,
+        candidates: _windowsFirst,
+        online: () async {
+          onlineCalled = true;
+          return null;
+        },
+      ),
+      isNull,
+    );
+    expect(onlineCalled, isTrue);
+  });
+
   test('מנוע בלי חלונות: הרשת נבדקת קודם, כמו תמיד', () async {
     stageAll();
     final locator = FakeLocator(

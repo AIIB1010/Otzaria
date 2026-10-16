@@ -162,8 +162,10 @@ class SemanticVectorsReleaseLocator {
     int libraryVersion,
     SemanticVectorsFamily family,
   ) async {
+    final releaseAssets = release['assets'];
+    if (releaseAssets is! List) throw _malformed('release assets');
     final assets = <String, Map<String, dynamic>>{
-      for (final asset in (release['assets'] as List?) ?? const [])
+      for (final asset in releaseAssets)
         if (asset is Map<String, dynamic> && asset['name'] is String)
           asset['name'] as String: asset,
     };
@@ -177,12 +179,14 @@ class SemanticVectorsReleaseLocator {
 
     final manifestBytes = await _getBytes(
       client,
-      manifestAsset['browser_download_url'] as String? ?? '',
+      _string(manifestAsset['browser_download_url'], 'manifest download URL'),
     );
     final manifestSha = sha256.convert(manifestBytes).toString();
     final assetDigest = _assetSha256(manifestAsset);
+    final body = release['body'];
+    if (body != null && body is! String) throw _malformed('release body');
     final notesDigest = parsePublishedManifestSha256(
-      release['body'] as String?,
+      body as String?,
       manifestName,
     );
     // בלי digest שפורסם מחוץ למניפסט אין הבדל בין הרשמי לבין מה שנבנה מחדש.
@@ -228,6 +232,8 @@ class SemanticVectorsReleaseLocator {
       );
     }
 
+    final segment = manifest['segment'];
+    if (segment is! Map<String, dynamic>) throw _malformed('manifest segment');
     final identity = SemanticVectorsRelease.identityOf(manifest);
     return SemanticVectorsRelease(
       libraryTag: libraryTag,
@@ -239,10 +245,7 @@ class SemanticVectorsReleaseLocator {
       files: [
         for (final entry in files) _file(entry, assets),
       ],
-      segmentUncompressedSize: _int(
-        (manifest['segment'] as Map<String, dynamic>?)?['size'],
-        'segment.size',
-      ),
+      segmentUncompressedSize: _int(segment['size'], 'segment.size'),
       identityDigest: identity.identityDigest,
       chunkingIdentity: identity.chunkingIdentity,
       family: family,
@@ -261,7 +264,7 @@ class SemanticVectorsReleaseLocator {
     if (asset == null) throw _malformed('asset $name missing from release');
     return SemanticVectorsFile(
       name: name,
-      downloadUrl: asset['browser_download_url'] as String? ?? '',
+      downloadUrl: _string(asset['browser_download_url'], '$name download URL'),
       size: _int(entry['size'], '$name.size'),
       sha256: sha.toLowerCase(),
       assetId: asset['id']?.toString() ?? '',
@@ -274,6 +277,11 @@ class SemanticVectorsReleaseLocator {
           digest.substring('sha256:'.length).toLowerCase(),
         _ => null,
       };
+
+  static String _string(Object? value, String field) {
+    if (value is String) return value;
+    throw _malformed('$field missing');
+  }
 
   static int _int(Object? value, String field) {
     if (value is int) return value;

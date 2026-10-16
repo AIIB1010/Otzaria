@@ -125,7 +125,9 @@ class SemanticStagedImport {
       }
       return staged;
     }
-    if (staged != null && staged.family != candidates.first.family) {
+    if (staged != null &&
+        staged.family != candidates.first.family &&
+        await _hasVectorPayload(staged)) {
       return staged;
     }
     try {
@@ -139,6 +141,21 @@ class SemanticStagedImport {
       );
       return staged;
     }
+  }
+
+  Future<bool> _hasVectorPayload(SemanticVectorsRelease release) async {
+    final root = directoryOf(await _paths());
+    for (final file in release.files) {
+      try {
+        final staged = File(
+          p.join(root, kSemanticImportVectorsFolderName, file.name),
+        );
+        if (await staged.length() == file.size) return true;
+      } on FileSystemException {
+        // A manifest can outlive the payload moved into the installation.
+      }
+    }
+    return false;
   }
 
   /// סט הוקטורים המוכן לגרסת הספרייה [libraryVersion] מאחד מ-[candidates],
@@ -195,7 +212,10 @@ class SemanticStagedImport {
       return null;
     }
     final files = manifest['files'];
-    final segmentSize = (manifest['segment'] as Map?)?['size'];
+    final segmentSize = switch (manifest['segment']) {
+      {'size': final int size} => size,
+      _ => null,
+    };
     if (files is! List || files.isEmpty || segmentSize is! int) {
       throw const FormatException('manifest files/segment missing');
     }

@@ -473,6 +473,82 @@ void main() {
       expect(server.requested, isNot(contains(_windowsSegmentUrl)));
     });
 
+    for (final segment in <Object?>['invalid shape', [], null]) {
+      test(
+        'מבנה segment שגוי בחלונות מאפשר נפילה לסט הישן ($segment)',
+        () async {
+          final manifest =
+              jsonDecode(
+                    _manifestFor(
+                      chunking: _windowsChunking,
+                      segmentName: _windowsSegmentName,
+                    ),
+                  )
+                  as Map<String, dynamic>;
+          manifest['segment'] = segment;
+          final server = _Server()..windowsManifest = jsonEncode(manifest);
+
+          final release = await locatorOf(server).findForLibraryVersion(
+            30,
+            candidates: _windowsFirst,
+          );
+          expect(release!.family, SemanticVectorsFamily.anchor);
+
+          await expectLater(
+            locatorOf(
+              server,
+            ).findForLibraryVersion(30, candidates: const [_windows]),
+            throwsA(
+              isA<SemanticFailure>().having(
+                (f) => f.kind,
+                'kind',
+                SemanticFailureKind.releaseMalformed,
+              ),
+            ),
+          );
+        },
+      );
+    }
+
+    for (final field in ['assets', 'body', 'manifest URL', 'segment URL']) {
+      test('שדה release שגוי בחלונות מאפשר נפילה לסט הישן ($field)', () async {
+        final server = _Server()
+          ..windowsManifest = _manifestFor(
+            chunking: _windowsChunking,
+            segmentName: _windowsSegmentName,
+          );
+        final client = server.client();
+        final locator = SemanticVectorsReleaseLocator(
+          apiBase: _api,
+          clientFactory: () => MockClient((request) async {
+            final response = await client.get(request.url);
+            if (!request.url.path.contains('/releases/tags/vectors-windows-')) {
+              return response;
+            }
+            final release = jsonDecode(response.body) as Map<String, dynamic>;
+            switch (field) {
+              case 'assets':
+                release['assets'] = 'invalid shape';
+              case 'body':
+                release['body'] = [];
+              case 'manifest URL':
+                release['assets'][0]['browser_download_url'] = 7;
+              case 'segment URL':
+                release['assets'][1]['browser_download_url'] = 7;
+            }
+            return http.Response.bytes(utf8.encode(jsonEncode(release)), 200);
+          }),
+        );
+
+        final release = await locator.findForLibraryVersion(
+          30,
+          candidates: _windowsFirst,
+        );
+        expect(release!.family, SemanticVectorsFamily.anchor);
+        client.close();
+      });
+    }
+
     test('כשהסט הישן לא פורסם, כשל החלונות נזרק ולא null', () async {
       final server = _Server()
         ..windowsStatus = 500
