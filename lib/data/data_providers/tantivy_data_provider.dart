@@ -7,10 +7,14 @@ import 'package:otzaria_search_engine/otzaria_search_engine.dart';
 import 'package:otzaria/data/data_providers/catalogue_order_revision.dart';
 import 'package:otzaria/search/models/search_configuration.dart';
 import 'package:otzaria/data/constants/database_constants.dart';
+import 'package:otzaria/data/data_providers/user_books_database_holder.dart';
 import 'package:otzaria/search/library_line_source.dart';
 import 'package:otzaria/search/search_engine_gateway.dart';
 import 'package:otzaria/search/magic_dictionary_downloader.dart';
+import 'package:otzaria/attached_libraries/repository/attached_library_registry.dart';
 import 'package:otzaria/core/app_paths.dart';
+import 'package:otzaria/core/windowing/window_role.dart';
+import 'package:otzaria/indexing/models/index_update_mode.dart';
 
 /// A singleton class that manages search functionality using Tantivy search engine.
 ///
@@ -30,7 +34,10 @@ class TantivyDataProvider {
   };
 
   /// Instance of the search engine pointing to the index directory
-  Future<SearchEngine> get engine => _engineInit.ensure(_initAll);
+  Future<SearchEngine> get engine {
+    AttachedLibraryRegistry.instance.noteEngineUse();
+    return _engineInit.ensure(_initAll);
+  }
 
   set engine(Future<SearchEngine> value) => _engineInit.current = value;
 
@@ -106,6 +113,9 @@ class TantivyDataProvider {
       indexPath,
       indexStateIsKnown: indexedFilePathsLoaded && !isTempFallback,
     );
+    if (indexedFilePathsLoaded && !isTempFallback && !_catalogueOrderStale) {
+      await migratePersonalOrderRange(engine, indexPath, indexedFilePaths);
+    }
 
     // indexedFilePaths כעת משקפת את מצב האינדקס בפועל. צרכנים שמסיקים
     // "אין אינדקס" מתוך הקבוצה צריכים לחכות לסימן הזה כדי לא להציג שגוי בהפעלה.
@@ -118,6 +128,12 @@ class TantivyDataProvider {
   Future<void> _prepareLibraryLineSource() async {
     await LibraryLineSource.ensureHostSqlite();
     await LibraryLineSource.configure(DatabaseConstants.getDatabasePath());
+    // המסד נפתח לפני שהמנוע נטען — ההגדרה בפתיחתו לא הגיעה אליו.
+    final userBooksDbPath = UserBooksDatabaseHolder.instance.openDbPath;
+    if (userBooksDbPath != null) {
+      await UserBooksDatabaseHolder.configureSearchLineSource(userBooksDbPath);
+    }
+    await AttachedLibraryRegistry.instance.enableEngineSources();
   }
 
   /// קורא את תוצאת בדיקת התאימות מהאינדקס עצמו. כשל בבדיקה אינו עוצר את
@@ -179,6 +195,40 @@ class TantivyDataProvider {
 
     if (_catalogueOrderStale) {
       debugPrint('⚠️ האינדקס נבנה בסדר קטלוגי ישן — נדרשת בנייה מחדש');
+    }
+  }
+
+  /// אינדקס שנבנה לפני טווח הסדר של הספרים האישיים: רשומות `uid:` נמחקות פעם
+  /// אחת ויאונדקסו מחדש. כשהעדכון האוטומטי כבוי — נדחה להפעלה שבה יאונדקסו.
+  @visibleForTesting
+  static Future<void> migratePersonalOrderRange(
+    SearchEngine engine,
+    String indexPath,
+    Set<String> indexedFilePaths, {
+    IndexUpdateMode Function() mode = IndexUpdateMode.readStored,
+  }) async {
+    if (WindowRole.isSecondary ||
+        CatalogueOrderRevision.hasPersonalOrderRange(indexPath)) {
+      return;
+    }
+    final personalKeys = [
+      for (final key in indexedFilePaths)
+        if (key.startsWith('uid:')) key,
+    ];
+    if (personalKeys.isNotEmpty && !mode().isAutomatic) return;
+    // החותם קודם: כשל בו אחרי מחיקה היה מוחק ומאנדקס מחדש בכל הפעלה.
+    if (!CatalogueOrderRevision.write(indexPath)) return;
+    if (personalKeys.isEmpty) return;
+    try {
+      await engine.deleteDocumentsByFilePaths(filePaths: personalKeys);
+      await engine.commit();
+      indexedFilePaths.removeAll(personalKeys);
+    } catch (e) {
+      debugPrint('⚠️ מחיקת הספרים האישיים בסדר הישן נכשלה: $e');
+      try {
+        await engine.rollback();
+      } catch (_) {}
+      CatalogueOrderRevision.write(indexPath, personalOrderRange: false);
     }
   }
 
@@ -545,6 +595,20 @@ class TantivyDataProvider {
     debugPrint('✅ Index reset completed');
   }
 
+  /// מבטל במנוע את קריאות החיפוש של [requestId]. מנוע שלא נפתח לא התחיל אותן.
+  void cancelLexicalSearch(int requestId) {
+    final current = _engineInit.current;
+    if (current == null) return;
+    unawaited(
+      current.then(
+        (engine) =>
+            RustSearchEngineOperations(engine).cancelLexicalSearch(requestId),
+        onError: (Object error) =>
+            debugPrint('cancelLexicalSearch skipped: $error'),
+      ),
+    );
+  }
+
   Future<Map<String, int>> countByBook(
     String query,
     List<String> facets, {
@@ -565,6 +629,8 @@ class TantivyDataProvider {
     bool matchTaamim = false,
     WordMatchMode wordMatchMode = WordMatchMode.all,
     int? wordMatchCount,
+    bool anyOrder = false,
+    int? cancelRequestId,
   }) async {
     final results = await _searchGateway.countByBook(
       RustSearchEngineOperations(await engine),
@@ -587,6 +653,8 @@ class TantivyDataProvider {
         matchTaamim: matchTaamim,
         wordMatchMode: wordMatchMode,
         wordMatchCount: wordMatchCount,
+        anyOrder: anyOrder,
+        cancelRequestId: cancelRequestId,
       ),
     );
 

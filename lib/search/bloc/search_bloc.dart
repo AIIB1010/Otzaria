@@ -14,6 +14,8 @@ import 'package:otzaria/data/repository/data_repository.dart';
 import 'package:otzaria/library/models/library.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/search/search_defaults.dart';
+import 'package:otzaria/search/search_engine_gateway.dart'
+    show LexicalSearchRequestIds, isSearchCancelledError;
 import 'package:otzaria/search/search_repository.dart';
 import 'package:otzaria/search/search_query_builder.dart';
 import 'package:otzaria/search/utils/facet_helper.dart';
@@ -32,6 +34,7 @@ typedef _FacetRecountInputs = ({
   SearchScope proximityScope,
   WordMatchMode wordMatchMode,
   int wordMatchCount,
+  bool anyOrder,
 });
 
 typedef IndexedBookResolution = ({Book? book, bool isStale});
@@ -39,6 +42,9 @@ typedef IndexedBookResolution = ({Book? book, bool isStale});
 class SearchBloc extends Bloc<SearchEvent, SearchState> {
   final SearchRepository _repository;
   int _searchRequestId = 0;
+
+  /// מזהה הביטול במנוע של החיפוש הנוכחי; חיפוש חדש או סגירה מבטלים אותו.
+  int? _engineRequestId;
 
   /// חתימת החיפוש שעבורו חושבו ספירות ה-facets שב-state כרגע.
   /// מאפשרת לדלג על ספירת כל-האינדקס (countByBook) כשלחיצה על קטגוריה
@@ -105,6 +111,8 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
     on<UpdateProximityScopeWithoutSearch>(_onUpdateProximityScopeWithoutSearch);
     on<UpdateWordMatchMode>(_onUpdateWordMatchMode);
     on<UpdateWordMatchModeWithoutSearch>(_onUpdateWordMatchModeWithoutSearch);
+    on<UpdateWordOrder>(_onUpdateWordOrder);
+    on<UpdateWordOrderWithoutSearch>(_onUpdateWordOrderWithoutSearch);
     on<ToggleSearchMode>(_onToggleSearchMode);
     on<SetSearchMode>(_onSetSearchMode);
     on<SetSearchModeWithoutSearch>(_onSetSearchModeWithoutSearch);
@@ -138,6 +146,7 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
     Emitter<SearchState> emit,
   ) async {
     final requestId = ++_searchRequestId;
+    _cancelEngineSearch();
     final query = event.query;
     final negativeQuery = event.negativeQuery ?? state.negativeQuery;
     // גם חיפוש שנעצר כאן מייצג את כוונת המשתמש העדכנית — שמירתו מונעת
@@ -173,6 +182,7 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
       return;
     }
 
+    final engineRequestId = _engineRequestId = LexicalSearchRequestIds.next();
     final requestedFacets = List<String>.from(state.currentFacets);
     final shouldPreserveFacetCounts =
         state.searchQuery == query && state.facetCounts.isNotEmpty;
@@ -222,6 +232,7 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
           _refreshFacetCountsForAllBooks(
             event,
             requestId,
+            engineRequestId,
             recountSignature,
             recountInputs,
           ),
@@ -251,6 +262,11 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
           grouping: state.configuration.resultGrouping.engineGrouping,
           wordMatchMode: state.wordMatchMode,
           wordMatchCount: state.wordMatchCount,
+          anyOrder: state.configuration.appliesAnyOrder(
+            customSpacing: event.customSpacing ?? const {},
+            query: state.searchQuery,
+          ),
+          cancelRequestId: engineRequestId,
         ),
         chunkSize: 50, // 50 תוצאות בכל chunk
       );
@@ -336,6 +352,10 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
       );
     } catch (e, stackTrace) {
       if (requestId != _searchRequestId) return;
+      if (isSearchCancelledError(e)) {
+        emit(state.copyWith(isLoading: false));
+        return;
+      }
       // שגיאת החיפוש מוצגת בהודעה וב-state כדי שלא תיראה כ"0 תוצאות".
       debugPrint('❌ Search failed: $e\n$stackTrace');
       // בלי רישום ליומן, כשל חיפוש (כמו אחרי יציאה משינה, issue #1012)
@@ -359,6 +379,24 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
         ),
       );
     }
+  }
+
+  void _cancelEngineSearch() {
+    final id = _engineRequestId;
+    if (id == null) return;
+    _engineRequestId = null;
+    unawaited(
+      _repository.cancelLexicalSearch(id).catchError((Object error) {
+        debugPrint('Search cancel failed: $error');
+      }),
+    );
+  }
+
+  @override
+  Future<void> close() {
+    _searchRequestId++;
+    _cancelEngineSearch();
+    return super.close();
   }
 
   /// אותו אירוע חייב לשמש גם לחתימת הספירות וגם לשליחה — אחרת החתימות
@@ -389,6 +427,7 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
       proximityScope: state.proximityScope,
       wordMatchMode: state.wordMatchMode,
       wordMatchCount: state.wordMatchCount,
+      anyOrder: state.anyOrder,
     );
   }
 
@@ -409,6 +448,7 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
       inputs.proximityScope.name,
       inputs.wordMatchMode.name,
       inputs.wordMatchCount,
+      inputs.anyOrder,
       jsonEncode(event.customSpacing ?? const <String, String>{}),
       jsonEncode(
         (event.alternativeWords ?? const <int, List<String>>{}).map(
@@ -431,6 +471,7 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
   Future<void> _refreshFacetCountsForAllBooks(
     UpdateSearchQuery event,
     int requestId,
+    int engineRequestId,
     String signature,
     _FacetRecountInputs inputs,
   ) async {
@@ -459,12 +500,23 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
         searchMode: inputs.searchMode,
         wordMatchMode: inputs.wordMatchMode,
         wordMatchCount: inputs.wordMatchCount,
+        anyOrder:
+            SearchConfiguration(
+              searchMode: inputs.searchMode,
+              proximityScope: inputs.proximityScope,
+              wordMatchMode: inputs.wordMatchMode,
+              anyOrder: inputs.anyOrder,
+            ).appliesAnyOrder(
+              customSpacing: event.customSpacing ?? const {},
+              query: query,
+            ),
         customSpacing: event.customSpacing,
         alternativeWords: event.alternativeWords,
         searchOptions: event.searchOptions,
         negativeCustomSpacing: event.negativeCustomSpacing,
         negativeAlternativeWords: event.negativeAlternativeWords,
         negativeSearchOptions: event.negativeSearchOptions,
+        cancelRequestId: engineRequestId,
       );
     } catch (e, stackTrace) {
       // עדכון ה-facets רץ ב-fire-and-forget (unawaited). המנוע דוחה שאילתה
@@ -588,6 +640,28 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
     }
 
     emit(state.copyWith(configuration: newConfig));
+    return true;
+  }
+
+  void _onUpdateWordOrder(UpdateWordOrder event, Emitter<SearchState> emit) {
+    if (!_updateWordOrderConfiguration(event.anyOrder, emit)) return;
+    _reSearch();
+  }
+
+  void _onUpdateWordOrderWithoutSearch(
+    UpdateWordOrderWithoutSearch event,
+    Emitter<SearchState> emit,
+  ) {
+    _updateWordOrderConfiguration(event.anyOrder, emit);
+  }
+
+  bool _updateWordOrderConfiguration(bool anyOrder, Emitter<SearchState> emit) {
+    if (anyOrder == state.anyOrder) return false;
+    emit(
+      state.copyWith(
+        configuration: state.configuration.copyWith(anyOrder: anyOrder),
+      ),
+    );
     return true;
   }
 
@@ -950,6 +1024,8 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
     ResetSearch event,
     Emitter<SearchState> emit,
   ) {
+    _searchRequestId++;
+    _cancelEngineSearch();
     _facetCountsSignature = null;
     _lastUserSearch = null;
     emit(const SearchState());
@@ -1085,6 +1161,11 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
           grouping: state.configuration.resultGrouping.engineGrouping,
           wordMatchMode: state.wordMatchMode,
           wordMatchCount: state.wordMatchCount,
+          anyOrder: state.configuration.appliesAnyOrder(
+            customSpacing: event.customSpacing ?? const {},
+            query: state.searchQuery,
+          ),
+          cancelRequestId: _engineRequestId,
         ),
       );
       // חיפוש חדש החליף את התוצאות ומנהל את isLoading בעצמו.
@@ -1110,6 +1191,10 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
       );
     } catch (e, stackTrace) {
       if (requestId != _searchRequestId) return;
+      if (isSearchCancelledError(e)) {
+        emit(state.copyWith(isLoading: false));
+        return;
+      }
       debugPrint('❌ Load more results failed: $e\n$stackTrace');
       UiSnack.showError(LibraryMessages.loadMoreResultsError);
       emit(state.copyWith(isLoading: false));

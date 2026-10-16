@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:otzaria/search/models/search_configuration.dart';
+import 'package:otzaria/search/search_query_builder.dart';
 import 'package:otzaria/utils/text/text_manipulation.dart' as text_utils;
 import 'package:otzaria_search_engine/otzaria_search_engine.dart';
 
@@ -57,6 +58,14 @@ class SearchEngineRequest {
   /// חוצה-ספרים. limit/offset נספרים בקבוצות כשהאיחוד פעיל.
   final ResultGrouping? grouping;
 
+  /// מילות השאילתה בכל סדר בתוך חלון המרווח (גם בשאילתה השלילית). המנוע
+  /// מתעלם ממנו כשיש מרווחים ידניים; הבונה מעביר את הערך האפקטיבי.
+  final bool anyOrder;
+
+  /// מזהה הבקשה שמבטל במנוע את כל קריאות החיפוש הזה
+  /// ([SearchEngineOperations.cancelLexicalSearch]); null — אין ביטול.
+  final int? cancelRequestId;
+
   const SearchEngineRequest({
     required this.query,
     required this.facets,
@@ -80,6 +89,8 @@ class SearchEngineRequest {
     this.grouping,
     this.wordMatchMode = WordMatchMode.all,
     this.wordMatchCount,
+    this.anyOrder = false,
+    this.cancelRequestId,
   });
 
   SearchEngineRequest copyWith({
@@ -105,8 +116,10 @@ class SearchEngineRequest {
     Object? grouping = _unset,
     WordMatchMode? wordMatchMode,
     Object? wordMatchCount = _unset,
+    bool? anyOrder,
   }) {
     return SearchEngineRequest(
+      cancelRequestId: cancelRequestId,
       query: query ?? this.query,
       facets: facets ?? this.facets,
       limit: limit ?? this.limit,
@@ -136,6 +149,7 @@ class SearchEngineRequest {
       wordMatchCount: identical(wordMatchCount, _unset)
           ? this.wordMatchCount
           : wordMatchCount as int?,
+      anyOrder: anyOrder ?? this.anyOrder,
     );
   }
 }
@@ -205,6 +219,20 @@ abstract interface class SemanticSearchEngineOperations {
   Future<SemanticResetResult> resetSemanticIndex();
 }
 
+/// מזהי בקשה לביטול חיפוש במנוע, ייחודיים בתהליך: המנוע זוכר מזהים שבוטלו,
+/// ומזהה שחוזר היה מבטל מראש חיפוש חדש.
+abstract final class LexicalSearchRequestIds {
+  static int _last = 0;
+
+  static int next() => _last = _last >= 0xFFFFFFFF ? 1 : _last + 1;
+}
+
+/// האם [error] הוא כשל של חיפוש שבוטל — לא תקלה להציג למשתמש.
+bool isSearchCancelledError(Object error) {
+  final message = error.toString();
+  return message.contains('lexical search cancelled');
+}
+
 /// ממשק קטן וניתן לבדיקה מעל ה-API של `search_engine`.
 abstract class SearchEngineOperations {
   Future<List<SearchResult>> searchExact(SearchEngineRequest request);
@@ -252,6 +280,10 @@ abstract class SearchEngineOperations {
     SearchEngineRequest request, {
     required String facetPrefix,
   });
+
+  /// עוצר במנוע את כל קריאות החיפוש שנשאו את [requestId] (ראו
+  /// [SearchEngineRequest.cancelRequestId]), גם כאלה שעוד לא התחילו.
+  void cancelLexicalSearch(int requestId) {}
 
   /// מזין מראש את תבנית הדגשת-הספר-הפתוח מבוססת-האינדקס לפרמטרי החיפוש —
   /// כך שכשהמשתמש יפתח תוצאה, `utils.highLight` ימצא תבנית שמדגישה את
@@ -313,6 +345,7 @@ class RustSearchEngineOperations
   /// שאילתה שלילית, scope) מרוקנים במפורש, כדי ששאריות ממצב מתקדם קודם
   /// לא יזלגו פנימה.
   ///
+  /// "בכל סדר" בשאילתה מרובת מילים קיים רק במסלול המתקדם, ולכן גם הוא מנותב.
   /// מחזיר null כשאין מה לנתב (מרווח 0 ובלי אפשרויות — המסלול המדויק
   /// המהיר נשאר).
   static SearchEngineRequest? _exactWithParametersAsAdvanced(
@@ -324,7 +357,9 @@ class RustSearchEngineOperations
     final hasOptions = request.searchOptions.values.any(
       (options) => options.values.any((enabled) => enabled),
     );
-    if (request.distance <= 0 && !hasOptions) {
+    final reordersWords =
+        request.anyOrder && SearchQueryBuilder.hasMultipleWords(request.query);
+    if (request.distance <= 0 && !hasOptions && !reordersWords) {
       return null;
     }
     return exactAsAdvanced(request);
@@ -401,6 +436,7 @@ class RustSearchEngineOperations
       grouping: request.grouping,
       wordMatchMode: request.wordMatchMode,
       wordMatchCount: request.wordMatchCount,
+      anyOrder: request.anyOrder,
     );
   }
 
@@ -514,6 +550,7 @@ class RustSearchEngineOperations
       grouping: request.grouping,
       wordMatchMode: request.wordMatchMode,
       wordMatchCount: request.wordMatchCount,
+      anyOrder: request.anyOrder,
     );
   }
 
@@ -551,6 +588,7 @@ class RustSearchEngineOperations
       matchNikud: request.matchNikud,
       matchTaamim: request.matchTaamim,
       grouping: request.grouping,
+      cancelRequestId: request.cancelRequestId,
     );
   }
 
@@ -582,6 +620,8 @@ class RustSearchEngineOperations
       grouping: request.grouping,
       wordMatchMode: request.wordMatchMode,
       wordMatchCount: request.wordMatchCount,
+      anyOrder: request.anyOrder,
+      cancelRequestId: request.cancelRequestId,
     );
   }
 
@@ -601,6 +641,7 @@ class RustSearchEngineOperations
       matchNikud: request.matchNikud,
       matchTaamim: request.matchTaamim,
       grouping: request.grouping,
+      cancelRequestId: request.cancelRequestId,
     );
   }
 
@@ -613,6 +654,7 @@ class RustSearchEngineOperations
       facets: request.facets,
       matchNikud: request.matchNikud,
       matchTaamim: request.matchTaamim,
+      cancelRequestId: request.cancelRequestId,
     );
   }
 
@@ -636,6 +678,8 @@ class RustSearchEngineOperations
       negativeScope: request.negativeScope,
       wordMatchMode: request.wordMatchMode,
       wordMatchCount: request.wordMatchCount,
+      anyOrder: request.anyOrder,
+      cancelRequestId: request.cancelRequestId,
     );
   }
 
@@ -647,6 +691,7 @@ class RustSearchEngineOperations
       maxDistance: _fuzzyDistance(request.distance),
       matchNikud: request.matchNikud,
       matchTaamim: request.matchTaamim,
+      cancelRequestId: request.cancelRequestId,
     );
   }
 
@@ -659,6 +704,7 @@ class RustSearchEngineOperations
       facets: request.facets,
       matchNikud: request.matchNikud,
       matchTaamim: request.matchTaamim,
+      cancelRequestId: request.cancelRequestId,
     );
   }
 
@@ -682,6 +728,8 @@ class RustSearchEngineOperations
       negativeScope: request.negativeScope,
       wordMatchMode: request.wordMatchMode,
       wordMatchCount: request.wordMatchCount,
+      anyOrder: request.anyOrder,
+      cancelRequestId: request.cancelRequestId,
     );
   }
 
@@ -693,6 +741,7 @@ class RustSearchEngineOperations
       maxDistance: _fuzzyDistance(request.distance),
       matchNikud: request.matchNikud,
       matchTaamim: request.matchTaamim,
+      cancelRequestId: request.cancelRequestId,
     );
   }
 
@@ -738,6 +787,7 @@ class RustSearchEngineOperations
       negativeScope: request.negativeScope,
       wordMatchMode: request.wordMatchMode,
       wordMatchCount: request.wordMatchCount,
+      anyOrder: request.anyOrder,
     );
   }
 
@@ -779,6 +829,7 @@ class RustSearchEngineOperations
           matchNikud: request.matchNikud,
           matchTaamim: request.matchTaamim,
           grouping: request.grouping,
+          cancelRequestId: request.cancelRequestId,
         );
       case SearchMode.advanced:
         return _engine.searchAdvancedStreamWithCounts(
@@ -804,6 +855,8 @@ class RustSearchEngineOperations
           grouping: request.grouping,
           wordMatchMode: request.wordMatchMode,
           wordMatchCount: request.wordMatchCount,
+          anyOrder: request.anyOrder,
+          cancelRequestId: request.cancelRequestId,
         );
       case SearchMode.fuzzy:
         return _engine.searchFuzzyStreamWithCounts(
@@ -817,8 +870,14 @@ class RustSearchEngineOperations
           matchNikud: request.matchNikud,
           matchTaamim: request.matchTaamim,
           grouping: request.grouping,
+          cancelRequestId: request.cancelRequestId,
         );
     }
+  }
+
+  @override
+  void cancelLexicalSearch(int requestId) {
+    _engine.cancelLexicalSearch(requestId: requestId);
   }
 
   static int _fuzzyDistance(int distance) {
@@ -849,6 +908,7 @@ class RustSearchEngineOperations
         spacingValues: request.customSpacing,
         searchDistance: request.distance,
         isFuzzy: request.searchMode == SearchMode.fuzzy,
+        anyOrder: request.anyOrder,
         fetch: () => switch (request.searchMode) {
           SearchMode.advanced => _engine.generateIndexHighlightPattern(
             query: request.query,
@@ -856,6 +916,7 @@ class RustSearchEngineOperations
             customSpacing: request.customSpacing,
             alternativeWords: request.alternativeWords,
             searchOptions: request.searchOptions,
+            anyOrder: request.anyOrder,
           ),
           SearchMode.fuzzy => _engine.generateIndexFuzzyHighlightPattern(
             query: request.query,

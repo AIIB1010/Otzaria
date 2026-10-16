@@ -23,11 +23,13 @@ import 'package:otzaria/migration/database/daos/database.dart';
 import 'package:otzaria/migration/database/repository/seforim_repository.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
 import '../../test_helpers/memory_cache_provider.dart';
+import '../../support/fake_line_source_engine.dart';
 import '../../support/search_engine_test_init.dart';
 
 import 'package:otzaria/data/constants/database_constants.dart';
 import 'package:otzaria/data/data_providers/tantivy_data_provider.dart';
 import 'package:otzaria/indexing/models/catalogue_order_resolver.dart';
+import 'package:otzaria/indexing/models/index_update_mode.dart';
 import 'package:otzaria/indexing/models/indexing_run_result.dart';
 import 'package:otzaria/indexing/repository/indexing_repository.dart';
 import 'package:otzaria/indexing/utils/indexing_crash_canary.dart';
@@ -3418,8 +3420,23 @@ void main() {
         IndexingRepository.textStorageFor(
           filePath: filePath,
           libraryDbBookId: id,
+          userBooksDbBookId: null,
           hostApiReady: ready,
+          userBooksConfigured: true,
         );
+
+    TextStorage decideUser(
+      String filePath,
+      int? id, {
+      bool ready = true,
+      bool configured = true,
+    }) => IndexingRepository.textStorageFor(
+      filePath: filePath,
+      libraryDbBookId: null,
+      userBooksDbBookId: id,
+      hostApiReady: ready,
+      userBooksConfigured: configured,
+    );
 
     test('ספר רשמי שנקרא מ-seforim.db — הטקסט לא נשמר באינדקס', () {
       expect(decide('id:5', 5), TextStorage.libraryDb);
@@ -3427,6 +3444,25 @@ void main() {
 
     test('בלי SQLite משותף למנוע — הטקסט נשמר באינדקס', () {
       expect(decide('id:5', 5, ready: false), TextStorage.inIndex);
+    });
+
+    test('ספר אישי שנקרא משורות user_books.db — הטקסט לא נשמר באינדקס', () {
+      expect(decideUser('uid:5', 5), TextStorage.libraryDb);
+    });
+
+    test('ספר אישי כשמקור הספרים האישיים אינו מוגדר — הטקסט נשמר', () {
+      expect(decideUser('uid:5', 5, configured: false), TextStorage.inIndex);
+    });
+
+    test('ספר אישי בלי SQLite משותף למנוע — הטקסט נשמר באינדקס', () {
+      expect(decideUser('uid:5', 5, ready: false), TextStorage.inIndex);
+    });
+
+    test('id של user_books.db אינו מתאים למפתח אחר', () {
+      expect(decideUser('uid:5', null), TextStorage.inIndex);
+      expect(decideUser('uid:6', 5), TextStorage.inIndex);
+      expect(decideUser('id:5', 5), TextStorage.inIndex);
+      expect(decideUser('ext:abc', 5), TextStorage.inIndex);
     });
 
     test('מקור שאינו seforim.db או מפתח אחר — הטקסט נשמר באינדקס', () {
@@ -3443,20 +3479,32 @@ void main() {
 
       Future<_CancellationRecordingEngine> index({
         required bool hostApiReady,
+        bool userBooksConfigured = false,
       }) async {
+        LibraryLineSource.debugReset(engine: FakeLineSourceEngine());
+        if (userBooksConfigured) {
+          await LibraryLineSource.configureUserBooks('/db/user_books.db');
+        }
         LibraryLineSource.debugHostApiReady = hostApiReady;
         final engine = _CancellationRecordingEngine();
         final provider = _RecordingTantivyDataProvider(engine);
         final repository = _FakeExtractionRepository(provider)
           ..libraryDbBookIdByTitle['מהמסד'] = 301
+          ..userBooksDbBookIdByTitle['אישי'] = 7
           ..dataUriLinesByTitle['מהמסד'] = Uint32List.fromList([0, 2])
+          ..dataUriLinesByTitle['אישי'] = Uint32List.fromList([3])
           ..dataUriLinesByTitle['מקובץ'] = Uint32List.fromList([1]);
         final fromDb = TextBook(id: 301, title: 'מהמסד');
         final fromFile = TextBook(id: 302, title: 'מקובץ');
+        final personal = TextBook(
+          id: 7,
+          title: 'אישי',
+          source: BookSource.user,
+        );
         final library = Library(categories: [])
-          ..books.addAll([fromDb, fromFile]);
+          ..books.addAll([fromDb, fromFile, personal]);
         final result = await repository.indexBooks(
-          [fromDb, fromFile],
+          [fromDb, fromFile, personal],
           library,
           onProgress: (_, _) {},
         );
@@ -3469,12 +3517,24 @@ void main() {
         expect(engine.textStorageByFilePath, {
           'id:301': TextStorage.libraryDb,
           'id:302': TextStorage.inIndex,
+          'uid:7': TextStorage.inIndex,
         });
         // שורות התמונות נשמרות באינדקס רק בספר שטקסטו נקרא מהמסד.
         expect(engine.storedLinesByFilePath, {
           'id:301': [0, 2],
           'id:302': null,
+          'uid:7': null,
         });
+      });
+
+      test('ספר אישי מהמסד מאונדקס בלי טקסט כשהמקור מוגדר', () async {
+        final engine = await index(
+          hostApiReady: true,
+          userBooksConfigured: true,
+        );
+        expect(engine.textStorageByFilePath['uid:7'], TextStorage.libraryDb);
+        expect(engine.storedLinesByFilePath['uid:7'], [3]);
+        expect(engine.textStorageByFilePath['id:302'], TextStorage.inIndex);
       });
 
       test('כשהמנוע לא קיבל SQLite — הכול נשמר באינדקס', () async {
@@ -3482,8 +3542,13 @@ void main() {
         expect(engine.textStorageByFilePath, {
           'id:301': TextStorage.inIndex,
           'id:302': TextStorage.inIndex,
+          'uid:7': TextStorage.inIndex,
         });
-        expect(engine.storedLinesByFilePath, {'id:301': null, 'id:302': null});
+        expect(engine.storedLinesByFilePath, {
+          'id:301': null,
+          'id:302': null,
+          'uid:7': null,
+        });
       });
     });
   });
@@ -3516,6 +3581,156 @@ void main() {
 
       expect(completed, isFalse);
       expect(reportedError, isA<StateError>());
+    });
+  });
+
+  group('מצב "בלי ספרים אישיים"', () {
+    IndexingRepository repositoryFor(
+      _RecordingTantivyDataProvider provider,
+      IndexUpdateMode mode,
+    ) => IndexingRepository(provider, indexUpdateMode: () => mode);
+
+    test('ספרים אישיים יוצאים מרשימת האינדוקס', () {
+      final official = TextBook(id: 1, title: 'שבת');
+      final personal = TextBook(id: 1, title: 'אישי', source: BookSource.user);
+      final attached = TextBook(
+        id: 1,
+        title: 'מצורף',
+        source: BookSource.attached('lib'),
+      );
+
+      expect(
+        IndexingRepository.booksForIndexing(
+          [official, personal, attached],
+          includePdfBooks: true,
+          hidden: const HiddenLibrarySelection(),
+          mode: IndexUpdateMode.libraryOnly,
+        ),
+        [official, attached],
+      );
+    });
+
+    test(
+      'ספר אישי שאינו באינדקס אינו נחשב חסר — אין אינדוקס חוזר בכל עלייה',
+      () async {
+        final provider = _RecordingTantivyDataProvider(
+          _RecordingSearchEngine(),
+        );
+        final library = _buildLibrary(bavliBooks: const [('שבת', 1)]);
+        final personal = TextBook(
+          id: 3,
+          title: 'אישי',
+          source: BookSource.user,
+        );
+        library.books.add(personal);
+        provider.indexedFilePaths.addAll(
+          library
+              .getAllBooks()
+              .where((book) => !book.source.isUser)
+              .where(IndexingRepository.isIndexableBook)
+              .map(IndexingRepository.buildIndexedBookFilePath),
+        );
+
+        expect(
+          await repositoryFor(
+            provider,
+            IndexUpdateMode.libraryOnly,
+          ).hasUnindexedBooks(library),
+          isFalse,
+        );
+        expect(
+          await repositoryFor(provider, IndexUpdateMode.all).hasUnindexedBooks(
+            library,
+          ),
+          isTrue,
+          reason: 'חזרה ל"כל הספרים" מזהה את הספר האישי כחסר',
+        );
+      },
+    );
+
+    test('ניקוי היתומים מסיר את רשומות הספרים האישיים בלבד', () async {
+      final engine = _RecordingSearchEngine();
+      final provider = _RecordingTantivyDataProvider(engine);
+      final library = _buildLibrary(bavliBooks: const []);
+      final officialBook = TextBook(id: 7, title: 'רשמי');
+      final personalText = TextBook(
+        id: 1,
+        title: 'אישי',
+        source: BookSource.user,
+      );
+      final root = await io.Directory.systemTemp.createTemp('otzaria-personal');
+      addTearDown(() => root.delete(recursive: true));
+      final pdfFile = io.File(p.join(root.path, 'סרוק.pdf'))
+        ..writeAsStringSync('');
+      final personalPdf = PdfBook(
+        title: 'סרוק',
+        path: pdfFile.path,
+        source: BookSource.user,
+      );
+      final hiddenFolder = io.Directory(p.join(root.path, 'מוסתרת'))
+        ..createSync();
+      final hiddenFolderPdf = p.join(hiddenFolder.path, 'אחר.pdf');
+      // ספרייה שנמצאת בתוך תיקייה אישית — הקבצים שלה אינם אישיים.
+      final nestedLibrary = p.join(hiddenFolder.path, 'ספרייה');
+      final nestedLibraryPdf = p.join(nestedLibrary, 'רשמי.pdf');
+      io.File(nestedLibraryPdf)
+        ..createSync(recursive: true)
+        ..writeAsStringSync('');
+      library.books.addAll([officialBook, personalText, personalPdf]);
+      provider.indexedFilePaths.addAll({
+        'id:7',
+        'ext:abc',
+        IndexingRepository.buildIndexedBookFilePath(personalText),
+        IndexingRepository.buildIndexedBookFilePath(personalPdf),
+        'uid:99', // ספר מתיקייה מוסתרת — אינו בעץ
+        hiddenFolderPdf,
+        nestedLibraryPdf,
+      });
+
+      final removed =
+          await repositoryFor(
+            provider,
+            IndexUpdateMode.libraryOnly,
+          ).dropOrphanedIndexEntries(
+            library,
+            customFolders: [
+              CustomFolder(path: root.path, addedAt: DateTime(2026)),
+              CustomFolder(
+                path: hiddenFolder.path,
+                hidden: true,
+                addedAt: DateTime(2026),
+              ),
+            ],
+            preservedHiddenUserBookKeys: {'uid:99'},
+            attachedLibraries: const [],
+            libraryRoot: nestedLibrary,
+          );
+
+      expect(removed, 4);
+      expect(engine.commitCount, 1);
+      expect(provider.indexedFilePaths, {'id:7', 'ext:abc', nestedLibraryPdf});
+    });
+
+    test('במצב "כל הספרים" הספרים האישיים נשמרים', () async {
+      final engine = _RecordingSearchEngine();
+      final provider = _RecordingTantivyDataProvider(engine);
+      final library = _buildLibrary(bavliBooks: const []);
+      final personal = TextBook(id: 1, title: 'אישי', source: BookSource.user);
+      library.books.add(personal);
+      provider.indexedFilePaths.addAll({'uid:1', 'uid:99'});
+
+      final removed =
+          await repositoryFor(
+            provider,
+            IndexUpdateMode.all,
+          ).dropOrphanedIndexEntries(
+            library,
+            customFolders: const [],
+            preservedHiddenUserBookKeys: {'uid:99'},
+          );
+
+      expect(removed, 0);
+      expect(provider.indexedFilePaths, {'uid:1', 'uid:99'});
     });
   });
 }
@@ -3674,6 +3889,8 @@ typedef _TextBookSource = ({
   Uint8List? bytes,
   String? text,
   int? libraryDbBookId,
+  int? userBooksDbBookId,
+  int? attachedDbBookId,
   Uint32List? dataUriLines,
 });
 
@@ -3694,6 +3911,8 @@ class _CancelDuringLoadRepository extends IndexingRepository {
       bytes: null,
       text: 'תוכן',
       libraryDbBookId: null,
+      userBooksDbBookId: null,
+      attachedDbBookId: null,
       dataUriLines: null,
     );
   }
@@ -3725,6 +3944,9 @@ class _FakeExtractionRepository extends IndexingRepository {
   /// ה-id ב-seforim.db שממנו "נקרא" ספר הטקסט, לפי כותרת.
   final libraryDbBookIdByTitle = <String, int>{};
 
+  /// ה-id ב-user_books.db שממנו "נקרא" ספר אישי, לפי כותרת.
+  final userBooksDbBookIdByTitle = <String, int>{};
+
   /// שורות התמונות שנוקו מספר הטקסט, לפי כותרת.
   final dataUriLinesByTitle = <String, Uint32List>{};
 
@@ -3736,6 +3958,8 @@ class _FakeExtractionRepository extends IndexingRepository {
       bytes: null,
       text: 'תוכן',
       libraryDbBookId: libraryDbBookIdByTitle[book.title],
+      userBooksDbBookId: userBooksDbBookIdByTitle[book.title],
+      attachedDbBookId: null,
       dataUriLines: dataUriLinesByTitle[book.title],
     );
   }

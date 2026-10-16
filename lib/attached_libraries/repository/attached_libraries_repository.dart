@@ -288,8 +288,10 @@ class AttachedLibrariesRepository {
       });
 
   /// משחרר את נעילת הקובץ. הוא ייפתח שוב בגישה הבאה לספר ממנו.
-  Future<void> release(AttachedLibrary library) =>
-      _registry.close(library.slug);
+  Future<void> release(AttachedLibrary library) async {
+    await _registry.close(library.slug);
+    await _registry.syncEngineSources();
+  }
 
   /// מתקין קובץ מסד מעודכן במקום הקובץ של [library] (עדכון במקום, גם בקישור).
   ///
@@ -309,9 +311,9 @@ class AttachedLibrariesRepository {
       throw FileSystemException('library is no longer attached', library.path);
     }
     await _registry.close(current.slug);
-    await swap.swapIn(current.path, stagedPath);
     final AttachedLibraryProbeResult result;
     try {
+      await swap.swapIn(current.path, stagedPath);
       result = await _probe(current.path);
       if (!result.isOk || !accept(result)) {
         throw const AttachedUpdateVerificationFailed();
@@ -320,6 +322,8 @@ class AttachedLibrariesRepository {
       await _registry.close(current.slug);
       await swap.restore(current.path);
       rethrow;
+    } finally {
+      await _registry.syncEngineSources();
     }
     await swap.discardBackup(current.path);
     // [accept] checked the key and library_id, so a moved manifest URL is
@@ -447,7 +451,11 @@ class AttachedLibrariesRepository {
         [
           for (var i = 0; i < resolved.length; i++) before[i] != resolved[i],
         ].any((differs) => differs);
-    if (!changed) return false;
+    if (!changed) {
+      // מסד שנסגר לפני פעולת קובץ חוזר למנוע גם כשהרשימה לא השתנתה.
+      await _registry.syncEngineSources();
+      return false;
+    }
     final contentChanged = _contentChangedSlugs(before, resolved);
     await _store.saveLibraries(resolved);
     _registry.update(resolved);
