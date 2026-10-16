@@ -231,13 +231,13 @@ int _pickBestOccurrence(
   int bestIdx = occurrences.first;
   int bestScore = -1;
   for (final idx in occurrences) {
-    final before = normalized.substring(0, idx);
-    final after = normalized.substring(idx + needleLen);
     int score = 0;
     if (prefix != null && prefix.isNotEmpty) {
+      final before = normalized.substring(0, idx);
       score += _contextScore(before, prefix, matchTail: true);
     }
     if (suffix != null && suffix.isNotEmpty) {
+      final after = normalized.substring(idx + needleLen);
       score += _contextScore(after, suffix, matchTail: false);
     }
     // שובר שוויון: קרבה לרמז המיקום (ככל שקרוב יותר — עדיף).

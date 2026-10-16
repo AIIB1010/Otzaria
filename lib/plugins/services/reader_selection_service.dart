@@ -658,10 +658,18 @@ class _GraphemeBoundaries {
   PluginTextOffset offsetAt(int index) => offsets[index];
 
   int? graphemeAtUtf16(int utf16) {
-    for (var index = 0; index < offsets.length; index++) {
-      if (offsets[index].utf16 == utf16) return index;
+    var low = 0;
+    var high = offsets.length;
+    while (low < high) {
+      final mid = (low + high) >> 1;
+      final offset = offsets[mid].utf16;
+      if (offset < utf16) {
+        low = mid + 1;
+      } else {
+        high = mid;
+      }
     }
-    return null;
+    return low < offsets.length && offsets[low].utf16 == utf16 ? low : null;
   }
 
   String slice(int start, int end) => values.sublist(start, end).join();
