@@ -1698,17 +1698,13 @@ String replaceHolyNames(
   String s, {
   HolyNameStyle style = HolyNameStyle.kufKuf,
 }) {
-  // סריקת RegExp על כל השורה יקרה בשורות ארוכות, לכן מנסים
-  // התאמה רק כשאחרי ה-י באות "הוה", בדילוג על כל מה שעשוי להיות Mn.
-  StringBuffer? out;
+  final matches = findReplaceableHolyNames(s);
+  if (matches.isEmpty) return s;
+
+  final out = StringBuffer();
   var copied = 0;
-  for (var i = s.indexOf('י'); i >= 0; i = s.indexOf('י', i + 1)) {
-    if (!_mayBeHolyName(s, i)) continue;
-    final match = _holyName.matchAsPrefix(s, i);
-    if (match == null) continue;
-    i = match.end - 1;
-    if (_hasThreeContiguousHebrewLettersBeforeMatch(s, match.start)) continue;
-    (out ??= StringBuffer())
+  for (final match in matches) {
+    out
       ..write(s.substring(copied, match.start))
       ..write(
         style == HolyNameStyle.hehApostrophe
@@ -1717,7 +1713,23 @@ String replaceHolyNames(
       );
     copied = match.end;
   }
-  return out == null ? s : (out..write(s.substring(copied))).toString();
+  return (out..write(s.substring(copied))).toString();
+}
+
+/// שמות הקודש ש-[replaceHolyNames] תחליף, בטווחי התווים המקוריים.
+List<Match> findReplaceableHolyNames(String s) {
+  List<Match>? matches;
+  // סריקת RegExp על כל השורה יקרה בשורות ארוכות, לכן מנסים
+  // התאמה רק כשאחרי ה-י באות "הוה", בדילוג על כל מה שעשוי להיות Mn.
+  for (var i = s.indexOf('י'); i >= 0; i = s.indexOf('י', i + 1)) {
+    if (!_mayBeHolyName(s, i)) continue;
+    final match = _holyName.matchAsPrefix(s, i);
+    if (match == null) continue;
+    i = match.end - 1;
+    if (_hasThreeContiguousHebrewLettersBeforeMatch(s, match.start)) continue;
+    (matches ??= <Match>[]).add(match);
+  }
+  return matches ?? const <Match>[];
 }
 
 /// מסנן מקדים ל-[_holyName]: "הוה" אחרי ה-י, בדילוג על כל יחידה שעשויה להיות

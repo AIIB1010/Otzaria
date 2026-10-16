@@ -9,6 +9,7 @@ import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/models/links.dart';
 import 'package:otzaria/personal_notes/personal_notes_system.dart';
+import 'package:otzaria/personal_notes/utils/personal_note_source_selection.dart';
 import 'package:otzaria/services/target_line_links_service.dart';
 import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
 import 'package:otzaria/tabs/bloc/tabs_event.dart';
@@ -31,6 +32,7 @@ import 'package:otzaria/text_book/view/selection/selected_text_copy.dart';
 import 'package:otzaria/text_book/utils/reader_menu_entries.dart';
 import 'package:otzaria/utils/text/global_search_helper.dart';
 import 'package:otzaria_icons/otzaria_icons.dart';
+import 'package:otzaria/widgets/smart_text/render_settings.dart';
 
 /// תווית פריט תפריט ההקשר לפתיחה ברקע — משותפת לתוצאות חיפוש ולמפרשים.
 const kOpenInNewTabLabel = 'פתח בכרטיסייה חדשה';
@@ -144,6 +146,7 @@ class ContextMenuUtils {
             context: context,
             link: link,
             savedSelectedText: savedSelectedText,
+            displayProfile: profile,
           ),
         ),
         if (targetBookId != null)
@@ -240,10 +243,7 @@ class ContextMenuUtils {
     BuildContext context,
     Offset tapPosition,
   ) {
-    final url = inlineLinkUrlAt(
-      tapPosition,
-      viewId: View.of(context).viewId,
-    );
+    final url = inlineLinkUrlAt(tapPosition, viewId: View.of(context).viewId);
     if (url == null || !HtmlLinkHandler.opensAnotherBook(url)) return const [];
     return [
       AppContextMenuEntry(
@@ -258,6 +258,7 @@ class ContextMenuUtils {
   static Future<void> _createCommentaryNote({
     required BuildContext context,
     required Link link,
+    required TextDisplayProfile displayProfile,
     String? savedSelectedText,
   }) async {
     final bookTitle = utils.getTitleFromPath(link.path2);
@@ -293,6 +294,16 @@ class ContextMenuUtils {
     );
     if (result == null || result.contentPlain.trim().isEmpty) return;
 
+    final sourceSelection = selectedText?.isNotEmpty == true
+        ? mapPersonalNoteSourceSelection(
+            bookId: notesKey,
+            lineIndex: link.index2 - 1,
+            rawLine: rawContent,
+            settings: RenderSettings.fromProfile(displayProfile),
+            selectedText: selectedText!,
+          )
+        : null;
+
     try {
       await PersonalNotesRepository().addNote(
         bookId: notesKey,
@@ -301,6 +312,8 @@ class ContextMenuUtils {
         contentPlain: result.contentPlain,
         contentFormat: result.contentFormat,
         selectedText: selectedText,
+        sourceSelectedText: sourceSelection?.text,
+        sourceSelectionOffset: sourceSelection?.offset,
         categoryId: link.targetCategoryId,
       );
       if (context.mounted) UiSnack.showSuccess(TextBookMessages.noteSaved);
