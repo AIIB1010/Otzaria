@@ -209,14 +209,21 @@ class ReaderSelectionService {
       startHint: startHint,
     );
     if (range == null) return null;
-    final preciseSourceRange = settings.replaceHolyNames
-        ? _sourceRangeForHolyNameReplacement(
-            map: map,
-            rawText: rawText,
-            settings: settings,
-            renderedRange: range,
-          )
-        : null;
+    var preciseSourceRange = null as ({int start, int end})?;
+    if (settings.replaceHolyNames) {
+      final replacementMapping = _sourceRangeForHolyNameReplacement(
+        map: map,
+        rawText: rawText,
+        settings: settings,
+        renderedRange: range,
+      );
+      if (replacementMapping == null ||
+          (replacementMapping.hasVisibleReplacements &&
+              replacementMapping.range == null)) {
+        return null;
+      }
+      preciseSourceRange = replacementMapping.range;
+    }
     return _buildFromMap(
       map: map,
       bookId: bookId,
@@ -233,7 +240,11 @@ class ReaderSelectionService {
     );
   }
 
-  ({int start, int end})? _sourceRangeForHolyNameReplacement({
+  ({
+    bool hasVisibleReplacements,
+    ({int start, int end})? range,
+  })?
+  _sourceRangeForHolyNameReplacement({
     required PluginTextSourceMap map,
     required String rawText,
     required RenderSettings settings,
@@ -250,38 +261,53 @@ class ReaderSelectionService {
       rawText: rawText,
       processedHtml: intermediateHtml,
     );
-    final intermediateText = intermediateMap.renderedText;
     final replacements = text_utils.findReplaceableHolyNames(
-      intermediateText,
+      intermediateHtml,
     );
-    if (replacements.isEmpty ||
-        text_utils.replaceHolyNames(
-              intermediateText,
-              style: settings.holyNameStyle,
-            ) !=
-            map.renderedText) {
+    final replacedHtml = text_utils.replaceHolyNames(
+      intermediateHtml,
+      style: settings.holyNameStyle,
+    );
+    if (TextRendererService.stripHtml(replacedHtml) != map.renderedText) {
       return null;
     }
 
-    final renderedBoundaries = _GraphemeBoundaries(map.renderedText);
-    final renderedStart = renderedBoundaries.graphemeAtUtf16(
-      renderedRange.start,
-    );
-    final renderedEnd = renderedBoundaries.graphemeAtUtf16(renderedRange.end);
-    if (renderedStart == null || renderedEnd == null) return null;
-
+    final intermediateText = intermediateMap.renderedText;
     final sourceBoundaries = _GraphemeBoundaries(intermediateText);
     final replacementRanges =
         <
           ({int sourceStart, int sourceEnd, int renderedStart, int renderedEnd})
         >[];
+    var htmlOffset = 0;
+    var htmlScanOffset = 0;
+    var insideHtmlTag = false;
+    var visibleOffset = 0;
     var delta = 0;
+    final projectedText = StringBuffer();
     for (final match in replacements) {
-      final sourceStart = sourceBoundaries.graphemeAtUtf16(match.start);
-      final sourceEnd = sourceBoundaries.graphemeAtUtf16(match.end);
+      while (htmlScanOffset < match.start) {
+        final code = intermediateHtml.codeUnitAt(htmlScanOffset++);
+        if (code == 0x3C) insideHtmlTag = true;
+        if (code == 0x3E) insideHtmlTag = false;
+      }
+      final isInsideTag = insideHtmlTag;
+      htmlScanOffset = match.end;
+      if (isInsideTag) continue;
+
+      final precedingText = TextRendererService.stripHtml(
+        intermediateHtml.substring(htmlOffset, match.start),
+      );
+      projectedText.write(precedingText);
+      visibleOffset += precedingText.length;
+      final visibleMatch = TextRendererService.stripHtml(match[0]!);
+      projectedText.write(visibleMatch);
+      final sourceStart = sourceBoundaries.graphemeAtUtf16(visibleOffset);
+      final sourceEnd = sourceBoundaries.graphemeAtUtf16(
+        visibleOffset + visibleMatch.length,
+      );
       if (sourceStart == null || sourceEnd == null) return null;
       final replacement = text_utils.replaceHolyNames(
-        match[0]!,
+        visibleMatch,
         style: settings.holyNameStyle,
       );
       final replacementLength = replacement.characters.length;
@@ -293,7 +319,28 @@ class ReaderSelectionService {
         renderedEnd: outputStart + replacementLength,
       ));
       delta += (sourceEnd - sourceStart) - replacementLength;
+      visibleOffset += visibleMatch.length;
+      htmlOffset = match.end;
     }
+    final trailingText = TextRendererService.stripHtml(
+      intermediateHtml.substring(htmlOffset),
+    );
+    projectedText.write(trailingText);
+    visibleOffset += trailingText.length;
+    if (visibleOffset != intermediateText.length ||
+        projectedText.toString() != intermediateText) {
+      return null;
+    }
+    if (replacementRanges.isEmpty) {
+      return (hasVisibleReplacements: false, range: null);
+    }
+
+    final renderedBoundaries = _GraphemeBoundaries(map.renderedText);
+    final renderedStart = renderedBoundaries.graphemeAtUtf16(
+      renderedRange.start,
+    );
+    final renderedEnd = renderedBoundaries.graphemeAtUtf16(renderedRange.end);
+    if (renderedStart == null || renderedEnd == null) return null;
 
     int toIntermediate(int boundary, {required bool endBoundary}) {
       var deltaBefore = 0;
@@ -308,6 +355,11 @@ class ReaderSelectionService {
           if (boundary == replacement.renderedEnd) {
             return replacement.sourceEnd;
           }
+          if (replacement.renderedEnd - replacement.renderedStart ==
+              replacement.sourceEnd - replacement.sourceStart) {
+            return replacement.sourceStart +
+                (boundary - replacement.renderedStart);
+          }
           return endBoundary ? replacement.sourceEnd : replacement.sourceStart;
         }
         deltaBefore +=
@@ -320,13 +372,16 @@ class ReaderSelectionService {
     final intermediateStart = toIntermediate(renderedStart, endBoundary: false);
     final intermediateEnd = toIntermediate(renderedEnd, endBoundary: true);
     return (
-      start: _sourceMapService.renderedBoundaryToSource(
-        intermediateMap,
-        intermediateStart,
-      ),
-      end: _sourceMapService.renderedBoundaryToSource(
-        intermediateMap,
-        intermediateEnd,
+      hasVisibleReplacements: true,
+      range: (
+        start: _sourceMapService.renderedBoundaryToSource(
+          intermediateMap,
+          intermediateStart,
+        ),
+        end: _sourceMapService.renderedBoundaryToSource(
+          intermediateMap,
+          intermediateEnd,
+        ),
       ),
     );
   }

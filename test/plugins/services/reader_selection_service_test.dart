@@ -132,7 +132,114 @@ void main() {
     );
 
     expect(selection?.sourceSelectedText, 'יהוה');
-    expect(selection?.sourceRange.start.utf16, rawText.lastIndexOf('יהוה'));
+    expect(
+      selection?.sourceRange.start.utf16,
+      map.sourceText.lastIndexOf('יהוה'),
+    );
+  });
+
+  test('בחירה חלקית בהחלפה שומרת גבולות פנימיים כשהאורך לא השתנה', () {
+    const rawText = 'לפני יהוה אחרי';
+    const settings = RenderSettings(
+      replaceHolyNames: true,
+      holyNameStyle: HolyNameStyle.kufKuf,
+      formatParentheses: false,
+    );
+    final selection = service.buildFromRenderedSelection(
+      bookId: 'book',
+      bookTitle: 'ספר',
+      sectionIndex: 0,
+      rawText: rawText,
+      settings: settings,
+      selectedText: 'קוק',
+    );
+
+    expect(selection?.sourceSelectedText, 'הוה');
+    expect(selection?.sourceRange.start.utf16, rawText.indexOf('יהוה') + 1);
+  });
+
+  test('מיפוי בחירה לאחר שם בתוך תגיות HTML נשאר מדויק', () {
+    const rawText = 'אבג<b>יהוה</b> יהוה יהוה יהוה יהוה';
+    const settings = RenderSettings(
+      replaceHolyNames: true,
+      holyNameStyle: HolyNameStyle.hehApostrophe,
+      formatParentheses: false,
+    );
+    final map = const TextSourceMapService().build(
+      bookId: 'book',
+      sectionIndex: 0,
+      rawText: rawText,
+      settings: settings,
+    );
+    final selection = service.buildFromRenderedSelection(
+      bookId: 'book',
+      bookTitle: 'ספר',
+      sectionIndex: 0,
+      rawText: rawText,
+      settings: settings,
+      selectedText: "ה'",
+      startHint: map.renderedText.lastIndexOf("ה'"),
+    );
+
+    expect(selection?.sourceSelectedText, 'יהוה');
+    expect(
+      selection?.sourceRange.start.utf16,
+      map.sourceText.lastIndexOf('יהוה'),
+    );
+  });
+
+  test('בחירה רגילה אחרי שם בתוך תגיות אינה ממופה ביחס שגוי', () {
+    const rawText = 'אבג<b>יהוה</b> יהוה יהוה יהוה יהוה מילה עוד סוף';
+    const settings = RenderSettings(
+      replaceHolyNames: true,
+      holyNameStyle: HolyNameStyle.hehApostrophe,
+      formatParentheses: false,
+    );
+    final map = const TextSourceMapService().build(
+      bookId: 'book',
+      sectionIndex: 0,
+      rawText: rawText,
+      settings: settings,
+    );
+    final selection = service.buildFromRenderedSelection(
+      bookId: 'book',
+      bookTitle: 'ספר',
+      sectionIndex: 0,
+      rawText: rawText,
+      settings: settings,
+      selectedText: 'מילה',
+      startHint: map.renderedText.lastIndexOf('מילה'),
+    );
+
+    expect(selection?.sourceSelectedText, 'מילה');
+    expect(selection?.sourceRange.start.utf16, map.sourceText.indexOf('מילה'));
+  });
+
+  test('שם במאפיין HTML אינו מסיט את מיפוי הטקסט הגלוי שאחריו', () {
+    const rawText = '<b data="יהוה">טקסט</b> יהוה יהוה יהוה יהוה מילה';
+    const settings = RenderSettings(
+      replaceHolyNames: true,
+      holyNameStyle: HolyNameStyle.hehApostrophe,
+      formatParentheses: false,
+    );
+    final map = const TextSourceMapService().build(
+      bookId: 'book',
+      sectionIndex: 0,
+      rawText: rawText,
+      settings: settings,
+    );
+    final selection = service.buildFromRenderedSelection(
+      bookId: 'book',
+      bookTitle: 'ספר',
+      sectionIndex: 0,
+      rawText: rawText,
+      settings: settings,
+      selectedText: 'מילה',
+      startHint: map.renderedText.lastIndexOf('מילה'),
+    );
+
+    expect(selection?.sourceSelectedText, 'מילה');
+    expect(selection?.sourceRange.start.utf16, map.sourceText.indexOf('מילה'));
   });
 
   test(
