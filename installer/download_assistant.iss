@@ -3422,24 +3422,25 @@ begin
   Result := Bytes div 1048576;
 end;
 
-{ משרשר את Src (בדיוק Expected בתים) לסוף Dest ומדווח התקדמות בבתים.
-  שרשור בתים טהור — התוצאה זהה בית-בית למקור. }
-function AppendFileTo(const Dest, Src: String; Expected, DoneBefore,
+{ מעתיק בבתים עם התקדמות: fmCreate מחליף יעד, fmOpenWrite מוסיף חלק להרכבה. }
+function WriteFileTo(const Dest, Src: String; Mode: Word; Expected, DoneBefore,
   Total: Int64; const Status: String): Boolean;
 var
   Output, Input: TFileStream;
   Start, Copied, Slice, Got, SliceStart: Int64;
+  Detail: String;
 begin
   Result := False;
   try
-    if FileExists(Dest) then
-      Output := TFileStream.Create(Dest, fmOpenWrite)
-    else
-      Output := TFileStream.Create(Dest, fmCreate);
+    { מקור פתוח מונע ב-Windows חיתוך יעד שהוא קישור לאותו קובץ. }
+    Input := TFileStream.Create(Src, fmOpenRead or fmShareDenyWrite);
     try
-      Start := Output.Seek(Int64(0), soFromEnd);
-      Input := TFileStream.Create(Src, fmOpenRead or fmShareDenyWrite);
+      if (Mode = fmOpenWrite) and FileExists(Dest) then
+        Output := TFileStream.Create(Dest, fmOpenWrite)
+      else
+        Output := TFileStream.Create(Dest, fmCreate);
       try
+        Start := Output.Seek(Int64(0), soFromEnd);
         Copied := 0;
         while Copied < Expected do
         begin
@@ -3450,27 +3451,30 @@ begin
           Got := Output.CopyFrom(Input, Slice, CopyChunkSize);
           CopyMsMeasured := CopyMsMeasured + NowMs() - SliceStart;
           CopyBytesMeasured := CopyBytesMeasured + Got;
-          JoinCopyLeft := JoinCopyLeft - Got;
+          if Mode = fmOpenWrite then
+            JoinCopyLeft := JoinCopyLeft - Got;
           if Got <> Slice then
             Break;
           Copied := Copied + Got;
-          WorkPage.SetText(Status,
-            FmtMessage(CustomMessage('SizeOf'), [HumanSize(DoneBefore + Copied),
-              HumanSize(Total)]) + ' · ' + PostEtaText());
+          Detail := FmtMessage(CustomMessage('SizeOf'), [HumanSize(DoneBefore + Copied),
+            HumanSize(Total)]);
+          if Mode = fmOpenWrite then
+            Detail := Detail + ' · ' + PostEtaText();
+          WorkPage.SetText(Status, Detail);
           WorkPage.SetProgress(MegaBytes(DoneBefore + Copied), MegaBytes(Total));
         end;
+        Result := (Copied = Expected) and
+          (Output.Seek(Int64(0), soFromCurrent) = Start + Expected);
       finally
-        Input.Free;
+        Output.Free;
       end;
-      Result := (Copied = Expected) and
-        (Output.Seek(Int64(0), soFromCurrent) = Start + Expected);
     finally
-      Output.Free;
+      Input.Free;
     end;
     if not Result then
-      LoadErrorTech := 'append wrote a wrong byte count: ' + Src;
+      LoadErrorTech := 'write produced a wrong byte count: ' + Src;
   except
-    LoadErrorTech := 'append failed: ' + GetExceptionMessage;
+    LoadErrorTech := 'write failed: ' + GetExceptionMessage;
   end;
 end;
 
@@ -3534,7 +3538,7 @@ begin
       exit;
     end;
     HoldShownEta(False);
-    if not AppendFileTo(TmpPath, PartPath, PartSize[First + I], Base + Done, Total,
+    if not WriteFileTo(TmpPath, PartPath, fmOpenWrite, PartSize[First + I], Base + Done, Total,
       Msg1('JoiningFiles', Caption)) then
     begin
       LoadErrorMsg := CustomMessage('ErrorWriteJoined');
@@ -3601,7 +3605,7 @@ begin
     Log('DownloadAssistant: linked ' + Name);
     exit;
   end;
-  Result := AppendFileTo(Dest, CachePath(Name), Size, Done, Total,
+  Result := WriteFileTo(Dest, CachePath(Name), fmCreate, Size, Done, Total,
     Msg1('CopyingTo', Caption));
   if Result then
     Log('DownloadAssistant: copied ' + Name);

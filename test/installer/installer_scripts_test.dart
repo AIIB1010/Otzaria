@@ -3050,7 +3050,7 @@ void main() {
         lessThan(promoteFinal),
       );
       expect(
-        _routine(_script(_assistant), 'function AppendFileTo('),
+        _routine(_script(_assistant), 'function WriteFileTo('),
         contains('(Copied = Expected)'),
       );
     });
@@ -3164,7 +3164,7 @@ void main() {
       final link = copy.indexOf('CreateHardLink(Dest, CachePath(Name), 0)');
       expect(link, greaterThanOrEqualTo(0));
       expect(
-        copy.indexOf('AppendFileTo(Dest, CachePath(Name)'),
+        copy.indexOf('WriteFileTo(Dest, CachePath(Name)'),
         greaterThan(link),
       );
     });
@@ -3189,7 +3189,7 @@ void main() {
         );
         expect(
           copy,
-          contains('AppendFileTo(Dest, CachePath(Name), Size, Done,'),
+          contains('WriteFileTo(Dest, CachePath(Name), fmCreate, Size, Done,'),
         );
         expect(
           _routine(script, 'function AssembleAsset('),
@@ -3261,12 +3261,12 @@ void main() {
         contains('Bytes := DownloadStatus;'),
       );
       expect(
-        _routine(script, 'function AppendFileTo('),
+        _routine(script, 'function WriteFileTo('),
         contains('WorkPage.SetProgress('),
         reason: 'ההרכבה מדווחת התקדמות בבתים',
       );
       expect(
-        _routine(script, 'function AppendFileTo('),
+        _routine(script, 'function WriteFileTo('),
         contains("' · ' + PostEtaText()"),
         reason: 'גם לחיבור החלקים יש זמן משוער',
       );
@@ -3818,7 +3818,7 @@ void main() {
       );
       expect(sidecar, greaterThanOrEqualTo(0));
       expect(
-        assemble.indexOf('AppendFileTo(TmpPath, PartPath,'),
+        assemble.indexOf('WriteFileTo(TmpPath, PartPath,'),
         greaterThan(sidecar),
         reason: 'חותם הצד נכתב לפני הבית הראשון',
       );
@@ -3933,7 +3933,7 @@ void main() {
 
     test('$_assistant: ההרכבה מוחקת כל חלק מיד אחרי הוספתו', () {
       final assemble = _routine(_script(_assistant), 'function AssembleAsset(');
-      final append = assemble.indexOf('AppendFileTo(TmpPath, PartPath,');
+      final append = assemble.indexOf('WriteFileTo(TmpPath, PartPath,');
       final delete = assemble.indexOf('DeleteFile(PartPath)');
 
       expect(append, greaterThanOrEqualTo(0));
