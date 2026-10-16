@@ -63,6 +63,7 @@ LineProjection projectLine(
   String rawLine, {
   bool keepPunctuation = false,
   bool omitInjectedAnchorMarkers = false,
+  bool plainText = false,
 }) {
   final buffer = StringBuffer();
   final rawIndex = <int>[];
@@ -106,7 +107,7 @@ LineProjection projectLine(
   for (int i = 0; i < rawLine.length; i++) {
     final code = rawLine.codeUnitAt(i);
 
-    if (omitInjectedAnchorMarkers && !inTag && code == 0x3C) {
+    if (!plainText && omitInjectedAnchorMarkers && !inTag && code == 0x3C) {
       final isAnchor = rawLine.startsWith('<a class="link-anchor ', i);
       final isSpan = rawLine.startsWith('<span class="link-anchor ', i);
       if (isAnchor || isSpan) {
@@ -119,7 +120,7 @@ LineProjection projectLine(
       }
     }
 
-    if (inTag) {
+    if (!plainText && inTag) {
       if (code == 0x3E) {
         inTag = false;
         // <br> הוא שבירת שורה — הרינדור מציג אותו כרווח, לכן גם כאן, אחרת
@@ -128,12 +129,12 @@ LineProjection projectLine(
       }
       continue;
     }
-    if (code == 0x3C) {
+    if (!plainText && code == 0x3C) {
       inTag = true;
       tagStart = i;
       continue;
     }
-    if (code == 0x26) {
+    if (!plainText && code == 0x26) {
       final entity = _htmlEntity.matchAsPrefix(rawLine, i);
       if (entity != null) {
         for (final decodedCode
@@ -352,7 +353,7 @@ ComputedAnchor? computeAnchorForSelection({
   int matchStart = occurrences.first;
   int? normalizedHint;
   if (sourceSelectionOffset != null && sourceSelectionText != null) {
-    final source = projectLine(sourceSelectionText);
+    final source = projectLine(sourceSelectionText, plainText: true);
     final offset = p.normalized.indexOf(source.normalized);
     if (source.normalized.isNotEmpty && offset >= 0) {
       normalizedHint =

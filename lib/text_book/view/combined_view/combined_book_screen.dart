@@ -2700,7 +2700,7 @@ class _CombinedViewState extends State<CombinedView> {
       notesForLine: notesForLine,
       lineIndex0: lineIndex,
       underlineColor: Theme.of(context).colorScheme.primary,
-      replaceHolyNames: settingsState.replaceHolyNames,
+      replaceHolyNames: state.bodyDisplayProfile.replaceHolyNames,
     );
   }
 

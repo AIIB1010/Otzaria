@@ -3109,7 +3109,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
       notesForLine: notesForLine,
       lineIndex0: lineIndex,
       underlineColor: Theme.of(context).colorScheme.primary,
-      replaceHolyNames: settingsState.replaceHolyNames,
+      replaceHolyNames: _displayProfile(state).replaceHolyNames,
     );
   }
 

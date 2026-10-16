@@ -137,6 +137,68 @@ void main() {
     expect(sourceText.lastIndexOf('יהוה'), selection.sourceRange.start.utf16);
   });
 
+  test('טעינה מחדש מאמתת עוגן מקור גם כשהכותרת היא שם מקוצר', () async {
+    final database = _MemoryNotesDb();
+    final service = PersonalNotesService(database: database, random: Random(1));
+    const raw = 'פתיחה אחרת לגמרי לפני יהוה וסיום';
+    final note = (await service.addNote(
+      bookId: 'ספר',
+      bookContent: raw,
+      lineNumber: 1,
+      content: 'הערה',
+      contentPlain: 'הערה',
+      contentFormat: PersonalNoteContentFormat.plain,
+      selectedText: "ה'",
+      sourceSelectedText: 'יהוה',
+      sourceSelectionOffset: raw.indexOf('יהוה'),
+    )).single;
+
+    expect(note.displayTitle, "ה'");
+    expect(note.anchorText, 'יהוה');
+    expect(
+      service.noteTextMatchesLine(note, [raw], 1, 'ספר'),
+      isTrue,
+    );
+    final reloaded = (await service.loadNotes(
+      bookId: 'ספר',
+      bookContent: raw,
+    )).single;
+    expect(reloaded.status, PersonalNoteStatus.located);
+    expect(reloaded.anchorText, 'יהוה');
+
+    final sameTitleWithoutSource = (await service.loadNotes(
+      bookId: 'ספר',
+      bookContent: "קטע אחר עם ה' בלבד",
+    )).single;
+    expect(sameTitleWithoutSource.status, PersonalNoteStatus.missing);
+  });
+
+  test('איתור מחדש בשורה סמוכה משתמש בעוגן המקור ולא בכותרת', () async {
+    final database = _MemoryNotesDb();
+    final service = PersonalNotesService(database: database, random: Random(1));
+    const raw = 'פתיחה אחרת יהוה סוף';
+    final note = (await service.addNote(
+      bookId: 'ספר',
+      bookContent: raw,
+      lineNumber: 1,
+      content: 'הערה',
+      contentPlain: 'הערה',
+      contentFormat: PersonalNoteContentFormat.plain,
+      selectedText: "ה'",
+      sourceSelectedText: 'יהוה',
+      sourceSelectionOffset: raw.indexOf('יהוה'),
+    )).single;
+
+    final moved = (await service.loadNotes(
+      bookId: 'ספר',
+      bookContent: "שורה ה' בלבד\nטקסט חדש עם יהוה",
+    )).single;
+
+    expect(moved.id, note.id);
+    expect(moved.status, PersonalNoteStatus.located);
+    expect(moved.lineNumber, 2);
+  });
+
   test('הערה ישנה שסומנה כחסרה בגלל פיסוק חוזרת לשורה המקורית', () async {
     final database = _MemoryNotesDb();
     final service = PersonalNotesService(database: database, random: Random(1));

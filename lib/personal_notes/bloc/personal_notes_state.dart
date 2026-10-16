@@ -116,6 +116,7 @@ class PersonalNotesState extends Equatable {
     String? newNoteInitialContent,
     PersonalNoteContentFormat? newNoteInitialFormat,
     bool clearNewNoteData = false,
+    bool clearNewNoteSourceSelection = false,
     bool clearExpandRequest = false,
   }) {
     return PersonalNotesState(
@@ -154,9 +155,13 @@ class PersonalNotesState extends Equatable {
           : (newNoteSelectionColumn ?? this.newNoteSelectionColumn),
       newNoteSourceSelectedText: clearNewNoteData
           ? null
+          : clearNewNoteSourceSelection
+          ? newNoteSourceSelectedText
           : (newNoteSourceSelectedText ?? this.newNoteSourceSelectedText),
       newNoteSourceSelectionOffset: clearNewNoteData
           ? null
+          : clearNewNoteSourceSelection
+          ? newNoteSourceSelectionOffset
           : (newNoteSourceSelectionOffset ?? this.newNoteSourceSelectionOffset),
       newNotePunctuationHidden: clearNewNoteData
           ? false

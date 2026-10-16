@@ -5,7 +5,9 @@ import 'package:crypto/crypto.dart';
 import 'package:otzaria/plugins/models/plugin_reader_selection.dart';
 import 'package:otzaria/plugins/models/text_source_map.dart';
 import 'package:otzaria/plugins/services/text_source_map_service.dart';
+import 'package:otzaria/utils/text/text_manipulation.dart' as text_utils;
 import 'package:otzaria/widgets/smart_text/render_settings.dart';
+import 'package:otzaria/widgets/smart_text/text_renderer_service.dart';
 
 class ReaderSelectionService {
   static const int contextLength = 30;
@@ -207,14 +209,125 @@ class ReaderSelectionService {
       startHint: startHint,
     );
     if (range == null) return null;
+    final preciseSourceRange = settings.replaceHolyNames
+        ? _sourceRangeForHolyNameReplacement(
+            map: map,
+            rawText: rawText,
+            settings: settings,
+            renderedRange: range,
+          )
+        : null;
     return _buildFromMap(
       map: map,
       bookId: bookId,
       bookTitle: bookTitle,
       sectionIndex: sectionIndex,
       currentRef: currentRef,
+      bookDbId: bookDbId,
+      bookType: bookType,
+      bookSource: bookSource,
       renderedStartUtf16: range.start,
       renderedEndUtf16: range.end,
+      sourceStartGrapheme: preciseSourceRange?.start,
+      sourceEndGrapheme: preciseSourceRange?.end,
+    );
+  }
+
+  ({int start, int end})? _sourceRangeForHolyNameReplacement({
+    required PluginTextSourceMap map,
+    required String rawText,
+    required RenderSettings settings,
+    required ({int start, int end}) renderedRange,
+  }) {
+    final intermediateSettings = settings.copyWith(replaceHolyNames: false);
+    final intermediateHtml = TextRendererService.processText(
+      rawText,
+      intermediateSettings,
+    );
+    final intermediateMap = _sourceMapService.buildFromProcessedHtml(
+      bookId: map.bookId,
+      sectionIndex: map.sectionIndex,
+      rawText: rawText,
+      processedHtml: intermediateHtml,
+    );
+    final intermediateText = intermediateMap.renderedText;
+    final replacements = text_utils.findReplaceableHolyNames(
+      intermediateText,
+    );
+    if (replacements.isEmpty ||
+        text_utils.replaceHolyNames(
+              intermediateText,
+              style: settings.holyNameStyle,
+            ) !=
+            map.renderedText) {
+      return null;
+    }
+
+    final renderedBoundaries = _GraphemeBoundaries(map.renderedText);
+    final renderedStart = renderedBoundaries.graphemeAtUtf16(
+      renderedRange.start,
+    );
+    final renderedEnd = renderedBoundaries.graphemeAtUtf16(renderedRange.end);
+    if (renderedStart == null || renderedEnd == null) return null;
+
+    final sourceBoundaries = _GraphemeBoundaries(intermediateText);
+    final replacementRanges =
+        <
+          ({int sourceStart, int sourceEnd, int renderedStart, int renderedEnd})
+        >[];
+    var delta = 0;
+    for (final match in replacements) {
+      final sourceStart = sourceBoundaries.graphemeAtUtf16(match.start);
+      final sourceEnd = sourceBoundaries.graphemeAtUtf16(match.end);
+      if (sourceStart == null || sourceEnd == null) return null;
+      final replacement = text_utils.replaceHolyNames(
+        match[0]!,
+        style: settings.holyNameStyle,
+      );
+      final replacementLength = replacement.characters.length;
+      final outputStart = sourceStart - delta;
+      replacementRanges.add((
+        sourceStart: sourceStart,
+        sourceEnd: sourceEnd,
+        renderedStart: outputStart,
+        renderedEnd: outputStart + replacementLength,
+      ));
+      delta += (sourceEnd - sourceStart) - replacementLength;
+    }
+
+    int toIntermediate(int boundary, {required bool endBoundary}) {
+      var deltaBefore = 0;
+      for (final replacement in replacementRanges) {
+        if (boundary < replacement.renderedStart) {
+          return boundary + deltaBefore;
+        }
+        if (boundary <= replacement.renderedEnd) {
+          if (boundary == replacement.renderedStart) {
+            return replacement.sourceStart;
+          }
+          if (boundary == replacement.renderedEnd) {
+            return replacement.sourceEnd;
+          }
+          return endBoundary ? replacement.sourceEnd : replacement.sourceStart;
+        }
+        deltaBefore +=
+            (replacement.sourceEnd - replacement.sourceStart) -
+            (replacement.renderedEnd - replacement.renderedStart);
+      }
+      return boundary + deltaBefore;
+    }
+
+    final intermediateStart = toIntermediate(renderedStart, endBoundary: false);
+    final intermediateEnd = toIntermediate(renderedEnd, endBoundary: true);
+    return (
+      start: _sourceMapService.renderedBoundaryToSource(
+        intermediateMap,
+        intermediateStart,
+      ),
+      end: _sourceMapService.renderedBoundaryToSource(
+        intermediateMap,
+        intermediateEnd,
+      ),
     );
   }
 
@@ -231,6 +344,8 @@ class ReaderSelectionService {
     int? bookDbId,
     String? bookType,
     String? bookSource,
+    int? sourceStartGrapheme,
+    int? sourceEndGrapheme,
   }) {
     final rendered = _GraphemeBoundaries(map.renderedText);
     final renderedStart = rendered.graphemeAtUtf16(renderedStartUtf16);
@@ -241,14 +356,12 @@ class ReaderSelectionService {
       return null;
     }
 
-    final sourceStart = _sourceMapService.renderedBoundaryToSource(
-      map,
-      renderedStart,
-    );
-    final sourceEnd = _sourceMapService.renderedBoundaryToSource(
-      map,
-      renderedEnd,
-    );
+    final sourceStart =
+        sourceStartGrapheme ??
+        _sourceMapService.renderedBoundaryToSource(map, renderedStart);
+    final sourceEnd =
+        sourceEndGrapheme ??
+        _sourceMapService.renderedBoundaryToSource(map, renderedEnd);
     if (sourceStart >= sourceEnd) return null;
 
     final source = _GraphemeBoundaries(map.sourceText);

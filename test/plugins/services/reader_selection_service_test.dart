@@ -103,9 +103,37 @@ void main() {
       expect(map.renderedText, contains("ה'"));
       expect(whole?.sourceSelectedText, 'יהוה');
       expect(whole?.sourceRange.start.utf16, 'לפני '.length);
-      expect(partial?.sourceSelectedText, 'יה');
+      expect(partial?.sourceSelectedText, 'יהוה');
+      expect(partial?.sourceRange.start.utf16, 'לפני '.length);
     },
   );
+
+  test('ממפה קיצור חוזר לשם המקור המתאים לפי מיקום הבחירה', () {
+    const rawText = 'יהוה יהוה יהוה יהוה יהוה';
+    const settings = RenderSettings(
+      replaceHolyNames: true,
+      holyNameStyle: HolyNameStyle.hehApostrophe,
+      formatParentheses: false,
+    );
+    final map = const TextSourceMapService().build(
+      bookId: 'book',
+      sectionIndex: 0,
+      rawText: rawText,
+      settings: settings,
+    );
+    final selection = service.buildFromRenderedSelection(
+      bookId: 'book',
+      bookTitle: 'ספר',
+      sectionIndex: 0,
+      rawText: rawText,
+      settings: settings,
+      selectedText: "ה'",
+      startHint: map.renderedText.lastIndexOf("ה'"),
+    );
+
+    expect(selection?.sourceSelectedText, 'יהוה');
+    expect(selection?.sourceRange.start.utf16, rawText.lastIndexOf('יהוה'));
+  });
 
   test(
     'maps a selection across HTML entities, breaks, and repeated spaces',
