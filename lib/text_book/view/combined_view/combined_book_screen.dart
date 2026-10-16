@@ -5,6 +5,7 @@ import 'package:otzaria/text_book/utils/reader_menu_entries.dart';
 import 'package:otzaria/text_book/utils/reader_plugin_menu_entries.dart';
 import 'package:otzaria/book_common/utils/commentators_menu.dart';
 import 'package:otzaria/text_display/view/copy_as_menu.dart';
+
 import 'dart:async';
 
 import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier;
@@ -44,6 +45,7 @@ import 'package:otzaria/utils/navigation/talmud_bavli_open_format.dart';
 import 'package:otzaria/utils/text/text_manipulation.dart' as utils;
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/personal_notes/personal_notes_system.dart';
+import 'package:otzaria/personal_notes/utils/personal_note_source_selection.dart';
 import 'package:otzaria/bookmarks/utils/section_bookmark.dart';
 import 'package:otzaria/core/messages/text_book_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
@@ -1269,10 +1271,7 @@ class _CombinedViewState extends State<CombinedView> {
           linksByLine: state.linksByLine,
           queriedCommentators: isLoading
               ? const <String>[]
-              : _paragraphCommentatorsCache.value(
-                  state.book,
-                  paragraphIndex,
-                ),
+              : _paragraphCommentatorsCache.value(state.book, paragraphIndex),
         ),
         commentatorGroups: state.commentatorGroups,
         linksLoading: state.linksLoading || isLoading,
@@ -1453,9 +1452,7 @@ class _CombinedViewState extends State<CombinedView> {
             paragraphIndex: paragraphIndex,
           )
           .onError((error, stackTrace) {
-            debugPrint(
-              'שגיאה בטעינת מפרשי הפסקה: $error\n$stackTrace',
-            );
+            debugPrint('שגיאה בטעינת מפרשי הפסקה: $error\n$stackTrace');
           }),
     );
   }
@@ -1555,12 +1552,7 @@ class _CombinedViewState extends State<CombinedView> {
     widget.tab.dynamicCopyRequestNotifier.value = null;
     switch (request.kind) {
       case DynamicShortcutKind.copySelectionWith:
-        _copyFormattedText(
-          null,
-          false,
-          request.profile,
-          request.plainTextOnly,
-        );
+        _copyFormattedText(null, false, request.profile, request.plainTextOnly);
       case DynamicShortcutKind.copyParagraphWith:
         final state = _textBookBloc.state;
         final index =
@@ -1671,6 +1663,19 @@ class _CombinedViewState extends State<CombinedView> {
             currentIndex + 1,
             excludeBookTitle: widget.tab.book.title,
           );
+    final sourceSelection = hasSelection
+        ? mapPersonalNoteSourceSelection(
+            bookId: personalNotesBookKey(widget.tab.book),
+            lineIndex: currentIndex,
+            rawLine: state.content[currentIndex],
+            settings: _selectionRenderSettings(
+              state,
+              context.read<SettingsBloc>().state,
+            ),
+            selectedText: selectedText!.trim(),
+            startHint: source.column,
+          )
+        : null;
 
     // טען טיוטה אם קיימת
     final draftService = PersonalNoteDraftService();
@@ -1690,6 +1695,8 @@ class _CombinedViewState extends State<CombinedView> {
         referenceText: referenceText,
         selectedText: selectedText?.trim(),
         selectionColumn: source.column,
+        sourceSelectedText: sourceSelection?.text,
+        sourceSelectionOffset: sourceSelection?.offset,
         punctuationHidden: state.removePunctuation,
         initialContent: draft?.content ?? '',
         initialFormat: draft?.contentFormat ?? PersonalNoteContentFormat.plain,
@@ -2595,11 +2602,7 @@ class _CombinedViewState extends State<CombinedView> {
                       setting: settingsState.textMaxWidth,
                       availableWidth: constraints.maxWidth,
                     );
-              final text = _sectionHeadingsText(
-                state,
-                settingsState,
-                headings,
-              );
+              final text = _sectionHeadingsText(state, settingsState, headings);
               return textMaxWidth > 0
                   ? Center(
                       child: ConstrainedBox(
@@ -2697,6 +2700,7 @@ class _CombinedViewState extends State<CombinedView> {
       notesForLine: notesForLine,
       lineIndex0: lineIndex,
       underlineColor: Theme.of(context).colorScheme.primary,
+      replaceHolyNames: settingsState.replaceHolyNames,
     );
   }
 

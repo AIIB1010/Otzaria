@@ -1,11 +1,14 @@
 import 'dart:io';
+
 import 'package:otzaria/bookmarks/view/book_bookmarks_action.dart';
 import 'package:otzaria/book_common/view/parallel_editions_action.dart';
 import 'package:otzaria/plugins/utils/reader_plugin_toolbar_actions.dart';
+
 import 'dart:math';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
+
 import 'package:flutter/foundation.dart';
 import 'package:collection/collection.dart' show IterableExtension;
 import 'package:otzaria/core/messages/text_book_messages.dart';
@@ -74,6 +77,8 @@ import 'package:otzaria/book_common/view/book_source_dialog.dart';
 import 'package:otzaria/text_book/view/page_shape/simple_text_viewer.dart';
 // [EDITING DISABLED] import 'package:otzaria/text_book/editing/helpers/editor_settings_helper.dart';
 import 'package:otzaria/personal_notes/personal_notes_system.dart';
+import 'package:otzaria/personal_notes/utils/personal_note_source_selection.dart';
+import 'package:otzaria/widgets/smart_text/render_settings.dart';
 import 'package:otzaria/shortcuts/shortcut_helper.dart';
 import 'package:otzaria/shortcuts/shortcut_validator.dart';
 import 'package:otzaria/settings/services/safer_mode_guard.dart';
@@ -90,7 +95,6 @@ import 'package:otzaria/plugins/services/plugin_runtime_dispatcher.dart';
 import 'package:otzaria/plugins/utils/plugin_context_menu_entries.dart';
 import 'package:otzaria/search/models/search_configuration.dart';
 import 'package:otzaria/text_book/view/selection/plugin_selection_payload.dart';
-import 'package:otzaria/widgets/smart_text/render_settings.dart';
 import 'package:otzaria/core/messages/plugin_messages.dart';
 import 'package:otzaria/tools/shamor_zachor/providers/shamor_zachor_data_provider.dart';
 import 'package:otzaria/tools/shamor_zachor/providers/shamor_zachor_progress_provider.dart';
@@ -704,10 +708,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
       } else {
         final text = await compute(
           _createTextBookTextExport,
-          _TextExportRequest(
-            rawContent: fullContent,
-            profile: profile,
-          ),
+          _TextExportRequest(rawContent: fullContent, profile: profile),
         );
         bytes = Uint8List.fromList(utf8.encode(text));
         successMessage = TextBookMessages.textFileSaved;
@@ -1006,11 +1007,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
       final dibburim = await loadDibburimForBook(widget.tab.book);
       if (!mounted) return;
 
-      final usableDibburim =
-          hasDibburimEntries(
-            state.tableOfContents,
-            dibburim,
-          )
+      final usableDibburim = hasDibburimEntries(state.tableOfContents, dibburim)
           ? dibburim
           : const <int, String>{};
 
@@ -1356,10 +1353,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
                   });
                 }
                 if (state.showSplitView) {
-                  Settings.setValue<int>(
-                    'key-sidebar-tab-index-pending',
-                    -1,
-                  );
+                  Settings.setValue<int>('key-sidebar-tab-index-pending', -1);
                 }
               } else if (!state.showSplitView && _sidebarTabIndex != null) {
                 setState(() {
@@ -1454,9 +1448,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
                 if (!(ModalRoute.of(context)?.isCurrent ?? true)) {
                   return;
                 }
-                if (isTextInputFocusNode(
-                  FocusManager.instance.primaryFocus,
-                )) {
+                if (isTextInputFocusNode(FocusManager.instance.primaryFocus)) {
                   return;
                 }
                 // בטאב מפוצל רק החלונית הפעילה תופסת פוקוס: rebuild של
@@ -1475,9 +1467,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
                   // לכן Ctrl+P/Home וכו' ממשיכים לעבוד. fallback ל-node הזה
                   // אם אין requester (למשל צורת הדף).
                   final didFocus =
-                      _focusRepository?.requestTabContentFocus(
-                        widget.tab,
-                      ) ??
+                      _focusRepository?.requestTabContentFocus(widget.tab) ??
                       false;
                   if (!didFocus) _bookContentFocusNode.requestFocus();
                 }
@@ -1517,18 +1507,13 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
     );
   }
 
-  Widget _buildAppBar(
-    BuildContext context,
-    TextBookLoaded state,
-  ) => ListenableBuilder(
-    listenable: PluginTextReaderRegistry.instance,
-    builder: (context, _) => _buildReaderAppBar(context, state),
-  );
+  Widget _buildAppBar(BuildContext context, TextBookLoaded state) =>
+      ListenableBuilder(
+        listenable: PluginTextReaderRegistry.instance,
+        builder: (context, _) => _buildReaderAppBar(context, state),
+      );
 
-  Widget _buildReaderAppBar(
-    BuildContext context,
-    TextBookLoaded state,
-  ) {
+  Widget _buildReaderAppBar(BuildContext context, TextBookLoaded state) {
     return AppTopBar(
       minCenterWidth: ReaderNavCenter.minTitleWidth,
       leadingItems: [
@@ -1559,10 +1544,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
               onNextMajor: () => _navigateToNextToc(state),
             ),
       trailingItems: [
-        AppTopBarItem(
-          flexible: true,
-          widget: _buildActions(context, state),
-        ),
+        AppTopBarItem(flexible: true, widget: _buildActions(context, state)),
       ],
     );
   }
@@ -1711,10 +1693,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
     );
   }
 
-  Widget _buildActions(
-    BuildContext context,
-    TextBookLoaded state,
-  ) {
+  Widget _buildActions(BuildContext context, TextBookLoaded state) {
     return ListenableBuilder(
       listenable: PluginToolbarRegistry.instance,
       builder: (context, _) => Consumer<ShamorZachorDataProvider>(
@@ -2005,10 +1984,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
               : 'העתק קישור ישיר (לא זמין לספר זה)',
           onPressed: state.book.id != null
               ? () => copyLinkToClipboard(
-                  buildBookLink(
-                    state.book.id!,
-                    source: state.book.source,
-                  ),
+                  buildBookLink(state.book.id!, source: state.book.source),
                 )
               : null,
         ),
@@ -2311,10 +2287,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
   Widget _buildZoomInButton(BuildContext context, TextBookLoaded state) {
     final isCompact = context.read<SettingsBloc>().state.compactMenuMode;
     return BarButton.icon(
-      tooltip: _withShortcut(
-        'הגדל את גודל הטקסט',
-        ShortcutValidator.zoomInKey,
-      ),
+      tooltip: _withShortcut('הגדל את גודל הטקסט', ShortcutValidator.zoomInKey),
       icon: FluentIcons.zoom_in_24_regular,
       compact: isCompact,
       onPressed: () => _stepFontSize(context, state, larger: true),
@@ -2769,9 +2742,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
           context.read<TextBookBloc>().add(const ToggleLeftPane(false)),
       paneContent: NavPanelSearchScope(
         host: _searchHost,
-        child: _NavPanelTourTargetBuilder(
-          child: _buildLeftPaneContent(state),
-        ),
+        child: _NavPanelTourTargetBuilder(child: _buildLeftPaneContent(state)),
       ),
       mainContent: _buildHTMLViewer(state),
       isResizable: true,
@@ -2826,10 +2797,8 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
         },
         child: CallbackShortcuts(
           bindings: <ShortcutActivator, VoidCallback>{
-            LogicalKeySet(
-              LogicalKeyboardKey.control,
-              LogicalKeyboardKey.keyF,
-            ): _openSearchFromToolbar,
+            LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyF):
+                _openSearchFromToolbar,
             // Mac: Cmd+F
             LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyF):
                 _openSearchFromToolbar,
@@ -3234,9 +3203,7 @@ bool _handleGlobalKeyEvent(
       if (bookId == null) {
         UiSnack.showError(TextBookMessages.directLinkUnavailable);
       } else {
-        copyLinkToClipboard(
-          buildBookLink(bookId, source: state.book.source),
-        );
+        copyLinkToClipboard(buildBookLink(bookId, source: state.book.source));
       }
       return true;
     }
@@ -3245,11 +3212,7 @@ bool _handleGlobalKeyEvent(
         UiSnack.showError(TextBookMessages.directLinkUnavailable);
       } else {
         copyLinkToClipboard(
-          buildSectionLink(
-            bookId,
-            index,
-            source: state.book.source,
-          ),
+          buildSectionLink(bookId, index, source: state.book.source),
         );
       }
       return true;
@@ -3259,11 +3222,7 @@ bool _handleGlobalKeyEvent(
         UiSnack.showError(TextBookMessages.directLinkUnavailable);
       } else {
         copyLinkToClipboard(
-          buildSectionMarkLink(
-            bookId,
-            index,
-            source: state.book.source,
-          ),
+          buildSectionMarkLink(bookId, index, source: state.book.source),
         );
       }
       return true;
@@ -3483,10 +3442,7 @@ Future<void> _dispatchContextMenuShortcut({
     UiSnack.showError(PluginMessages.contextMenuActionUnavailableHere);
     return;
   }
-  if (!ContextMenuRegistry.instance.isItemVisible(
-    target.pluginId,
-    item.id,
-  )) {
+  if (!ContextMenuRegistry.instance.isItemVisible(target.pluginId, item.id)) {
     UiSnack.showError(PluginMessages.contextMenuActionUnavailableHere);
     return;
   }
@@ -3613,6 +3569,16 @@ Future<void> _addNoteFromKeyboard(
           currentIndex + 1,
           excludeBookTitle: state.book.title,
         );
+  final sourceSelection = hasSelection
+      ? mapPersonalNoteSourceSelection(
+          bookId: personalNotesBookKey(state.book),
+          lineIndex: currentIndex,
+          rawLine: state.content[currentIndex],
+          settings: RenderSettings.fromProfile(state.bodyDisplayProfile),
+          selectedText: trimmedSelection,
+          startHint: selectionColumn,
+        )
+      : null;
 
   // טען טיוטה אם קיימת
   final draftService = PersonalNoteDraftService();
@@ -3632,6 +3598,8 @@ Future<void> _addNoteFromKeyboard(
       referenceText: referenceText,
       selectedText: hasSelection ? trimmedSelection : null,
       selectionColumn: hasSelection ? selectionColumn : null,
+      sourceSelectedText: sourceSelection?.text,
+      sourceSelectionOffset: sourceSelection?.offset,
       punctuationHidden: state.removePunctuation,
       initialContent: draft?.content ?? '',
       initialFormat: draft?.contentFormat ?? PersonalNoteContentFormat.plain,

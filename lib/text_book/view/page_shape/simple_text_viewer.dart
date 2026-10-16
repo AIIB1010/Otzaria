@@ -7,7 +7,9 @@ import 'package:otzaria/book_common/utils/commentators_menu.dart';
 import 'package:otzaria/shortcuts/dynamic/dynamic_shortcut.dart';
 import 'package:otzaria/shortcuts/dynamic/dynamic_shortcut_registry.dart';
 import 'package:otzaria/text_display/view/copy_as_menu.dart';
+
 import 'dart:async';
+
 import 'package:flutter/gestures.dart' show kPrimaryMouseButton;
 import 'package:flutter/cupertino.dart'
     show cupertinoTextSelectionHandleControls;
@@ -53,6 +55,7 @@ import 'package:otzaria/utils/ui/context_menu_utils.dart' show ContextMenuUtils;
 import 'package:otzaria/core/messages/text_book_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/personal_notes/personal_notes_system.dart';
+import 'package:otzaria/personal_notes/utils/personal_note_source_selection.dart';
 import 'package:otzaria/personal_notes/storage/personal_notes_changes.dart';
 import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:otzaria/tabs/models/text_tab.dart';
@@ -340,6 +343,8 @@ Future<void> saveCommentaryNoteToRepository({
   required PersonalNoteEditorResult result,
   String? selectedText,
   int? selectionColumn,
+  String? sourceSelectedText,
+  int? sourceSelectionOffset,
   bool punctuationHidden = false,
   int? categoryId,
 }) {
@@ -351,6 +356,8 @@ Future<void> saveCommentaryNoteToRepository({
     contentFormat: result.contentFormat,
     selectedText: selectedText,
     selectionColumn: selectionColumn,
+    sourceSelectedText: sourceSelectedText,
+    sourceSelectionOffset: sourceSelectionOffset,
     punctuationHidden: punctuationHidden,
     categoryId: categoryId,
   );
@@ -2087,10 +2094,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     TextBookLoaded state,
     int index,
   ) {
-    final isLoading = _paragraphCommentatorsCache.isLoading(
-      state.book,
-      index,
-    );
+    final isLoading = _paragraphCommentatorsCache.isLoading(state.book, index);
     final showOpenPane = shouldShowOpenCommentatorsPaneEntry(
       hasSelectedCommentators: state.activeCommentators.isNotEmpty,
       showCommentaryAsExpansionTiles: false,
@@ -2151,9 +2155,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
             paragraphIndex: index,
           )
           .onError((error, stackTrace) {
-            debugPrint(
-              'שגיאה בטעינת מפרשי הפסקה: $error\n$stackTrace',
-            );
+            debugPrint('שגיאה בטעינת מפרשי הפסקה: $error\n$stackTrace');
           }),
     );
   }
@@ -2190,6 +2192,20 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
       _selectionStartColumn,
     );
     final selectedText = source.text;
+    final settingsState = context.read<SettingsBloc>().state;
+    final mappedSelection = selectedText?.trim().isNotEmpty == true
+        ? mapPersonalNoteSourceSelection(
+            bookId: widget.bookTitle ?? state.book.title,
+            lineIndex: index,
+            rawLine: widget.content[index],
+            settings: _selectionRenderSettings(
+              state: state,
+              settingsState: settingsState,
+            ),
+            selectedText: selectedText!.trim(),
+            startHint: source.column,
+          )
+        : null;
     final referenceText = selectedText?.trim().isNotEmpty == true
         ? utils.removeVolwels(selectedText!.trim())
         : widget.content[index];
@@ -2205,6 +2221,8 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
         referenceText: referenceText,
         selectedText: selectedText?.trim(),
         selectionColumn: source.column,
+        sourceSelectedText: mappedSelection?.text,
+        sourceSelectionOffset: mappedSelection?.offset,
         punctuationHidden: state.commentaryRemovePunctuation,
       );
       return;
@@ -2228,6 +2246,8 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
         referenceText: referenceText,
         selectedText: selectedText?.trim(),
         selectionColumn: source.column,
+        sourceSelectedText: mappedSelection?.text,
+        sourceSelectionOffset: mappedSelection?.offset,
         punctuationHidden: state.removePunctuation,
         initialContent: draft?.content ?? '',
         initialFormat: draft?.contentFormat ?? PersonalNoteContentFormat.plain,
@@ -2270,6 +2290,8 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     required String referenceText,
     String? selectedText,
     int? selectionColumn,
+    String? sourceSelectedText,
+    int? sourceSelectionOffset,
     bool punctuationHidden = false,
   }) async {
     final notesKey = _commentaryNotesKey(bookTitle);
@@ -2311,6 +2333,8 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
         result: result,
         selectedText: selectedText,
         selectionColumn: selectionColumn,
+        sourceSelectedText: sourceSelectedText,
+        sourceSelectionOffset: sourceSelectionOffset,
         punctuationHidden: punctuationHidden,
         categoryId: categoryId,
       );
@@ -2402,10 +2426,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     TextBookLoaded state,
     String? selectedText,
   ) => buildCopyAsMenuEntry(
-    base: state.displayProfile(
-      target: _textTarget,
-      channel: TextChannel.copy,
-    ),
+    base: state.displayProfile(target: _textTarget, channel: TextChannel.copy),
     selectedText: selectedText,
     onCopy: (profile) => _copyFormattedText(selectedText, false, profile),
   );
@@ -2842,11 +2863,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
       padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
       child: BlocBuilder<SettingsBloc, SettingsState>(
         builder: (context, settingsState) {
-          final lineContext = _readerLineContext(
-            state,
-            settingsState,
-            noteMap,
-          );
+          final lineContext = _readerLineContext(state, settingsState, noteMap);
           if (isMultiLine) {
             return _buildMultiLineItem(itemLines, state, lineContext, noteMap);
           }
@@ -3092,6 +3109,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
       notesForLine: notesForLine,
       lineIndex0: lineIndex,
       underlineColor: Theme.of(context).colorScheme.primary,
+      replaceHolyNames: settingsState.replaceHolyNames,
     );
   }
 

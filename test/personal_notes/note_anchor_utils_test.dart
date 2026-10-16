@@ -23,6 +23,16 @@ void main() {
       expect(raw[p.rawIndex[dNorm]], 'ד');
     });
 
+    test('מפענח ישויות HTML תוך שמירת האינדקס בשורה הגולמית', () {
+      const raw = 'אמר &quot;אב&quot; אחרי';
+      final projection = projectLine(raw);
+      final range = locateAnchor(rawLine: raw, anchorText: 'אב');
+
+      expect(projection.normalized, 'אמר אב אחרי');
+      expect(range, isNotNull);
+      expect(raw.substring(range!.start, range.end), 'אב');
+    });
+
     test('מקף עברי (־) הופך לרווח, עקבי עם normalizeAnchorText', () {
       const raw = 'כל־ישראל';
       final p = projectLine(raw);

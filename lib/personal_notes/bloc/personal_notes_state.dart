@@ -31,6 +31,8 @@ class PersonalNotesState extends Equatable {
   final String? newNoteReferenceText;
   final String? newNoteSelectedText;
   final int? newNoteSelectionColumn;
+  final String? newNoteSourceSelectedText;
+  final int? newNoteSourceSelectionOffset;
   final bool newNotePunctuationHidden;
   final String? newNoteInitialContent;
   final PersonalNoteContentFormat? newNoteInitialFormat;
@@ -55,6 +57,8 @@ class PersonalNotesState extends Equatable {
     this.newNoteReferenceText,
     this.newNoteSelectedText,
     this.newNoteSelectionColumn,
+    this.newNoteSourceSelectedText,
+    this.newNoteSourceSelectionOffset,
     this.newNotePunctuationHidden = false,
     this.newNoteInitialContent,
     this.newNoteInitialFormat,
@@ -80,6 +84,8 @@ class PersonalNotesState extends Equatable {
       newNoteReferenceText = null,
       newNoteSelectedText = null,
       newNoteSelectionColumn = null,
+      newNoteSourceSelectedText = null,
+      newNoteSourceSelectionOffset = null,
       newNotePunctuationHidden = false,
       newNoteInitialContent = null,
       newNoteInitialFormat = null;
@@ -104,6 +110,8 @@ class PersonalNotesState extends Equatable {
     String? newNoteReferenceText,
     String? newNoteSelectedText,
     int? newNoteSelectionColumn,
+    String? newNoteSourceSelectedText,
+    int? newNoteSourceSelectionOffset,
     bool? newNotePunctuationHidden,
     String? newNoteInitialContent,
     PersonalNoteContentFormat? newNoteInitialFormat,
@@ -144,6 +152,12 @@ class PersonalNotesState extends Equatable {
       newNoteSelectionColumn: clearNewNoteData
           ? null
           : (newNoteSelectionColumn ?? this.newNoteSelectionColumn),
+      newNoteSourceSelectedText: clearNewNoteData
+          ? null
+          : (newNoteSourceSelectedText ?? this.newNoteSourceSelectedText),
+      newNoteSourceSelectionOffset: clearNewNoteData
+          ? null
+          : (newNoteSourceSelectionOffset ?? this.newNoteSourceSelectionOffset),
       newNotePunctuationHidden: clearNewNoteData
           ? false
           : (newNotePunctuationHidden ?? this.newNotePunctuationHidden),
@@ -177,6 +191,8 @@ class PersonalNotesState extends Equatable {
     newNoteReferenceText,
     newNoteSelectedText,
     newNoteSelectionColumn,
+    newNoteSourceSelectedText,
+    newNoteSourceSelectionOffset,
     newNotePunctuationHidden,
     newNoteInitialContent,
     newNoteInitialFormat,

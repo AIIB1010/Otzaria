@@ -6,16 +6,15 @@ import 'package:otzaria/personal_notes/utils/note_anchor_utils.dart';
 import 'package:otzaria/personal_notes/utils/note_collection_utils.dart';
 import 'package:otzaria/personal_notes/utils/note_text_utils.dart';
 import 'package:otzaria/personal_notes/utils/personal_notes_book_key.dart';
+import 'package:otzaria/utils/text/text_manipulation.dart' as text_utils;
 
 class PersonalNotesService {
   final PersonalNotesDatabase _database;
   final Random _random;
 
-  PersonalNotesService({
-    PersonalNotesDatabase? database,
-    Random? random,
-  }) : _database = database ?? PersonalNotesDatabase.instance,
-       _random = random ?? Random();
+  PersonalNotesService({PersonalNotesDatabase? database, Random? random})
+    : _database = database ?? PersonalNotesDatabase.instance,
+      _random = random ?? Random();
 
   Future<List<PersonalNote>> loadNotes({
     required String bookId,
@@ -52,6 +51,8 @@ class PersonalNotesService {
     required PersonalNoteContentFormat contentFormat,
     String? selectedText,
     int? selectionColumn,
+    String? sourceSelectedText,
+    int? sourceSelectionOffset,
     bool punctuationHidden = false,
   }) async {
     final lines = splitBookContentIntoLines(bookContent);
@@ -85,12 +86,18 @@ class PersonalNotesService {
       final rawLine = lines[normalizedLineNumber - 1];
       final computed = computeAnchorForSelection(
         rawLine: rawLine,
-        selectedText: trimmedSelectedText,
+        selectedText: sourceSelectedText ?? trimmedSelectedText,
         selectionColumnHint: selectionColumn,
+        sourceSelectionOffset: sourceSelectionOffset,
+        sourceSelectionText: sourceSelectedText == null
+            ? null
+            : text_utils.stripHtmlIfNeeded(rawLine),
         punctuationHidden: punctuationHidden,
       );
       if (computed != null) {
-        anchorText = normalizeAnchorText(trimmedSelectedText);
+        anchorText = normalizeAnchorText(
+          sourceSelectedText ?? trimmedSelectedText,
+        );
         anchorPrefix = computed.prefix;
         anchorSuffix = computed.suffix;
         anchorStart = computed.start;
@@ -385,7 +392,5 @@ class PersonalNotesService {
 class _LineMatch {
   final int line;
 
-  _LineMatch({
-    required this.line,
-  });
+  _LineMatch({required this.line});
 }

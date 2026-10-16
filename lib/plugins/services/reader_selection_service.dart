@@ -165,6 +165,73 @@ class ReaderSelectionService {
       rawText: rawText,
       settings: settings,
     );
+    return _buildFromMap(
+      map: map,
+      bookId: bookId,
+      bookTitle: bookTitle,
+      sectionIndex: sectionIndex,
+      currentRef: currentRef,
+      tabId: tabId,
+      createdAt: createdAt,
+      bookDbId: bookDbId,
+      bookType: bookType,
+      bookSource: bookSource,
+      renderedStartUtf16: renderedStartUtf16,
+      renderedEndUtf16: renderedEndUtf16,
+    );
+  }
+
+  /// ממפה בחירה מהתצוגה לטווח המקביל במקור בעזרת מפת פסקה אחת.
+  PluginReaderSelection? buildFromRenderedSelection({
+    required String bookId,
+    required String bookTitle,
+    required int sectionIndex,
+    required String rawText,
+    required RenderSettings settings,
+    required String selectedText,
+    int? startHint,
+    String? currentRef,
+    int? bookDbId,
+    String? bookType,
+    String? bookSource,
+  }) {
+    final map = _sourceMapService.build(
+      bookId: bookId,
+      sectionIndex: sectionIndex,
+      rawText: rawText,
+      settings: settings,
+    );
+    final range = _locateWhitespaceNormalizedRange(
+      renderedText: map.renderedText,
+      selectedText: selectedText,
+      startHint: startHint,
+    );
+    if (range == null) return null;
+    return _buildFromMap(
+      map: map,
+      bookId: bookId,
+      bookTitle: bookTitle,
+      sectionIndex: sectionIndex,
+      currentRef: currentRef,
+      renderedStartUtf16: range.start,
+      renderedEndUtf16: range.end,
+    );
+  }
+
+  PluginReaderSelection? _buildFromMap({
+    required PluginTextSourceMap map,
+    required String bookId,
+    required String bookTitle,
+    required int sectionIndex,
+    required int renderedStartUtf16,
+    required int renderedEndUtf16,
+    String? currentRef,
+    String? tabId,
+    DateTime? createdAt,
+    int? bookDbId,
+    String? bookType,
+    String? bookSource,
+  }) {
     final rendered = _GraphemeBoundaries(map.renderedText);
     final renderedStart = rendered.graphemeAtUtf16(renderedStartUtf16);
     final renderedEnd = rendered.graphemeAtUtf16(renderedEndUtf16);
@@ -227,6 +294,55 @@ class ReaderSelectionService {
       direction: _direction(renderedText),
       createdAt: timestamp,
     );
+  }
+
+  ({int start, int end})? _locateWhitespaceNormalizedRange({
+    required String renderedText,
+    required String selectedText,
+    int? startHint,
+  }) {
+    final normalized = StringBuffer();
+    final offsets = <int>[];
+    var pendingWhitespace = false;
+    var whitespaceStart = 0;
+    for (var i = 0; i < renderedText.length; i++) {
+      final character = renderedText[i];
+      if (character.trim().isEmpty) {
+        if (normalized.isNotEmpty) {
+          if (!pendingWhitespace) whitespaceStart = i;
+          pendingWhitespace = true;
+        }
+        continue;
+      }
+      if (pendingWhitespace) {
+        offsets.add(whitespaceStart);
+        normalized.write(' ');
+        pendingWhitespace = false;
+      }
+      offsets.add(i);
+      normalized.write(character);
+    }
+    final needle = selectedText.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (needle.isEmpty || needle.length > offsets.length) return null;
+    final text = normalized.toString();
+    final starts = <int>[];
+    var from = 0;
+    while (from <= text.length - needle.length) {
+      final found = text.indexOf(needle, from);
+      if (found < 0) break;
+      starts.add(found);
+      from = found + 1;
+    }
+    if (starts.isEmpty) return null;
+    final start = startHint == null
+        ? starts.first
+        : (starts..sort(
+                (a, b) => (offsets[a] - startHint).abs().compareTo(
+                  (offsets[b] - startHint).abs(),
+                ),
+              ))
+              .first;
+    return (start: offsets[start], end: offsets[start + needle.length - 1] + 1);
   }
 
   PluginTextRangeAnchor? buildRangeAnchor({
