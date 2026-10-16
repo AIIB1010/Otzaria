@@ -21,7 +21,10 @@ class ViewportAlignedSelectionContainer extends StatefulWidget {
 
 class _ViewportAlignedSelectionContainerState
     extends State<ViewportAlignedSelectionContainer> {
-  final _delegate = _MarginToLineEdgeDelegate();
+  // התוכן ולא התיבה: הטקסט ממיר קואורדינטות בלי תיקון הטרנספורם שלה.
+  late final _delegate = _ItemSelectionDelegate(
+    () => (context.findRenderObject() as RenderViewportAlignedBox?)?.child,
+  );
 
   @override
   void dispose() {
@@ -40,9 +43,14 @@ class _ViewportAlignedSelectionContainerState
   }
 }
 
-/// נקודת גרירה בשוליים שלצד הטקסט נצמדת לקצה השורה שבגובהה: Flutter מסווג
-/// אותה לפי LTR, ובפסקה RTL עוגן הבחירה נפל בסוף הפסקה (issue #2072).
-class _MarginToLineEdgeDelegate extends StaticSelectionContainerDelegate {
+/// Flutter שומר את קצות הבחירה בקואורדינטות מסך ומשדר אותם שוב כשהטקסט נבנה
+/// מחדש; אחרי גלילה הם נוחתים על טקסט אחר, ולכן נשמרים יחסית לפריט.
+class _ItemSelectionDelegate extends StaticSelectionContainerDelegate {
+  _ItemSelectionDelegate(this._box);
+
+  final RenderObject? Function() _box;
+  final _edges = <bool, Offset>{};
+
   @override
   SelectionResult handleSelectionEdgeUpdate(SelectionEdgeUpdateEvent event) {
     final p = event.globalPosition;
@@ -71,6 +79,39 @@ class _MarginToLineEdgeDelegate extends StaticSelectionContainerDelegate {
         granularity: event.granularity,
       ),
     );
+  }
+
+  @override
+  void updateLastSelectionEdgeLocation({
+    required Offset globalSelectionEdgeLocation,
+    required bool forEnd,
+  }) {
+    if (_box() case final RenderBox box when box.attached) {
+      _edges[forEnd] = box.globalToLocal(globalSelectionEdgeLocation);
+    }
+    super.updateLastSelectionEdgeLocation(
+      globalSelectionEdgeLocation: globalSelectionEdgeLocation,
+      forEnd: forEnd,
+    );
+  }
+
+  @override
+  void clearInternalSelectionState() {
+    _edges.clear();
+    super.clearInternalSelectionState();
+  }
+
+  @override
+  void didChangeSelectables() {
+    if (_box() case final RenderBox box when box.attached) {
+      _edges.forEach(
+        (forEnd, edge) => super.updateLastSelectionEdgeLocation(
+          globalSelectionEdgeLocation: box.localToGlobal(edge),
+          forEnd: forEnd,
+        ),
+      );
+    }
+    super.didChangeSelectables();
   }
 }
 
