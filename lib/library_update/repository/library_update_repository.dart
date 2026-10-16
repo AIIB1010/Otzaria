@@ -78,7 +78,7 @@ class LibraryUpdateDiskSpaceException implements Exception {
   String toString() => message;
 }
 
-/// ה-DB או תיקייתו חסומים לכתיבה — נבדק לפני ההורדה (issue #2346).
+/// הרשאות הספרייה אינן מאפשרות את העדכון.
 class LibraryUpdateReadOnlyException implements Exception {
   final String dir;
   const LibraryUpdateReadOnlyException(this.dir);
@@ -293,7 +293,7 @@ class LibraryUpdateRepository implements LibraryUpdateService {
     bool Function()? isCancelled,
   }) async {
     final dbPath = dbPathProvider();
-    await _ensureDbWritable(dbPath);
+    await _ensureDbDirectoryWritable(dbPath);
     final cacheDir = Directory(
       p.join(await dataRootProvider(), 'library_update_cache'),
     );
@@ -595,13 +595,18 @@ class LibraryUpdateRepository implements LibraryUpdateService {
     } catch (_) {}
   }
 
-  /// "קריאה בלבד" ב-DB (ב-Windows ה-mode משקף זאת; 0 = אין קובץ) או בתיקייה.
-  Future<void> _ensureDbWritable(String dbPath) async {
-    final dir = p.dirname(dbPath), mode = FileStat.statSync(dbPath).mode;
-    if (mode != 0 && mode & 0x80 == 0 || !await isDirectoryWritable(dir)) {
+  /// בדיקת התיקייה מקדימה; הרשאות קובץ המסד נבדקות בעת ההחלה או ההחלפה.
+  Future<void> _ensureDbDirectoryWritable(String dbPath) async {
+    final dir = p.dirname(dbPath);
+    if (!await isDirectoryWritable(dir)) {
       throw LibraryUpdateReadOnlyException(dir);
     }
   }
+
+  static bool _isPermissionError(FileSystemException error) =>
+      (Platform.isWindows ? const {5, 19} : const {1, 13, 30}).contains(
+        error.osError?.errorCode,
+      );
 
   /// זורק [LibraryUpdateDiskSpaceException] אם אין מקום ל-patch של הצעד:
   /// בקאש — הדחוס והמחולץ; ליד ה-DB — ה-WAL של טרנזקציית ההחלה היחידה.
@@ -686,7 +691,7 @@ class LibraryUpdateRepository implements LibraryUpdateService {
       throw StateError('אין DB מלא בתוכנית');
     }
     final dbPath = dbPathProvider();
-    await _ensureDbWritable(dbPath);
+    await _ensureDbDirectoryWritable(dbPath);
     final cacheDir = Directory(
       p.join(await dataRootProvider(), 'library_update_cache'),
     );
@@ -912,10 +917,13 @@ class LibraryUpdateRepository implements LibraryUpdateService {
                 'Full DB replacement callback failed: $error\n$stackTrace',
               );
             }
-          } catch (_) {
+          } catch (error) {
             // לפני beginApply אין לפעולה הזו artifacts משלה; rollback בשלב הזה
             // עלול לגעת בטעות בגיבוי ישן שאינו שייך לריצה הנוכחית.
             if (recoveryStarted) await recovery.rollback(dbPath);
+            if (error is FileSystemException && _isPermissionError(error)) {
+              throw LibraryUpdateReadOnlyException(p.dirname(dbPath));
+            }
             rethrow;
           }
         },
@@ -970,8 +978,11 @@ class LibraryUpdateRepository implements LibraryUpdateService {
         DbReadWorker.clearBookCacheIfRunning();
         recovery.finishSuccess(dbPath);
         return booksTouched;
-      } catch (_) {
+      } catch (error) {
         await recovery.rollback(dbPath);
+        if (error is sqlite3.SqliteException && error.resultCode == 8) {
+          throw LibraryUpdateReadOnlyException(p.dirname(dbPath));
+        }
         rethrow;
       } finally {
         try {
