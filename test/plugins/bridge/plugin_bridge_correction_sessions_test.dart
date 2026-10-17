@@ -16,6 +16,7 @@ import 'package:otzaria/plugins/bridge/plugin_bridge_adapter.dart';
 import 'package:otzaria/plugins/bridge/plugin_bridge_handler.dart';
 import 'package:otzaria/plugins/models/installed_plugin.dart';
 import 'package:otzaria/plugins/models/plugin_manifest.dart';
+import 'package:otzaria/plugins/repository/plugin_correction_draft_repository.dart';
 import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
 import 'package:otzaria/plugins/services/plugin_correction_session_service.dart';
 import 'package:otzaria/search/search_repository.dart';
@@ -136,6 +137,20 @@ Matcher _error(String code) => throwsA(
   ),
 );
 
+/// תוכן הסשן בלי מצב השמירה, שמתעדכן ברקע אחרי כל שינוי.
+Map<String, dynamic> _content(Map<String, dynamic> snapshot) => Map.of(snapshot)
+  ..remove('draft')
+  ..remove('recovery');
+
+Map<String, dynamic> _draftOf(Map<String, dynamic> snapshot) =>
+    Map<String, dynamic>.from(snapshot['draft'] as Map);
+
+Future<void> _eventually(bool Function() done) async {
+  for (var i = 0; i < 400 && !done(); i++) {
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory temporary;
@@ -143,6 +158,8 @@ void main() {
   late _Tabs tabs;
   late List<TextBookTab> readers;
   late PluginBridgeAdapter adapter;
+  late sqlite3.Database draftDb;
+  final service = PluginCorrectionSessionService.instance;
   final events = <String>[];
   final payloads = <Map<String, dynamic>>[];
   const permissions = ['reader.open', 'reader.local_edit'];
@@ -236,12 +253,19 @@ void main() {
     tabs.current = TabsState(tabs: readers, currentTabIndex: 0);
     events.clear();
     payloads.clear();
+    draftDb = sqlite3.sqlite3.openInMemory();
+    service.draftRepository = PluginCorrectionDraftRepository.direct(draftDb);
     adapter = buildAdapter();
   });
 
   tearDown(() async {
-    PluginCorrectionSessionService.instance.removeOwner('owner');
-    PluginCorrectionSessionService.instance.removeOwner('foreign');
+    await service.purgeOwner('owner');
+    await service.purgeOwner('foreign');
+    // כתיבה שכבר יצאה לפני המחיקה מסתיימת לפני סגירת החיבור.
+    for (var i = 0; i < 20; i++) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    draftDb.close();
     for (final reader in readers) {
       await reader.bloc.close();
     }
@@ -281,10 +305,12 @@ void main() {
         'layer': 'source',
       });
       expect(map['sourceText'], 'בראשית א');
-      expect(
-        await call('getCorrectionSession', {'sessionId': initial['sessionId']}),
-        restored,
-      );
+      final current = await call('getCorrectionSession', {
+        'sessionId': initial['sessionId'],
+      });
+      expect(_content(current), _content(restored));
+      expect(_draftOf(current)['persisted'], isTrue);
+      expect(_draftOf(current)['version'], isA<int>());
       expect(
         PluginCorrectionSessionService.instance.displayText(
           initial['tabId'],
@@ -293,9 +319,16 @@ void main() {
         ),
         'תיקון 😀',
       );
-      final second = await begin(1);
-      expect(second['sessionId'], isNot(initial['sessionId']));
-      expect(second['changes'], isEmpty);
+      // אותו תוסף ואותו ספר בלשונית נוספת — טיוטה אחת לכל תוסף+ספר.
+      await expectLater(begin(1), _error('error.correction_busy'));
+      expect(
+        PluginCorrectionSessionService.instance.displayText(
+          PluginCorrectionSessionService.tabIdFor(readers[1]),
+          0,
+          'בראשית א',
+        ),
+        'בראשית א',
+      );
       expect(
         (readers.first.bloc.state as TextBookLoaded).content.first,
         'בראשית א',
@@ -324,11 +357,13 @@ void main() {
       });
       expect(reset['changes'], isEmpty);
       expect(reset['revision'], 2);
+      await call('getCorrectionSession', {'sessionId': initial['sessionId']});
       final ended = await call('endCorrectionSession', {
         'sessionId': initial['sessionId'],
         'expectedRevision': 2,
       });
-      expect(ended, reset);
+      expect(_content(ended), _content(reset));
+      expect(_draftOf(ended)['persisted'], isTrue);
       await expectLater(
         call('getCorrectionSession', {'sessionId': initial['sessionId']}),
         _error('error.not_found'),
@@ -383,7 +418,7 @@ void main() {
       await call('getCorrectionSession', {
         'sessionId': owned['currentCorrectionSessionId'],
       }, target: foreground),
-      session,
+      Map.of(session)..remove('recovery'),
     );
     final foreign = buildAdapter(owner: 'foreign');
     final hidden = await call('getCurrentState', {}, target: foreign);
@@ -470,10 +505,10 @@ void main() {
       }),
       _error('error.unsupported_context'),
     );
-    expect(
-      await call('getCorrectionSession', {'sessionId': session['sessionId']}),
-      restored,
-    );
+    final current = await call('getCorrectionSession', {
+      'sessionId': session['sessionId'],
+    });
+    expect(_content(current), _content(restored));
     try {
       await call('getSelection', {});
     } on Object catch (error) {
@@ -492,7 +527,8 @@ void main() {
       'sessionId': session['sessionId'],
       'expectedRevision': restored['revision'],
     });
-    expect(ended, restored);
+    expect(_content(ended), _content(restored));
+    expect(_draftOf(ended), _draftOf(current));
   });
 
   test('מפרשים בצד מאפשרים סשן ותיקון בטקסט הראשי בלבד', () async {
@@ -586,7 +622,7 @@ void main() {
     );
     expect(
       await call('getCorrectionSession', {'sessionId': session['sessionId']}),
-      session,
+      Map.of(session)..remove('recovery'),
     );
     expect(events, isEmpty);
   });
@@ -646,6 +682,9 @@ void main() {
   test('שינוי גרסה עם טקסט זהה דוחה גם ניקוי טיוטה אטומי', () async {
     final initial = await begin();
     final restored = await call('restoreCorrectionDraft', draft(initial));
+    final persisted = await call('getCorrectionSession', {
+      'sessionId': restored['sessionId'],
+    });
     events.clear();
     final db = sqlite3.sqlite3.open(databasePath);
     try {
@@ -663,8 +702,9 @@ void main() {
     );
     expect(
       await call('getCorrectionSession', {'sessionId': restored['sessionId']}),
-      restored,
+      persisted,
     );
+    expect(_content(persisted), _content(restored));
     expect(events, isEmpty);
   });
 
@@ -815,27 +855,73 @@ void main() {
       'שינוי, איפוס וסיום נושאים sessionId, revision, סיבה ותמונה',
       () async {
         final session = await begin();
+        final id = session['sessionId'];
         final restored = await call('restoreCorrectionDraft', draft(session));
+        await call('getCorrectionSession', {'sessionId': id});
         await call('resetCorrection', {
-          'sessionId': session['sessionId'],
+          'sessionId': id,
           'expectedRevision': restored['revision'],
           'sectionIndex': 0,
         });
+        await call('getCorrectionSession', {'sessionId': id});
         await call('endCorrectionSession', {
-          'sessionId': session['sessionId'],
+          'sessionId': id,
           'expectedRevision': 2,
         });
         expect(payloads, hasLength(3));
-        expect(payloads[0], {'sessionId': session['sessionId'], 'revision': 1});
-        expect(payloads[1], {
-          'sessionId': session['sessionId'],
-          'revision': 2,
-          'sectionIndex': 0,
+        expect(payloads[0], {
+          'sessionId': id,
+          'revision': 1,
+          'sectionIndices': [0],
         });
+        expect(payloads[1], {
+          'sessionId': id,
+          'revision': 2,
+          'sectionIndices': [0],
+        });
+        expect(
+          payloads[2].keys,
+          unorderedEquals(['sessionId', 'reason', 'snapshot']),
+        );
+        expect(payloads[2]['sessionId'], id);
         expect(payloads[2]['reason'], 'explicit');
-        expect(payloads[2]['snapshot'], isA<Map>());
+        final snapshot = Map<String, dynamic>.from(payloads[2]['snapshot']);
+        expect(snapshot['revision'], 2);
+        expect(_draftOf(snapshot)['persisted'], isTrue);
       },
     );
+
+    test('שינויים רצופים מאוחדים לאירוע אחד עם כל הפסקאות', () async {
+      final window = PluginCorrectionSessionService.eventWindow;
+      PluginCorrectionSessionService.eventWindow = const Duration(minutes: 1);
+      addTearDown(() => PluginCorrectionSessionService.eventWindow = window);
+      final session = await begin();
+      final id = session['sessionId'];
+      final restored = await call('restoreCorrectionDraft', {
+        ...draft(session),
+        'changes': [
+          for (final (index, text) in [(0, 'בראשית א'), (1, 'שורה ב')])
+            {
+              'sectionIndex': index,
+              'originalSourceText': text,
+              'originalText': text,
+              'proposedText': '$text מתוקן',
+            },
+        ],
+      });
+      await call('resetCorrection', {
+        'sessionId': id,
+        'expectedRevision': restored['revision'],
+        'sectionIndex': 1,
+      });
+      expect(events, isEmpty, reason: 'האירוע ממתין לחלון הקצב');
+      await call('getCorrectionSession', {'sessionId': id});
+      expect(payloads.single, {
+        'sessionId': id,
+        'revision': 2,
+        'sectionIndices': [0, 1],
+      });
+    });
 
     test(
       'ביטול הרשאת התיקון המקומי מסיים את הסשן עם plugin_unavailable',
@@ -843,8 +929,313 @@ void main() {
         await begin();
         payloads.clear();
         PluginCorrectionSessionService.instance.removeOwner('owner');
+        await _eventually(() => payloads.isNotEmpty);
         expect(payloads.single['reason'], 'plugin_unavailable');
       },
     );
+  });
+
+  group('טיוטות התאוששות', () {
+    Future<Map<String, dynamic>> edited([String proposed = 'תיקון 😀']) async {
+      final session = await begin();
+      await call('restoreCorrectionDraft', draft(session, proposed: proposed));
+      return call('getCorrectionSession', {'sessionId': session['sessionId']});
+    }
+
+    Future<Map<String, dynamic>> end(Map<String, dynamic> snapshot) =>
+        call('endCorrectionSession', {
+          'sessionId': snapshot['sessionId'],
+          'expectedRevision': snapshot['revision'],
+        });
+
+    Future<Map<String, dynamic>> ack(
+      Map<String, dynamic> snapshot, {
+      PluginBridgeAdapter? target,
+      int? version,
+    }) => call('acknowledgeCorrectionDraft', {
+      'draftId': _draftOf(snapshot)['draftId'],
+      'version': version ?? _draftOf(snapshot)['version'],
+    }, target: target);
+
+    test('begin מחזיר טיוטה ריקה שמורה ו-recovery null', () async {
+      final session = await begin();
+      expect(session['recovery'], isNull);
+      expect(session.containsKey('recovery'), isTrue);
+      final saved = _draftOf(session);
+      expect(
+        saved['draftId'],
+        isA<String>().having((v) => v, 'id', isNotEmpty),
+      );
+      expect(saved, {
+        'draftId': saved['draftId'],
+        'version': null,
+        'persisted': true,
+        'pending': false,
+        'error': null,
+        'conflicts': isEmpty,
+      });
+      expect((await call('listCorrectionDrafts', {}))['drafts'], isEmpty);
+    });
+
+    test('עריכה שלא אושרה משוחזרת ב-begin הבא אחרי סיום', () async {
+      final current = await edited();
+      final ended = await end(current);
+      expect(_draftOf(ended)['version'], _draftOf(current)['version']);
+      expect(_draftOf(ended)['persisted'], isTrue);
+      events.clear();
+      payloads.clear();
+      final reopened = await begin(1);
+      expect(reopened['sessionId'], isNot(current['sessionId']));
+      expect(reopened['recovery'], {
+        'draftId': _draftOf(current)['draftId'],
+        'fromVersion': _draftOf(current)['version'],
+        'restoredSectionIndices': [0],
+        'conflicts': isEmpty,
+      });
+      expect(reopened['revision'], 1);
+      expect(_content(reopened)['changes'], current['changes']);
+      expect(_draftOf(reopened)['draftId'], _draftOf(current)['draftId']);
+      expect(_draftOf(reopened)['persisted'], isTrue);
+      expect(
+        _draftOf(reopened)['version'],
+        greaterThan(_draftOf(current)['version'] as int),
+      );
+      expect(
+        service.displayText(reopened['tabId'], 0, 'בראשית א'),
+        'תיקון 😀',
+      );
+      expect(events, isEmpty, reason: 'השחזור אינו נחשב שינוי של התוסף');
+    });
+
+    test('תיקון שמקורו השתנה חוזר כהתנגשות עד לאישור', () async {
+      final current = await edited();
+      await end(current);
+      final db = sqlite3.sqlite3.open(databasePath);
+      try {
+        db.execute(
+          "UPDATE line SET content = 'בראשית שונה' "
+          'WHERE bookId = 1 AND lineIndex = 0',
+        );
+      } finally {
+        db.close();
+      }
+      final reopened = await begin();
+      final recovery = Map<String, dynamic>.from(reopened['recovery'] as Map);
+      expect(recovery['restoredSectionIndices'], isEmpty);
+      final conflict = Map<String, dynamic>.from(
+        (recovery['conflicts'] as List).single as Map,
+      );
+      expect(conflict, {
+        ...(current['changes'] as List).single as Map,
+        'reason': 'source_changed',
+      });
+      expect(reopened['changes'], isEmpty);
+      expect(_draftOf(reopened)['conflicts'], [conflict]);
+      final again = await call('getCorrectionSession', {
+        'sessionId': reopened['sessionId'],
+      });
+      expect(_draftOf(again)['conflicts'], [conflict]);
+      expect(
+        (await call('getCorrectionDraft', {
+          'draftId': _draftOf(again)['draftId'],
+        }))['conflicts'],
+        [conflict],
+      );
+      await ack(again);
+      final cleared = await call('getCorrectionSession', {
+        'sessionId': reopened['sessionId'],
+      });
+      expect(_draftOf(cleared)['conflicts'], isEmpty);
+    });
+
+    test(
+      'אישור אחרי סיום מוחק את הטיוטה, וחזרה עליו מסומנת duplicate',
+      () async {
+        final ended = await end(await edited());
+        final saved = _draftOf(ended);
+        expect(await ack(ended), {
+          'draftId': saved['draftId'],
+          'version': saved['version'],
+          'acknowledged': true,
+          'duplicate': false,
+        });
+        expect(await ack(ended), {
+          'draftId': saved['draftId'],
+          'version': saved['version'],
+          'acknowledged': true,
+          'duplicate': true,
+        });
+        expect((await call('listCorrectionDrafts', {}))['drafts'], isEmpty);
+        await expectLater(
+          call('getCorrectionDraft', {'draftId': saved['draftId']}),
+          _error('error.not_found'),
+        );
+        final reopened = await begin();
+        expect(reopened['recovery'], isNull);
+        expect(reopened['changes'], isEmpty);
+      },
+    );
+
+    test('אישור גרסה ישנה נדחה; אישור בסשן פעיל אינו עוצר עריכה', () async {
+      final first = await edited('גרסה א');
+      final second = await call('getCorrectionSession', {
+        'sessionId': (await call(
+          'restoreCorrectionDraft',
+          draft(first, proposed: 'גרסה ב'),
+        ))['sessionId'],
+      });
+      final older = _draftOf(first)['version'] as int;
+      final newer = _draftOf(second)['version'] as int;
+      expect(newer, greaterThan(older));
+      await expectLater(
+        ack(second, version: older),
+        _error('error.revision_conflict'),
+      );
+      expect((await ack(second))['duplicate'], isFalse);
+      expect((await call('listCorrectionDrafts', {}))['drafts'], isEmpty);
+      final still = await call('getCorrectionSession', {
+        'sessionId': second['sessionId'],
+      });
+      expect(still['changes'], second['changes']);
+      final third = await call('getCorrectionSession', {
+        'sessionId': (await call(
+          'restoreCorrectionDraft',
+          draft(still, proposed: 'גרסה ג'),
+        ))['sessionId'],
+      });
+      expect(_draftOf(third)['version'], greaterThan(newer));
+      final listed = (await call('listCorrectionDrafts', {}))['drafts'] as List;
+      expect((listed.single as Map)['version'], _draftOf(third)['version']);
+    });
+
+    test('list ו-get מחזירים את טיוטות התוסף עם מטא-דאטה ותוכן', () async {
+      final current = await edited();
+      final saved = _draftOf(current);
+      final listed = await call('listCorrectionDrafts', {});
+      expect(listed.keys, ['drafts']);
+      expect(listed['drafts'], [
+        {
+          'draftId': saved['draftId'],
+          'bookId': 'בראשית',
+          'bookUid': current['bookUid'],
+          'bookSource': PluginBookIdentity.sourceOf(
+            (readers.first.bloc.state as TextBookLoaded).book,
+          ),
+          'libraryVersion': current['libraryVersion'],
+          'version': saved['version'],
+          'updatedAt': isA<String>(),
+          'active': true,
+          'changeCount': 1,
+          'conflictCount': 0,
+        },
+      ]);
+      final full = await call('getCorrectionDraft', {
+        'draftId': saved['draftId'],
+      });
+      expect(full['version'], saved['version']);
+      expect(full['active'], isTrue);
+      expect(full['changes'], current['changes']);
+      expect(full['conflicts'], isEmpty);
+      await end(current);
+      final after = await call('getCorrectionDraft', {
+        'draftId': saved['draftId'],
+      });
+      expect(after['active'], isFalse);
+      expect(after['changes'], current['changes']);
+    });
+
+    test('תוסף אחר אינו רואה ואינו מאשר טיוטה שאינה שלו', () async {
+      final ended = await end(await edited());
+      final foreign = buildAdapter(owner: 'foreign');
+      await expectLater(
+        ack(ended, target: foreign),
+        _error('error.not_found'),
+      );
+      await expectLater(
+        call('getCorrectionDraft', {
+          'draftId': _draftOf(ended)['draftId'],
+        }, target: foreign),
+        _error('error.not_found'),
+      );
+      expect(
+        (await call('listCorrectionDrafts', {}, target: foreign))['drafts'],
+        isEmpty,
+      );
+      expect((await call('listCorrectionDrafts', {}))['drafts'], hasLength(1));
+    });
+
+    test('פרמטרים פגומים נדחים', () async {
+      final ended = await end(await edited());
+      final id = _draftOf(ended)['draftId'];
+      final version = _draftOf(ended)['version'];
+      final bad = <(String, Map<String, dynamic>)>[
+        ('acknowledgeCorrectionDraft', {}),
+        ('acknowledgeCorrectionDraft', {'draftId': id}),
+        ('acknowledgeCorrectionDraft', {'version': version}),
+        ('acknowledgeCorrectionDraft', {'draftId': '', 'version': version}),
+        ('acknowledgeCorrectionDraft', {'draftId': 5, 'version': version}),
+        ('acknowledgeCorrectionDraft', {'draftId': id, 'version': '$version'}),
+        ('acknowledgeCorrectionDraft', {'draftId': id, 'version': -1}),
+        ('acknowledgeCorrectionDraft', {'draftId': id, 'version': 1.5}),
+        (
+          'acknowledgeCorrectionDraft',
+          {'draftId': id, 'version': version, 'extra': 1},
+        ),
+        ('listCorrectionDrafts', {'extra': 1}),
+        ('getCorrectionDraft', {}),
+        ('getCorrectionDraft', {'draftId': ''}),
+        ('getCorrectionDraft', {'draftId': 5}),
+        ('getCorrectionDraft', {'draftId': id, 'version': version}),
+      ];
+      for (final (action, args) in bad) {
+        await expectLater(
+          call(action, args),
+          _error('error.invalid_params'),
+          reason: '$action $args',
+        );
+      }
+      expect((await call('listCorrectionDrafts', {}))['drafts'], hasLength(1));
+    });
+
+    test('בלי הרשאת תיקון מקומי אין גישה לטיוטות', () async {
+      final ended = await end(await edited());
+      final denied = buildAdapter(grants: const ['reader.open']);
+      for (final (action, args) in <(String, Map<String, dynamic>)>[
+        ('listCorrectionDrafts', {}),
+        ('getCorrectionDraft', {'draftId': _draftOf(ended)['draftId']}),
+        (
+          'acknowledgeCorrectionDraft',
+          {
+            'draftId': _draftOf(ended)['draftId'],
+            'version': _draftOf(ended)['version'],
+          },
+        ),
+      ]) {
+        await expectLater(
+          call(action, args, target: denied),
+          _error('error.permission_denied'),
+          reason: action,
+        );
+      }
+      for (final method in const [
+        'reader.listCorrectionDrafts',
+        'reader.getCorrectionDraft',
+        'reader.acknowledgeCorrectionDraft',
+      ]) {
+        final handler = PluginBridgeHandler(
+          _plugin('owner', const ['reader.open']),
+          adapter: adapter,
+          registry: _Grants(permissions),
+        );
+        final response =
+            await handler.handleRpcForTesting([
+                  {'method': method, 'payload': <String, dynamic>{}},
+                ])
+                as Map;
+        expect(response['success'], isFalse, reason: method);
+        expect(response['error']['code'], 'permission_denied', reason: method);
+      }
+      expect((await call('listCorrectionDrafts', {}))['drafts'], hasLength(1));
+    });
   });
 }

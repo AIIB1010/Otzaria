@@ -3221,6 +3221,10 @@ class PluginBridgeAdapter {
         return _correctionSessionAction(action, args);
       case 'endCorrectionSession':
         return _correctionSessionAction(action, args);
+      case 'acknowledgeCorrectionDraft':
+      case 'listCorrectionDrafts':
+      case 'getCorrectionDraft':
+        return _correctionDraftAction(action, args);
       case 'addContextMenuItem':
         ContextMenuRegistry.instance.registerPayload(
           plugin.pluginId,
@@ -3743,11 +3747,13 @@ class PluginBridgeAdapter {
       );
     }
     final book = _requireCorrectionContext(tab);
-    return PluginCorrectionSessionService.instance.begin(
+    final result = await PluginCorrectionSessionService.instance.begin(
       owner: plugin.pluginId,
+      ownerName: plugin.name,
       tabId: id,
       bookId: book.title,
       bookUid: PluginBookIdentity.uidOf(book),
+      bookSource: PluginBookIdentity.sourceOf(book),
       libraryVersion: version,
       ownerEpoch: ownerEpoch,
       validateSource: () async {
@@ -3793,6 +3799,8 @@ class PluginBridgeAdapter {
         );
       },
     );
+    // קריאה חוזרת לאותה לשונית מחזירה snapshot בלבד; הצורה נשמרת אחידה.
+    return {...result, 'recovery': result['recovery']};
   }
 
   Future<Map<String, dynamic>> _correctionSessionAction(
@@ -3828,13 +3836,31 @@ class PluginBridgeAdapter {
     final service = PluginCorrectionSessionService.instance;
     final id = args['sessionId'] as String;
     final owner = plugin.pluginId;
-    final snapshot = service.get(owner, id);
-    if (action == 'getCorrectionSession') return snapshot;
-    final revision = args['expectedRevision'] as int;
     if (action == 'endCorrectionSession') {
-      return service.end(owner, id, revision);
+      return service.end(owner, id, args['expectedRevision'] as int);
     }
-    _requireCorrectionContext(_correctionTab(snapshot['tabId'] as String));
+    if (action == 'getCorrectionSession') return service.get(owner, id);
+    final revision = args['expectedRevision'] as int;
+    // לא דרך get: הוא ממתין לשמירה ושולח אירוע ממתין.
+    final tab = _dependencies.tabsBloc.state.tabs
+        .expand(leafPanes)
+        .whereType<TextBookTab>()
+        .where(
+          (tab) =>
+              service.sessionIdForTab(
+                owner,
+                PluginCorrectionSessionService.tabIdFor(tab),
+              ) ==
+              id,
+        )
+        .firstOrNull;
+    if (tab == null) {
+      throw const PluginCorrectionException(
+        'error.not_found',
+        'סשן התיקון אינו זמין לתוסף.',
+      );
+    }
+    _requireCorrectionContext(tab);
     if (action == 'resetCorrection') {
       if (args['sectionIndex'] is! int) {
         throw const PluginCorrectionException(
@@ -3860,6 +3886,41 @@ class PluginBridgeAdapter {
       libraryVersion: args['libraryVersion'] as String,
       changes: args['changes'] as List<dynamic>,
     );
+  }
+
+  /// טיוטות התוסף עצמו בלבד; פועל גם אחרי שהסשן והלשונית נסגרו.
+  Future<Map<String, dynamic>> _correctionDraftAction(
+    String action,
+    Map<String, dynamic> args,
+  ) async {
+    final keys = switch (action) {
+      'acknowledgeCorrectionDraft' => const {'draftId', 'version'},
+      'getCorrectionDraft' => const {'draftId'},
+      _ => const <String>{},
+    };
+    final draftId = args['draftId'];
+    final version = args['version'];
+    if (args.length != keys.length ||
+        args.keys.any((key) => !keys.contains(key)) ||
+        (keys.contains('draftId') && (draftId is! String || draftId.isEmpty)) ||
+        (keys.contains('version') && (version is! int || version < 0))) {
+      throw const PluginCorrectionException(
+        'error.invalid_params',
+        'נתוני הטיוטה אינם תקינים.',
+      );
+    }
+    await _requireCorrectionPermission();
+    final service = PluginCorrectionSessionService.instance;
+    final owner = plugin.pluginId;
+    return switch (action) {
+      'acknowledgeCorrectionDraft' => await service.acknowledge(
+        owner,
+        draftId as String,
+        version as int,
+      ),
+      'getCorrectionDraft' => await service.getDraft(owner, draftId as String),
+      _ => {'drafts': await service.listDrafts(owner)},
+    };
   }
 
   Future<Map<String, dynamic>> _getSectionTextMap(

@@ -285,7 +285,8 @@ const Map<String, PluginPermissionInfo> _permissionLabels = {
     label: 'תיקונים מקומיים בטקסט',
     icon: FluentIcons.text_edit_style_24_regular,
     description:
-        'ניהול תיקונים מקומיים לספר הפתוח, ללא כתיבה לספר או למסד הספרייה',
+        'ניהול תיקונים מקומיים לספר הפתוח וטיוטות השחזור שלהם, ללא כתיבה '
+        'לספר או למסד הספרייה',
   ),
   'reader.highlight': PluginPermissionInfo(
     label: 'הדגשות בטקסט',

@@ -624,17 +624,17 @@ async function commentariesForCurrentLine() {
 
 ---
 
-## תיקונים מקומיים: שמירת טיוטה לפני הצגה בקורא
+## תיקונים מקומיים: שמירה, אישור והתאוששות
 
 **מגרסה:** `0.9.99`. **הרשאות:** `reader.open`, `reader.local_edit`,
 `plugin.storage.read`, `plugin.storage.write`.
 
 `beginCorrectionSession` מפעילה עורך מובנה בפסקאות פשוטות בקורא הרשמי.
-כל הקלדה שהתקבלה מסנכרנת מיד את הסשן ומפיקה `correctionSessionChanged`.
-התוסף מושך ושומר snapshots באופן שוטף, ושומר טיוטה לפני `restoreCorrectionDraft`.
-הסשן באוצריא זמני; מזהי סשן ולשונית אינם מזהי התאוששות בין הפעלות.
-הדוגמה שומרת בנפרד את כוונת המשתמש ואת ה־snapshot שאוצריא אישרה.
-יש לסדר את הפעולות בתור יחיד בתוסף ולשמור כל snapshot שחוזר מפעולה מוצלחת.
+אוצריא שומרת כל שינוי בטיוטה עמידה (`draft`) עד שהתוסף מאשר את הגרסה שקיבל
+ב־`acknowledgeCorrectionDraft`. סיום סשן, סגירת לשונית או קריסה אינם מוחקים אותה,
+ו־`beginCorrectionSession` הבא על אותו ספר משחזר אותה ומחזיר `recovery`.
+התוסף שומר אצלו את ה־snapshot, ורק אחרי שהשמירה הצליחה מאשר את `draft.version`.
+יש לסדר את הפעולות בתור יחיד בתוסף.
 
 ```javascript
 async function rpc(method, payload) {
@@ -647,81 +647,91 @@ async function rpc(method, payload) {
   return response.data;
 }
 
-async function saveSnapshot(snapshot) {
+// שומר אצל התוסף ורק אז מאשר; אישור פירושו "שמרתי", לא "נשלח לאתר".
+async function keep(snapshot) {
   await rpc('storage.set', {
-    key: 'correction.snapshot',
+    key: `correction.${snapshot.bookUid}`,
     value: snapshot,
   });
+  const { draftId, version, persisted } = snapshot.draft;
+  if (!persisted || version == null) return snapshot;
+  try {
+    await rpc('reader.acknowledgeCorrectionDraft', { draftId, version });
+  } catch (error) {
+    // revision_conflict: נוצרה גרסה חדשה יותר; היא תאושר בסבב הבא.
+    if (error.code !== 'error.revision_conflict') throw error;
+  }
   return snapshot;
 }
 
 async function beginCorrections() {
   const state = await rpc('reader.getCurrentState');
-  return saveSnapshot(await rpc('reader.beginCorrectionSession', {
+  const session = await rpc('reader.beginCorrectionSession', {
     tabId: state.currentTabId,
-  }));
-}
-
-async function applyDraft(session, changes) {
-  const draft = {
-    bookUid: session.bookUid,
-    libraryVersion: session.libraryVersion,
-    changes,
-  };
-  await rpc('storage.set', { key: 'correction.draft', value: draft });
-  try {
-    return await saveSnapshot(await rpc('reader.restoreCorrectionDraft', {
-      ...draft,
-      sessionId: session.sessionId,
-      expectedRevision: session.revision,
-    }));
-  } catch (error) {
-    if (error.code === 'error.revision_conflict') {
-      await saveSnapshot(await rpc('reader.getCorrectionSession', {
-        sessionId: session.sessionId,
-      }));
-    }
-    throw error;
+  });
+  if (session.recovery) {
+    // restoredSectionIndices כבר מוצגים בספר; conflicts דורשים החלטת משתמש.
+    showRecovered(session.recovery);
   }
+  return keep(session);
 }
 
 async function finishCorrections(session) {
-  const latest = await saveSnapshot(await rpc('reader.getCorrectionSession', {
+  const latest = await rpc('reader.getCorrectionSession', {
     sessionId: session.sessionId,
-  }));
-  return saveSnapshot(await rpc('reader.endCorrectionSession', {
+  });
+  return keep(await rpc('reader.endCorrectionSession', {
     sessionId: latest.sessionId,
     expectedRevision: latest.revision,
   }));
 }
 
-let snapshotWrites = Promise.resolve();
-Otzaria.on('reader.correctionSessionChanged', ({ sessionId }) => {
-  snapshotWrites = snapshotWrites.then(async () => {
-    const snapshot = await rpc('reader.getCorrectionSession', { sessionId });
-    await saveSnapshot(snapshot);
-  }).catch((error) => {
+let queue = Promise.resolve();
+function enqueue(task) {
+  queue = queue.then(task).catch((error) => {
     if (error.code !== 'error.not_found') console.error(error);
   });
+}
+
+Otzaria.on('reader.correctionSessionChanged', ({ sessionId, sectionIndices }) => {
+  // אירוע אחד לכל 300ms לכל היותר; sectionIndices מאחד את כל הפסקאות שהשתנו.
+  enqueue(async () => keep(await rpc('reader.getCorrectionSession', { sessionId })));
 });
 Otzaria.on('reader.correctionSessionEnded', ({ snapshot }) => {
-  snapshotWrites = snapshotWrites.then(() => saveSnapshot(snapshot))
-    .catch(console.error);
+  enqueue(() => keep(snapshot));
 });
+
+// באתחול: טיוטות שאירוע הסיום שלהן לא הגיע (תוסף סגור, קריסה).
+async function recoverOrphans() {
+  const { drafts } = await rpc('reader.listCorrectionDrafts', {});
+  for (const meta of drafts) {
+    if (meta.active) continue; // סשן חי מטפל בה בעצמו
+    const draft = await rpc('reader.getCorrectionDraft', { draftId: meta.draftId });
+    await rpc('storage.set', { key: `correction.${draft.bookUid}`, value: draft });
+    await rpc('reader.acknowledgeCorrectionDraft', {
+      draftId: draft.draftId,
+      version: draft.version,
+    });
+  }
+}
 ```
 
-לאחר `error.revision_conflict` יש להשוות את הטיוטה השמורה למצב המעודכן ולהציג
-התנגשות למשתמש; אין לנסות שוב עם revision חדש באופן עיוור. `error.source_changed`
-מחייב קריאת מקור מחדש ובדיקת התיקונים לפני שחזור. גם `resetCorrection` מחזירה
-snapshot שיש לשמור. באתחול הבא קוראים את `correction.draft` באמצעות `storage.get`,
-פותחים סשן חדש בספר המתאים ומאמתים שוב את זהות המקור והגרסה לפני restore.
+אין לאשר גרסה לפני שהשמירה אצל התוסף הצליחה: אחרי האישור התוכן נמחק מצד אוצריא.
+אם `draft.persisted` false, הגרסה שב־snapshot אינה בהכרח התוכן שבו, ולכן מחכים
+לאירוע הבא או ל־`getCorrectionSession` נוסף. אישור חוזר מחזיר `duplicate: true`.
+אישור בזמן סשן פעיל אינו עוצר את העריכה; עריכה נוספת יוצרת גרסה חדשה לאישור.
 
-יש לקרוא את הטיוטה ואת ה־snapshot שנשמר לפני פתיחת סשן חדש, ולהחליט איזה מצב
-לשחזר; ההקלדה המובנית נשמרת כאן במפתח `correction.snapshot`.
-אירוע סיום כולל את הטקסט האחרון אך אינו הבטחת שמירה אם התוסף נסגר.
-במהלך כל הסשן `getSelection` אינה זמינה. rendered/both, מפות מקור וחיפוש rendered
-אינם זמינים לספר עם סשן פעיל. `getSectionTextMap` עם `layer: 'source'` וללא מפת
-מקור נשארת קריאת מקור רשמי. אין אחסון התאוששות בצד אוצריא.
+התנגשויות (`draft.conflicts`) הן תיקונים ששוחזרו אך המקור שלהם השתנה או שלא ניתן
+היה לאמת אותם. הן אינן מוצגות בספר ונשמרות עד האישור. אפשר להציג אותן למשתמש,
+ולהחזיר תיקון רצוי בעזרת `restoreCorrectionDraft` מול המקור העדכני.
+
+לאחר `error.revision_conflict` מ־`restoreCorrectionDraft` יש לקרוא את הסשן מחדש,
+להשוות ולהציג התנגשות למשתמש; אין לנסות שוב עם revision חדש באופן עיוור.
+`error.source_changed` מחייב קריאת מקור מחדש. `error.correction_busy` פירושו שהספר
+כבר בעריכה של התוסף בלשונית או בחלון אחר (או שחלון שקרס עדיין מחזיק בו, עד כ־20
+שניות). במהלך כל הסשן `getSelection` אינה זמינה. rendered/both, מפות מקור וחיפוש
+rendered אינם זמינים לספר עם סשן פעיל. `getSectionTextMap` עם `layer: 'source'`
+וללא מפת מקור נשארת קריאת מקור רשמי.
 
 ### שליחת התיקון כ־`text_correction` בלבד
 

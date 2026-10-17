@@ -860,7 +860,68 @@ export interface CorrectionSessionSnapshot {
     maxTextLength: 20000;
     maxChangesBytes: 1048576;
   };
+  /** Durable recovery draft owned by Otzaria for this plugin + bookUid. */
+  draft: CorrectionDraftState;
 }
+/** A recovered change that could not be re-verified against the current raw source. */
+export interface CorrectionConflict extends CorrectionChange {
+  reason: 'source_changed' | 'not_found' | 'invalid' | 'unverifiable';
+}
+export interface CorrectionDraftState {
+  /** Stable for plugin + bookUid across sessions, tabs, windows and restarts. */
+  draftId: string;
+  /** Durable version of the last commit (global monotonic, never reused); null before the first commit. */
+  version: number | null;
+  /** True only when the exact current `revision` is committed under `version`. */
+  persisted: boolean;
+  /** A write is scheduled or in flight. */
+  pending: boolean;
+  /** Last write error; retried automatically with backoff. */
+  error: string | null;
+  /** Kept until acknowledged; returned in every snapshot. */
+  conflicts: CorrectionConflict[];
+}
+export interface CorrectionRecovery {
+  draftId: string;
+  /** Draft version that was recovered. */
+  fromVersion: number;
+  restoredSectionIndices: number[];
+  conflicts: CorrectionConflict[];
+}
+export interface BeginCorrectionSessionResult extends CorrectionSessionSnapshot {
+  /** Null when there was no unacknowledged draft, or the session already existed. */
+  recovery: CorrectionRecovery | null;
+}
+export interface AcknowledgeCorrectionDraftArgs { draftId: string; version: number; }
+export interface AcknowledgeCorrectionDraftResult {
+  draftId: string;
+  version: number;
+  acknowledged: true;
+  /** True when this exact version was already acknowledged. */
+  duplicate: boolean;
+}
+export interface GetCorrectionDraftArgs { draftId: string; }
+export interface CorrectionDraftMeta {
+  draftId: string;
+  bookId: string;
+  bookUid: string;
+  bookSource: 'library' | 'user' | 'external' | 'attached';
+  libraryVersion: string;
+  version: number;
+  /** ISO-8601 UTC. */
+  updatedAt: string;
+  /** A live session (any tab or window) currently holds the draft. */
+  active: boolean;
+}
+export interface CorrectionDraftSummary extends CorrectionDraftMeta {
+  changeCount: number;
+  conflictCount: number;
+}
+export interface CorrectionDraft extends CorrectionDraftMeta {
+  changes: CorrectionChange[];
+  conflicts: CorrectionConflict[];
+}
+export interface ListCorrectionDraftsResult { drafts: CorrectionDraftSummary[]; }
 export interface BeginCorrectionSessionArgs { tabId: string; }
 export interface GetCorrectionSessionArgs { sessionId: string; }
 export interface RestoreCorrectionDraftArgs extends GetCorrectionSessionArgs {
@@ -876,14 +937,22 @@ export interface ResetCorrectionArgs extends GetCorrectionSessionArgs {
 export interface EndCorrectionSessionArgs extends GetCorrectionSessionArgs {
   expectedRevision: number;
 }
+/** Rate-limited (at most one per 300ms per session); flushed before getCorrectionSession returns. */
 export interface CorrectionSessionChangedEvent {
   sessionId: string;
   revision: number;
-  sectionIndex?: number;
+  /** Sorted, deduplicated paragraphs changed since the previous event. */
+  sectionIndices: number[];
 }
 export interface CorrectionSessionEndedEvent {
   sessionId: string;
-  reason: 'explicit' | 'tab_closed' | 'plugin_unavailable';
+  reason:
+    | 'explicit'
+    | 'user'
+    | 'tab_closed'
+    | 'plugin_unavailable'
+    | 'window_closed'
+    | 'ownership_lost';
   snapshot: CorrectionSessionSnapshot;
 }
 
@@ -2129,6 +2198,9 @@ export type OtzariaMethod =
   | 'reader.restoreCorrectionDraft'
   | 'reader.resetCorrection'
   | 'reader.endCorrectionSession'
+  | 'reader.acknowledgeCorrectionDraft'
+  | 'reader.listCorrectionDrafts'
+  | 'reader.getCorrectionDraft'
   | 'workspace.list'
   | 'workspace.getActive'
   | 'workspace.create'

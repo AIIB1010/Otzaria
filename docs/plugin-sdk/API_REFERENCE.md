@@ -207,6 +207,9 @@ if (response.success) {
 | `reader.restoreCorrectionDraft` | 0.9.99 |
 | `reader.resetCorrection` | 0.9.99 |
 | `reader.endCorrectionSession` | 0.9.99 |
+| `reader.acknowledgeCorrectionDraft` | 0.9.99 |
+| `reader.listCorrectionDrafts` | 0.9.99 |
+| `reader.getCorrectionDraft` | 0.9.99 |
 | `reader.registerInBookSearchProvider` | 0.9.97 |
 | `reader.respondInBookSearch` | 0.9.97 |
 | `reader.registerExternalSearchProvider` | 0.9.97 |
@@ -2237,7 +2240,63 @@ const { data: session } = await Otzaria.call('reader.beginCorrectionSession', {
 מ־`0.9.99`, `getCurrentState` מחזירה `currentTabId` ו־`openTabs[].tabId`:
 מזהה יציב למשך חיי לשונית הטקסט, ו־`null` עבור לשוניות אחרות. המזהה אינו נשמר
 בין הפעלות. מעבר ללשונית אחרת אינו משנה את יעד הסשן. לכל לשונית בעלים יחיד;
-פתיחה חוזרת של אותו תוסף מחזירה את הסשן הקיים. תוסף אחר מקבל `error.correction_busy`.
+פתיחה חוזרת של אותו תוסף באותה לשונית מחזירה את הסשן הקיים (עם `recovery: null`).
+תוסף אחר מקבל `error.correction_busy`. לכל תוסף+`bookUid` יש סשן פעיל אחד בלבד,
+בכל הלשוניות ובכל החלונות: פתיחה של אותו ספר בלשונית או בחלון נוסף מחזירה
+`error.correction_busy`. כשל בפתיחת הטיוטה העמידה מחזיר `error.storage_failed`.
+
+התוצאה היא snapshot עם שדה נוסף `recovery` — `null`, או תיאור הטיוטה ששוחזרה
+(ראו [חוזה שמירה והתאוששות](#חוזה-שמירה-והתאוששות-של-טיוטות-תיקון)):
+
+```json
+{
+  "sessionId": "q3J…",
+  "tabId": "Zx8…",
+  "bookId": "בראשית",
+  "bookUid": "id:1",
+  "libraryVersion": "1",
+  "revision": 1,
+  "capabilities": { "plainTextOnly": true, "maxChanges": 500, "…": "…" },
+  "changes": [
+    {
+      "sectionIndex": 0,
+      "originalSourceText": "<b>בראשית</b> ברא",
+      "originalText": "בראשית ברא",
+      "proposedText": "בראשית ברא אלהים"
+    }
+  ],
+  "draft": {
+    "draftId": "hR2…",
+    "version": 42,
+    "persisted": true,
+    "pending": false,
+    "error": null,
+    "conflicts": [
+      {
+        "sectionIndex": 7,
+        "originalSourceText": "נוסח ישן",
+        "originalText": "נוסח ישן",
+        "proposedText": "נוסח מתוקן",
+        "reason": "source_changed"
+      }
+    ]
+  },
+  "recovery": {
+    "draftId": "hR2…",
+    "fromVersion": 37,
+    "restoredSectionIndices": [0],
+    "conflicts": [
+      {
+        "sectionIndex": 7,
+        "originalSourceText": "נוסח ישן",
+        "originalText": "נוסח ישן",
+        "proposedText": "נוסח מתוקן",
+        "reason": "source_changed"
+      }
+    ]
+  }
+}
+```
 
 `currentCorrectionSessionId` ו־`openTabs[].correctionSessionId` מפנים רק לסשן קיים
 השייך לתוסף הקורא, או מחזירים `null`. אפשר לקרוא `getCorrectionSession` עם המזהה
@@ -2252,7 +2311,8 @@ const { data: session } = await Otzaria.call('reader.beginCorrectionSession', {
 מחזירות `error.unsupported_context`, ו־`getCorrectionSession` ו־`endCorrectionSession` זמינות.
 
 כל הפעולות מחזירות `CorrectionSessionSnapshot`: `sessionId`, `tabId`, `bookId`,
-`bookUid`, `libraryVersion`, `revision`, `changes` ו־`capabilities`.
+`bookUid`, `libraryVersion`, `revision`, `changes`, `capabilities` ו־`draft`
+(`{ draftId, version, persisted, pending, error, conflicts }`, מצב השמירה העמידה).
 כל שינוי כולל `sectionIndex` אפסי, `originalSourceText`, `originalText` ו־`proposedText`.
 `originalSourceText` שומר את המקור הגולמי כולל תגיות וישויות HTML;
 `originalText` הוא הטקסט הקנוני לאחר `TextRendererService.stripHtml`.
@@ -2293,6 +2353,12 @@ const { data: session } = await Otzaria.call('reader.beginCorrectionSession', {
 המובנה מסנכרן את הסשן מיד ומעלה revision. ה־snapshot כולל את הטקסט האחרון
 גם כשהשדה עדיין ממוקד או במהלך composition; אין צורך להוציא ממנו את המיקוד.
 
+לפני החזרה היא שולחת `correctionSessionChanged` ממתין, ומחכה עד 3 שניות לשמירת
+המצב הנוכחי, כך שכאשר `draft.persisted` הוא true, `draft.version` הוא בדיוק הגרסה
+של התוכן שב־snapshot ואפשר לאשר אותה. אם השמירה לא הסתיימה בזמן או נכשלה,
+`persisted` הוא false (ו־`pending` או `error` מסבירים למה), ואין לאשר את `version`
+כמייצגת את ה־snapshot.
+
 ### `reader.restoreCorrectionDraft`
 
 **הרשאה:** `reader.local_edit`. מקבלת
@@ -2301,7 +2367,7 @@ const { data: session } = await Otzaria.call('reader.beginCorrectionSession', {
 מנקה את כל התיקונים וגם מאמתת גרסה והרשאה. פסקה שלא נכללה חוזרת למקור;
 הצעה זהה למקור אינה נשמרת כשינוי. כשל אימות אינו מחיל אף פסקה.
 
-התוסף חייב לשמור את הטיוטה באחסון שלו **לפני** הקריאה: הסשנים בזיכרון בלבד.
+אוצריא שומרת את התוצאה בטיוטה העמידה כמו כל שינוי אחר; restore שנכשל אינו משנה אותה.
 `expectedRevision` חייב להתאים ל־snapshot האחרון; שינוי בפועל מעלה `revision`.
 גרסה ישנה מחזירה `error.revision_conflict`; מקור או גרסת ספרייה שהשתנו מחזירים
 `error.source_changed`. בעלים שגוי או סשן שהסתיים מחזירים `error.not_found`.
@@ -2316,25 +2382,152 @@ const { data: session } = await Otzaria.call('reader.beginCorrectionSession', {
 ### `reader.endCorrectionSession`
 
 **הרשאה:** `reader.local_edit`. מקבלת `{ sessionId, expectedRevision }`, מחזירה את
-ה־snapshot האחרון ומסירה את הסשן ושכבת התצוגה. אינה שולחת דיווח או מוחקת
-טיוטה באחסון התוסף. יש לשמור טיוטה לפני סיום; שליחה נעשית בנפרד באמצעות
-`feedback.submitBookCorrection` ובהרשאת `feedback.send_email`.
+ה־snapshot האחרון ומסירה את הסשן ושכבת התצוגה. היא ממתינה (עד 3 שניות) לשמירה
+האחרונה, כך שה־snapshot המוחזר כולל `draft.version` שאפשר לאשר כש־`persisted` true.
+סיום **אינו** מוחק את הטיוטה העמידה ואינו שולח דיווח; שליחה נעשית בנפרד באמצעות
+`feedback.submitBookCorrection` ובהרשאת `feedback.send_email`, ואחריה (או אחרי שמירה
+באחסון התוסף) מאשרים ב־`acknowledgeCorrectionDraft`.
 
 ### Event: `reader.correctionSessionChanged`
 
 אירוע ממוקד לבעלים בלבד, ללא הרשאת subscribe נפרדת, מ־`0.9.99`.
-כולל `{ sessionId, revision, sectionIndex? }`; מבקש מהתוסף למשוך snapshot,
-ואינו מחליף קריאת מצב מלא. כל שינוי מתקבל בעורך המובנה מפיק אירוע עם
-`sectionIndex`; גם איפוס פסקה מצרף אותו. restore אטומי יכול להשמיט את האינדקס.
+כולל `{ sessionId, revision, sectionIndices }`; מבקש מהתוסף למשוך snapshot,
+ואינו מחליף קריאת מצב מלא. האירוע מוגבל בקצב (לא debounce): לכל היותר אחד לכל
+חלון של 300ms לסשן, גם בהקלדה רצופה. `sectionIndices` הוא רשימה ממוינת וללא כפילויות
+של כל הפסקאות ששונו מאז האירוע הקודם (עריכה מובנית, restore ו־reset), ו־`revision`
+הוא האחרון. `getCorrectionSession` שולחת אירוע ממתין לפני שהיא חוזרת. בסיום הסשן
+אירוע ממתין אינו מובטח: `correctionSessionEnded` נושא את ה־snapshot הסופי.
 
 ### Event: `reader.correctionSessionEnded`
 
 אירוע ממוקד לבעלים בלבד, ללא הרשאת subscribe נפרדת, מ־`0.9.99`.
-כולל `{ sessionId, reason, snapshot }`; הסיבות הן `explicit`, `tab_closed`
-ו־`plugin_unavailable`. סגירת לשונית, הסרת תוסף, השבתתו או ביטול הרשאה מנקים
-סשנים. האירוע אינו הבטחת התמדה: תוסף שכבר נסגר או הושבת עשוי שלא לקבל אותו.
-`snapshot` הוא המצב האחרון, כולל ההקלדה האחרונה. התוסף אחראי לשמירה שוטפת,
-לשחזור ולשליחה; אין אחסון התאוששות נוסף בצד אוצריא.
+כולל `{ sessionId, reason, snapshot }`. הסיבות:
+
+| `reason` | מתי |
+|---|---|
+| `explicit` | התוסף קרא `endCorrectionSession` |
+| `user` | המשתמש סיים את העריכה מהממשק של אוצריא |
+| `tab_closed` | הלשונית נסגרה |
+| `plugin_unavailable` | התוסף הוסר, הושבת או שהרשאת `reader.local_edit` בוטלה |
+| `window_closed` | חלון משני שהסשן בו נסגר |
+| `ownership_lost` | ה־lease על הטיוטה אבד (ראו מגבלות עמידות); השינויים שאחרי האובדן לא נשמרו |
+
+האירוע נשלח אחרי השמירה האחרונה ושחרור ה־lease, ו־`snapshot` הוא המצב הסופי,
+כולל `draft`. האירוע אינו הבטחת מסירה: תוסף שכבר נסגר או הושבת עשוי שלא
+לקבל אותו. במקרה כזה הטיוטה נשארת, ומגלים אותה ב־`listCorrectionDrafts`.
+
+### חוזה שמירה והתאוששות של טיוטות תיקון
+
+אוצריא שומרת את המצב המלא של כל סשן בטיוטה עמידה בבעלותה (במסד המקומי של
+התוספים), במפתח `draftId` יציב שנגזר מהתוסף ומ־`bookUid`. אותו תוסף ואותו ספר
+מקבלים אותו `draftId` בכל סשן, לשונית, חלון והפעלה. התוסף אינו נדרש לשמור טיוטה
+בעצמו כדי לא לאבד הקלדה; עליו לאשר כל גרסה אחרי שטיפל בה.
+
+- **כתיבה.** הכתיבות לכל סשן סדרתיות, ותמיד של המצב האחרון; כתיבה ישנה אינה דורסת
+  חדשה. קצב הכתיבה מוגבל לכל היותר לאחת לכל 250ms (הגבלת קצב, לא debounce).
+  כשל כתיבה מוצג למשתמש ומנוסה שוב אוטומטית (1, 2, 5, 10, 30 שניות).
+- **`draft.persisted`** הוא true רק כאשר ה־commit האחרון שמר בדיוק את `revision`
+  הנוכחי. `pending` מציין כתיבה מתוזמנת או בביצוע, ו־`error` את כשל הכתיבה האחרון.
+- **`draft.version`** היא גרסה עמידה של ה־commit האחרון, ממונה גלובלי עולה
+  שאינו חוזר לעולם — גם לא אחרי מחיקת טיוטה ויצירתה מחדש. `null` עד ה־commit
+  הראשון. `getCorrectionSession` ו־`endCorrectionSession` ממתינות עד 3 שניות לשמירה,
+  כך שכאשר `persisted` true, `version` מתאימה בדיוק לתוכן ה־snapshot.
+- **סיום אינו מוחק.** סיום סשן מכל סיבה משאיר את הטיוטה. רק
+  `acknowledgeCorrectionDraft` עם ה־`version` הנוכחית בדיוק מנקה אותה.
+- **אישור.** פירושו "התוסף שמר את המצב הזה" (באחסון שלו או בדיווח שבתור) — **לא**
+  שדיווח הגיע לאתר. גרסה ישנה מחזירה `error.revision_conflict` ואינה מוחקת שינוי
+  חדש יותר; אישור חוזר של אותה גרסה מחזיר `duplicate: true`. אישור בזמן סשן פעיל
+  אינו עוצר את העריכה, ועריכה שאחריו יוצרת גרסה חדשה שוב ממתינה לאישור.
+- **שחזור.** `beginCorrectionSession` על ספר שיש לו טיוטה שלא אושרה מחזירה
+  `recovery`. כל שינוי נבדק מחדש מול המקור הגולמי הנוכחי לפי `sectionIndex`:
+  שינוי ש־`originalSourceText` ו־`originalText` שלו זהים למקור מוחל מחדש — שינוי
+  גרסת ספרייה לבדו אינו פוסל אותו. שינוי שלא ניתן לאמת עובר ל־`draft.conflicts`
+  עם `reason`: `source_changed` (המקור השתנה), `not_found` (הפסקה אינה קיימת),
+  `invalid` (נתונים פגומים או הצעה שאינה נתמכת) או `unverifiable` (קריאת המקור
+  נכשלה). התנגשויות נשמרות עד אישור ומוחזרות בכל snapshot; הן אינן מוצגות בספר.
+  לאחר שחזור `revision` הוא 1 ונוצרת גרסה חדשה; השחזור עצמו אינו שולח
+  `correctionSessionChanged`.
+- **גילוי.** `listCorrectionDrafts` ו־`getCorrectionDraft` מאפשרות למצוא טיוטות
+  שאירוע הסיום שלהן לא נמסר (קריסה, תוסף סגור), בלי לפתוח לשונית.
+- **בעלות.** טיוטות שייכות לתוסף; תוסף אחר מקבל `error.not_found` גם אם ידוע לו
+  ה־`draftId`. סשן פעיל אחד לכל תוסף+`bookUid` בכל הלשוניות והחלונות; ניסיון נוסף
+  מקבל `error.correction_busy`. אחרי קריסה, ה־lease של התהליך שקרס פג בתוך כ־20 שניות,
+  ועד אז הפתיחה מחזירה `error.correction_busy`.
+- **ניקוי.** הסרת התוסף או איפוס נתוניו, באישור המשתמש, מוחקים את טיוטותיו.
+
+**מגבלות עמידות:**
+
+- בקריסת תהליך עלולים לאבוד עד כ־250ms של ההקלדה האחרונה, ועוד זמן הכתיבה שבביצוע.
+- המסד פועל ב־WAL עם `synchronous=NORMAL`: בהפסקת חשמל או קריסת מערכת ההפעלה
+  ה־commit האחרון עלול לאבוד (המסד נשאר תקין).
+- אם ה־lease אבד (למשל התהליך הושהה מעבר לתוקף וחלון אחר פתח את הספר), השמירה
+  נעצרת, המשתמש מקבל הודעה והסשן מסתיים ב־`ownership_lost`. השינויים שאחרי האובדן
+  נשארים רק ב־snapshot של אירוע הסיום.
+
+### `reader.acknowledgeCorrectionDraft`
+
+**גרסת מינימום:** `0.9.99`. **הרשאה:** `reader.local_edit`. מקבלת
+`{ draftId: string, version: int }`; מפתחות אחרים נדחים ב־`error.invalid_params`.
+אינה דורשת סשן או לשונית פתוחים, ופועלת גם אחרי סיום הסשן.
+
+```javascript
+const ended = await rpc('reader.endCorrectionSession', {
+  sessionId, expectedRevision: snapshot.revision,
+});
+await saveToPluginStorage(ended);           // או שליחה / הכנסה לתור
+if (ended.draft.persisted) {
+  await rpc('reader.acknowledgeCorrectionDraft', {
+    draftId: ended.draft.draftId,
+    version: ended.draft.version,
+  });
+}
+```
+
+```json
+{ "draftId": "hR2…", "version": 42, "acknowledged": true, "duplicate": false }
+```
+
+| מצב | תוצאה |
+|---|---|
+| `version` היא הגרסה הנוכחית | התוכן וההתנגשויות נמחקים; `duplicate: false` |
+| אותה גרסה כבר אושרה | `duplicate: true`, ללא שינוי |
+| הגרסה אינה הנוכחית | `error.revision_conflict` (יש לקרוא את הטיוטה מחדש) |
+| אין טיוטה, או שהיא של תוסף אחר | `error.not_found` |
+| כשל במסד | `error.storage_failed` |
+
+### `reader.listCorrectionDrafts`
+
+**גרסת מינימום:** `0.9.99`. **הרשאה:** `reader.local_edit`. מקבלת `{}` ומחזירה
+`{ drafts }` — הטיוטות של התוסף הקורא שיש בהן תוכן או התנגשויות שלא אושרו, מהחדשה
+לישנה, ללא התוכן עצמו:
+
+```json
+{
+  "drafts": [
+    {
+      "draftId": "hR2…",
+      "bookId": "בראשית",
+      "bookUid": "id:1",
+      "bookSource": "library",
+      "libraryVersion": "1",
+      "version": 42,
+      "updatedAt": "2026-10-17T09:12:44.120Z",
+      "active": false,
+      "changeCount": 1,
+      "conflictCount": 1
+    }
+  ]
+}
+```
+
+`active` הוא true כשסשן חי (בכל לשונית או חלון) מחזיק בטיוטה.
+
+### `reader.getCorrectionDraft`
+
+**גרסת מינימום:** `0.9.99`. **הרשאה:** `reader.local_edit`. מקבלת `{ draftId }`
+ומחזירה את אותם שדות מטא־דאטה, ובמקום המונים את `changes` ו־`conflicts` המלאים.
+`version` היא הגרסה לאישור. טיוטה שאושרה, שאין בה תוכן או שאינה של התוסף מחזירה
+`error.not_found`.
 
 ### `reader.getSectionTextMap`
 **הרשאה:** `reader.open`
