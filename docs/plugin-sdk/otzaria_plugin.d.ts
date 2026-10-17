@@ -2040,14 +2040,24 @@ export interface SubmitBookCorrectionParams {
   details?: string;
   allowQueue?: boolean;
   forceFreeText?: boolean;
+  /**
+   * Reject with `error.text_correction_unavailable` (nothing sent or queued)
+   * instead of falling back to `free_text`. Cannot be combined with
+   * `forceFreeText: true` (`error.invalid_params`).
+   */
+  requireTextCorrection?: boolean;
 }
 
 export interface SubmitBookCorrectionResult {
+  /** `sent`: delivered now. `queued`: stored in Otzaria's local queue. */
   status: 'sent' | 'queued';
   reportId: string;
   nativeReportId: string;
   message: string;
   duplicate: boolean;
+  /** Kind of report built and sent/queued; not proof of server acceptance. */
+  reportKind: 'text_correction' | 'free_text';
+  /** Server verdict for `sent` only; `null` while `queued`. */
   correctionSupported: boolean | null;
 }
 

@@ -3542,7 +3542,12 @@ const result = await Otzaria.call('feedback.submitBookCorrection', {
 - נתמכים רק ספרי טקסט רשמיים ממסד הספרייה, ללא ספר אישי, מסד מצורף, קובץ חיצוני או מהדורה חלופית. גוף הדיווח מוגבל ל־256 KiB UTF-8.
 - `allowQueue` ברירת מחדל true. כאשר false, מצב מנותק או כשל רשת מחזירים `error.report_failed` ללא שמירה בתור. התוסף משאיר את הטיוטה וניסיון חוזר משתמש באותו `reportId`.
 - `forceFreeText: true` מגיש v2 חופשי גם כאשר טווח יחיד ניתן למיפוי. יש להשתמש בו בחלקים של תיקון גדול, כדי שלא ליצור הצעות שורה שלמה חלופיות עבור חלקי הוספה אחת. פירוט סדר החלקים נמצא ב־`details`.
-- תוצאה: `{status: 'sent'|'queued', reportId, nativeReportId, message, duplicate, correctionSupported}`. `queued` מעביר בעלות לשירות אוצריא; `correctionSupported` הוא null עד שיש אישור שרת. כשל או שינוי במקור מחזירים שגיאה ואינם מאשרים את התיקון.
+- `requireTextCorrection: true` (ברירת מחדל false) אוסר נפילה שקטה ל־`free_text`: אם לא ניתן לבנות `text_correction` מדויק (טווח שחוצה תגיות HTML או entity, טקסט שאינו חד־משמעי, יותר מפסקה אחת, פסקה ארוכה מדי), מתקבלת `error.text_correction_unavailable` לפני שליחה, ושום דיווח אינו נשלח או נשמר בתור. שילוב עם `forceFreeText: true` נדחה ב־`error.invalid_params`. בלי האפשרות ההתנהגות אינה משתנה.
+- לפי סקירת המתחזק של צד השרת, דיווח `free_text` מנותב באתר לדוא"ל בלבד ואינו נכנס לתור התיקונים של האתר; אוצריא אינה מאמתת זאת. תוסף שהתיקון שלו חייב להגיע לתור התיקונים צריך להעביר `requireTextCorrection: true`.
+- תוצאה: `{status: 'sent'|'queued', reportId, nativeReportId, message, duplicate, reportKind, correctionSupported}`. כשל או שינוי במקור מחזירים שגיאה ואינם מאשרים את התיקון. שלושת השדות עונים על שאלות שונות:
+  - `status` — מה קרה למשלוח: `sent` נמסר לשרת עכשיו; `queued` נשמר בתור המקומי של אוצריא וישלח בהמשך, והבעלות עליו עוברת לאוצריא.
+  - `reportKind` — `'text_correction'` או `'free_text'`: סוג הדיווח שנבנה ונשלח או נשמר בתור. זו קביעה מקומית של אוצריא ואינה אישור שהשרת קיבל אותו.
+  - `correctionSupported` — עבור `sent` בלבד: true כשנשלח `text_correction` והשרת לא דיווח שאינו תומך בו; false עבור `free_text` או כשהשרת דחה את סוג התיקון. ב־`queued` הערך null, כי עדיין אין תשובת שרת.
 - `error.report_id_conflict` מציין התנגשות בתור המקומי או HTTP 409: יש ליצור `reportId` חדש לפני ניסיון נוסף. כשל זמני משתמש באותו מזהה ובאותו תוכן.
 
 ### `feedback.hasReporterEmail`

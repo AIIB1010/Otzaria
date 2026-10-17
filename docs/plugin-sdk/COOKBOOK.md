@@ -723,4 +723,30 @@ snapshot שיש לשמור. באתחול הבא קוראים את `correction.dr
 אינם זמינים לספר עם סשן פעיל. `getSectionTextMap` עם `layer: 'source'` וללא מפת
 מקור נשארת קריאת מקור רשמי. אין אחסון התאוששות בצד אוצריא.
 
+### שליחת התיקון כ־`text_correction` בלבד
+
+`feedback.submitBookCorrection` בונה `text_correction` רק כששינוי בפסקה אחת ממופה
+במדויק למקור; אחרת הוא נשלח כ־`free_text`. לפי סקירת המתחזק של צד השרת (לא
+מאומת באוצריא), `free_text` מגיע לדוא"ל בלבד ולא לתור התיקונים של האתר. כדי לדחות
+את הנפילה הזו מעבירים `requireTextCorrection: true`:
+
+```javascript
+try {
+  // כאן reportKind תמיד 'text_correction'; status מבחין בין sent ל־queued.
+  return await rpc('feedback.submitBookCorrection', {
+    ...correction,
+    requireTextCorrection: true,
+  });
+} catch (error) {
+  if (error.code === 'error.text_correction_unavailable') {
+    // לא נשלח ולא נשמר בתור: להציע לצמצם את הטווח או לשלוח כדיווח חופשי.
+  }
+  throw error;
+}
+```
+
+`status` מתאר את המשלוח (`sent` עכשיו או `queued` לשליחה מאוחרת), `reportKind`
+את סוג הדיווח שנבנה, ו־`correctionSupported` את תשובת השרת — רק עבור `sent`; ב־`queued`
+הוא null. אין לשלב `requireTextCorrection` עם `forceFreeText: true`.
+
 > זקוקים ל-API נוסף או לדפוס עיצוב נוסף? כתבו לנו ב-[GitHub Issues](https://github.com/Otzaria/otzaria/issues) עם התג `plugin-sdk`.
