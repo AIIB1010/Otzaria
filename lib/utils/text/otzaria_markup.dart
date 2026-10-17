@@ -72,7 +72,7 @@ const String kBookLinkScheme = 'book';
 /// האם [href] הוא קישור "העתק קישור ישיר" שפותח ספר (`otzaria://open/book/…`
 /// או `otzaria://open/pdf/…`). שאר פעולות `otzaria://` אינן נגישות מתוכן ספר.
 bool isOtzariaBookLink(String href) {
-  // userInfo נפסל: `otzaria://note@open/…` היה עובר כאן ונתפס בקורא כ-`otzaria://note`.
+  // userInfo משנה את זיהוי הפעולה בקורא ולכן חייב להיפסל.
   final uri = Uri.tryParse(href.trim());
   if (uri == null ||
       uri.scheme != 'otzaria' ||
@@ -81,10 +81,15 @@ bool isOtzariaBookLink(String href) {
       uri.hasPort) {
     return false;
   }
-  final segments = uri.pathSegments;
-  return segments.length == 2 &&
-      (segments.first == 'book' || segments.first == 'pdf') &&
-      segments.last.isNotEmpty;
+  try {
+    // tryParse אינו מפענח את קידוד ה-UTF-8 של מקטעי הנתיב.
+    final segments = uri.pathSegments;
+    return segments.length == 2 &&
+        (segments.first == 'book' || segments.first == 'pdf') &&
+        segments.last.isNotEmpty;
+  } on FormatException {
+    return false;
+  }
 }
 
 /// מסנן יעד קישור שהגיע מתוך המסמך, או `null` כשאין לכתוב `<a>` כלל.

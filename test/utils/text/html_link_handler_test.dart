@@ -228,6 +228,10 @@ void main() {
       for (final url in const [
         'otzaria://open/book',
         'otzaria://open/book/',
+        'otzaria://open/book/%FF',
+        'otzaria://open/pdf/%FF',
+        'otzaria://open/book/%D7',
+        'otzaria://open/b%FFok/12',
         'otzaria://open/settings/about',
         'otzaria://open/plugin/x',
         'otzaria://plugin/install?url=https%3A%2F%2Fexample.com%2Fp.otzplugin',
