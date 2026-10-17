@@ -1049,7 +1049,8 @@ begin
       exit;
     Stream := TFileStream.Create(Path, fmOpenRead or fmShareDenyWrite);
     try
-      Left := Stream.Size;
+      Left := Stream.Seek(Int64(0), soFromEnd);
+      Stream.Seek(Int64(0), soFromBeginning);
       SetLength(Buffer, CopyChunkSize);
       while Left > 0 do
       begin
