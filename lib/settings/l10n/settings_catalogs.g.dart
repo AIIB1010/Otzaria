@@ -699,6 +699,7 @@ const Map<String, Map<String, String>> kSettingsCatalogs = {
     'טקסט': 'Text',
     'טרם נבחר מיקום': 'No Location Chosen Yet',
     'י-ה-ו-ה יוצג כ-י-ק-ו-ק': 'The Divine Name is shown in a substituted spelling',
+    'ידוד': 'Y-Dalet-V-Dalet',
     'יומי': 'Daily',
     'יומן מקישור (ICS)': 'Calendar from link (ICS)',
     'יומן שינויים': 'Changelog',
