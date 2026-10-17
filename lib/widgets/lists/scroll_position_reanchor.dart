@@ -53,6 +53,11 @@ class _ScrollPositionReanchorState extends State<ScrollPositionReanchor> {
   double? _lastWidth;
   double? _selectedEdge;
   bool _holdSelectedEdge = false;
+  ScrollableState? _scrollable;
+
+  bool get _isScrolling =>
+      _scrollable?.mounted == true &&
+      _scrollable!.position.isScrollingNotifier.value;
 
   /// החוב שייך למקור הגלילה המקוננת; ניווט שמפרק אותו משנה גם את העוגן.
   ({double pixels, BuildContext? context})? _owedAt;
@@ -70,6 +75,7 @@ class _ScrollPositionReanchorState extends State<ScrollPositionReanchor> {
     final listenerChanged =
         widget.positionsListener != oldWidget.positionsListener;
     if (listenerChanged) {
+      _scrollable = null;
       oldWidget.positionsListener.itemPositions.removeListener(_onPositions);
       widget.positionsListener.itemPositions.addListener(_onPositions);
     }
@@ -117,11 +123,18 @@ class _ScrollPositionReanchorState extends State<ScrollPositionReanchor> {
       edge = owed.itemLeadingEdge;
     }
     // קפיצה לפני שהגלילה נחה מפילה את layout cycles של החבילה.
-    if (_idleTimer?.isActive ?? false) return;
-    _owedAt = null;
+    if (_isScrolling || (_idleTimer?.isActive ?? false)) return;
     final (targetIndex, alignment) = (index, edge);
+    // גם גלגלת שהסתיימה באותו פריים מבטלת את העיגון המתוזמן.
+    final pixels = _pixels;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !widget.scrollController.isAttached) return;
+      if (!mounted ||
+          !widget.scrollController.isAttached ||
+          _isScrolling ||
+          _pixels != pixels) {
+        return;
+      }
+      _owedAt = null;
       _lastIndex = targetIndex;
       _lastAlignment = alignment;
       widget.scrollController.jumpTo(index: targetIndex, alignment: alignment);
@@ -160,6 +173,18 @@ class _ScrollPositionReanchorState extends State<ScrollPositionReanchor> {
           return false;
         }
         final metrics = notification.metrics;
+        if (notification.context != null) {
+          _scrollable = Scrollable.maybeOf(notification.context!);
+        }
+        final edge = _selectedEdge;
+        if (_holdSelectedEdge &&
+            edge != null &&
+            notification is ScrollUpdateNotification) {
+          final moved =
+              edge -
+              (notification.scrollDelta ?? 0) / metrics.viewportDimension;
+          _selectedEdge = moved >= 0 && moved <= 1 ? moved : null;
+        }
         _pixels = metrics.pixels;
         final owedAt = _owedAt;
         // רשימה מקוננת אינה גבוהה מהמסך, ולכן שני מסכים ממנה היא כבר מחוצה לו.
@@ -167,9 +192,8 @@ class _ScrollPositionReanchorState extends State<ScrollPositionReanchor> {
             (_pixels - owedAt.pixels).abs() >= 2 * metrics.viewportDimension) {
           _owedAt = null;
         }
-        // `pixels` הוא ההיסט מהעוגן, והוא מתאפס בכל עיגון. כל עוד לא
-        // התרחקנו ממנו מסך שלם, שינוי רוחב יזיז את הטקסט פחות ממסך —
-        // ועיגון כאן היה בונה מחדש את כל טווח המטמון על כל נקישת גלגלת.
+        // pixels מתאפס בעיגון. מתחת למסך מהעוגן הסחיפה מוגבלת, ואילו כל
+        // עיגון בונה מחדש את טווח המטמון — לכן לא מעגנים על כל נקישה.
         if (metrics.pixels.abs() < metrics.viewportDimension) return false;
         _idleTimer?.cancel();
         _idleTimer = Timer(ScrollPositionReanchor.idleDelay, _reanchor);
