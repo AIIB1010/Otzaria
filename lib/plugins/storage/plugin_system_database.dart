@@ -6,6 +6,7 @@ import 'package:otzaria/plugins/models/plugin_valid_permissions.dart';
 import 'package:otzaria/plugins/models/plugin_permission_grant.dart';
 import 'package:otzaria/plugins/models/plugin_published_record.dart';
 import 'package:otzaria/migration/database/sqlite3_utils.dart';
+import 'package:otzaria/plugins/storage/plugin_correction_draft_store.dart';
 
 class PluginSystemDatabase {
   PluginSystemDatabase._();
@@ -131,6 +132,9 @@ class PluginSystemDatabase {
         created_at TEXT NOT NULL
       )
     ''');
+
+    // 6. טיוטות תיקון מקומיות — נכתבות דרך PluginCorrectionDraftRepository.
+    PluginCorrectionDraftStore.createSchema(db);
   }
 
   // --- CRUD for Installed Plugins ---
