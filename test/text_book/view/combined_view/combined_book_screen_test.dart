@@ -23,7 +23,6 @@ import 'package:otzaria/data/repository/text_book_repository.dart';
 import 'package:otzaria/text_book/view/combined_view/combined_book_screen.dart';
 import 'package:otzaria/text_book/view/selection/enhanced_gesture_detector.dart';
 import 'package:otzaria/text_book/view/selection/selection_sync_controller.dart';
-import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:otzaria/text_book/view/widgets/continuous_reading_paragraph.dart';
 import 'package:otzaria/text_display/text_display_exports.dart';
 import 'package:otzaria/widgets/misc/app_context_menu.dart';
@@ -68,10 +67,6 @@ void main() {
             supportsContinuousReadingMode: true,
             continuousReadingMode: continuous,
             showSplitView: splitView,
-            readingSegments: buildReadingSegments(
-              source,
-              continuous: continuous,
-            ),
           );
           final blocs = List.generate(2, (_) => _RecordingTextBookBloc(state));
           final tabs = List.generate(
@@ -148,7 +143,9 @@ void main() {
                 ? tester
                       .widgetList<ContinuousReadingParagraph>(descendants)
                       .expand(
-                        (paragraph) => paragraph.lines.map((line) => line.text),
+                        (paragraph) => paragraph.lines.map(
+                          (line) => line.htmlText ?? line.text,
+                        ),
                       )
                       .toList()
                 : tester
@@ -309,13 +306,13 @@ void main() {
           );
           editor.focusNode!.unfocus();
           if (!continuous) {
-            tabs.first.scrollController.jumpTo(index: 30);
+            tabs.first.lines.itemController.jumpTo(index: 30);
             await tester.pumpAndSettle();
             expect(
               displayed(0).join(' '),
               isNot(contains('עריכה ישירה אחרונה 😀ק')),
             );
-            tabs.first.scrollController.jumpTo(index: 0);
+            tabs.first.lines.itemController.jumpTo(index: 0);
             await tester.pumpAndSettle();
             expect(displayed(0).join(' '), contains('עריכה ישירה אחרונה 😀ק'));
           }
