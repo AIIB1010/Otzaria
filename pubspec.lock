@@ -1224,10 +1224,10 @@ packages:
     dependency: "direct main"
     description:
       name: opentype_shaper
-      sha256: "0d9473aa5eee89d4b731811129d23ef7fa95e87f1ad63a935f3ff53799e29e45"
+      sha256: "9925b6e8023bb490bcbfc7743d0bea2b91774fdfdbbf7f40aa3b5acf5c0fe388"
       url: "https://pub.dev"
     source: hosted
-    version: "0.3.0"
+    version: "0.3.1"
   otzaria_ashurit:
     dependency: "direct main"
     description:
