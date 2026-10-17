@@ -80,9 +80,8 @@ class SemanticVectorsReleaseLocator {
     }
   }
 
-  /// ה-deltas מ-[installedVersion] אל ה-base [target], לפי סדר ההתקנה; `null`
-  /// כשה-base עדיף: משפחה בלי deltas, release חסר או פגום, זהות אחרת, דילוג
-  /// אל מתחת ל-[installedVersion], או שרשרת מעבר ל-[kSemanticDeltaChainLimits].
+  /// ה-deltas מ-[installedVersion] אל [target] לפי סדר ההתקנה; `null` — ה-base
+  /// עדיף. כשל רשת נזרק: base של כמה GB אינו תחליף לניסיון חוזר.
   Future<List<SemanticVectorsRelease>?> findDeltaChain({
     required SemanticVectorsRelease target,
     required int installedVersion,
@@ -132,10 +131,19 @@ class SemanticVectorsReleaseLocator {
         if (to > installedVersion) tag = await tagOf(to);
       }
       return chain;
-    } catch (error) {
-      if (error is Error) rethrow;
-      // ה-base כבר נמצא, ונכסיו אינם נספרים במכסת ה-API.
-      debugPrint('[SemanticSearch] delta chain unavailable: $error');
+    } on SemanticFailure catch (failure) {
+      if (!const {
+        SemanticFailureKind.releaseMalformed,
+        SemanticFailureKind.unsupportedRelease,
+        SemanticFailureKind.artifactNotPublished,
+        SemanticFailureKind.releaseUnverified,
+      }.contains(failure.kind)) {
+        rethrow;
+      }
+      debugPrint('[SemanticSearch] delta chain unusable: $failure');
+      return null;
+    } on FormatException catch (error) {
+      debugPrint('[SemanticSearch] delta chain unusable: $error');
       return null;
     } finally {
       client.close();
@@ -340,8 +348,13 @@ class SemanticVectorsReleaseLocator {
       _ when kind == 'base' => 0,
       _ => throw _malformed('fromLibraryVersion missing'),
     };
-    if (kind == 'delta' && fromVersion >= toVersion) {
-      throw _malformed('delta v$fromVersion-v$toVersion goes backwards');
+    if (kind == 'delta') {
+      final named = _deltaManifest.firstMatch(manifestName)!;
+      if (fromVersion >= toVersion ||
+          int.parse(named.group(1)!) != fromVersion ||
+          int.parse(named.group(2)!) != toVersion) {
+        throw _malformed('$manifestName holds v$fromVersion-v$toVersion');
+      }
     }
     if (toVersion != libraryVersion ||
         manifest['libraryReleaseTag'] != libraryTag) {

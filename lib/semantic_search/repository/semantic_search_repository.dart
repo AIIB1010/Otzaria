@@ -152,6 +152,9 @@ class SemanticSearchRepository {
   SemanticCancelHandle _jobCancel = SemanticCancelHandle();
   Future<void>? _compaction;
   SemanticCancelHandle _compactCancel = SemanticCancelHandle();
+
+  /// ה-base שהשרשרת אליו נכשלה; אליו מורידים base בלבד.
+  String? _deltaChainFailedFor;
   SemanticAvailabilityPhase? _jobPhase;
   SemanticDownloadProgress? _jobProgress;
 
@@ -297,6 +300,7 @@ class SemanticSearchRepository {
     _busyRetry?.cancel();
     await _job;
     await _stopCompaction();
+    _busyRetry?.cancel();
     _cancelAllSearches();
     await _closeSession();
     await _settings.setDataEnabled(false);
@@ -389,6 +393,7 @@ class SemanticSearchRepository {
     _jobCancel.cancel();
     await _job;
     await _stopCompaction();
+    _busyRetry?.cancel();
     _cancelAllSearches();
     await _closeSession();
     _vectors = null;
@@ -801,10 +806,12 @@ class SemanticSearchRepository {
     }
     if (release == null && !installed.present) return;
 
-    // deltas רק מהרשת: מסייע ההורדה מכין base בלבד.
+    // deltas רק מהרשת: נתונים מוכנים של מסייע ההורדה הם base, והוא גובר.
     final chain =
         release != null &&
             identical(release, onlineRelease) &&
+            !_jobFromStaged &&
+            _deltaChainFailedFor != release.releaseTag &&
             !_needsRepair &&
             installed.present &&
             installedFamily == release.family &&
@@ -851,9 +858,19 @@ class SemanticSearchRepository {
     var done = vectorsStart ?? _jobModelBytes;
     await _ensureDiskSpace(downloadDir.path, plan, done);
     for (final release in plan) {
-      final segment = await _downloadVectors(downloadDir.path, release, done);
-      if (_jobCancel.isCancelled) return;
-      if (!await _installStep(paths, release, segment)) {
+      bool installed;
+      try {
+        final segment = await _downloadVectors(downloadDir.path, release, done);
+        if (_jobCancel.isCancelled) return;
+        installed = await _installStep(paths, release, segment, done);
+      } catch (error, stackTrace) {
+        if (chain == null || !_isBrokenDelta(error)) rethrow;
+        _log('delta ${release.releaseTag}', error, stackTrace);
+        installed = false;
+      }
+      if (!installed) {
+        // בלי זה כל עבודה הייתה מחשבת שוב את אותה שרשרת ונכשלת בה.
+        _deltaChainFailedFor = base.releaseTag;
         _jobTotalBytes = done + base.downloadSize;
         return _installRelease(paths, base, vectorsStart: done);
       }
@@ -874,16 +891,18 @@ class SemanticSearchRepository {
   }
 
   /// מתקין release אחד מ-[segment]; `false` כש-delta אינו ממשיך את הסט.
+  /// [before] — הבתים שנספרו לפני ההורדה של [release].
   Future<bool> _installStep(
     SemanticPaths paths,
     SemanticVectorsRelease release,
     String segment,
+    int before,
   ) async {
     final family = release.family;
     final identity = await _loadIdentity(family);
     _setJob(
       SemanticAvailabilityPhase.installing,
-      _progressOf(SemanticDownloadItem.install, _jobTotalBytes),
+      _progressOf(SemanticDownloadItem.install, before + release.downloadSize),
     );
     final repair = _needsRepair;
     // ב-Windows אי אפשר להחליף קובץ ממופה, ומשפחה אחרת נפתחת עם model.json אחר.
@@ -979,6 +998,20 @@ class SemanticSearchRepository {
     _compactCancel.cancel();
     await _compaction;
   }
+
+  /// delta פגום או נדחה: ה-base מחליף אותו. רשת, מקום וביטול — לא.
+  static bool _isBrokenDelta(Object error) => switch (error) {
+    PatchDownloadException() => true,
+    SemanticFailure(:final kind) => !const {
+      SemanticFailureKind.cancelled,
+      SemanticFailureKind.vectorsBusy,
+      SemanticFailureKind.insufficientDiskSpace,
+      SemanticFailureKind.offline,
+      SemanticFailureKind.network,
+      SemanticFailureKind.rateLimited,
+    }.contains(kind),
+    _ => false,
+  };
 
   static int _downloadSizeOf(List<SemanticVectorsRelease> plan) =>
       plan.fold(0, (sum, release) => sum + release.downloadSize);

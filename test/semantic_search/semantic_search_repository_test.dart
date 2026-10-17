@@ -17,6 +17,8 @@ import 'package:otzaria/semantic_search/models/semantic_vectors_family.dart';
 import 'package:otzaria/semantic_search/models/semantic_vectors_release.dart';
 import 'package:otzaria/semantic_search/repository/semantic_search_repository.dart';
 import 'package:path/path.dart' as p;
+import 'package:seforim_library_updater/seforim_library_updater.dart'
+    show PatchDownloadException;
 
 import 'semantic_test_support.dart';
 
@@ -1143,9 +1145,14 @@ void main() {
         delta(30),
       ]);
 
-      await update();
+      await repository.enableAndDownload();
 
-      expect(backend.installRequests, hasLength(2));
+      // אינו כשל ואינו נפילה ל-base: הצעד הבא בשרשרת מותקן.
+      expect(backend.installRequests.map((r) => r.manifestJson), [
+        for (final release in chainTo30()) release.manifestJson,
+      ]);
+      expect(downloads.urls, isNot(contains('https://github.test/vectors/0')));
+      expect(repository.availability.failure, isNull);
       expect(backend.vectors.libraryVersion, 30);
       expect(repository.availability.phase, SemanticAvailabilityPhase.ready);
     });
@@ -1178,7 +1185,7 @@ void main() {
       });
     }
 
-    test('כשל אחר ב-delta אינו מוריד base', () async {
+    test('delta פגום — base, וגם העבודה הבאה אינה חוזרת לשרשרת', () async {
       locator.chain = chainTo30();
       backend.installFailures.add(
         const SemanticFailure(SemanticFailureKind.artifactCorrupt),
@@ -1186,8 +1193,92 @@ void main() {
 
       await update();
 
+      expect(downloads.urls, [
+        'https://github.test/delta/28-29',
+        'https://github.test/vectors/0',
+      ]);
+      expect(backend.installRequests.last.manifestJson, '{"kind":"base"}');
+      expect(settings.skippedVectorsRelease, isNull);
+
+      // הסט חזר ל-v28 (למשל שחזור הדור הקודם): שוב base, בלי השרשרת.
+      backend.vectors = SemanticVectorsSummary(
+        present: true,
+        identityDigest: digest,
+        libraryVersion: 28,
+        libraryReleaseTag: 'v28-20260930165019',
+      );
+      downloads.urls.clear();
+      await update();
+
+      expect(locator.chainLookups, hasLength(1));
+      expect(downloads.urls, ['https://github.test/vectors/0']);
+    });
+
+    test('SHA שגוי בהורדת delta — base', () async {
+      locator.chain = chainTo30();
+      final urls = <String>[];
+      repository = buildRepository(
+        root: root,
+        backend: backend,
+        settings: settings,
+        locator: locator,
+        download:
+            ({
+              required url,
+              required destPath,
+              required resumeIdentity,
+              expectedSize,
+              expectedSha256,
+              onProgress,
+              isCancelled,
+            }) async {
+              urls.add(url);
+              if (url.contains('/delta/')) {
+                throw PatchDownloadException('sha mismatch');
+              }
+              await File(destPath).create(recursive: true);
+            },
+      );
+
+      await update();
+
+      expect(urls, [
+        'https://github.test/delta/28-29',
+        'https://github.test/vectors/0',
+      ]);
+      expect(backend.installRequests.single.manifestJson, '{"kind":"base"}');
+    });
+
+    test('כשל רשת בהורדת delta אינו מוריד base', () async {
+      locator.chain = chainTo30();
+      downloads.error = const SocketException('offline');
+
+      await repository.enableAndDownload();
+
       expect(downloads.urls, ['https://github.test/delta/28-29']);
-      expect(backend.installRequests, hasLength(1));
+      expect(backend.installRequests, isEmpty);
+      expect(
+        repository.availability.failure?.kind,
+        SemanticFailureKind.network,
+      );
+    });
+
+    test('התקדמות השרשרת אינה חוזרת אחורה', () async {
+      locator.chain = chainTo30();
+      backend.installResults.addAll([delta(29), delta(30)]);
+      final seen = <double>[];
+      final sub = repository.availabilityChanges.listen((availability) {
+        final fraction = availability.progress?.fraction;
+        if (fraction != null) seen.add(fraction);
+      });
+
+      await repository.enableAndDownload();
+      await sub.cancel();
+
+      for (var i = 1; i < seen.length; i++) {
+        expect(seen[i], greaterThanOrEqualTo(seen[i - 1]));
+      }
+      expect(seen.last, 1.0);
     });
 
     test('המקום בכונן נבדק לכל השרשרת', () async {

@@ -663,6 +663,12 @@ class _DeltaServer {
   String identityDigest = _windowsDigest;
   String? notesSha;
 
+  /// `fromLibraryVersion` שהמניפסט מצהיר במקום הגרסה שבשמו.
+  int? manifestFrom;
+
+  /// תשובה במקום ה-release של ה-delta.
+  http.Response? deltaResponse;
+
   String _manifestName(int from, int to) =>
       'otzaria-vectors-5d1e7a20-v$from-v$to.manifest.json';
 
@@ -674,7 +680,7 @@ class _DeltaServer {
         'model': {'chunking_identity': _windowsChunking},
       },
       'identityDigest': identityDigest,
-      'fromLibraryVersion': delta.from,
+      'fromLibraryVersion': manifestFrom ?? delta.from,
       'toLibraryVersion': to,
       'libraryReleaseTag': _libraryTagOf(to),
       'segment': {'sha256': 'cd' * 32, 'size': delta.size * 2},
@@ -709,6 +715,8 @@ class _DeltaServer {
     if (tag != null) {
       final to = int.parse(tag.group(1)!);
       final delta = deltas[to];
+      final override = deltaResponse;
+      if (override != null) return override;
       if (delta == null) return http.Response('{}', 404);
       final name = _manifestName(delta.from, to);
       final segment = 'otzaria-vectors-5d1e7a20-v${delta.from}-v$to.oxv.zst';
@@ -847,5 +855,41 @@ void _deltaChainTests() {
       isNull,
     );
     expect(server.requested, isEmpty);
+  });
+
+  for (final from in [30, 31, 28]) {
+    test('מניפסט שמצהיר v$from-v30 בשם v29-v30 — base', () async {
+      final server = _DeltaServer()
+        ..deltas[30] = (from: 29, size: 1)
+        ..manifestFrom = from;
+
+      expect(await server.chain(29), isNull);
+    });
+  }
+
+  test('חסימת מכסה בגילוי השרשרת נזרקת, לא base', () async {
+    final server = _DeltaServer()
+      ..deltas[30] = (from: 29, size: 1)
+      ..deltaResponse = http.Response(
+        '',
+        403,
+        headers: {'x-ratelimit-remaining': '0'},
+      );
+
+    await expectLater(
+      server.chain(29),
+      throwsA(isA<GithubRateLimitException>()),
+    );
+  });
+
+  test('שגיאת שרת בגילוי השרשרת נזרקת, לא base', () async {
+    final server = _DeltaServer()
+      ..deltas[30] = (from: 29, size: 1)
+      ..deltaResponse = http.Response('oops', 502);
+
+    await expectLater(
+      server.chain(29),
+      throwsA(isA<http.ClientException>()),
+    );
   });
 }

@@ -409,43 +409,62 @@ void main() {
     expect(backend.installRequests, hasLength(1));
   });
 
-  test(
-    'נתונים מוכנים מותקנים כ-base גם כשמותקן סט שאפשר לקדם ב-deltas',
-    () async {
-      final digest = 'ab' * 32;
-      installModelFiles(root);
-      final manifest = jsonEncode(
-        jsonDecode(_manifest(family: SemanticVectorsFamily.windows))
-          ..['identityDigest'] = digest,
-      );
-      write(staged(kSemanticImportVectorsFolderName, _segmentName), 'segment');
-      write(staged(kSemanticImportVectorsFolderName, _manifestName), manifest);
-      markInstalledWindowsSet(root, digest);
-      final backend = FakeBackend()
-        ..supportsLongLineWindows = true
-        ..vectors = SemanticVectorsSummary(
-          present: true,
-          identityDigest: digest,
-          libraryVersion: 29,
-          libraryReleaseTag: 'v29-20260930165019',
+  for (final offline in [true, false]) {
+    test(
+      'נתונים מוכנים: base בלי שרשרת deltas (לא מקוון: $offline)',
+      () async {
+        final digest = 'ab' * 32;
+        installModelFiles(root);
+        final manifest = jsonEncode(
+          jsonDecode(_manifest(family: SemanticVectorsFamily.windows))
+            ..['identityDigest'] = digest,
         );
-      final locator = FakeLocator()..chain = [deltaRelease(29, 30)];
-      final downloads = FakeDownloads();
-      final repository = buildRepository(
-        root: root,
-        backend: backend,
-        settings: FakeSettingsStore()..isOfflineMode = true,
-        locator: locator,
-        download: downloads.call,
-      );
+        write(
+          staged(kSemanticImportVectorsFolderName, _segmentName),
+          'segment',
+        );
+        write(
+          staged(kSemanticImportVectorsFolderName, _manifestName),
+          manifest,
+        );
+        markInstalledWindowsSet(root, digest);
+        final backend = FakeBackend()
+          ..supportsLongLineWindows = true
+          ..vectors = SemanticVectorsSummary(
+            present: true,
+            identityDigest: digest,
+            libraryVersion: 29,
+            libraryReleaseTag: 'v29-20260930165019',
+          );
+        final chunking = SemanticModelIdentity.parse(
+          bundledModelJson(SemanticVectorsFamily.windows),
+        ).chunkingIdentity;
+        final online = releaseV30(
+          family: SemanticVectorsFamily.windows,
+          identityDigest: digest,
+          chunkingIdentity: chunking,
+        );
+        final locator = FakeLocator(online)..chain = [deltaRelease(29, 30)];
+        final downloads = FakeDownloads();
+        final repository = buildRepository(
+          root: root,
+          backend: backend,
+          settings: FakeSettingsStore()..isOfflineMode = offline,
+          locator: locator,
+          download: downloads.call,
+        );
 
-      await repository.enableAndDownload();
+        await repository.enableAndDownload();
 
-      expect(locator.chainLookups, isEmpty);
-      expect(downloads.urls, isEmpty);
-      expect(backend.installRequests.single.manifestJson, manifest);
-    },
-  );
+        expect(locator.chainLookups, isEmpty);
+        expect(downloads.urls.where((u) => u.contains('/delta/')), isEmpty);
+        expect(
+          backend.installRequests.single.manifestJson,
+          offline ? manifest : online.manifestJson,
+        );
+      },
+    );
+  }
 
   test('קובץ מוכן שאינו תואם — יורד מהרשת במקומו', () async {
     stageAll(segment: 'corrupted');
