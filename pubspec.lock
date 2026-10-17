@@ -1257,11 +1257,11 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "4be1999da838060adcdd18864f6e626f91bd6e86"
-      resolved-ref: "4be1999da838060adcdd18864f6e626f91bd6e86"
+      ref: "1b199a28a0f99eb1725a705809c3334ce95b6808"
+      resolved-ref: "1b199a28a0f99eb1725a705809c3334ce95b6808"
       url: "https://github.com/Otzaria/otzaria_search_engine.git"
     source: git
-    version: "4.0.0"
+    version: "4.1.0"
   package_config:
     dependency: transitive
     description:
