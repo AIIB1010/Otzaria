@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/messages/plugin_messages.dart';
 import 'package:otzaria/plugins/services/plugin_correction_session_service.dart';
+import 'package:otzaria/theme/app_surfaces.dart';
 import 'package:otzaria/widgets/smart_text/render_settings.dart';
 import 'package:otzaria/widgets/text/rtl_text_field.dart';
 
@@ -32,6 +33,7 @@ class PluginCorrectionParagraph extends StatefulWidget {
 
 class _PluginCorrectionParagraphState extends State<PluginCorrectionParagraph> {
   bool _editable = false;
+  bool _corrected = false;
   final _controller = TextEditingController();
   final _focus = FocusNode();
   String? _lastRejection;
@@ -77,6 +79,12 @@ class _PluginCorrectionParagraphState extends State<PluginCorrectionParagraph> {
     return true;
   }
 
+  bool get _isCorrected => _registry.isCorrected(
+    widget.tabId,
+    widget.sectionIndex,
+    widget.sourceText,
+  );
+
   void _changed() {
     if (!mounted) return;
     final textChanged = _syncText();
@@ -84,8 +92,12 @@ class _PluginCorrectionParagraphState extends State<PluginCorrectionParagraph> {
       widget.tabId,
       widget.sourceText,
     );
-    if (!textChanged && editable == _editable) return;
+    final corrected = _isCorrected;
+    if (!textChanged && editable == _editable && corrected == _corrected) {
+      return;
+    }
     _editable = editable;
+    _corrected = corrected;
     setState(() {});
   }
 
@@ -139,6 +151,28 @@ class _PluginCorrectionParagraphState extends State<PluginCorrectionParagraph> {
     if (!_editable) {
       return widget.original;
     }
+    _corrected = _isCorrected;
+    final colorScheme = Theme.of(context).colorScheme;
+    // מבנה קבוע: החלפת העץ בהקשה הראשונה הייתה יוצרת את שדה העריכה מחדש.
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: BorderDirectional(
+          start: _corrected
+              ? BorderSide(
+                  color: AppSurfaces.correctedParagraphMarker(colorScheme),
+                  width: 3,
+                )
+              : BorderSide.none,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsetsDirectional.only(start: 8),
+        child: _buildEditor(),
+      ),
+    );
+  }
+
+  Widget _buildEditor() {
     final settings = widget.settings;
     return RtlTextField(
       controller: _controller,

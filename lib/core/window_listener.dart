@@ -23,6 +23,7 @@ import 'package:otzaria/data/data_providers/user_books_database_holder.dart';
 import 'package:otzaria/indexing/utils/indexing_crash_canary.dart';
 import 'package:otzaria/personal_notes/storage/personal_notes_database.dart';
 import 'package:otzaria/plugins/storage/plugin_system_database.dart';
+import 'package:otzaria/plugins/services/plugin_correction_session_service.dart';
 import 'package:otzaria/plugins/services/plugin_crash_guard.dart';
 import 'package:otzaria/plugins/services/plugin_runtime_dispatcher.dart';
 import 'package:otzaria/plugins/view/webview_environment_holder.dart';
@@ -327,6 +328,9 @@ class AppWindowListener extends WindowListener {
           await TabsRepository().discardWindowSession();
         }
 
+        // המנוע נשאר חי, ולכן הכתיבות האחרונות לטיוטה ממשיכות אחרי ההסתרה.
+        PluginCorrectionSessionService.instance.endAll('window_closed');
+
         // מוסתר ולא נהרס: תוספים שממשיכים לרוץ היו צורכים משאבים ברקע.
         PluginRuntimeDispatcher.instance.setWindowShown(false);
 
@@ -351,6 +355,14 @@ class AppWindowListener extends WindowListener {
       'armForceExitWatchdog',
       _armForceExitWatchdog,
       timeout: const Duration(seconds: 1),
+    );
+
+    await _runBestEffortShutdownStep(
+      'flushCorrectionDrafts',
+      () => PluginCorrectionSessionService.instance.flushAll(
+        timeout: const Duration(seconds: 3),
+      ),
+      timeout: const Duration(seconds: 3),
     );
 
     IndexingCrashCanary.current?.finish();

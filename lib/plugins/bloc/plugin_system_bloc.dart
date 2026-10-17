@@ -698,7 +698,10 @@ class PluginSystemBloc extends Bloc<PluginSystemEvent, PluginSystemState> {
     Emitter<PluginSystemState> emit,
   ) async {
     try {
-      PluginCorrectionSessionService.instance.removeOwner(event.pluginId);
+      await _endCorrectionSessions(
+        event.pluginId,
+        deleteDrafts: event.deleteCorrectionDrafts,
+      );
       _removeDeclarative(event.pluginId);
       ContextMenuRegistry.instance.removeAll(event.pluginId);
       PluginToolbarRegistry.instance.removeAll(event.pluginId);
@@ -726,7 +729,10 @@ class PluginSystemBloc extends Bloc<PluginSystemEvent, PluginSystemState> {
     try {
       final plugin = await repository.getPlugin(event.pluginId);
       if (plugin == null) return;
-      PluginCorrectionSessionService.instance.removeOwner(event.pluginId);
+      await _endCorrectionSessions(
+        event.pluginId,
+        deleteDrafts: event.deleteCorrectionDrafts,
+      );
       _removeDeclarative(event.pluginId);
       ContextMenuRegistry.instance.removeAll(event.pluginId);
       PluginToolbarRegistry.instance.removeAll(event.pluginId);
@@ -745,6 +751,19 @@ class PluginSystemBloc extends Bloc<PluginSystemEvent, PluginSystemState> {
       UiSnack.show(PluginMessages.pluginDataReset(plugin.name));
     } catch (e) {
       UiSnack.showError(PluginMessages.resetPluginDataError(e));
+    }
+  }
+
+  /// הטיוטות נמחקות רק בפעולה שהמשתמש אישר במפורש שהיא מוחקת אותן.
+  Future<void> _endCorrectionSessions(
+    String pluginId, {
+    required bool deleteDrafts,
+  }) async {
+    final sessions = PluginCorrectionSessionService.instance;
+    if (deleteDrafts) {
+      await sessions.purgeOwner(pluginId);
+    } else {
+      sessions.removeOwner(pluginId);
     }
   }
 
