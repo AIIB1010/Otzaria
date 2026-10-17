@@ -1,9 +1,7 @@
 name: Library index schema trigger
 
-# Release builds package the search index stored on the latest SeforimLibrary
-# release (fetch_prebuilt_library_index.sh) and fail when its schema is not the
-# one the pinned engine writes. Rebuild it as soon as such an engine lands on
-# dev, instead of in the first release build after it.
+# Rebuild the stored SeforimLibrary index when dev changes the engine schema,
+# before release packaging encounters an incompatible index.
 
 on:
   push:
@@ -19,10 +17,11 @@ permissions:
 concurrency:
   group: library-index-schema-trigger
   cancel-in-progress: false
+  queue: max
 
 jobs:
   check:
-    name: Compare engine index schema with the stored index
+    name: Detect an engine index schema transition
     # A dev of a fork, or another branch, would rebuild the shared index from its own commit.
     if: github.repository == 'Otzaria/otzaria' && github.ref_name == 'dev'
     runs-on: ubuntu-latest
@@ -35,47 +34,31 @@ jobs:
       - name: Dispatch an index build when the schema changed
         env:
           GH_TOKEN: ${{ github.token }}
+          BEFORE_SHA: ${{ github.event.before }}
           SEFORIM_LIBRARY_DISPATCH_TOKEN: ${{ secrets.SEFORIM_LIBRARY_DISPATCH_TOKEN }}
         run: |
           set -euo pipefail
-          # The same release build-and-announce.yml takes the database and the index from.
+          current=$(bash tool/release/engine_index_schema.sh pubspec.lock)
+          # Only a schema transition queues a build; ordinary lock updates cannot duplicate it.
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            gh api "repos/$GITHUB_REPOSITORY/contents/pubspec.lock?ref=$BEFORE_SHA" \
+              -H "Accept: application/vnd.github.raw" > "$RUNNER_TEMP/previous.pubspec.lock"
+            previous=$(bash tool/release/engine_index_schema.sh "$RUNNER_TEMP/previous.pubspec.lock")
+            if [ "$previous" = "$current" ]; then
+              echo "The engine index schema did not change."
+              exit 0
+            fi
+          fi
+          # Use the same release as build-and-announce.yml.
           release=$(gh api repos/Otzaria/SeforimLibrary/releases/latest)
           tag=$(jq -er '.tag_name' <<< "$release")
-          # A release without an index yet is already queued for one built from the dev HEAD.
-          if ! jq -e '.assets | any(.name == "otzaria-library-index.provenance.json")' <<< "$release" > /dev/null; then
-            echo "::notice::$tag has no index yet; build-library-index.yml builds it on publish."
-            exit 0
-          fi
-          provenance="$RUNNER_TEMP/provenance.json"
-          curl -fsSL --retry 3 --retry-delay 5 -o "$provenance" \
-            "https://github.com/Otzaria/SeforimLibrary/releases/download/$tag/otzaria-library-index.provenance.json"
-          built_sha=$(jq -er '.otzaria.sha' "$provenance")
-          gh api "repos/$GITHUB_REPOSITORY/contents/pubspec.lock?ref=$built_sha" \
-            -H "Accept: application/vnd.github.raw" > "$RUNNER_TEMP/stored-index.pubspec.lock"
-
-          stored=$(bash tool/release/engine_index_schema.sh "$RUNNER_TEMP/stored-index.pubspec.lock")
-          current=$(bash tool/release/engine_index_schema.sh pubspec.lock)
-          echo "Index on $tag (built from $built_sha): $stored; $GITHUB_REF_NAME @ $GITHUB_SHA: $current"
-          if [ "$stored" = "$current" ]; then
-            echo "The stored index already matches this engine."
-            exit 0
-          fi
-
-          # The provenance changes only when a build ends, hours later; until then every push would queue another.
-          pending=$(gh run list -R Otzaria/SeforimLibrary -w build-library-index.yml -L 20 \
-            --json status,displayTitle,url \
-            --jq "[.[] | select(.status != \"completed\" and .displayTitle == \"library-index $tag\") | .url] | first // empty")
-          if [ -n "$pending" ]; then
-            echo "::notice::An index build of $tag is already queued or running: $pending"
-            exit 0
-          fi
-
-          rebuild_hint="build-library-index.yml in Otzaria/SeforimLibrary (release_tag=$tag, otzaria_ref=$GITHUB_SHA)"
+          # Resolve dev inside the builder: event order need not match queue order.
+          rebuild_hint="build-library-index.yml in Otzaria/SeforimLibrary (release_tag=$tag, otzaria_ref=dev)"
           if [ -z "$SEFORIM_LIBRARY_DISPATCH_TOKEN" ]; then
             echo "::error::SEFORIM_LIBRARY_DISPATCH_TOKEN is not set — dispatch $rebuild_hint manually"
             exit 1
           fi
-          jq -nc --arg tag "$tag" --arg ref "$GITHUB_SHA" \
+          jq -nc --arg tag "$tag" --arg ref dev \
               '{ref: "otzaria", inputs: {release_tag: $tag, otzaria_ref: $ref}}' \
             | curl -fsS -X POST \
                 -H "Authorization: Bearer $SEFORIM_LIBRARY_DISPATCH_TOKEN" \
