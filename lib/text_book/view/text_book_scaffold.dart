@@ -84,6 +84,7 @@ class TextBookScaffold extends StatelessWidget {
   /// מחדש ומאבד בחירה ומצב. הבאנר עצמו ריק כשאין סשן.
   Widget _withCorrectionBanner(Widget view, {required bool pageShape}) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         PluginCorrectionSessionBanner(
           tabId: PluginCorrectionSessionService.tabIdFor(tab),

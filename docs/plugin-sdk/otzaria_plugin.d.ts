@@ -865,7 +865,7 @@ export interface CorrectionSessionSnapshot {
 }
 /** A recovered change that could not be re-verified against the current raw source. */
 export interface CorrectionConflict extends CorrectionChange {
-  reason: 'source_changed' | 'not_found' | 'invalid' | 'unverifiable';
+  reason: 'source_changed' | 'not_found' | 'invalid';
 }
 export interface CorrectionDraftState {
   /** Stable for plugin + bookUid across sessions, tabs, windows and restarts. */
@@ -944,6 +944,11 @@ export interface CorrectionSessionChangedEvent {
   /** Sorted, deduplicated paragraphs changed since the previous event. */
   sectionIndices: number[];
 }
+/**
+ * Sent once the final write settles (lease released first), or after 3s with
+ * `snapshot.draft.persisted: false` while Otzaria keeps retrying and holds the lease.
+ * Not sent when the user confirms uninstall or data reset (drafts are purged).
+ */
 export interface CorrectionSessionEndedEvent {
   sessionId: string;
   reason:
@@ -952,6 +957,7 @@ export interface CorrectionSessionEndedEvent {
     | 'tab_closed'
     | 'plugin_unavailable'
     | 'window_closed'
+    | 'app_exit'
     | 'ownership_lost';
   snapshot: CorrectionSessionSnapshot;
 }

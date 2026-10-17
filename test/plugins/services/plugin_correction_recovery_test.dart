@@ -19,7 +19,11 @@ class _ControlledRepository implements PluginCorrectionDraftRepository {
 
   final PluginCorrectionDraftRepository inner;
   Completer<void>? gate;
+  Completer<void>? acquireGate;
   int failWrites = 0;
+
+  /// הכתיבה נשמרת ב-SQLite אבל התשובה אובדת (כמו worker שקרס אחרי commit).
+  int loseReplies = 0;
   int inFlight = 0;
   int maxInFlight = 0;
   final attempts = <int>[];
@@ -34,6 +38,7 @@ class _ControlledRepository implements PluginCorrectionDraftRepository {
     required String libraryVersion,
     required String changesJson,
     String? conflictsJson,
+    int? expectedVersion,
   }) async {
     attempts.add(revision);
     inFlight++;
@@ -53,8 +58,13 @@ class _ControlledRepository implements PluginCorrectionDraftRepository {
         libraryVersion: libraryVersion,
         changesJson: changesJson,
         conflictsJson: conflictsJson,
+        expectedVersion: expectedVersion,
       );
       committed.add((revision: revision, status: result.status));
+      if (loseReplies > 0) {
+        loseReplies--;
+        throw StateError('correction draft worker exited');
+      }
       return result;
     } finally {
       inFlight--;
@@ -76,14 +86,18 @@ class _ControlledRepository implements PluginCorrectionDraftRepository {
     required String bookId,
     required String bookSource,
     required String libraryVersion,
-  }) => inner.acquire(
-    pluginId: pluginId,
-    draftId: draftId,
-    bookUid: bookUid,
-    bookId: bookId,
-    bookSource: bookSource,
-    libraryVersion: libraryVersion,
-  );
+  }) async {
+    final blocked = acquireGate;
+    if (blocked != null) await blocked.future;
+    return inner.acquire(
+      pluginId: pluginId,
+      draftId: draftId,
+      bookUid: bookUid,
+      bookId: bookId,
+      bookSource: bookSource,
+      libraryVersion: libraryVersion,
+    );
+  }
 
   @override
   Future<void> release({
@@ -191,6 +205,7 @@ void main() {
     String bookUid = 'id:42',
     String libraryVersion = 'v1',
     Future<String> Function(int)? loadSource,
+    Future<void> Function()? validateSource,
     List<_Event>? events,
   }) => service.begin(
     owner: owner,
@@ -199,6 +214,7 @@ void main() {
     bookUid: bookUid,
     libraryVersion: libraryVersion,
     loadSource: loadSource ?? original,
+    validateSource: validateSource,
     onEvent: events == null
         ? null
         : (topic, payload) => events.add((topic, payload)),
@@ -227,6 +243,10 @@ void main() {
       repository
         ..failWrites = 0
         ..open();
+      final acquireGate = repository.acquireGate;
+      if (acquireGate != null && !acquireGate.isCompleted) {
+        acquireGate.complete();
+      }
     }
     for (final service in services) {
       service.endAll('test');
@@ -389,7 +409,10 @@ void main() {
           'error.not_found',
           'הפסקה אינה קיימת',
         ),
-        3 => throw StateError('database is locked'),
+        3 => throw const PluginCorrectionException(
+          'error.unsupported_context',
+          'הפסקה אינה נתמכת',
+        ),
         _ => 'מקור $index',
       };
 
@@ -404,7 +427,7 @@ void main() {
           for (final conflict in conflicts)
             conflict['sectionIndex']: conflict['reason'],
         },
-        {1: 'source_changed', 2: 'not_found', 3: 'unverifiable'},
+        {1: 'source_changed', 2: 'not_found', 3: 'invalid'},
       );
       expect(conflicts.first, {
         'sectionIndex': 1,
@@ -1058,6 +1081,244 @@ void main() {
         expect(service.isCorrected('tab', 0, 'מקור 0'), isFalse);
         expect(service.isCorrected('tab', 1, 'מקור 1'), isFalse);
       });
+    });
+  });
+
+  group('רגרסיות מסקירה', () {
+    /// טיוטה שמורה ומשוחררת עם תיקונים בפסקאות [indices].
+    Future<int> savedDraft(List<int> indices) async {
+      final first = newService(connection());
+      final session = await begin(first, tabId: 'setup');
+      for (final index in indices) {
+        edit(first, index, 'תיקון $index', tabId: 'setup');
+      }
+      final ended = await first.end(
+        'p',
+        session['sessionId'],
+        indices.length,
+      );
+      expect(ended['draft']['persisted'], isTrue);
+      return ended['draft']['version'] as int;
+    }
+
+    test('סשן שהסתיים עם כשל כתיבה מתמשך מנסה שוב לפי backoff', () async {
+      PluginCorrectionSessionService.flushTimeout = const Duration(
+        milliseconds: 100,
+      );
+      final repository = controlledConnection();
+      final service = newService(repository);
+      final events = <_Event>[];
+      await begin(service, events: events);
+      repository.failWrites = 1 << 30;
+      edit(service, 0, 'תיקון');
+      service.removeTab('tab');
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      expect(repository.attempts.length, lessThanOrEqualTo(2));
+
+      final ended = events.singleWhere(
+        (event) => event.$1 == 'reader.correctionSessionEnded',
+      );
+      expect(ended.$2['reason'], 'tab_closed');
+      expect(ended.$2['snapshot']['draft']['persisted'], isFalse);
+      // המצב לא נשמר, ולכן ה-lease נשאר עד שיישמר.
+      await expectLater(
+        begin(newService(connection()), tabId: 'other'),
+        _error('error.correction_busy'),
+      );
+    });
+
+    group('לשונית שנסגרה בזמן begin', () {
+      for (final (name, close)
+          in <(String, void Function(PluginCorrectionSessionService))>[
+            ('removeTab', (s) => s.removeTab('tab')),
+            ('endAll', (s) => s.endAll('window_closed')),
+          ]) {
+        test('$name בזמן acquire: begin נכשל וה-lease משתחרר', () async {
+          final repository = controlledConnection();
+          final service = newService(repository);
+          final gate = repository.acquireGate = Completer<void>();
+          final pending = begin(service);
+          await _idle();
+          close(service);
+          gate.complete();
+          await expectLater(pending, _error('error.not_found'));
+          expect(service.hasSessionForTab('tab'), isFalse);
+          await _idle();
+          final other = await begin(newService(connection()), tabId: 'other');
+          expect(other['recovery'], isNull);
+          // הלשונית אינה נשארת מסומנת כסגורה לפתיחה הבאה.
+          expect(
+            await begin(service, tabId: 'tab', bookUid: 'id:43'),
+            containsPair('recovery', null),
+          );
+        });
+      }
+
+      test('נסגרה באמצע שחזור: begin נכשל והטיוטה אינה משתנה', () async {
+        final version = await savedDraft([0, 1]);
+        var closed = false;
+        final service = newService(connection());
+        await expectLater(
+          begin(
+            service,
+            loadSource: (index) async {
+              if (index == 1) closed = true;
+              if (closed) {
+                throw const PluginCorrectionException(
+                  'error.not_found',
+                  'הלשונית נסגרה',
+                );
+              }
+              return 'מקור $index';
+            },
+            validateSource: () async {
+              if (closed) {
+                throw const PluginCorrectionException(
+                  'error.not_found',
+                  'הלשונית נסגרה',
+                );
+              }
+            },
+          ),
+          _error('error.not_found'),
+        );
+        final draft = await service.getDraft('p', draftId);
+        expect(draft['version'], version);
+        expect(draft['conflicts'], isEmpty);
+        expect(
+          [
+            for (final change in draft['changes'] as List)
+              change['sectionIndex'],
+          ],
+          [0, 1],
+        );
+      });
+    });
+
+    test('ack בזמן שחזור: begin נכשל והתוכן שאושר אינו חוזר', () async {
+      final version = await savedDraft([0]);
+      final service = newService(connection());
+      final loading = Completer<void>();
+      final release = Completer<void>();
+      final pending = begin(
+        service,
+        loadSource: (index) async {
+          if (!loading.isCompleted) loading.complete();
+          await release.future;
+          return 'מקור $index';
+        },
+      );
+      await loading.future;
+      expect(
+        await service.acknowledge('p', draftId, version),
+        containsPair('acknowledged', true),
+      );
+      release.complete();
+      await expectLater(pending, _error('error.revision_conflict'));
+      expect(service.hasSessionForTab('tab'), isFalse);
+      await expectLater(
+        service.getDraft('p', draftId),
+        _error('error.not_found'),
+      );
+      expect(await service.listDrafts('p'), isEmpty);
+      await _idle();
+      expect((await begin(service))['recovery'], isNull);
+    });
+
+    test('shutdown מסיים ב-app_exit, שומר ומשחרר את ה-lease', () async {
+      final service = newService(connection());
+      final events = <_Event>[];
+      await begin(service, events: events);
+      edit(service, 0, 'תיקון');
+      await service.shutdown(timeout: const Duration(seconds: 3));
+      expect(service.hasSessionForTab('tab'), isFalse);
+      final ended = events.last;
+      expect(ended.$1, 'reader.correctionSessionEnded');
+      expect(ended.$2['reason'], 'app_exit');
+      expect(ended.$2['snapshot']['draft']['persisted'], isTrue);
+
+      // הפעלה מחדש מיידית — בלי להמתין לפקיעת ה-lease.
+      final restarted = await begin(newService(connection()), tabId: 'next');
+      expect(restarted['recovery']['restoredSectionIndices'], [0]);
+    });
+
+    test('קריאת מקור שנכשלה זמנית אינה הופכת תיקון להתנגשות', () async {
+      final version = await savedDraft([0, 1]);
+      final service = newService(connection());
+      await expectLater(
+        begin(
+          service,
+          loadSource: (index) async => index == 1
+              ? throw StateError('database is locked')
+              : 'מקור $index',
+        ),
+        _error('error.storage_failed'),
+      );
+      expect(service.hasSessionForTab('tab'), isFalse);
+      final draft = await service.getDraft('p', draftId);
+      expect(draft['version'], version);
+      expect(draft['conflicts'], isEmpty);
+      expect((draft['changes'] as List), hasLength(2));
+
+      await _idle();
+      final retried = await begin(service);
+      expect(retried['recovery']['restoredSectionIndices'], [0, 1]);
+      expect(retried['recovery']['conflicts'], isEmpty);
+    });
+
+    test('תשובת כתיבה שאבדה: הניסיון החוזר (stale) מאמץ את הגרסה', () async {
+      PluginCorrectionSessionService.writeInterval = Duration.zero;
+      final repository = controlledConnection();
+      final service = newService(repository);
+      final session = await begin(service);
+      edit(service, 0, 'א');
+      await get(service, session);
+      repository.loseReplies = 1;
+      edit(service, 0, 'ב');
+      await _idle();
+      expect(
+        service.draftStatusForTab('tab'),
+        PluginCorrectionDraftStatus.failed,
+      );
+      service.retryDraftWrites();
+      final latest = await get(service, session);
+      expect(repository.committed.last, (revision: 2, status: 'stale'));
+      expect(latest['draft']['persisted'], isTrue);
+      final stored = await service.getDraft('p', draftId);
+      expect(latest['draft']['version'], stored['version']);
+      expect(
+        await service.acknowledge('p', draftId, stored['version'] as int),
+        containsPair('acknowledged', true),
+      );
+    });
+
+    test('טיוטה שהתרוקנה ושוחררה נמחקת; ack לגרסתה מחזיר not_found', () async {
+      final service = newService(connection());
+      final session = await begin(service);
+      edit(service, 0, 'תיקון');
+      final v1 = (await get(service, session))['draft']['version'] as int;
+      edit(service, 0, 'מקור 0');
+      final emptied = await service.end('p', session['sessionId'], 2);
+      final v2 = emptied['draft']['version'] as int;
+      for (final version in [v1, v2]) {
+        await expectLater(
+          service.acknowledge('p', draftId, version),
+          _error('error.not_found'),
+        );
+      }
+    });
+  });
+
+  group('worker', () {
+    test('פתיחת מסד שנכשלה אינה תוקעת קריאות או dispose', () async {
+      final repository = PluginCorrectionDraftRepository.isolate(
+        dbPath: () async => p.join(temp.path, 'missing', 'dir', 'db.sqlite'),
+      );
+      await expectLater(
+        repository.list('p').timeout(const Duration(seconds: 10)),
+        throwsA(isA<StateError>()),
+      );
+      await repository.dispose().timeout(const Duration(seconds: 2));
     });
   });
 }

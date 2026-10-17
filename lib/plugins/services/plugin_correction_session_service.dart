@@ -66,6 +66,7 @@ class PluginCorrectionSessionService extends ChangeNotifier {
   final Set<_Session> _finalizing = {};
   final Set<String> _pendingTabs = {};
   final Set<String> _pendingDrafts = {};
+  final Set<String> _cancelledTabs = {};
   final Map<String, int> _ownerEpochs = {};
 
   /// גדל בכל הסרת בעלים; מי שהתחיל לפני ההסרה לא יוצר אחריה סשן.
@@ -141,6 +142,9 @@ class PluginCorrectionSessionService extends ChangeNotifier {
           recovery = await _recover(session, lease);
           checkEpoch();
         }
+        if (_cancelledTabs.contains(tabId)) {
+          _fail('error.not_found', 'לשונית הספר נסגרה.');
+        }
         _sessions[session.id] = session;
         notifyListeners();
         if (recovery != null) {
@@ -162,6 +166,7 @@ class PluginCorrectionSessionService extends ChangeNotifier {
       }
     } finally {
       _pendingTabs.remove(tabId);
+      _cancelledTabs.remove(tabId);
       _pendingDrafts.remove(draftId);
     }
   }
@@ -239,8 +244,9 @@ class PluginCorrectionSessionService extends ChangeNotifier {
         }
       } on PluginCorrectionException catch (error) {
         reason ??= error.code == 'error.not_found' ? 'not_found' : 'invalid';
-      } catch (_) {
-        reason = 'unverifiable';
+      } catch (error) {
+        // תקלה זמנית אינה הופכת תיקון להתנגשות קבועה; הפתיחה נכשלת ותנוסה שוב.
+        _fail('error.storage_failed', 'קריאת מקור הספר נכשלה: $error');
       }
       if (reason == null) {
         restored[index as int] = _nativeChange(
@@ -253,6 +259,8 @@ class PluginCorrectionSessionService extends ChangeNotifier {
       final conflict = {...change, 'reason': reason};
       if (known.add(_conflictKey(conflict))) conflicts.add(conflict);
     }
+    // not_found מלשונית שנסגרה באמצע אינו התנגשות: הפתיחה נכשלת לפני הכתיבה.
+    await session.validateSource?.call();
     session.changes = restored;
     session.changesBytes = restored.values.fold(
       0,
@@ -268,8 +276,15 @@ class PluginCorrectionSessionService extends ChangeNotifier {
       libraryVersion: session.libraryVersion,
       changesJson: session.changesJson(),
       conflictsJson: jsonEncode(conflicts),
+      expectedVersion: lease.version,
     );
     if (result.status != 'ok') {
+      if (result.status == 'conflict') {
+        _fail(
+          'error.revision_conflict',
+          'הטיוטה אושרה או השתנתה בזמן השחזור; יש לפתוח את הסשן מחדש.',
+        );
+      }
       _fail('error.storage_failed', 'שמירת הטיוטה המשוחזרת נכשלה.');
     }
     session.version = result.version;
@@ -424,9 +439,19 @@ class PluginCorrectionSessionService extends ChangeNotifier {
 
   /// סגירת חלון משני מסתירה אותו בלבד, ולכן הסשנים שבו מסתיימים במפורש.
   void endAll(String reason) {
+    _cancelledTabs.addAll(_pendingTabs);
     for (final session in _sessions.values.toList()) {
       unawaited(_end(session, reason));
     }
+  }
+
+  /// ביציאה מהתהליך: מסיים, שומר ומשחרר את ה-leases, כדי שהפעלה מחדש לא
+  /// תמתין לפקיעתם.
+  Future<void> shutdown({required Duration timeout}) async {
+    endAll('app_exit');
+    await Future.wait([
+      for (final session in _finalizing.toList()) session.finished.future,
+    ]).timeout(timeout, onTimeout: () => const []);
   }
 
   void removeOwner(String owner) {
@@ -440,7 +465,12 @@ class PluginCorrectionSessionService extends ChangeNotifier {
 
   void removeTab(String tabId) {
     final session = _sessionForTab(tabId);
-    if (session != null) unawaited(_end(session, 'tab_closed'));
+    if (session != null) {
+      unawaited(_end(session, 'tab_closed'));
+    } else if (_pendingTabs.contains(tabId)) {
+      // begin שעדיין ממתין לא יירשם ללשונית שנסגרה.
+      _cancelledTabs.add(tabId);
+    }
   }
 
   /// מחיקה מכוונת שהמשתמש אישר (הסרת תוסף או איפוס נתוניו).
@@ -573,7 +603,7 @@ class PluginCorrectionSessionService extends ChangeNotifier {
         _ownershipLost(session);
         return;
       }
-      if (result.status == 'ok') {
+      if (result.version != null) {
         session.version = result.version;
         session.conflicts = [
           for (final value in jsonDecode(result.conflicts!) as List)
@@ -610,7 +640,11 @@ class PluginCorrectionSessionService extends ChangeNotifier {
       session.writing = false;
       notifyListeners();
       if (session.error != null) _wakeFlushWaiters(session);
-      _scheduleWrite(session, immediate: session.ended);
+      // אחרי כשל ה-backoff קובע, גם בסשן שהסתיים — אחרת זו לולאה צפופה.
+      _scheduleWrite(
+        session,
+        immediate: session.ended && session.error == null,
+      );
     }
   }
 

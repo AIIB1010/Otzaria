@@ -26,6 +26,7 @@ class _FlakyDrafts implements PluginCorrectionDraftRepository {
     required String libraryVersion,
     required String changesJson,
     String? conflictsJson,
+    int? expectedVersion,
   }) async {
     if (failWrites) throw StateError('disk full');
     return inner.write(
@@ -36,6 +37,7 @@ class _FlakyDrafts implements PluginCorrectionDraftRepository {
       libraryVersion: libraryVersion,
       changesJson: changesJson,
       conflictsJson: conflictsJson,
+      expectedVersion: expectedVersion,
     );
   }
 

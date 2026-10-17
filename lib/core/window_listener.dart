@@ -358,8 +358,8 @@ class AppWindowListener extends WindowListener {
     );
 
     await _runBestEffortShutdownStep(
-      'flushCorrectionDrafts',
-      () => PluginCorrectionSessionService.instance.flushAll(
+      'endCorrectionSessions',
+      () => PluginCorrectionSessionService.instance.shutdown(
         timeout: const Duration(seconds: 3),
       ),
       timeout: const Duration(seconds: 3),

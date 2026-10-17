@@ -85,6 +85,7 @@ class PluginCorrectionDraftRepository {
     required String libraryVersion,
     required String changesJson,
     String? conflictsJson,
+    int? expectedVersion,
   }) async {
     final result = await _backend.call('write', {
       'pluginId': pluginId,
@@ -94,6 +95,7 @@ class PluginCorrectionDraftRepository {
       'libraryVersion': libraryVersion,
       'changesJson': changesJson,
       'conflictsJson': conflictsJson,
+      'expectedVersion': expectedVersion,
     });
     return (
       status: result['status'] as String,
@@ -189,9 +191,15 @@ class _Executor {
           libraryVersion: a['libraryVersion'] as String,
           changesJson: a['changesJson'] as String,
           conflictsJson: a['conflictsJson'] as String?,
+          expectedVersion: a['expectedVersion'] as int?,
           nowMs: nowMs(),
         );
-        if (result['status'] == 'lost') heldTokens.remove(a['token']);
+        // worker שעלה מחדש לומד מהכתיבה אילו leases בידיו, כדי לחדש אותם.
+        if (result['status'] == 'lost') {
+          heldTokens.remove(a['token']);
+        } else {
+          heldTokens.add(a['token'] as String);
+        }
         return result;
       case 'release':
         heldTokens.remove(a['token']);
@@ -294,6 +302,10 @@ class _IsolateBackend implements _Backend {
       return;
     }
     final reply = (message as Map).cast<String, Object?>();
+    if (reply.containsKey('fatal')) {
+      _failAll(StateError('correction draft worker failed: ${reply['fatal']}'));
+      return;
+    }
     final completer = _pending.remove(reply['id']);
     if (completer == null) return;
     if (reply.containsKey('error')) {
@@ -304,6 +316,9 @@ class _IsolateBackend implements _Backend {
   }
 
   void _failAll(Object error) {
+    // worker שיצא לפני שעלה (פתיחת המסד נכשלה) — אחרת כל קריאה נתקעת.
+    final ready = _readyCompleter;
+    if (ready != null && !ready.isCompleted) ready.completeError(error);
     _commandPort = null;
     final pending = _pending.values.toList();
     _pending.clear();
@@ -329,9 +344,10 @@ class _IsolateBackend implements _Backend {
 
   @override
   Future<void> dispose() async {
-    final port = await _commandPort?.catchError(
-      (Object _) => ReceivePort().sendPort,
-    );
+    SendPort? port;
+    try {
+      port = await _commandPort;
+    } catch (_) {}
     if (port != null) {
       // ממתינים לסגירת החיבור, כדי שהקובץ לא יישאר נעול אחרי dispose.
       final exited = _exited = Completer<void>();
@@ -347,8 +363,14 @@ class _IsolateBackend implements _Backend {
 /// ה-worker: חיבור משלו, טרנזקציה לכל בקשה ו-heartbeat ל-leases שבידיו.
 void _workerMain(List<Object> init) {
   final replies = init[0] as SendPort;
-  final db = openWritableDatabase(init[1] as String, 'PluginCorrectionDrafts');
-  PluginCorrectionDraftStore.createSchema(db);
+  final Database db;
+  try {
+    db = openWritableDatabase(init[1] as String, 'PluginCorrectionDrafts');
+    PluginCorrectionDraftStore.createSchema(db);
+  } catch (error) {
+    replies.send({'fatal': '$error'});
+    return;
+  }
   final executor = _Executor(
     db,
     () => DateTime.now().millisecondsSinceEpoch,

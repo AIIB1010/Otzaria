@@ -145,7 +145,8 @@ abstract final class PluginCorrectionDraftStore {
   /// שומר את המצב המלא של revision. `conflicts` מוחלף רק כשנמסר (בשחזור).
   ///
   /// `lost` — ה-lease אינו בידי [token] (או שהטיוטה נמחקה); `stale` — כבר
-  /// נשמר revision חדש יותר, והכתיבה הישנה אינה דורסת אותו.
+  /// נשמר revision חדש יותר, והכתיבה הישנה אינה דורסת אותו; `conflict` —
+  /// הגרסה אינה [expectedVersion] (למשל ack בזמן שחזור).
   static Map<String, Object?> write(
     Database db, {
     required String pluginId,
@@ -155,12 +156,21 @@ abstract final class PluginCorrectionDraftStore {
     required String libraryVersion,
     required String changesJson,
     String? conflictsJson,
+    int? expectedVersion,
     required int nowMs,
   }) => _transaction(db, () {
     final row = _row(db, pluginId, draftId);
     if (row == null || row['holder'] != token) return {'status': 'lost'};
     if ((row['holder_revision'] as int? ?? 0) >= revision) {
-      return {'status': 'stale'};
+      return {
+        'status': 'stale',
+        'version': row['version'],
+        'conflicts': row['conflicts_json'],
+      };
+    }
+    if (expectedVersion != null &&
+        (row['version'] != expectedVersion || !_hasContent(row))) {
+      return {'status': 'conflict'};
     }
     final version = _nextVersion(db);
     final conflicts = conflictsJson ?? row['conflicts_json'] as String;

@@ -153,6 +153,54 @@ void main() {
     expect((draft!['changes'] as List).single['proposedText'], 'שלישי');
   });
 
+  test('כתיבה stale מחזירה את הגרסה וה-conflicts השמורים', () async {
+    final repo = context();
+    final token = await acquire(repo);
+    final conflicts = jsonEncode([
+      {'sectionIndex': 7, 'reason': 'source_changed'},
+    ]);
+    final saved = await write(repo, token, 2, ['ב'], conflicts: conflicts);
+    final stale = await write(repo, token, 2, ['ב']);
+    expect(stale.status, 'stale');
+    expect(stale.version, saved.version);
+    expect(stale.conflicts, conflicts);
+  });
+
+  test('כתיבה עם expectedVersion נדחית אחרי ack או שינוי גרסה', () async {
+    final repo = context();
+    final token = await acquire(repo);
+    final v1 = (await write(repo, token, 1, ['א'])).version!;
+    final v2 = (await write(repo, token, 2, ['ב'])).version!;
+    Future<String> guarded(int expectedVersion) async => (await repo.write(
+      pluginId: 'p',
+      draftId: draftId,
+      token: token,
+      revision: 3,
+      libraryVersion: 'v1',
+      changesJson: _changes(['ג']),
+      expectedVersion: expectedVersion,
+    )).status;
+    expect(await guarded(v1), 'conflict');
+    await repo.acknowledge(pluginId: 'p', draftId: draftId, version: v2);
+    expect(await guarded(v2), 'conflict');
+    expect(await repo.get('p', draftId), isNull);
+  });
+
+  test('הקשר חדש (worker שעלה מחדש) לומד מהכתיבה לחדש את ה-lease', () async {
+    final ttl = PluginCorrectionDraftRepository.leaseTtl.inMilliseconds;
+    final token = await acquire(context());
+    // אותו token דרך executor חדש, שאינו יודע שה-lease בידיו.
+    final restarted = context();
+    expect((await write(restarted, token, 1, ['א'])).status, 'ok');
+    now += ttl - 1;
+    await restarted.heartbeat();
+    now += ttl - 1;
+    await expectLater(
+      acquire(context()),
+      throwsA(isA<PluginCorrectionDraftBusy>()),
+    );
+  });
+
   test('כתיבה רגילה שומרת conflicts ומחזירה אותם', () async {
     final repo = context();
     final token = await acquire(repo);
