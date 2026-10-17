@@ -73,7 +73,7 @@ dependencies:
   pdf: ^3.13.1
   # OpenType shaping, so nikud and te'amim reach a PDF as vector text
   # rather than as an image of text.
-  opentype_shaper: ^0.2.0
+  opentype_shaper: ^0.3.0
   # The Unicode bidi algorithm, used to order the runs of a mixed line before
   # they are placed. Already in the graph through `pdf`; declared for direct use.
   bidi: ^2.0.13
@@ -103,7 +103,7 @@ dependencies:
   otzaria_search_engine:
     git:
       url: https://github.com/Otzaria/otzaria_search_engine.git
-      ref: 4be1999da838060adcdd18864f6e626f91bd6e86
+      ref: 1b199a28a0f99eb1725a705809c3334ce95b6808
   # חוזה הדיווחים מול השרת, משותף עם "עדכוני אוצריא" (Dart טהור).
   otzaria_report_contract:
     path: packages/otzaria_report_contract
@@ -248,10 +248,6 @@ dev_dependencies:
   vm_service: ^15.3.0
 
 flutter:
-  # התוספים הנייטיביים (search_engine מבוסס cargokit, printing) לא תומכים ב-SPM.
-  config:
-    enable-swift-package-manager: false
-
   uses-material-design: true
 
   assets:
