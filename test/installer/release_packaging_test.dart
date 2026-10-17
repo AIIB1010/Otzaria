@@ -6,6 +6,47 @@ import 'package:otzaria/update/my_update_widget.dart' show pickWindowsAssetUrl;
 import 'package:path/path.dart' as p;
 
 void main() {
+  test('סכמת האינדקס נקראת ממקור המנוע הנעול ב-pubspec.lock', () async {
+    final temp = Directory.systemTemp.createTempSync('otzaria_engine_schema_');
+    addTearDown(() => temp.deleteSync(recursive: true));
+    File(p.join(temp.path, 'engine', 'rust', 'src', 'api', 'search_engine.rs'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync(
+        'const INDEX_FORMAT: &str = "otzaria-search-index";\n'
+        'pub(crate) const INDEX_SCHEMA_VERSION: u32 = 6;\n',
+      );
+    final lock = File(p.join(temp.path, 'app', 'pubspec.lock'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync('''
+packages:
+  otzaria_search:
+    dependency: transitive
+    description:
+      name: otzaria_search
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.0"
+  otzaria_search_engine:
+    dependency: "direct main"
+    description:
+      path: "../engine"
+      relative: true
+    source: path
+    version: "4.0.0"
+  path:
+    dependency: transitive
+    source: hosted
+    version: "1.9.1"
+''');
+
+    final result = await Process.run('bash', [
+      'tool/release/engine_index_schema.sh',
+      lock.path,
+    ]);
+    expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
+    expect((result.stdout as String).trim(), 'otzaria-search-index 6');
+  });
+
   test('ארכיון מפוצל נבנה מחדש ומאומת לפי ה-manifest', () async {
     final temp = Directory.systemTemp.createTempSync('otzaria_release_parts_');
     addTearDown(() => temp.deleteSync(recursive: true));
