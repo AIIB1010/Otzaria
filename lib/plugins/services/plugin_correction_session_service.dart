@@ -1,7 +1,12 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:otzaria/core/messages/plugin_messages.dart';
+import 'package:otzaria/core/ui_snack.dart';
+import 'package:otzaria/plugins/repository/plugin_correction_draft_repository.dart';
+import 'package:otzaria/plugins/storage/plugin_correction_draft_store.dart';
 import 'package:otzaria/widgets/smart_text/text_renderer_service.dart';
 
 class PluginCorrectionException implements Exception {
@@ -14,13 +19,32 @@ class PluginCorrectionException implements Exception {
   String toString() => '$code: $message';
 }
 
-/// תיקונים זמניים בלבד; אין לשירות גישה לכתיבה במקור הספר.
+/// מצב השמירה העמידה של סשן, להצגה למשתמש.
+enum PluginCorrectionDraftStatus { saved, saving, failed }
+
+/// תיקונים זמניים בתצוגה; אין לשירות גישה לכתיבה במקור הספר.
+///
+/// כל שינוי נשמר גם בטיוטת התאוששות בבעלות אוצריא, שנשארת עד שהתוסף מאשר
+/// (`acknowledge`) את הגרסה המדויקת שקיבל. סיום סשן אינו מוחק טיוטה.
 class PluginCorrectionSessionService extends ChangeNotifier {
   static final instance = PluginCorrectionSessionService();
   static const maxSessions = 32;
   static const maxChanges = 500;
   static const maxTextLength = 20000;
   static const maxChangesBytes = 1024 * 1024;
+
+  /// הגבלת קצב, לא debounce: הקלדה רצופה אינה דוחה את האירוע או השמירה.
+  static Duration eventWindow = const Duration(milliseconds: 300);
+  static Duration writeInterval = const Duration(milliseconds: 250);
+  static Duration flushTimeout = const Duration(seconds: 3);
+  static const List<Duration> retryBackoff = [
+    Duration(seconds: 1),
+    Duration(seconds: 2),
+    Duration(seconds: 5),
+    Duration(seconds: 10),
+    Duration(seconds: 30),
+  ];
+
   static final Expando<String> _tabIds = Expando<String>();
   static String? knownTabIdFor(Object tab) => _tabIds[tab];
 
@@ -28,53 +52,250 @@ class PluginCorrectionSessionService extends ChangeNotifier {
     List<int>.generate(24, (_) => Random.secure().nextInt(256)),
   );
 
+  PluginCorrectionDraftRepository? _drafts;
+  PluginCorrectionDraftRepository get _repository =>
+      _drafts ??= PluginCorrectionDraftRepository.isolate();
+
+  @visibleForTesting
+  set draftRepository(PluginCorrectionDraftRepository repository) =>
+      _drafts = repository;
+
   final Map<String, _Session> _sessions = {};
+
+  /// סשנים שהסתיימו וטרם נשמרו סופית ושוחרר ה-lease שלהם.
+  final Set<_Session> _finalizing = {};
+  final Set<String> _pendingTabs = {};
+  final Set<String> _pendingDrafts = {};
   final Map<String, int> _ownerEpochs = {};
 
   /// גדל בכל הסרת בעלים; מי שהתחיל לפני ההסרה לא יוצר אחריה סשן.
   int ownerEpoch(String owner) => _ownerEpochs[owner] ?? 0;
 
-  Map<String, dynamic> begin({
+  Future<Map<String, dynamic>> begin({
     required String owner,
+    String? ownerName,
     required String tabId,
     required String bookId,
     required String bookUid,
+    String bookSource = '',
     required String libraryVersion,
     required Future<String> Function(int) loadSource,
     Future<void> Function()? validateSource,
     void Function(String topic, Map<String, dynamic> payload)? onEvent,
     int? ownerEpoch,
-  }) {
-    if (ownerEpoch != null && ownerEpoch != this.ownerEpoch(owner)) {
-      _fail('error.permission_denied', 'התוסף הושבת או שהרשאתו בוטלה.');
-    }
-    for (final session in _sessions.values) {
-      if (session.tabId != tabId) continue;
-      if (session.owner != owner) {
-        _fail('error.correction_busy', 'הלשונית שייכת לסשן תיקון אחר.');
+  }) async {
+    final epoch = ownerEpoch ?? this.ownerEpoch(owner);
+    void checkEpoch() {
+      if (epoch != this.ownerEpoch(owner)) {
+        _fail('error.permission_denied', 'התוסף הושבת או שהרשאתו בוטלה.');
       }
-      return session.snapshot();
+    }
+
+    checkEpoch();
+    final draftId = correctionDraftId(owner, bookUid);
+    for (final session in _sessions.values) {
+      if (session.tabId == tabId) {
+        if (session.owner != owner) {
+          _fail('error.correction_busy', 'הלשונית שייכת לסשן תיקון אחר.');
+        }
+        return {...session.snapshot(), 'recovery': null};
+      }
+      if (session.owner == owner && session.draftId == draftId) {
+        _fail('error.correction_busy', 'הספר כבר בעריכה בלשונית אחרת.');
+      }
+    }
+    if (_pendingTabs.contains(tabId) || _pendingDrafts.contains(draftId)) {
+      _fail('error.correction_busy', 'פתיחת סשן תיקון כבר מתבצעת.');
     }
     if (_sessions.length >= maxSessions) {
       _fail('error.limit_exceeded', 'מספר סשני התיקון הגיע למגבלה.');
     }
-    final session = _Session(
-      owner: owner,
-      tabId: tabId,
-      bookId: bookId,
-      bookUid: bookUid,
-      libraryVersion: libraryVersion,
-      loadSource: loadSource,
-      validateSource: validateSource,
-      onEvent: onEvent,
-    );
-    _sessions[session.id] = session;
-    notifyListeners();
-    return session.snapshot();
+    _pendingTabs.add(tabId);
+    _pendingDrafts.add(draftId);
+    try {
+      final lease = await _acquire(
+        owner: owner,
+        draftId: draftId,
+        bookUid: bookUid,
+        bookId: bookId,
+        bookSource: bookSource,
+        libraryVersion: libraryVersion,
+      );
+      try {
+        checkEpoch();
+        final session = _Session(
+          owner: owner,
+          ownerName: ownerName ?? owner,
+          tabId: tabId,
+          bookId: bookId,
+          bookUid: bookUid,
+          libraryVersion: libraryVersion,
+          draftId: draftId,
+          token: lease.token,
+          loadSource: loadSource,
+          validateSource: validateSource,
+          onEvent: onEvent,
+        );
+        Map<String, dynamic>? recovery;
+        if (lease.version != null) {
+          recovery = await _recover(session, lease);
+          checkEpoch();
+        }
+        _sessions[session.id] = session;
+        notifyListeners();
+        if (recovery != null) {
+          final applied = (recovery['restoredSectionIndices'] as List).length;
+          final conflicts = (recovery['conflicts'] as List).length;
+          if (applied > 0 || conflicts > 0) {
+            UiSnack.show(
+              PluginMessages.correctionRecovered(
+                applied: applied,
+                conflicts: conflicts,
+              ),
+            );
+          }
+        }
+        return {...session.snapshot(), 'recovery': recovery};
+      } catch (_) {
+        unawaited(_release(owner, draftId, lease.token));
+        rethrow;
+      }
+    } finally {
+      _pendingTabs.remove(tabId);
+      _pendingDrafts.remove(draftId);
+    }
   }
 
-  Map<String, dynamic> get(String owner, String id) =>
-      _owned(owner, id).snapshot();
+  Future<({String token, int? version, String changes, String conflicts})>
+  _acquire({
+    required String owner,
+    required String draftId,
+    required String bookUid,
+    required String bookId,
+    required String bookSource,
+    required String libraryVersion,
+  }) async {
+    try {
+      return await _repository.acquire(
+        pluginId: owner,
+        draftId: draftId,
+        bookUid: bookUid,
+        bookId: bookId,
+        bookSource: bookSource,
+        libraryVersion: libraryVersion,
+      );
+    } on PluginCorrectionDraftBusy {
+      _fail(
+        'error.correction_busy',
+        'הספר נמצא בעריכה בחלון אחר, או שסשן קודם עדיין משתחרר. נסו שוב בעוד רגע.',
+      );
+    } catch (error) {
+      _fail('error.storage_failed', 'לא ניתן לפתוח את טיוטת התיקון: $error');
+    }
+  }
+
+  Future<void> _release(String owner, String draftId, String token) async {
+    try {
+      await _repository.release(
+        pluginId: owner,
+        draftId: draftId,
+        token: token,
+      );
+    } catch (error) {
+      // ה-lease יפוג לבד; הטיוטה עצמה כבר שמורה.
+      debugPrint('[PluginCorrectionSession] release failed: $error');
+    }
+  }
+
+  /// מחיל רק תיקונים שמקורם הגולמי זהה בדיוק; השאר נשמרים כהתנגשויות.
+  Future<Map<String, dynamic>> _recover(
+    _Session session,
+    ({String token, int? version, String changes, String conflicts}) lease,
+  ) async {
+    final conflicts = [
+      for (final value in jsonDecode(lease.conflicts) as List)
+        Map<String, dynamic>.from(value as Map),
+    ];
+    final known = {for (final conflict in conflicts) _conflictKey(conflict)};
+    final restored = <int, Map<String, dynamic>>{};
+    for (final value in jsonDecode(lease.changes) as List) {
+      final change = Map<String, dynamic>.from(value as Map);
+      final index = change['sectionIndex'];
+      String? reason;
+      try {
+        if (index is! int || index < 0 || restored.containsKey(index)) {
+          reason = 'invalid';
+        } else {
+          final raw = await session.loadSource(index);
+          final proposed = change['proposedText'];
+          if (raw != change['originalSourceText'] ||
+              _sourceText(raw) != change['originalText']) {
+            reason = 'source_changed';
+          } else if (proposed is! String) {
+            reason = 'invalid';
+          } else {
+            _plainText(proposed);
+          }
+        }
+      } on PluginCorrectionException catch (error) {
+        reason ??= error.code == 'error.not_found' ? 'not_found' : 'invalid';
+      } catch (_) {
+        reason = 'unverifiable';
+      }
+      if (reason == null) {
+        restored[index as int] = _nativeChange(
+          index,
+          change['originalSourceText'] as String,
+          change['proposedText'] as String,
+        );
+        continue;
+      }
+      final conflict = {...change, 'reason': reason};
+      if (known.add(_conflictKey(conflict))) conflicts.add(conflict);
+    }
+    session.changes = restored;
+    session.changesBytes = restored.values.fold(
+      0,
+      (sum, change) => sum + _changeBytes(change),
+    );
+    session.conflicts = conflicts;
+    session.revision = 1;
+    final result = await _repository.write(
+      pluginId: session.owner,
+      draftId: session.draftId,
+      token: session.token,
+      revision: 1,
+      libraryVersion: session.libraryVersion,
+      changesJson: session.changesJson(),
+      conflictsJson: jsonEncode(conflicts),
+    );
+    if (result.status != 'ok') {
+      _fail('error.storage_failed', 'שמירת הטיוטה המשוחזרת נכשלה.');
+    }
+    session.version = result.version;
+    session.persistedRevision = 1;
+    return {
+      'draftId': session.draftId,
+      'fromVersion': lease.version,
+      'restoredSectionIndices': restored.keys.toList()..sort(),
+      'conflicts': [for (final conflict in conflicts) Map.of(conflict)],
+    };
+  }
+
+  static String _conflictKey(Map<String, dynamic> conflict) => jsonEncode([
+    conflict['sectionIndex'],
+    conflict['originalSourceText'],
+    conflict['proposedText'],
+  ]);
+
+  /// מרוקן אירוע ממתין ומחכה (עד [flushTimeout]) לשמירת המצב הנוכחי, כדי
+  /// ש-`draft.version` ב-snapshot יתאים לתוכן שבו.
+  Future<Map<String, dynamic>> get(String owner, String id) async {
+    final session = _owned(owner, id);
+    _flushEvents(session);
+    await _flush(session, flushTimeout);
+    return _owned(owner, id).snapshot();
+  }
 
   /// מחליף את הטיוטה אטומית לאחר אימות כל הפסקאות מול המקור.
   Future<Map<String, dynamic>> restore({
@@ -146,21 +367,18 @@ class PluginCorrectionSessionService extends ChangeNotifier {
     prepared.removeWhere(
       (_, value) => value['originalText'] == value['proposedText'],
     );
-    String signature(Map<int, Map<String, dynamic>> values) => jsonEncode([
-      for (final index in (values.keys.toList()..sort())) values[index],
-    ]);
-    if (signature(session.changes) != signature(prepared)) {
+    final touched = <int>{
+      for (final index in {...session.changes.keys, ...prepared.keys})
+        if (jsonEncode(session.changes[index]) != jsonEncode(prepared[index]))
+          index,
+    };
+    if (touched.isNotEmpty) {
       session.changes = prepared;
       session.changesBytes = prepared.values.fold(
         0,
         (sum, change) => sum + _changeBytes(change),
       );
-      session.revision++;
-      notifyListeners();
-      session.onEvent?.call('reader.correctionSessionChanged', {
-        'sessionId': id,
-        'revision': session.revision,
-      });
+      _changed(session, touched);
     }
     return session.snapshot();
   }
@@ -179,63 +397,384 @@ class PluginCorrectionSessionService extends ChangeNotifier {
     final removed = session.changes.remove(sectionIndex);
     if (removed != null) {
       session.changesBytes -= _changeBytes(removed);
-      session.revision++;
-      notifyListeners();
-      session.onEvent?.call('reader.correctionSessionChanged', {
-        'sessionId': id,
-        'revision': session.revision,
-        'sectionIndex': sectionIndex,
-      });
+      _changed(session, {sectionIndex});
     }
     return session.snapshot();
   }
 
-  Map<String, dynamic> end(String owner, String id, int expectedRevision) {
+  /// מסיים את התצוגה בלבד; הטיוטה נשמרת עד ack. מחכה (עד [flushTimeout])
+  /// לשמירה כדי שה-snapshot יכלול גרסה שאפשר לאשר.
+  Future<Map<String, dynamic>> end(
+    String owner,
+    String id,
+    int expectedRevision,
+  ) async {
     final session = _owned(owner, id);
     _revision(session, expectedRevision);
-    final snapshot = session.snapshot();
-    _sessions.remove(id);
-    notifyListeners();
-    session.onEvent?.call('reader.correctionSessionEnded', {
-      'sessionId': id,
-      'reason': 'explicit',
-      'snapshot': snapshot,
-    });
-    return snapshot;
+    final finished = _end(session, 'explicit');
+    await finished.timeout(flushTimeout, onTimeout: () {});
+    return session.snapshot();
+  }
+
+  /// סיום בידי המשתמש — פועל גם כשהתוסף אינו מגיב.
+  void endByUser(String tabId) {
+    final session = _sessionForTab(tabId);
+    if (session != null) unawaited(_end(session, 'user'));
+  }
+
+  /// סגירת חלון משני מסתירה אותו בלבד, ולכן הסשנים שבו מסתיימים במפורש.
+  void endAll(String reason) {
+    for (final session in _sessions.values.toList()) {
+      unawaited(_end(session, reason));
+    }
   }
 
   void removeOwner(String owner) {
     _ownerEpochs[owner] = ownerEpoch(owner) + 1;
-    final before = _sessions.length;
-    _removeWhere((session) => session.owner == owner, 'plugin_unavailable');
-    if (before != _sessions.length) notifyListeners();
-  }
-
-  void removeTab(String tabId) {
-    final before = _sessions.length;
-    _removeWhere((session) => session.tabId == tabId, 'tab_closed');
-    if (before != _sessions.length) notifyListeners();
-  }
-
-  void _removeWhere(bool Function(_Session) matches, String reason) {
-    final removed = _sessions.values.where(matches).toList();
-    for (final session in removed) {
-      _sessions.remove(session.id);
-      session.onEvent?.call('reader.correctionSessionEnded', {
-        'sessionId': session.id,
-        'reason': reason,
-        'snapshot': session.snapshot(),
-      });
+    for (final session in _sessions.values.toList()) {
+      if (session.owner == owner) {
+        unawaited(_end(session, 'plugin_unavailable'));
+      }
     }
   }
 
-  String displayText(String tabId, int index, String source) {
-    for (final session in _sessions.values) {
-      if (session.tabId != tabId) continue;
-      final change = session.changes[index];
-      if (change?['originalSourceText'] == source) {
-        return change!['proposedText'] as String;
+  void removeTab(String tabId) {
+    final session = _sessionForTab(tabId);
+    if (session != null) unawaited(_end(session, 'tab_closed'));
+  }
+
+  /// מחיקה מכוונת שהמשתמש אישר (הסרת תוסף או איפוס נתוניו).
+  Future<void> purgeOwner(String owner) async {
+    removeOwner(owner);
+    for (final session in _finalizing.where((s) => s.owner == owner).toList()) {
+      session.purged = true;
+      _stopTimers(session);
+      _settle(session);
+    }
+    await _repository.purge(owner);
+  }
+
+  Future<void> _end(_Session session, String reason) {
+    if (session.ended) return session.finished.future;
+    // אירוע ממתין נשלח לפני הסימון, כדי ש-changed לא יאבד ולא יגיע אחרי ended.
+    _flushEvents(session);
+    session.ended = true;
+    _sessions.remove(session.id);
+    _finalizing.add(session);
+    notifyListeners();
+    unawaited(_finalize(session, reason));
+    return session.finished.future;
+  }
+
+  /// הכתיבה האחרונה, שחרור ה-lease ואירוע הסיום — בלי תלות ב-dispose
+  /// או בכך שהתוסף יצרוך את האירוע.
+  Future<void> _finalize(_Session session, String reason) async {
+    _scheduleWrite(session, immediate: true);
+    // כשל מתמשך אינו מעכב את האירוע: התוסף מקבל את המצב עם persisted=false,
+    // והניסיונות וה-lease נמשכים עד שהמצב נשמר.
+    await session.settled.future.timeout(flushTimeout, onTimeout: () {});
+    var released = false;
+    if (session.settled.isCompleted) {
+      released = true;
+      await _releaseFinal(session);
+    }
+    if (!session.purged) {
+      session.onEvent?.call('reader.correctionSessionEnded', {
+        'sessionId': session.id,
+        'reason': session.lost ? 'ownership_lost' : reason,
+        'snapshot': session.snapshot(),
+      });
+    }
+    if (!session.finished.isCompleted) session.finished.complete();
+    if (!released) {
+      await session.settled.future;
+      await _releaseFinal(session);
+    }
+  }
+
+  Future<void> _releaseFinal(_Session session) async {
+    if (!session.lost && !session.purged) {
+      await _release(session.owner, session.draftId, session.token);
+    }
+    _finalizing.remove(session);
+  }
+
+  void _changed(_Session session, Set<int> indices) {
+    session.revision++;
+    notifyListeners();
+    _scheduleWrite(session);
+    session.pendingEventIndices.addAll(indices);
+    session.eventTimer ??= Timer(eventWindow, () {
+      session.eventTimer = null;
+      _emitChanged(session);
+    });
+  }
+
+  void _emitChanged(_Session session) {
+    if (session.pendingEventIndices.isEmpty || session.ended) return;
+    final indices = session.pendingEventIndices.toList()..sort();
+    session.pendingEventIndices.clear();
+    session.onEvent?.call('reader.correctionSessionChanged', {
+      'sessionId': session.id,
+      'revision': session.revision,
+      'sectionIndices': indices,
+    });
+  }
+
+  void _flushEvents(_Session session) {
+    session.eventTimer?.cancel();
+    session.eventTimer = null;
+    _emitChanged(session);
+  }
+
+  /// כתיבה אחת בכל פעם, תמיד של המצב האחרון; כתיבה ישנה אינה דורסת חדשה.
+  void _scheduleWrite(_Session session, {bool immediate = false}) {
+    if (session.lost || session.purged) {
+      _settle(session);
+      return;
+    }
+    if (session.writing) return;
+    if (session.persistedRevision == session.revision) {
+      _settle(session);
+      return;
+    }
+    if (session.retryTimer != null && !immediate) return;
+    final elapsed = session.lastWriteStart == null
+        ? writeInterval
+        : DateTime.now().difference(session.lastWriteStart!);
+    if (!immediate && elapsed < writeInterval) {
+      session.writeTimer ??= Timer(writeInterval - elapsed, () {
+        session.writeTimer = null;
+        _scheduleWrite(session);
+      });
+      return;
+    }
+    session.writeTimer?.cancel();
+    session.writeTimer = null;
+    session.retryTimer?.cancel();
+    session.retryTimer = null;
+    unawaited(_write(session));
+  }
+
+  Future<void> _write(_Session session) async {
+    session.writing = true;
+    session.lastWriteStart = DateTime.now();
+    final revision = session.revision;
+    try {
+      final result = await _repository.write(
+        pluginId: session.owner,
+        draftId: session.draftId,
+        token: session.token,
+        revision: revision,
+        libraryVersion: session.libraryVersion,
+        changesJson: session.changesJson(),
+      );
+      if (result.status == 'lost') {
+        _ownershipLost(session);
+        return;
       }
+      if (result.status == 'ok') {
+        session.version = result.version;
+        session.conflicts = [
+          for (final value in jsonDecode(result.conflicts!) as List)
+            Map<String, dynamic>.from(value as Map),
+        ];
+      }
+      if (revision > session.persistedRevision) {
+        session.persistedRevision = revision;
+      }
+      if (session.failures > 0) {
+        session.failures = 0;
+        session.error = null;
+        if (!session.purged) {
+          UiSnack.showSuccess(PluginMessages.correctionDraftSaved);
+        }
+      }
+    } catch (error) {
+      session.error = error;
+      session.failures++;
+      if (session.failures == 1 && !session.purged) {
+        UiSnack.showWithAction(
+          message: PluginMessages.correctionDraftSaveFailed,
+          actionLabel: PluginMessages.correctionDraftRetry,
+          onAction: retryDraftWrites,
+        );
+      }
+      final delay =
+          retryBackoff[min(session.failures, retryBackoff.length) - 1];
+      session.retryTimer = Timer(delay, () {
+        session.retryTimer = null;
+        _scheduleWrite(session, immediate: true);
+      });
+    } finally {
+      session.writing = false;
+      notifyListeners();
+      if (session.error != null) _wakeFlushWaiters(session);
+      _scheduleWrite(session, immediate: session.ended);
+    }
+  }
+
+  /// ניסיון שמירה מיידי לכל סשן שהשמירה שלו נכשלה.
+  void retryDraftWrites() {
+    for (final session in [..._sessions.values, ..._finalizing]) {
+      if (session.error != null) _scheduleWrite(session, immediate: true);
+    }
+  }
+
+  void _ownershipLost(_Session session) {
+    session.lost = true;
+    _stopTimers(session);
+    if (!session.purged) {
+      UiSnack.showWarning(PluginMessages.correctionOwnershipLost);
+    }
+    if (!session.ended) {
+      unawaited(_end(session, 'ownership_lost'));
+    }
+    _settle(session);
+  }
+
+  void _stopTimers(_Session session) {
+    session.writeTimer?.cancel();
+    session.writeTimer = null;
+    session.retryTimer?.cancel();
+    session.retryTimer = null;
+    session.eventTimer?.cancel();
+    session.eventTimer = null;
+  }
+
+  /// המצב הנוכחי נשמר (או שאין עוד מה לשמור).
+  void _settle(_Session session) {
+    _wakeFlushWaiters(session);
+    if (session.ended && !session.settled.isCompleted) {
+      session.settled.complete();
+    }
+  }
+
+  void _wakeFlushWaiters(_Session session) {
+    final waiters = session.flushWaiters.toList();
+    session.flushWaiters.clear();
+    for (final waiter in waiters) {
+      if (!waiter.isCompleted) waiter.complete();
+    }
+  }
+
+  /// מנסה לשמור מיד; חוזר כשהמצב נשמר, כשהשמירה נכשלה או כשתם הזמן.
+  Future<void> _flush(_Session session, Duration timeout) {
+    if (session.persisted || session.lost || session.purged) {
+      return Future.value();
+    }
+    final waiter = Completer<void>();
+    session.flushWaiters.add(waiter);
+    _scheduleWrite(session, immediate: true);
+    return waiter.future.timeout(timeout, onTimeout: () {});
+  }
+
+  /// לפני סגירה: שומר את הלשוניות ומחזיר את אלה שעדיין לא נשמרו.
+  Future<Set<String>> unpersistedTabIds(
+    Iterable<String> tabIds, {
+    Duration? timeout,
+  }) async {
+    final sessions = [
+      for (final tabId in tabIds) ?_sessionForTab(tabId),
+    ];
+    await Future.wait([
+      for (final session in sessions) _flush(session, timeout ?? flushTimeout),
+    ]);
+    return {
+      for (final session in sessions)
+        if (!session.persisted) session.tabId,
+    };
+  }
+
+  /// לפני יציאה מהתהליך: כל הסשנים, כולל אלה שהסתיימו וטרם נשמרו.
+  Future<bool> flushAll({Duration? timeout}) async {
+    final sessions = [..._sessions.values, ..._finalizing];
+    await Future.wait([
+      for (final session in sessions) _flush(session, timeout ?? flushTimeout),
+    ]);
+    return sessions.every((s) => s.persisted || s.lost || s.purged);
+  }
+
+  /// התוסף מאשר ששמר את הגרסה המדויקת [version]; רק אז התוכן נמחק.
+  Future<Map<String, dynamic>> acknowledge(
+    String owner,
+    String draftId,
+    int version,
+  ) async {
+    if (draftId.isEmpty || version < 0) {
+      _fail('error.invalid_params', 'נדרשים draftId וגרסת טיוטה.');
+    }
+    final Map<String, Object?> result;
+    try {
+      result = await _repository.acknowledge(
+        pluginId: owner,
+        draftId: draftId,
+        version: version,
+      );
+    } catch (error) {
+      _fail('error.storage_failed', 'אישור הטיוטה נכשל: $error');
+    }
+    switch (result['status']) {
+      case 'acknowledged':
+        for (final session in [..._sessions.values, ..._finalizing]) {
+          if (session.owner == owner &&
+              session.draftId == draftId &&
+              session.version == version) {
+            session.conflicts = [];
+          }
+        }
+        notifyListeners();
+        return {
+          'draftId': draftId,
+          'version': version,
+          'acknowledged': true,
+          'duplicate': false,
+        };
+      case 'duplicate':
+        return {
+          'draftId': draftId,
+          'version': version,
+          'acknowledged': true,
+          'duplicate': true,
+        };
+      case 'conflict':
+        _fail(
+          'error.revision_conflict',
+          'הטיוטה השתנתה מאז גרסה $version '
+              '(גרסה נוכחית: ${result['currentVersion'] ?? 'אין תוכן'}); '
+              'יש לקרוא אותה מחדש.',
+        );
+      default:
+        _fail('error.not_found', 'טיוטת התיקון אינה קיימת.');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> listDrafts(String owner) async {
+    try {
+      return [
+        for (final draft in await _repository.list(owner))
+          Map<String, dynamic>.from(draft),
+      ];
+    } catch (error) {
+      _fail('error.storage_failed', 'קריאת הטיוטות נכשלה: $error');
+    }
+  }
+
+  Future<Map<String, dynamic>> getDraft(String owner, String draftId) async {
+    final Map<String, Object?>? draft;
+    try {
+      draft = await _repository.get(owner, draftId);
+    } catch (error) {
+      _fail('error.storage_failed', 'קריאת הטיוטה נכשלה: $error');
+    }
+    if (draft == null) _fail('error.not_found', 'טיוטת התיקון אינה קיימת.');
+    return Map<String, dynamic>.from(draft);
+  }
+
+  String displayText(String tabId, int index, String source) {
+    final change = _sessionForTab(tabId)?.changes[index];
+    if (change?['originalSourceText'] == source) {
+      return change!['proposedText'] as String;
     }
     return source;
   }
@@ -244,6 +783,23 @@ class PluginCorrectionSessionService extends ChangeNotifier {
       TextRendererService.stripHtml(displayText(tabId, index, source));
 
   bool hasSessionForTab(String tabId) => _sessionForTab(tabId) != null;
+
+  bool isCorrected(String tabId, int index, String source) =>
+      _sessionForTab(tabId)?.changes[index]?['originalSourceText'] == source;
+
+  String? ownerNameForTab(String tabId) => _sessionForTab(tabId)?.ownerName;
+
+  PluginCorrectionDraftStatus? draftStatusForTab(String tabId) {
+    final session = _sessionForTab(tabId);
+    if (session == null) return null;
+    if (session.error != null) return PluginCorrectionDraftStatus.failed;
+    return session.persisted
+        ? PluginCorrectionDraftStatus.saved
+        : PluginCorrectionDraftStatus.saving;
+  }
+
+  /// הלשונית של סשן בבעלות [owner], בלי המתנה לשמירה.
+  String tabIdForSession(String owner, String id) => _owned(owner, id).tabId;
 
   String? sessionIdForTab(String owner, String tabId) {
     final session = _sessionForTab(tabId);
@@ -292,7 +848,7 @@ class PluginCorrectionSessionService extends ChangeNotifier {
     }
   }
 
-  /// ההקלדה נשמרת מיד, לפני אירוע השינוי וללא תלות במיקוד השדה.
+  /// ההקלדה מוצגת מיד; השמירה העמידה והאירוע מוגבלים בקצב בנפרד.
   void editParagraph(String tabId, int index, String source, String proposed) {
     validateNativeEdit(tabId, index, source, proposed);
     final session = _sessionForTab(tabId)!;
@@ -307,13 +863,7 @@ class PluginCorrectionSessionService extends ChangeNotifier {
       session.changes[index] = change;
       session.changesBytes += _changeBytes(change);
     }
-    session.revision++;
-    notifyListeners();
-    session.onEvent?.call('reader.correctionSessionChanged', {
-      'sessionId': session.id,
-      'revision': session.revision,
-      'sectionIndex': index,
-    });
+    _changed(session, {index});
   }
 
   Map<String, dynamic> _nativeChange(
@@ -327,7 +877,7 @@ class PluginCorrectionSessionService extends ChangeNotifier {
     'proposedText': proposed,
   };
 
-  int _changeBytes(Map<String, dynamic> change) =>
+  static int _changeBytes(Map<String, dynamic> change) =>
       utf8.encode(jsonEncode(change)).length;
 
   _Session? _sessionForTab(String tabId) {
@@ -404,7 +954,7 @@ class PluginCorrectionSessionService extends ChangeNotifier {
   }
 
   static final _unsupportedText = RegExp(
-    r'[<>\r\n\u2028\u2029]|&(?:#[xX]?[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);',
+    r'[<>\r\n  ]|&(?:#[xX]?[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);',
   );
 
   static bool _validUtf16(String text) {
@@ -423,7 +973,7 @@ class PluginCorrectionSessionService extends ChangeNotifier {
     return true;
   }
 
-  Never _fail(String code, String message) =>
+  static Never _fail(String code, String message) =>
       throw PluginCorrectionException(code, message);
 }
 
@@ -432,27 +982,59 @@ class _Session {
     List<int>.generate(24, (_) => Random.secure().nextInt(256)),
   );
   final String owner;
+  final String ownerName;
   final String tabId;
   final String bookId;
   final String bookUid;
   final String libraryVersion;
+  final String draftId;
+  final String token;
   final Future<String> Function(int) loadSource;
   final Future<void> Function()? validateSource;
   final void Function(String topic, Map<String, dynamic> payload)? onEvent;
   int revision = 0;
   int changesBytes = 0;
   Map<int, Map<String, dynamic>> changes = {};
+  List<Map<String, dynamic>> conflicts = [];
+
+  /// הגרסה העמידה של ה-commit האחרון, ו-revision שהוא שמר.
+  int? version;
+  int persistedRevision = 0;
+  bool writing = false;
+  DateTime? lastWriteStart;
+  Timer? writeTimer;
+  Timer? retryTimer;
+  Object? error;
+  int failures = 0;
+  bool lost = false;
+  bool purged = false;
+  bool ended = false;
+  final Set<int> pendingEventIndices = {};
+  Timer? eventTimer;
+  final List<Completer<void>> flushWaiters = [];
+  final Completer<void> settled = Completer<void>();
+  final Completer<void> finished = Completer<void>();
 
   _Session({
     required this.owner,
+    required this.ownerName,
     required this.tabId,
     required this.bookId,
     required this.bookUid,
     required this.libraryVersion,
+    required this.draftId,
+    required this.token,
     required this.loadSource,
     this.validateSource,
     this.onEvent,
   });
+
+  /// נכון רק כשה-commit האחרון שמר בדיוק את ה-revision הנוכחי.
+  bool get persisted => !lost && error == null && persistedRevision == revision;
+
+  String changesJson() => jsonEncode([
+    for (final index in (changes.keys.toList()..sort())) changes[index],
+  ]);
 
   Map<String, dynamic> snapshot() => {
     'sessionId': id,
@@ -479,5 +1061,13 @@ class _Session {
       for (final index in (changes.keys.toList()..sort()))
         Map<String, dynamic>.of(changes[index]!),
     ],
+    'draft': {
+      'draftId': draftId,
+      'version': version,
+      'persisted': persisted,
+      'pending': !persisted && error == null && !lost,
+      'error': error == null ? null : '$error',
+      'conflicts': [for (final conflict in conflicts) Map.of(conflict)],
+    },
   };
 }

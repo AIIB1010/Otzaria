@@ -1,12 +1,23 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:otzaria/data/sqlite/sqlite3_api.dart';
+import 'package:otzaria/plugins/repository/plugin_correction_draft_repository.dart';
 import 'package:otzaria/plugins/services/plugin_correction_session_service.dart';
 
+/// מריץ את תור האירועים: כתיבות המאגר הישיר, שחרור ה-lease ואירוע הסיום.
+Future<void> _idle() async {
+  for (var i = 0; i < 20; i++) {
+    await Future<void>.delayed(Duration.zero);
+  }
+}
+
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late PluginCorrectionSessionService service;
   late Map<int, String> source;
   late Map<String, dynamic> session;
+  late Database db;
 
   Map<String, dynamic> change(int index, String proposed) => {
     'sectionIndex': index,
@@ -27,6 +38,35 @@ void main() {
     changes: changes,
   );
 
+  Future<Map<String, dynamic>> current() =>
+      service.get('owner', session['sessionId']);
+
+  Future<Map<String, dynamic>> beginTab({
+    String owner = 'owner',
+    String tabId = 'tab',
+    String bookUid = 'id:42',
+    Future<String> Function(int)? loadSource,
+    Future<void> Function()? validateSource,
+    void Function(String, Map<String, dynamic>)? onEvent,
+    int? ownerEpoch,
+  }) => service.begin(
+    owner: owner,
+    tabId: tabId,
+    bookId: 'ספר',
+    bookUid: bookUid,
+    libraryVersion: 'v1',
+    loadSource: loadSource ?? (index) async => source[index]!,
+    validateSource: validateSource,
+    onEvent: onEvent,
+    ownerEpoch: ownerEpoch,
+  );
+
+  /// מסיים את הסשן הנוכחי וממתין לשחרור ה-lease, כדי שאפשר יהיה לפתוח שוב.
+  Future<void> closeCurrent() async {
+    service.removeTab('tab');
+    await _idle();
+  }
+
   Matcher error(String code) => throwsA(
     isA<PluginCorrectionException>().having(
       (value) => value.code,
@@ -35,20 +75,21 @@ void main() {
     ),
   );
 
-  setUp(() {
-    service = PluginCorrectionSessionService();
+  setUp(() async {
+    db = sqlite3.openInMemory();
+    service = PluginCorrectionSessionService()
+      ..draftRepository = PluginCorrectionDraftRepository.direct(db);
     source = {0: 'מקור 0', 1: 'מקור 1'};
-    session = service.begin(
-      owner: 'owner',
-      tabId: 'tab',
-      bookId: 'ספר',
-      bookUid: 'id:42',
-      libraryVersion: 'v1',
-      loadSource: (index) async => source[index]!,
-    );
+    session = await beginTab();
   });
 
-  tearDown(() => service.dispose());
+  tearDown(() async {
+    service.endAll('test');
+    await service.flushAll();
+    await _idle();
+    service.dispose();
+    db.close();
+  });
 
   test('טיוטה אינה משנה מקור ותמונת המצב עצמאית', () async {
     final result = await restore([change(0, 'תיקון 😀')]);
@@ -58,7 +99,7 @@ void main() {
     expect(service.displayText('other-tab', 0, 'מקור 0'), 'מקור 0');
     expect(service.displayText('tab', 0, 'מקור אחר'), 'מקור אחר');
     (result['changes'] as List).clear();
-    expect(service.get('owner', session['sessionId'])['changes'], hasLength(1));
+    expect((await current())['changes'], hasLength(1));
   });
 
   test('פסקת איגרא רמה עם HTML נערכת כטקסט ושומרת מקור גולמי לשחזור', () async {
@@ -68,7 +109,7 @@ void main() {
     expect(service.canEditParagraph('tab', raw), isTrue);
     expect(service.editableText('tab', 0, raw), plain);
     service.editParagraph('tab', 0, raw, '$plain תיקון');
-    final latest = service.get('owner', session['sessionId']);
+    final latest = await current();
     final edited = (latest['changes'] as List).single;
     expect(edited['originalSourceText'], raw);
     expect(edited['originalText'], plain);
@@ -80,7 +121,7 @@ void main() {
     await restore([edited], revision: 2);
     expect(service.editableText('tab', 0, raw), '$plain תיקון');
     service.editParagraph('tab', 0, raw, plain);
-    expect(service.get('owner', session['sessionId'])['changes'], isEmpty);
+    expect((await current())['changes'], isEmpty);
     await expectLater(
       restore([
         {...edited, 'originalText': raw},
@@ -96,23 +137,28 @@ void main() {
     );
   });
 
-  test('בעלות אינה ניתנת להעברה ואינה חושפת סשן זר', () {
-    expect(
-      () => service.get('other', session['sessionId']),
+  test('בעלות אינה ניתנת להעברה ואינה חושפת סשן זר', () async {
+    await expectLater(
+      service.get('other', session['sessionId']),
       error('error.not_found'),
     );
-    expect(
-      () => service.begin(
-        owner: 'other',
-        tabId: 'tab',
-        bookId: 'ספר',
-        bookUid: 'id:42',
-        libraryVersion: 'v1',
-        loadSource: (index) async => '',
-      ),
+    await expectLater(
+      beginTab(owner: 'other', loadSource: (index) async => ''),
       error('error.correction_busy'),
     );
   });
+
+  test(
+    'אותו תוסף ואותו ספר בלשונית שנייה נדחה; אותה לשונית מחזירה סשן',
+    () async {
+      await expectLater(
+        beginTab(tabId: 'second-tab'),
+        error('error.correction_busy'),
+      );
+      final again = await beginTab();
+      expect(again['sessionId'], session['sessionId']);
+    },
+  );
 
   test('כשל אימות בפסקה השנייה אינו מחיל את הראשונה', () async {
     source[1] = 'מקור שהשתנה';
@@ -120,7 +166,7 @@ void main() {
       restore([change(0, 'א'), change(1, 'ב')]),
       error('error.source_changed'),
     );
-    expect(service.get('owner', session['sessionId'])['revision'], 0);
+    expect((await current())['revision'], 0);
     expect(service.displayText('tab', 0, 'מקור 0'), 'מקור 0');
   });
 
@@ -150,16 +196,9 @@ void main() {
   });
 
   test('סגירה בזמן טעינת מקור אינה מחיה סשן', () async {
-    service.removeTab('tab');
+    await closeCurrent();
     final gate = Completer<String>();
-    session = service.begin(
-      owner: 'owner',
-      tabId: 'tab',
-      bookId: 'ספר',
-      bookUid: 'id:42',
-      libraryVersion: 'v1',
-      loadSource: (_) => gate.future,
-    );
+    session = await beginTab(loadSource: (_) => gate.future);
     final pending = restore([change(0, 'א')]);
     service.removeOwner('owner');
     gate.complete('מקור 0');
@@ -171,13 +210,11 @@ void main() {
     final reset = service.reset('owner', session['sessionId'], 0, 1);
     expect(reset['revision'], 2);
     expect(service.displayText('tab', 0, 'מקור 0'), 'מקור 0');
-    final ended = service.end('owner', session['sessionId'], 2);
+    final ended = await service.end('owner', session['sessionId'], 2);
     expect(ended['changes'], hasLength(1));
+    expect(ended['draft']['persisted'], isTrue);
     expect(service.displayText('tab', 1, 'מקור 1'), 'מקור 1');
-    expect(
-      () => service.get('owner', session['sessionId']),
-      error('error.not_found'),
-    );
+    await expectLater(current(), error('error.not_found'));
   });
 
   for (final text in [
@@ -194,7 +231,7 @@ void main() {
         restore([change(0, text)]),
         throwsA(isA<PluginCorrectionException>()),
       );
-      expect(service.get('owner', session['sessionId'])['revision'], 0);
+      expect((await current())['revision'], 0);
     });
   }
 
@@ -210,15 +247,10 @@ void main() {
   });
 
   test('מאמת הקשר גם בשחזור ריק ובסיום טעינת מקור', () async {
-    service.removeTab('tab');
+    await closeCurrent();
     var validations = 0;
     var loads = 0;
-    session = service.begin(
-      owner: 'owner',
-      tabId: 'tab',
-      bookId: 'ספר',
-      bookUid: 'id:42',
-      libraryVersion: 'v1',
+    session = await beginTab(
       loadSource: (index) async {
         loads++;
         return source[index]!;
@@ -235,7 +267,7 @@ void main() {
     await expectLater(restore([]), error('error.source_changed'));
     expect(loads, 0);
     expect(validations, 2);
-    expect(service.get('owner', session['sessionId'])['revision'], 0);
+    expect((await current())['revision'], 0);
   });
 
   test('שחזור מחליף את כל הטיוטה וריק מסיר אותה', () async {
@@ -248,23 +280,20 @@ void main() {
   });
 
   test('שחזור ללא שינוי אינו מעלה revision או שולח אירוע', () async {
-    service.removeTab('tab');
+    await closeCurrent();
     final events = <String>[];
-    session = service.begin(
-      owner: 'owner',
-      tabId: 'tab',
-      bookId: 'ספר',
-      bookUid: 'id:42',
-      libraryVersion: 'v1',
-      loadSource: (index) async => source[index]!,
-      onEvent: (topic, _) => events.add(topic),
-    );
+    session = await beginTab(onEvent: (topic, _) => events.add(topic));
     await restore([change(0, 'א')]);
     final result = await restore([change(0, 'א')], revision: 1);
     expect(result['revision'], 1);
+    await current();
     expect(events, ['reader.correctionSessionChanged']);
     service.removeTab('tab');
-    expect(events.last, 'reader.correctionSessionEnded');
+    await _idle();
+    expect(events, [
+      'reader.correctionSessionChanged',
+      'reader.correctionSessionEnded',
+    ]);
   });
 
   test('זהות ספר או גרסה זרה אינה משוחזרת', () async {
@@ -294,82 +323,64 @@ void main() {
     );
   });
 
-  test('מספר הסשנים מוגבל וסיום מפנה מקום', () {
+  test('מספר הסשנים מוגבל וסיום מפנה מקום', () async {
     for (var i = 1; i < 32; i++) {
-      service.begin(
-        owner: 'owner',
+      await beginTab(
         tabId: 'tab-$i',
-        bookId: 'ספר',
-        bookUid: 'id:42',
-        libraryVersion: 'v1',
+        bookUid: 'id:$i',
         loadSource: (_) async => '',
       );
     }
-    expect(
-      () => service.begin(
-        owner: 'owner',
+    await expectLater(
+      beginTab(
         tabId: 'overflow',
-        bookId: 'ספר',
-        bookUid: 'id:42',
-        libraryVersion: 'v1',
+        bookUid: 'id:overflow',
         loadSource: (_) async => '',
       ),
       error('error.limit_exceeded'),
     );
-    service.end('owner', session['sessionId'], 0);
+    await service.end('owner', session['sessionId'], 0);
     expect(
-      service.begin(
-        owner: 'owner',
+      (await beginTab(
         tabId: 'overflow',
-        bookId: 'ספר',
-        bookUid: 'id:42',
-        libraryVersion: 'v1',
+        bookUid: 'id:overflow',
         loadSource: (_) async => '',
-      )['revision'],
+      ))['revision'],
       0,
     );
   });
 
-  test('הקלדה מקומית מתעדכנת מיד ונכללת באירוע הסיום', () {
-    service.removeTab('tab');
+  test('הקלדה מקומית מתעדכנת מיד ונכללת באירוע הסיום', () async {
+    await closeCurrent();
     final events = <Map<String, dynamic>>[];
-    session = service.begin(
-      owner: 'owner',
-      tabId: 'tab',
-      bookId: 'ספר',
-      bookUid: 'id:42',
-      libraryVersion: 'v1',
-      loadSource: (i) async => source[i]!,
+    session = await beginTab(
       onEvent: (topic, payload) => events.add({'topic': topic, ...payload}),
     );
     service.editParagraph('tab', 0, 'מקור 0', 'נוסח חדש 😀');
-    final latest = service.get('owner', session['sessionId']);
+    final latest = await current();
     expect(latest['revision'], 1);
     expect((latest['changes'] as List).single['proposedText'], 'נוסח חדש 😀');
-    expect(events.single['sectionIndex'], 0);
+    expect(events.single['topic'], 'reader.correctionSessionChanged');
+    expect(events.single['sectionIndices'], [0]);
+    expect(events.single['revision'], 1);
     service.editParagraph('tab', 0, 'מקור 0', 'מקור 0');
-    expect(service.get('owner', session['sessionId'])['changes'], isEmpty);
+    expect((await current())['changes'], isEmpty);
     service.editParagraph('tab', 1, 'מקור 1', 'אחרון');
     service.removeTab('tab');
+    await _idle();
     final ended = events.last;
     expect(ended['topic'], 'reader.correctionSessionEnded');
     expect(ended['reason'], 'tab_closed');
     expect(ended['snapshot']['revision'], 3);
     expect(ended['snapshot']['changes'].single['proposedText'], 'אחרון');
+    expect(ended['snapshot']['draft']['persisted'], isTrue);
     expect(source, {0: 'מקור 0', 1: 'מקור 1'});
   });
 
   test('הקלדה בעת restore מונעת דריסת ההקלדה האחרונה', () async {
-    service.removeTab('tab');
+    await closeCurrent();
     final gate = Completer<String>();
-    session = service.begin(
-      owner: 'owner',
-      tabId: 'tab',
-      bookId: 'ספר',
-      bookUid: 'id:42',
-      libraryVersion: 'v1',
-      loadSource: (_) => gate.future,
-    );
+    session = await beginTab(loadSource: (_) => gate.future);
     final pending = restore([change(0, 'טיוטה ישנה')]);
     await Future<void>.delayed(Duration.zero);
     service.editParagraph('tab', 0, 'מקור 0', 'הקלדה אחרונה');
@@ -386,7 +397,7 @@ void main() {
     );
     service.reset('owner', session['sessionId'], 0, 1);
     service.editParagraph('tab', 0, 'מקור 0', 'חדש');
-    expect(service.get('owner', session['sessionId'])['revision'], 3);
+    expect((await current())['revision'], 3);
   });
 
   test('מקור ריק נדחה, אך אפשר לרוקן פסקה קיימת בלי למחוק את הגבול', () async {
@@ -407,47 +418,54 @@ void main() {
     expect(service.canEditParagraph('tab', ''), isFalse);
   });
 
-  test('begin שהתחיל לפני הסרת הבעלים נדחה ואינו יוצר סשן יתום', () {
+  test('begin שהתחיל לפני הסרת הבעלים נדחה ואינו יוצר סשן יתום', () async {
     final epoch = service.ownerEpoch('late-owner');
     service.removeOwner('late-owner');
-    expect(
-      () => service.begin(
+    await expectLater(
+      beginTab(
         owner: 'late-owner',
         tabId: 'late-tab',
-        bookId: 'ספר',
-        bookUid: 'id:42',
-        libraryVersion: 'v1',
         loadSource: (index) async => 'מקור',
         ownerEpoch: epoch,
       ),
       error('error.permission_denied'),
     );
     expect(service.hasSessionForTab('late-tab'), isFalse);
-    service.begin(
+    await beginTab(
       owner: 'late-owner',
       tabId: 'late-tab',
-      bookId: 'ספר',
-      bookUid: 'id:42',
-      libraryVersion: 'v1',
       loadSource: (index) async => 'מקור',
       ownerEpoch: service.ownerEpoch('late-owner'),
     );
     expect(service.hasSessionForTab('late-tab'), isTrue);
   });
 
+  test('הסרת בעלים בזמן רכישת ה-lease אינה יוצרת סשן יתום', () async {
+    final pending = beginTab(
+      owner: 'racing-owner',
+      tabId: 'racing-tab',
+      bookUid: 'id:racing',
+    );
+    service.removeOwner('racing-owner');
+    await expectLater(pending, error('error.permission_denied'));
+    expect(service.hasSessionForTab('racing-tab'), isFalse);
+    await _idle();
+    // ה-lease שוחרר, ולכן פתיחה חוזרת מצליחה.
+    await beginTab(
+      owner: 'racing-owner',
+      tabId: 'racing-tab',
+      bookUid: 'id:racing',
+    );
+    expect(service.hasSessionForTab('racing-tab'), isTrue);
+  });
+
   group('חוזה אירועי הסיום והסרה', () {
     late List<(String, Map<String, dynamic>)> events;
 
-    setUp(() {
+    setUp(() async {
       events = [];
-      service.end('owner', session['sessionId'], 0);
-      session = service.begin(
-        owner: 'owner',
-        tabId: 'tab',
-        bookId: 'ספר',
-        bookUid: 'id:42',
-        libraryVersion: 'v1',
-        loadSource: (index) async => source[index]!,
+      await service.end('owner', session['sessionId'], 0);
+      session = await beginTab(
         onEvent: (topic, payload) => events.add((topic, payload)),
       );
     });
@@ -457,26 +475,37 @@ void main() {
           (
             String,
             String,
-            void Function(PluginCorrectionSessionService),
+            Future<void> Function(PluginCorrectionSessionService),
           )
         >[
           (
             'סיום מפורש',
             'explicit',
-            (s) => s.end(
-              'owner',
-              session['sessionId'],
-              s.get('owner', session['sessionId'])['revision'] as int,
-            ),
+            (s) async {
+              final latest = await s.get('owner', session['sessionId']);
+              await s.end(
+                'owner',
+                session['sessionId'],
+                latest['revision'] as int,
+              );
+            },
           ),
-          ('הסרת התוסף', 'plugin_unavailable', (s) => s.removeOwner('owner')),
-          ('סגירת לשונית', 'tab_closed', (s) => s.removeTab('tab')),
+          (
+            'הסרת התוסף',
+            'plugin_unavailable',
+            (s) async {
+              s.removeOwner('owner');
+            },
+          ),
+          ('סגירת לשונית', 'tab_closed', (s) async => s.removeTab('tab')),
+          ('סיום בידי המשתמש', 'user', (s) async => s.endByUser('tab')),
         ]) {
-      test('$name שולח correctionSessionEnded עם סיבה ותמונה אחרונה', () {
+      test('$name שולח correctionSessionEnded עם סיבה ותמונה אחרונה', () async {
         service.editParagraph('tab', 0, 'מקור 0', 'הקלדה אחרונה');
         events.clear();
-        remove(service);
+        await remove(service);
         expect(service.hasSessionForTab('tab'), isFalse);
+        await _idle();
         final ended = events.where(
           (event) => event.$1 == 'reader.correctionSessionEnded',
         );
@@ -488,12 +517,25 @@ void main() {
           (snapshot['changes'] as List).single['proposedText'],
           'הקלדה אחרונה',
         );
+        expect(snapshot['draft']['persisted'], isTrue);
+      });
+
+      test('$name משחרר את ה-lease ושומר את הטיוטה', () async {
+        service.editParagraph('tab', 0, 'מקור 0', 'נשמר בסיום');
+        await remove(service);
+        await _idle();
+        final drafts = await service.listDrafts('owner');
+        expect(drafts.single['changeCount'], 1);
+        expect(drafts.single['active'], isFalse);
+        final again = await beginTab();
+        expect(again['recovery']['restoredSectionIndices'], [0]);
       });
     }
 
-    test('הסרת בעלים או לשונית אחרים משאירה את הסשן חי', () {
+    test('הסרת בעלים או לשונית אחרים משאירה את הסשן חי', () async {
       service.removeOwner('other-owner');
       service.removeTab('other-tab');
+      await _idle();
       expect(service.hasSessionForTab('tab'), isTrue);
       expect(events, isEmpty);
     });
@@ -590,7 +632,7 @@ void main() {
           restore([mutate(change(0, 'תיקון'))]),
           error('error.invalid_params'),
         );
-        expect(service.get('owner', session['sessionId'])['revision'], 0);
+        expect((await current())['revision'], 0);
       });
     }
 
@@ -601,7 +643,7 @@ void main() {
           restore([change(0, 'תיקון')]),
           throwsA(isA<PluginCorrectionException>()),
         );
-        expect(service.get('owner', session['sessionId'])['changes'], isEmpty);
+        expect((await current())['changes'], isEmpty);
       }
     });
   });

@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:otzaria/data/sqlite/sqlite3_api.dart';
+import 'package:otzaria/plugins/repository/plugin_correction_draft_repository.dart';
 import 'package:otzaria/plugins/services/plugin_new_tab_page_registry.dart';
 import 'package:otzaria/plugins/models/plugin_valid_permissions.dart';
 import 'package:otzaria/plugins/bloc/plugin_system_bloc.dart';
@@ -122,7 +124,15 @@ void main() {
   );
   const menuItem = PluginContextMenuItem(id: 'item', label: 'Item');
 
-  tearDown(() {
+  late Database correctionDb;
+
+  setUp(() {
+    correctionDb = sqlite3.openInMemory();
+    PluginCorrectionSessionService.instance.draftRepository =
+        PluginCorrectionDraftRepository.direct(correctionDb);
+  });
+
+  tearDown(() async {
     PluginNewTabPageRegistry.instance.remove('p1');
     PluginNewTabPageRegistry.instance.remove('p2');
     PluginCorrectionSessionService.instance.removeOwner('p1');
@@ -135,6 +145,8 @@ void main() {
     PluginExternalSearchService.instance.removePlugin('p1');
     PluginInBookSearchService.instance.removePlugin('p1');
     PluginLazyActivationService.instance.backgroundDeactivator = null;
+    await _idle();
+    correctionDb.close();
   });
 
   Future<void> revoke(String permission) async {
@@ -210,7 +222,7 @@ void main() {
   group('סשני תיקון מקומיים', () {
     final events = <(String, Map<String, dynamic>)>[];
 
-    void beginFor(String owner, String tab) =>
+    Future<void> beginFor(String owner, String tab) =>
         PluginCorrectionSessionService.instance.begin(
           owner: owner,
           tabId: tab,
@@ -226,9 +238,10 @@ void main() {
     test(
       'שלילת reader.local_edit מסיימת את הסשן עם plugin_unavailable',
       () async {
-        beginFor('p1', 'tab-1');
+        await beginFor('p1', 'tab-1');
 
         await revoke('reader.local_edit');
+        await _idle();
 
         expect(
           PluginCorrectionSessionService.instance.hasSessionForTab('tab-1'),
@@ -240,12 +253,13 @@ void main() {
     );
 
     test('ניתוק תוסף פיתוח מסיים את הסשן שלו', () async {
-      beginFor('p1', 'tab-1');
+      await beginFor('p1', 'tab-1');
       final bloc = PluginSystemBloc(repository: _FakeRepo());
       addTearDown(bloc.close);
 
       bloc.add(const DetachDevelopmentPluginRequested('p1'));
       await Future<void>.delayed(Duration.zero);
+      await _idle();
 
       expect(
         PluginCorrectionSessionService.instance.hasSessionForTab('tab-1'),
@@ -255,9 +269,10 @@ void main() {
     });
 
     test('שלילת הרשאה אחרת משאירה את הסשן', () async {
-      beginFor('p1', 'tab-1');
+      await beginFor('p1', 'tab-1');
 
       await revoke('reader.open');
+      await _idle();
 
       expect(
         PluginCorrectionSessionService.instance.hasSessionForTab('tab-1'),
@@ -267,9 +282,10 @@ void main() {
     });
 
     test('שלילת הרשאה של תוסף אחד אינה מסיימת סשן של תוסף אחר', () async {
-      beginFor('p2', 'tab-2');
+      await beginFor('p2', 'tab-2');
 
       await revoke('reader.local_edit');
+      await _idle();
 
       expect(
         PluginCorrectionSessionService.instance.hasSessionForTab('tab-2'),
@@ -347,5 +363,12 @@ void main() {
         expect(deactivations, ['p1']);
       },
     );
+  }
+}
+
+/// סיום סשן תיקון (שמירה, שחרור lease ואירוע) רץ אחרי ההסרה עצמה.
+Future<void> _idle() async {
+  for (var i = 0; i < 20; i++) {
+    await Future<void>.delayed(Duration.zero);
   }
 }

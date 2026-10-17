@@ -7,6 +7,8 @@ import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/models/links.dart';
+import 'package:otzaria/data/sqlite/sqlite3_api.dart' show sqlite3;
+import 'package:otzaria/plugins/repository/plugin_correction_draft_repository.dart';
 import 'package:otzaria/plugins/services/plugin_correction_session_service.dart';
 import 'package:otzaria/personal_notes/bloc/personal_notes_bloc.dart';
 import 'package:otzaria/personal_notes/bloc/personal_notes_event.dart';
@@ -42,6 +44,23 @@ void main() {
   });
 
   group('תיקוני תוסף מקומיים בקורא המשולב', () {
+    final defaultFlushTimeout = PluginCorrectionSessionService.flushTimeout;
+
+    setUp(() {
+      final db = sqlite3.openInMemory();
+      addTearDown(db.close);
+      PluginCorrectionSessionService.instance.draftRepository =
+          PluginCorrectionDraftRepository.direct(db);
+      // כתיבה שהחלה בשעון המדומה אינה מתקדמת בתוך runAsync; לא ממתינים לה.
+      PluginCorrectionSessionService.flushTimeout = const Duration(
+        milliseconds: 200,
+      );
+    });
+
+    tearDown(
+      () => PluginCorrectionSessionService.flushTimeout = defaultFlushTimeout,
+    );
+
     for (final mode in [
       (false, false),
       (true, false),
@@ -158,19 +177,29 @@ void main() {
           expect(displayed(0).join(' '), contains('שורה א'));
           expect(displayed(1).join(' '), contains('שורה א'));
           final changeEvents = <Map<String, dynamic>>[];
-          final session = registry.begin(
-            owner: 'widget-correction',
-            tabId: PluginCorrectionSessionService.tabIdFor(tabs.first),
-            bookId: book.title,
-            bookUid: 'id:42',
-            libraryVersion: '1',
-            loadSource: (index) async => source[index],
-            onEvent: (topic, payload) {
-              if (topic == 'reader.correctionSessionChanged') {
-                changeEvents.add(payload);
-              }
-            },
-          );
+          final session = (await tester.runAsync(
+            () => registry.begin(
+              owner: 'widget-correction',
+              tabId: PluginCorrectionSessionService.tabIdFor(tabs.first),
+              bookId: book.title,
+              bookUid: 'id:42',
+              libraryVersion: '1',
+              loadSource: (index) async => source[index],
+              onEvent: (topic, payload) {
+                if (topic == 'reader.correctionSessionChanged') {
+                  changeEvents.add(payload);
+                }
+              },
+            ),
+          ))!;
+          // pump מריץ כתיבה שהחלה מהקלדה בשעון המדומה, לפני get האמיתי.
+          Future<Map<String, dynamic>> latestSnapshot() async {
+            await tester.pump();
+            return (await tester.runAsync(
+              () => registry.get('widget-correction', session['sessionId']),
+            ))!;
+          }
+
           await tester.pumpAndSettle();
           final editorFinder = find.descendant(
             of: find.byKey(keys.first),
@@ -219,17 +248,14 @@ void main() {
             isTrue,
           );
           await tester.enterText(firstEditor, 'עריכה ישירה אחרונה 😀');
-          final latest = registry.get(
-            'widget-correction',
-            session['sessionId'],
-          );
+          final latest = await latestSnapshot();
           expect(latest['revision'], 2);
           expect(
             (latest['changes'] as List).single['proposedText'],
             'עריכה ישירה אחרונה 😀',
           );
           expect(changeEvents.last['revision'], 2);
-          expect(changeEvents.last['sectionIndex'], 0);
+          expect(changeEvents.last['sectionIndices'], [0]);
           expect(editor.focusNode!.hasFocus, isTrue);
           editor.controller!.selection = const TextSelection.collapsed(
             offset: 3,
@@ -262,8 +288,7 @@ void main() {
             const TextRange(start: 21, end: 22),
           );
           expect(
-            (registry.get('widget-correction', session['sessionId'])['changes']
-                    as List)
+            ((await latestSnapshot())['changes'] as List)
                 .single['proposedText'],
             'עריכה ישירה אחרונה 😀ק',
           );
@@ -280,30 +305,18 @@ void main() {
             ),
           );
           await tester.pump();
-          expect(
-            registry.get('widget-correction', session['sessionId'])['revision'],
-            3,
-          );
+          expect((await latestSnapshot())['revision'], 3);
           for (final rejected in ['שתי\nפסקאות', '<b>תגית</b>']) {
             await tester.enterText(firstEditor, rejected);
             await tester.pump();
             expect(editor.controller!.text, 'עריכה ישירה אחרונה 😀ק');
-            expect(
-              registry.get(
-                'widget-correction',
-                session['sessionId'],
-              )['revision'],
-              3,
-            );
+            expect((await latestSnapshot())['revision'], 3);
           }
           editor.controller!.text = 'הדבקה ידנית\nשאינה פסקה אחת';
           editor.onChanged!(editor.controller!.text);
           await tester.pump();
           expect(editor.controller!.text, 'עריכה ישירה אחרונה 😀ק');
-          expect(
-            registry.get('widget-correction', session['sessionId'])['revision'],
-            3,
-          );
+          expect((await latestSnapshot())['revision'], 3);
           editor.focusNode!.unfocus();
           if (!continuous) {
             tabs.first.lines.itemController.jumpTo(index: 30);
@@ -322,17 +335,13 @@ void main() {
           registry.reset('widget-correction', session['sessionId'], 0, 3);
           await tester.pumpAndSettle();
           expect(displayed(0).join(' '), contains('שורה א'));
-          expect(
-            registry.get('widget-correction', session['sessionId'])['changes'],
-            isEmpty,
-          );
+          expect((await latestSnapshot())['changes'], isEmpty);
           await tester.runAsync(() => apply(4));
           await tester.pumpAndSettle();
-          final ended = registry.end(
-            'widget-correction',
-            session['sessionId'],
-            5,
-          );
+          final ended = (await tester.runAsync(
+            () => registry.end('widget-correction', session['sessionId'], 5),
+          ))!;
+          expect(ended['draft']['persisted'], isTrue);
           expect(
             (ended['changes'] as List).single['proposedText'],
             'נוסח מתוקן ארוך 😀',
@@ -406,29 +415,34 @@ void main() {
         );
         await tester.pumpAndSettle();
         Future<String> begin() async {
-          final session = registry.begin(
-            owner: 'focus-correction',
-            tabId: PluginCorrectionSessionService.tabIdFor(tab),
-            bookId: book.title,
-            bookUid: 'id:7',
-            libraryVersion: '1',
-            loadSource: (index) async => source[index],
-          );
+          final session = (await tester.runAsync(
+            () => registry.begin(
+              owner: 'focus-correction',
+              tabId: PluginCorrectionSessionService.tabIdFor(tab),
+              bookId: book.title,
+              bookUid: 'id:7',
+              libraryVersion: '1',
+              loadSource: (index) async => source[index],
+            ),
+          ))!;
           await tester.pumpAndSettle();
           return session['sessionId'] as String;
         }
 
+        Future<void> end(String id) =>
+            tester.runAsync(() => registry.end('focus-correction', id, 0));
+
         var id = await begin();
         external.requestFocus();
         await tester.pump();
-        registry.end('focus-correction', id, 0);
+        await end(id);
         await tester.pumpAndSettle();
         expect(external.hasFocus, isTrue);
 
         id = await begin();
         await tester.tap(find.byType(RtlTextField).first);
         await tester.pump();
-        registry.end('focus-correction', id, 0);
+        await end(id);
         await tester.pumpAndSettle();
         expect(external.hasFocus, isFalse);
         expect(find.byType(RtlTextField), findsNothing);

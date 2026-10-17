@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:otzaria/data/sqlite/sqlite3_api.dart';
+import 'package:otzaria/plugins/repository/plugin_correction_draft_repository.dart';
 import 'package:otzaria/plugins/services/plugin_correction_session_service.dart';
 import 'package:otzaria/plugins/view/plugin_correction_paragraph.dart';
 import 'package:otzaria/widgets/smart_text/render_settings.dart';
@@ -19,7 +21,10 @@ void main() {
   testWidgets('קריאה רגילה אינה מעבדת טקסט עבור עורך שאינו פעיל', (
     tester,
   ) async {
-    final service = _CountingService();
+    final db = sqlite3.openInMemory();
+    addTearDown(db.close);
+    final service = _CountingService()
+      ..draftRepository = PluginCorrectionDraftRepository.direct(db);
     addTearDown(service.dispose);
     const source = '<b>מקור</b>';
     await tester.pumpWidget(
@@ -38,14 +43,16 @@ void main() {
     );
     expect(service.editableTextCalls, 0);
     expect(find.byType(RtlTextField), findsNothing);
-    final session = service.begin(
-      owner: 'owner',
-      tabId: 'tab',
-      bookId: 'ספר',
-      bookUid: 'id:1',
-      libraryVersion: '1',
-      loadSource: (_) async => source,
-    );
+    final session = (await tester.runAsync(
+      () => service.begin(
+        owner: 'owner',
+        tabId: 'tab',
+        bookId: 'ספר',
+        bookUid: 'id:1',
+        libraryVersion: '1',
+        loadSource: (_) async => source,
+      ),
+    ))!;
     await tester.pump();
     expect(find.byType(RtlTextField), findsOneWidget);
     expect(
@@ -53,7 +60,7 @@ void main() {
       'מקור',
     );
     final calls = service.editableTextCalls;
-    service.end('owner', session['sessionId'], 0);
+    await tester.runAsync(() => service.end('owner', session['sessionId'], 0));
     await tester.pump();
     expect(service.editableTextCalls, calls);
     expect(find.text('קריאה'), findsOneWidget);
