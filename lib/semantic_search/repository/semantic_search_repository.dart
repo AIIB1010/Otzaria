@@ -150,6 +150,8 @@ class SemanticSearchRepository {
 
   Future<void>? _job;
   SemanticCancelHandle _jobCancel = SemanticCancelHandle();
+  Future<void>? _compaction;
+  SemanticCancelHandle _compactCancel = SemanticCancelHandle();
   SemanticAvailabilityPhase? _jobPhase;
   SemanticDownloadProgress? _jobProgress;
 
@@ -265,6 +267,7 @@ class SemanticSearchRepository {
   /// מחדשים את ההורדה עד [enableAndDownload].
   Future<void> cancelDownload() async {
     _jobCancel.cancel();
+    _compactCancel.cancel();
     await _settings.setDownloadPaused(true);
     await refresh();
   }
@@ -293,6 +296,7 @@ class SemanticSearchRepository {
     _jobCancel.cancel();
     _busyRetry?.cancel();
     await _job;
+    await _stopCompaction();
     _cancelAllSearches();
     await _closeSession();
     await _settings.setDataEnabled(false);
@@ -384,6 +388,7 @@ class SemanticSearchRepository {
     _busyRetry?.cancel();
     _jobCancel.cancel();
     await _job;
+    await _stopCompaction();
     _cancelAllSearches();
     await _closeSession();
     _vectors = null;
@@ -547,6 +552,7 @@ class SemanticSearchRepository {
       _consentSubscription = _consent.changes.listen((consent) async {
         if (consent != SearchFeedbackConsent.granted) {
           _jobCancel.cancel();
+          _compactCancel.cancel();
           _cancelAllSearches();
           await _closeSession();
         }
@@ -761,6 +767,7 @@ class SemanticSearchRepository {
 
     // ה-release נמצא לפני הורדת המודל: בלי וקטורים לגרסה הזו אין מה להוריד.
     SemanticVectorsRelease? release;
+    SemanticVectorsRelease? onlineRelease;
     final installedFamily = await _installedFamily(installed);
     final upToDate =
         installed.present &&
@@ -773,11 +780,12 @@ class SemanticSearchRepository {
         version,
         offline: offline,
         candidates: candidates,
-        online: () => _locator.findForLibraryVersion(
-          version,
-          libraryTag: _libraryTagHint,
-          candidates: candidates,
-        ),
+        online: () async =>
+            onlineRelease = await _locator.findForLibraryVersion(
+              version,
+              libraryTag: _libraryTagHint,
+              candidates: candidates,
+            ),
       );
       if (release == null) {
         _unpublishedVersion = version;
@@ -793,9 +801,22 @@ class SemanticSearchRepository {
     }
     if (release == null && !installed.present) return;
 
+    // deltas רק מהרשת: מסייע ההורדה מכין base בלבד.
+    final chain =
+        release != null &&
+            identical(release, onlineRelease) &&
+            !_needsRepair &&
+            installed.present &&
+            installedFamily == release.family &&
+            installed.identityDigest == release.identityDigest
+        ? await _locator.findDeltaChain(
+            target: release,
+            installedVersion: installed.libraryVersion,
+          )
+        : null;
     final model = await _missingModelFiles(paths, quantization);
     _jobModelBytes = model.missing.fold(0, (sum, t) => sum + t.file.size);
-    _jobTotalBytes = _jobModelBytes + (release?.downloadSize ?? 0);
+    _jobTotalBytes = _jobModelBytes + _downloadSizeOf(chain ?? [?release]);
     _jobSteps = [
       if (model.missing.isNotEmpty) SemanticDownloadItem.model,
       if (release != null) ...[
@@ -804,25 +825,62 @@ class SemanticSearchRepository {
       ],
     ];
     await _ensureModel(paths, modelIdentity, quantization, model);
-    if (_jobCancel.isCancelled || release == null) return;
-    await _installRelease(paths, release);
+    if (_jobCancel.isCancelled) return;
+    if (release != null) {
+      await _installRelease(paths, release, chain: chain);
+      if (_jobCancel.isCancelled) return;
+    }
+    _compactIfNeeded(version);
   }
 
+  /// מתקין את [base], או את [chain] — ה-deltas אליו — כשיש. delta שהמנוע
+  /// דוחה מחזיר ל-[base]; [vectorsStart] הוא מה שכבר נספר בהתקדמות.
   Future<void> _installRelease(
     SemanticPaths paths,
-    SemanticVectorsRelease release,
-  ) async {
-    final family = release.family;
-    final identity = await _loadIdentity(family);
+    SemanticVectorsRelease base, {
+    List<SemanticVectorsRelease>? chain,
+    int? vectorsStart,
+  }) async {
+    final plan = chain ?? [base];
+    await _stopCompaction();
     await _ensureOwnedOrAbsent(paths.vectorsDirectory, allowEmpty: true);
     await _ensureOwnedOrAbsent(paths.vectorsDownloadDirectory);
     await markSemanticDirectory(paths.vectorsDownloadDirectory);
     final downloadDir = Directory(paths.vectorsDownloadDirectory);
-    await _removeForeignDownloads(downloadDir, release);
-    await _ensureDiskSpace(downloadDir.path, release);
-    final segment = await _downloadVectors(downloadDir.path, release);
-    if (_jobCancel.isCancelled) return;
+    await _removeForeignDownloads(downloadDir, plan);
+    var done = vectorsStart ?? _jobModelBytes;
+    await _ensureDiskSpace(downloadDir.path, plan, done);
+    for (final release in plan) {
+      final segment = await _downloadVectors(downloadDir.path, release, done);
+      if (_jobCancel.isCancelled) return;
+      if (!await _installStep(paths, release, segment)) {
+        _jobTotalBytes = done + base.downloadSize;
+        return _installRelease(paths, base, vectorsStart: done);
+      }
+      done += release.downloadSize;
+      // צעד שהותקן אינו נחוץ עוד; ההורדות החלקיות של הבאים נשמרות.
+      if (plan.length > 1) {
+        await _removeForeignDownloads(
+          downloadDir,
+          plan.sublist(plan.indexOf(release) + 1),
+        );
+      }
+    }
+    try {
+      await deleteSemanticOwnedDirectory(downloadDir.path);
+    } on FileSystemException catch (error, stackTrace) {
+      _log('cleanup', error, stackTrace);
+    }
+  }
 
+  /// מתקין release אחד מ-[segment]; `false` כש-delta אינו ממשיך את הסט.
+  Future<bool> _installStep(
+    SemanticPaths paths,
+    SemanticVectorsRelease release,
+    String segment,
+  ) async {
+    final family = release.family;
+    final identity = await _loadIdentity(family);
     _setJob(
       SemanticAvailabilityPhase.installing,
       _progressOf(SemanticDownloadItem.install, _jobTotalBytes),
@@ -855,12 +913,17 @@ class SemanticSearchRepository {
         cancel: _jobCancel,
       );
     } on SemanticFailure catch (failure) {
+      if (failure.kind != SemanticFailureKind.artifactIncompatible) rethrow;
+      // delta שאינו ממשיך את הסט (delta.*, או פרסום חוזר): ה-base מחליף אותו.
+      if (release.isDelta) {
+        _log('install', failure, StackTrace.current);
+        return false;
+      }
       // פרסום חוזר של גרסה מותקנת, או chunking שהמנוע לא פותר: לא מורידים שוב.
-      if (failure.kind != SemanticFailureKind.artifactIncompatible ||
-          !const {
-            'segment_id',
-            'model.chunking_identity',
-          }.contains(failure.field)) {
+      if (!const {
+        'segment_id',
+        'model.chunking_identity',
+      }.contains(failure.field)) {
         rethrow;
       }
       _log('install', failure, StackTrace.current);
@@ -869,12 +932,56 @@ class SemanticSearchRepository {
     _needsRepair = false;
     if (repair) _lastFailure = null;
     _vectors = await _backend.vectorsInfo(paths.vectorsDirectory);
+    return true;
+  }
+
+  /// מאחד ברקע סט שהמנוע מבקש לאחד (אחרי deltas); לעולם לא בעליית התוכנה.
+  void _compactIfNeeded(int liveLibraryVersion) {
+    if (_vectors?.needsCompaction != true ||
+        _compaction != null ||
+        _isSecondaryWindow() ||
+        _moveInProgress) {
+      return;
+    }
+    final cancel = _compactCancel = SemanticCancelHandle();
+    _compaction = _compact(
+      liveLibraryVersion,
+      cancel,
+    ).whenComplete(() => _compaction = null);
+  }
+
+  Future<void> _compact(
+    int liveLibraryVersion,
+    SemanticCancelHandle cancel,
+  ) async {
     try {
-      await deleteSemanticOwnedDirectory(downloadDir.path);
-    } on FileSystemException catch (error, stackTrace) {
-      _log('cleanup', error, stackTrace);
+      final dir = (await _paths()).vectorsDirectory;
+      // session פתוח עובר בעצמו לדור המאוחד.
+      await _backend.compactVectors(
+        dir,
+        liveLibraryVersion: liveLibraryVersion,
+        cancel: cancel,
+      );
+      if (!cancel.isCancelled) _vectors = await _backend.vectorsInfo(dir);
+    } on SemanticFailure catch (failure) {
+      if (failure.kind == SemanticFailureKind.vectorsBusy) {
+        _scheduleBusyRetry();
+      } else if (failure.kind != SemanticFailureKind.cancelled) {
+        _log('compact', failure, StackTrace.current);
+      }
+    } catch (error, stackTrace) {
+      _log('compact', error, stackTrace);
     }
   }
+
+  /// מבטל איחוד שרץ וממתין לו: התקנה, מחיקה והעברה צריכות את הסט פנוי.
+  Future<void> _stopCompaction() async {
+    _compactCancel.cancel();
+    await _compaction;
+  }
+
+  static int _downloadSizeOf(List<SemanticVectorsRelease> plan) =>
+      plan.fold(0, (sum, release) => sum + release.downloadSize);
 
   /// לא כותבים לתוך תיקייה באותו שם שאינה שלנו.
   static Future<void> _ensureOwnedOrAbsent(
@@ -1024,17 +1131,18 @@ class SemanticSearchRepository {
     }
   }
 
+  /// [before] — מה שכבר נספר: רכיב החיפוש וצעדים קודמים בשרשרת.
   Future<String> _downloadVectors(
     String downloadDir,
     SemanticVectorsRelease release,
+    int before,
   ) async {
-    // הבתים של הוקטורים נספרים אחרי אלה של רכיב החיפוש.
-    var done = _jobModelBytes;
+    var done = before;
     final parts = <String>[];
     _reportProgress(SemanticDownloadItem.vectors, done, force: true);
     for (final file in release.files) {
       final dest = p.join(downloadDir, file.name);
-      final before = done;
+      final start = done;
       await _fetch(
         url: file.downloadUrl,
         destPath: dest,
@@ -1043,7 +1151,7 @@ class SemanticSearchRepository {
         expectedSize: file.size,
         expectedSha256: file.sha256,
         onProgress: (received, _) =>
-            _reportProgress(SemanticDownloadItem.vectors, before + received),
+            _reportProgress(SemanticDownloadItem.vectors, start + received),
         isCancelled: () => _jobCancel.isCancelled,
       );
       done += file.size;
@@ -1065,11 +1173,14 @@ class SemanticSearchRepository {
     return segment;
   }
 
+  /// מוחק מתיקיית ההורדות כל מה שאינו של [plan]; הורדות חלקיות שלו נשמרות.
   Future<void> _removeForeignDownloads(
     Directory dir,
-    SemanticVectorsRelease release,
+    List<SemanticVectorsRelease> plan,
   ) async {
-    final names = release.files.map((file) => file.name).toList();
+    final names = [
+      for (final release in plan) ...release.files.map((file) => file.name),
+    ];
     await for (final entity in dir.list()) {
       final name = p.basename(entity.path);
       if (name == kSemanticOwnerMarker || names.any(name.startsWith)) continue;
@@ -1081,16 +1192,17 @@ class SemanticSearchRepository {
     }
   }
 
-  /// צריך מקום להורדה שנותרה ול-segment הפרוס שההתקנה תכתוב.
+  /// צריך מקום להורדות שנותרו ול-segments הפרוסים שההתקנות יכתבו.
   Future<void> _ensureDiskSpace(
     String downloadDir,
-    SemanticVectorsRelease release,
+    List<SemanticVectorsRelease> plan,
+    int done,
   ) async {
     final info = await _diskSpace(downloadDir);
     if (info.freeBytes < 0) return;
-    _reportProgress(SemanticDownloadItem.vectors, _jobModelBytes, force: true);
+    _reportProgress(SemanticDownloadItem.vectors, done, force: true);
     var remaining = 0;
-    for (final file in release.files) {
+    for (final file in plan.expand((release) => release.files)) {
       // קובץ מוכן באותו כונן עובר ב-rename ואינו תופס מקום נוסף.
       final staged = await _staged.stagedFile(file.name);
       if (staged != null &&
@@ -1111,7 +1223,9 @@ class SemanticSearchRepository {
       final have = await partial.exists() ? await partial.length() : 0;
       remaining += (file.size - have).clamp(0, file.size);
     }
-    final needed = remaining + release.segmentUncompressedSize;
+    final needed =
+        remaining +
+        plan.fold(0, (sum, release) => sum + release.segmentUncompressedSize);
     if (info.freeBytes < needed) {
       throw SemanticFailure(
         SemanticFailureKind.insufficientDiskSpace,

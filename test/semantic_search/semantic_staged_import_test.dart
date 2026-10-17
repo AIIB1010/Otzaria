@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/messages/semantic_search_messages.dart';
 import 'package:otzaria/search_feedback/search_feedback_api.dart';
 import 'package:otzaria/semantic_search/models/semantic_availability.dart';
+import 'package:otzaria/semantic_search/models/semantic_engine_models.dart';
 import 'package:otzaria/semantic_search/models/semantic_failure.dart';
 import 'package:otzaria/semantic_search/models/semantic_import_layout.dart';
 import 'package:otzaria/semantic_search/models/semantic_model_identity.dart';
@@ -408,6 +409,44 @@ void main() {
     expect(backend.installRequests, hasLength(1));
   });
 
+  test(
+    'נתונים מוכנים מותקנים כ-base גם כשמותקן סט שאפשר לקדם ב-deltas',
+    () async {
+      final digest = 'ab' * 32;
+      installModelFiles(root);
+      final manifest = jsonEncode(
+        jsonDecode(_manifest(family: SemanticVectorsFamily.windows))
+          ..['identityDigest'] = digest,
+      );
+      write(staged(kSemanticImportVectorsFolderName, _segmentName), 'segment');
+      write(staged(kSemanticImportVectorsFolderName, _manifestName), manifest);
+      markInstalledWindowsSet(root, digest);
+      final backend = FakeBackend()
+        ..supportsLongLineWindows = true
+        ..vectors = SemanticVectorsSummary(
+          present: true,
+          identityDigest: digest,
+          libraryVersion: 29,
+          libraryReleaseTag: 'v29-20260930165019',
+        );
+      final locator = FakeLocator()..chain = [deltaRelease(29, 30)];
+      final downloads = FakeDownloads();
+      final repository = buildRepository(
+        root: root,
+        backend: backend,
+        settings: FakeSettingsStore()..isOfflineMode = true,
+        locator: locator,
+        download: downloads.call,
+      );
+
+      await repository.enableAndDownload();
+
+      expect(locator.chainLookups, isEmpty);
+      expect(downloads.urls, isEmpty);
+      expect(backend.installRequests.single.manifestJson, manifest);
+    },
+  );
+
   test('קובץ מוכן שאינו תואם — יורד מהרשת במקומו', () async {
     stageAll(segment: 'corrupted');
     final release = SemanticStagedImport.parseStagedManifest(
@@ -631,6 +670,20 @@ void main() {
         _anchorOnly,
       ),
       throwsFormatException,
+    );
+  });
+
+  test('מניפסט delta מוכן אינו משמש: נתונים מוכנים הם base בלבד', () {
+    final delta = jsonDecode(_manifest(family: SemanticVectorsFamily.windows))
+      ..['kind'] = 'delta'
+      ..['fromLibraryVersion'] = 29;
+    expect(
+      SemanticStagedImport.parseStagedManifest(
+        utf8.encode(jsonEncode(delta)),
+        30,
+        _windowsFirst,
+      ),
+      isNull,
     );
   });
 
