@@ -451,12 +451,6 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
     );
 
     if (matchingIndex != null) {
-      // אם הטאב החדש מבקש הדגשה ממוקדת (deep link), נעביר אותה ל‑bloc של
-      // הטאב הקיים — אחרת ה‑highlight החדש היה נזרק עם ה‑dispose.
-      _propagatePinpointHighlightToExistingTab(
-        existingTab: state.tabs[matchingIndex],
-        incomingTab: event.tab,
-      );
       _propagateSearchToExistingTab(
         existingTab: state.tabs[matchingIndex],
         incomingTab: event.tab,
@@ -469,6 +463,11 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
           incomingTab: event.tab,
         );
       }
+      // ההדגשה מדייקת את היעד בתוך השורה, אחרי הניווט למיקום המפורש.
+      _propagatePinpointHighlightToExistingTab(
+        existingTab: state.tabs[matchingIndex],
+        incomingTab: event.tab,
+      );
       final matchingPane = await _matchingPaneIn(
         state.tabs[matchingIndex],
         event.tab,
@@ -543,9 +542,7 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
     );
     if (targetText == null) return;
 
-    // בוחרים את ערכי ההדגשה לפי סדר עדיפות: pinpoint (deep link עם highlight
-    // ממוקד לסעיף) מקבל קדימות. אחרת, highlightText/permanentHighlightLine
-    // (deep link ?mark). אם אין כלום — אין מה להחיל.
+    // pinpoint מקבל קדימות על highlightText/permanentHighlightLine.
     final pinpoint = incomingTab.pinpointHighlight;
     final String effectiveHighlight;
     final int? effectiveLine;
