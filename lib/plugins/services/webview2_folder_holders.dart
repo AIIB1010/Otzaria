@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:otzaria/core/app_paths.dart';
 import 'package:otzaria/core/error_log_file.dart';
+import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:path/path.dart' as p;
 
 /// תוצאת הסריקה, שורת תיאור לכל תהליך. [unreadable] — תהליכים ששורת הפקודה
@@ -30,7 +31,7 @@ class WebView2FolderHolders {
 
   // Emits every msedgewebview2 process with its parent; [parse] keeps the roots.
   static const String _script = r'''
-$ErrorActionPreference = 'SilentlyContinue'
+$ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
 function Stamp($d) { if ($d) { $d.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'") } }
@@ -79,6 +80,7 @@ if ($ids.Count -gt 0) {
   /// מחזיר את ה-Future לצורכי בדיקה בלבד; הקוראים אינם ממתינים לו.
   static Future<void>? recordIfFolderConflict(Object error) {
     try {
+      if (WindowRole.isSecondary) return null;
       if (_triggered) return null;
       if (!(debugIsWindowsOverride ?? Platform.isWindows)) return null;
       if (!isFolderConflict(error)) return null;
@@ -162,7 +164,7 @@ if ($ids.Count -gt 0) {
         process.exitCode,
         stdout,
       ]).timeout(_processTimeout);
-      return results[1] as String;
+      return results[0] == 0 ? results[1] as String : null;
     } on TimeoutException {
       process.kill();
       return null;

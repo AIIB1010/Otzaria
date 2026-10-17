@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/app_paths.dart';
 import 'package:otzaria/core/error_log_file.dart';
+import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/plugins/services/plugin_webview_failure_log.dart';
 import 'package:otzaria/plugins/services/webview2_folder_holders.dart';
 import 'package:path/path.dart' as p;
@@ -30,6 +32,19 @@ WebView2FolderScan _parse(String output) =>
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  final powerShell = Platform.isWindows ? 'powershell.exe' : 'pwsh';
+  var hasPowerShell = false;
+  try {
+    hasPowerShell =
+        Process.runSync(powerShell, [
+          '-NoProfile',
+          '-Command',
+          'exit 0',
+        ]).exitCode ==
+        0;
+  } on ProcessException {
+    // הרצת הסקריפט דורשת PowerShell מותקן.
+  }
 
   group('parse', () {
     test('keeps only browser roots that use our folder (any case/form)', () {
@@ -169,6 +184,7 @@ void main() {
     });
 
     tearDown(() {
+      WindowRole.isSecondary = false;
       WebView2FolderHolders.debugReset();
       debugForcePluginWebViewFailureFileLog = false;
       AppPaths.debugOverrideDataRootPath(null);
@@ -192,6 +208,75 @@ void main() {
       WebView2FolderHolders.debugIsWindowsOverride = false;
       expect(WebView2FolderHolders.recordIfFolderConflict(_conflict), isNull);
     });
+
+    test('secondary window skips the gate and runner', () async {
+      var runs = 0;
+      var gateCalls = 0;
+      WebView2FolderHolders.startupGate = () async => gateCalls++;
+      addTearDown(
+        () => WebView2FolderHolders.startupGate = () => Future<void>.value(),
+      );
+      WebView2FolderHolders.debugRunnerOverride = (_) async {
+        runs++;
+        return _output(processes: const []);
+      };
+
+      WindowRole.isSecondary = true;
+      await WebView2FolderHolders.recordIfFolderConflict(_conflict);
+      expect(runs, 0);
+      expect(gateCalls, 0);
+      expect(errorsTxt(), isEmpty);
+
+      WindowRole.isSecondary = false;
+      await WebView2FolderHolders.recordIfFolderConflict(_conflict);
+      expect(runs, 1);
+    });
+
+    for (final failure in ['empty', 'browser query', 'parent query']) {
+      test('PowerShell $failure preserves query outcome', () async {
+        int? exitCode;
+        WebView2FolderHolders.debugRunnerOverride = (args) async {
+          final script = String.fromCharCodes(
+            Uint16List.view(base64Decode(args.last).buffer),
+          );
+          final mockedScript =
+              '''
+function Get-CimInstance {
+  param(\$ClassName, \$Filter)
+  if (\$Filter -like 'Name=*') {
+    ${failure == 'browser query' ? "Write-Error 'Access denied'" : ''}
+    ${failure == 'parent query' ? "[pscustomobject]@{ ProcessId=7; ParentProcessId=4; CommandLine='--user-data-dir=\"$folder\"' }" : ''}
+  } else {
+    Write-Error 'WMI unavailable'
+  }
+}
+$script
+''';
+          final result = await Process.run(powerShell, [
+            ...args.take(args.length - 1),
+            base64Encode(
+              Uint16List.fromList(mockedScript.codeUnits).buffer.asUint8List(),
+            ),
+          ]);
+          exitCode = result.exitCode;
+          return result.stdout as String;
+        };
+
+        await WebView2FolderHolders.recordIfFolderConflict(_conflict);
+        expect(
+          errorsTxt(),
+          contains(
+            failure == 'empty'
+                ? 'Holders: none: no msedgewebview2 browser process uses the folder'
+                : 'Holders: process query failed or timed out',
+          ),
+        );
+        if (failure != 'empty') {
+          expect(errorsTxt(), isNot(contains('parent=exited')));
+        }
+        expect(exitCode, failure == 'empty' ? 0 : isNonZero);
+      }, skip: !hasPowerShell ? 'PowerShell is not installed' : false);
+    }
 
     test('waits for the startup gate before spawning', () async {
       final gate = Completer<void>();
