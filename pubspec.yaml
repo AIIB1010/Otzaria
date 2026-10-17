@@ -100,7 +100,10 @@ dependencies:
   googleapis_auth: ^2.3.4
   characters: ^1.4.1
   collection: ^1.19.1
-  otzaria_search_engine: ^4.0.0
+  otzaria_search_engine:
+    git:
+      url: https://github.com/Otzaria/otzaria_search_engine.git
+      ref: 4be1999da838060adcdd18864f6e626f91bd6e86
   # חוזה הדיווחים מול השרת, משותף עם "עדכוני אוצריא" (Dart טהור).
   otzaria_report_contract:
     path: packages/otzaria_report_contract
@@ -272,6 +275,7 @@ flutter:
     - assets/export_restricted_books.json
     # זהות המודל הסמנטי (model.json מ-otzaria-semantic-search)
     - assets/semantic/meivin-round2-onnx/
+    - assets/semantic/meivin-round2-windows-onnx/
 
   fonts:
     # החבילה מספקת את הגופן אך אינה מצהירה עליו, ולכן שני אייקוני ה-light
