@@ -132,7 +132,6 @@ dependencies:
       path: flutter_inappwebview
   # נדרש ישירות עבור WindowsFileDropManager (גרירת קבצים אל החלון).
   flutter_inappwebview_windows: any
-  custom_mouse_cursor: ^1.1.3
   wakelock_plus: ^1.8.1
 
 dependency_overrides:
