@@ -66,14 +66,14 @@ List<IndexingEvent> buildRefreshIndexingPlan({
   }
   // קובץ מסד מצורף מדווח כשינוי של כל ספריו; השוואת טביעת האצבע מחליפה רק
   // את אלה שתוכנם באמת השתנה. ל-PDF אין טביעת אצבע, ולכן הוא מוחלף כמדווח.
-  final checkedBooks = [
-    for (final book in changedBooks)
-      if (book.source.isAttached && book is! PdfBook) book,
-  ];
-  final explicitChanged = [
-    for (final book in changedBooks)
-      if (!checkedBooks.contains(book)) book,
-  ];
+  final checkedBooks = <Book>[];
+  final explicitChanged = <Book>[];
+  for (final book in changedBooks) {
+    (book.source.isAttached && book is! PdfBook
+            ? checkedBooks
+            : explicitChanged)
+        .add(book);
+  }
   final check = reconcile
       ? IndexCheckScope.library
       : checkedBooks.isEmpty

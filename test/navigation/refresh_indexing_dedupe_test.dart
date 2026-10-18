@@ -91,6 +91,29 @@ void main() {
       expect(run.changedBooks, [regular]);
     });
 
+    test('החלפת מסד גדול מחלקת ספרים לבדיקה בזמן ליניארי', () {
+      final attached = List.generate(200, _ComparisonCountingBook.new);
+      _ComparisonCountingBook.comparisons = 0;
+
+      final run = single(
+        buildRefreshIndexingPlan(
+          library: library,
+          newBooks: const [],
+          changedBooks: attached,
+          indexWholeLibrary: false,
+          reconcile: false,
+          indexUpdateMode: IndexUpdateMode.all,
+        ),
+      );
+
+      expect(
+        _ComparisonCountingBook.comparisons,
+        lessThan(attached.length * 5),
+      );
+      expect(run.check.books, hasLength(attached.length));
+      expect(run.changedBooks, isEmpty);
+    });
+
     test('PDF ממסד מצורף שהשתנה — מוחלף, בלי טביעת אצבע', () {
       final attachedPdf = PdfBook(
         id: 2,
@@ -383,4 +406,20 @@ void main() {
       expect(change(IndexUpdateMode.libraryOnly, IndexUpdateMode.off), isEmpty);
     });
   });
+}
+
+class _ComparisonCountingBook extends TextBook {
+  _ComparisonCountingBook(int id)
+    : super(id: id, title: 'ספר $id', source: BookSource.attached('large'));
+
+  static int comparisons = 0;
+
+  @override
+  bool operator ==(Object other) {
+    comparisons++;
+    return identical(this, other);
+  }
+
+  @override
+  int get hashCode => identityHashCode(this);
 }
