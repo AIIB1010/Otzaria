@@ -221,6 +221,9 @@ class _PrintingScreenState extends State<PrintingScreen> {
   final Map<String, String> _commentaryContentCache = {};
   List<PersonalNote>? _personalNotesCache;
   bool _isLoadingNotes = false;
+
+  /// עבודת הדפסה בתהליך: ציור והעברה למדפסת יכולים לקחת דקות.
+  bool _isPrinting = false;
   Timer? _previewRefreshTimer;
 
   // נקודות הקצה של טווח ההדפסה — כל אחת עצמאית בסוגה (כותרת/כותרת משנה/שורה).
@@ -1689,13 +1692,24 @@ class _PrintingScreenState extends State<PrintingScreen> {
     }
     switch (_destination) {
       case _PrintDestination.printer:
-        final printed = await printPdfWithSaferMode(
-          context: context,
-          name: widget.bookId,
-          usePrinterSettings: true,
-          onLayout: _createOutputPdf,
-          format: format,
-        );
+        if (_isPrinting) return;
+        setState(() => _isPrinting = true);
+        final bool printed;
+        try {
+          printed = await printPdfWithSaferMode(
+            context: context,
+            name: widget.bookId,
+            usePrinterSettings: true,
+            onLayout: _createOutputPdf,
+            format: format,
+          );
+        } catch (e) {
+          if (mounted) setState(() => _isPrinting = false);
+          UiSnack.showError(PdfMessages.printError(e));
+          return;
+        }
+        if (mounted) setState(() => _isPrinting = false);
+        if (printed) UiSnack.show(PdfMessages.printSent);
         if (printed && context.mounted) {
           Navigator.of(context).pop(true);
         }
@@ -2498,18 +2512,27 @@ class _PrintingScreenState extends State<PrintingScreen> {
           Expanded(
             child: ActionButton.neutral(
               text: 'ביטול',
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: _isPrinting ? null : () => Navigator.of(context).pop(),
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: ActionButton.recommended(
-              text: isPrint ? 'הדפסה' : 'שמירה',
-              icon: isPrint
-                  ? FluentIcons.print_24_regular
-                  : FluentIcons.save_24_regular,
-              onPressed: () => _performDestinationAction(context),
-            ),
+            child: _isPrinting
+                ? const ActionButton.recommended(
+                    text: 'מדפיס…',
+                    iconWidget: SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    onPressed: null,
+                  )
+                : ActionButton.recommended(
+                    text: isPrint ? 'הדפסה' : 'שמירה',
+                    icon: isPrint
+                        ? FluentIcons.print_24_regular
+                        : FluentIcons.save_24_regular,
+                    onPressed: () => _performDestinationAction(context),
+                  ),
           ),
         ],
       ),

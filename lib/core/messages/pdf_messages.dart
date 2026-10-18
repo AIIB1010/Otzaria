@@ -38,5 +38,8 @@ abstract class PdfMessages {
       'לפתיחת דיאלוג ההדפסה של המערכת נדרשת סיסמה.';
 
   static String fileExportFailed(Object error) => 'ייצוא הקובץ נכשל: $error';
+  static const String printSent = 'המסמך נשלח להדפסה';
+
+  static String printError(Object error) => 'ההדפסה נכשלה: $error';
   static String printFailed(String printer) => 'ההדפסה למדפסת "$printer" נכשלה';
 }
