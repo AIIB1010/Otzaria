@@ -1043,6 +1043,44 @@ void main() {
       await repository.pendingJob;
       expect(downloads.urls.length, before);
     });
+
+    for (final field in [
+      'store.store_format_version',
+      'store.vector_precision',
+    ]) {
+      test('$field שהמנוע אינו קורא — נרשם ולא מורד שוב', () async {
+        installModelFiles(root);
+        final downloads = FakeDownloads();
+        final settings = FakeSettingsStore()..dataEnabled = true;
+        final backend = FakeBackend()
+          ..vectors = installedAnchorV30
+          ..installFailures.add(
+            SemanticFailure(
+              SemanticFailureKind.artifactIncompatible,
+              'this build reads another store',
+              field,
+            ),
+          );
+        final repository = buildRepository(
+          root: root,
+          backend: backend,
+          settings: settings,
+          download: downloads.call,
+          locator: FakeLocator(releaseV30()),
+          libraryVersion: 31,
+        );
+
+        repository.scheduleVectorsUpdate();
+        await repository.pendingJob;
+        expect(settings.skippedVectorsRelease, 'vectors-v30-20260930165019');
+        final before = downloads.urls.length;
+
+        repository.scheduleVectorsUpdate();
+        await repository.pendingJob;
+        expect(downloads.urls.length, before);
+        expect(backend.installRequests, hasLength(1));
+      });
+    }
   });
 
   group('deltas של משפחת החלונות', () {
@@ -1161,6 +1199,7 @@ void main() {
       'delta.from_library_version',
       'delta.identity',
       'delta.codec_params',
+      'store.store_format_version',
     ]) {
       test('$field — נופלים ל-base, בלי לדלג על ה-release', () async {
         locator.chain = chainTo30();

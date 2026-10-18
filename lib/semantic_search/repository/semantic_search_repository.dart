@@ -938,10 +938,12 @@ class SemanticSearchRepository {
         _log('install', failure, StackTrace.current);
         return false;
       }
-      // פרסום חוזר של גרסה מותקנת, או chunking שהמנוע לא פותר: לא מורידים שוב.
+      // פרסום חוזר, או chunking/store שהמנוע לא קורא: לא מורידים שוב.
       if (!const {
         'segment_id',
         'model.chunking_identity',
+        'store.store_format_version',
+        'store.vector_precision',
       }.contains(failure.field)) {
         rethrow;
       }
