@@ -217,7 +217,10 @@ class GoogleCalendarRepository {
   }
 
   @visibleForTesting
-  CustomEvent? fromGoogleEvent(cal.Event gEvent, {int? inheritedColorIndex}) {
+  CustomEvent? fromGoogleEvent(
+    cal.Event gEvent, {
+    int? inheritedColorIndex,
+  }) {
     final start = gEvent.start?.dateTime ?? gEvent.start?.date;
     if (start == null) return null;
 
@@ -467,10 +470,7 @@ class GoogleCalendarRepository {
 }
 
 typedef _GoogleEventMapper =
-    CustomEvent? Function(
-      cal.Event event, {
-      int? inheritedColorIndex,
-    });
+    CustomEvent? Function(cal.Event event, {int? inheritedColorIndex});
 
 class _GoogleEventsMerger {
   _GoogleEventsMerger({
@@ -492,7 +492,10 @@ class _GoogleEventsMerger {
   final Map<String, int> _byGoogleId = {};
   final Map<String, int> _byLocalId = {};
 
-  void mergePage(List<cal.Event> googleEvents, {int? inheritedColorIndex}) {
+  void mergePage(
+    List<cal.Event> googleEvents, {
+    int? inheritedColorIndex,
+  }) {
     for (final googleEvent in googleEvents) {
       if (googleEvent.status == 'cancelled') continue;
 

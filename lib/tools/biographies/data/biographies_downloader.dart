@@ -123,8 +123,13 @@ class BiographiesDownloader {
     try {
       await sink.addStream(response.stream);
       await sink.flush();
-    } finally {
       await sink.close();
+    } catch (_) {
+      try {
+        await sink.close();
+      } catch (_) {}
+      if (await outFile.exists()) await outFile.delete();
+      rethrow;
     }
     await outFile.rename(dest);
   }

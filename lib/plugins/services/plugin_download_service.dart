@@ -54,7 +54,9 @@ class PluginDownloadService {
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('שגיאה בהורדת התוסף (${response.statusCode})');
+      throw Exception(
+        'שגיאה בהורדת התוסף (${response.statusCode})',
+      );
     }
 
     final tempDir = await Directory.systemTemp.createTemp(
