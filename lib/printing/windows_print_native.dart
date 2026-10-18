@@ -93,6 +93,7 @@ final class DocInfoW extends Struct {
 
 const int _pdPageNums = 0x2;
 const int _pdNoSelection = 0x4;
+const int _pdHidePrintToFile = 0x100000;
 const int _pdUseDevModeCopiesAndCollate = 0x40000;
 const int _pdNoCurrentPage = 0x800000;
 const int _pdResultPrint = 1;
@@ -192,10 +193,6 @@ final _coUninitialize = _ole32.lookupFunction<Void Function(), void Function()>(
 
 final _getActiveWindow = _user32
     .lookupFunction<Pointer Function(), Pointer Function()>('GetActiveWindow');
-final _getForegroundWindow = _user32
-    .lookupFunction<Pointer Function(), Pointer Function()>(
-      'GetForegroundWindow',
-    );
 
 typedef _RenderPageNative =
     Void Function(
@@ -224,7 +221,24 @@ typedef _RenderPage =
 /// whose active window is the app's.
 int printDialogOwnerWindow() {
   final active = _getActiveWindow();
-  return active.address != 0 ? active.address : _getForegroundWindow().address;
+  if (active.address != 0) return active.address;
+  // In the background the foreground window is another app's, which the
+  // modal dialog would disable; take this process's own Flutter window.
+  return using((arena) {
+    final className = win32.PCWSTR(
+      'FLUTTER_RUNNER_WIN32_WINDOW'.toNativeUtf16(allocator: arena),
+    );
+    final processId = arena<Uint32>();
+    win32.HWND? window;
+    while (true) {
+      window = win32.FindWindowEx(null, window, className, null).value;
+      if (window.address == 0) return 0;
+      win32.GetWindowThreadProcessId(window, processId);
+      if (processId.value == win32.GetCurrentProcessId()) {
+        return window.address;
+      }
+    }
+  });
 }
 
 /// Shows the system print dialog, owned by [ownerWindow] and blocking until
@@ -243,7 +257,11 @@ WindowsPrintChoice? showWindowsPrintDialog(
         ..hwndOwner = Pointer.fromAddress(ownerWindow)
         ..hDevMode = devMode == null ? nullptr : _toGlobal(devMode)
         ..flags =
-            _pdUseDevModeCopiesAndCollate | _pdNoSelection | _pdNoCurrentPage
+            _pdUseDevModeCopiesAndCollate |
+            _pdNoSelection |
+            _pdNoCurrentPage |
+            // The job never sets an output file, so the checkbox would be ignored.
+            _pdHidePrintToFile
         ..nMaxPageRanges = _maxPageRanges
         ..lpPageRanges = ranges
         ..nMinPage = 1
