@@ -124,5 +124,19 @@ Future<void> main() async {
       );
       expect(results.map((r) => r.filePath), ['early', 'late']);
     });
+
+    test('ספר שאינו במיפוי אחרי כל הממופים — גם אחרי ספרים אישיים', () async {
+      final personal = _result((9 << 32) + 1, path: 'uid:5');
+      final unmapped = _result((1 << 32) + 1, path: 'new');
+      final engine = _PagedEngine((stream, offset, limit) async {
+        // המנוע ממיין ספר שאינו במיפוי אחרי כל הספרים שבו.
+        return [personal, unmapped].skip(offset).take(limit).toList();
+      });
+      final results = await _search(
+        engine,
+        bookOrder: const {'uid:5': (1 << 23) + 5},
+      );
+      expect(results.map((r) => r.filePath), ['uid:5', 'new']);
+    });
   }, skip: ready ? false : searchEngineSkipReason);
 }

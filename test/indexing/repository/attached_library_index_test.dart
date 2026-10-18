@@ -1,14 +1,18 @@
 import 'dart:math';
 import 'package:flutter/foundation.dart' show ValueNotifier;
+import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/attached_libraries/models/attached_library.dart';
 import 'package:otzaria/data/data_providers/tantivy_data_provider.dart';
+import 'package:otzaria/data/repository/data_repository.dart';
 import 'package:otzaria/indexing/repository/indexing_repository.dart';
 import 'package:otzaria/search/utils/search_catalogue_order_helper.dart';
 import 'package:otzaria/library/models/library.dart';
 import 'package:otzaria/models/book_source.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria_search_engine/otzaria_search_engine.dart';
+
+import '../../test_helpers/memory_cache_provider.dart';
 
 const _slug = 'lib-a';
 final _attached = BookSource.attached(_slug);
@@ -160,19 +164,42 @@ void main() {
       }
     });
 
-    test('רענון בונה מחדש את הסדר שהחיפוש בספר משווה לפיו', () async {
-      await IndexingRepository.refreshBookOrderRanks(_library());
+    test('טעינת ספרייה מבטלת את הסדר שהחיפוש בספר משווה לפיו', () async {
+      await Settings.init(cacheProvider: MemoryCacheProvider());
+      final previous = DataRepository.instance.cachedLibraryFutureForTesting;
+      addTearDown(() {
+        if (previous != null) {
+          DataRepository.instance.library = previous;
+        } else {
+          DataRepository.instance.invalidateLibraryCache();
+        }
+        IndexingRepository.invalidateBookOrder();
+      });
+      DataRepository.instance.library = Future.value(_library());
+      IndexingRepository.invalidateBookOrder();
       expect(
         await IndexingRepository.bookOrderRanks(),
         isNot(contains('db:$_slug:1')),
       );
 
-      await IndexingRepository.refreshBookOrderRanks(
+      DataRepository.instance.library = Future.value(
         _library(withAttached: true),
       );
+      IndexingRepository.invalidateBookOrder();
+      final ranks = await IndexingRepository.bookOrderRanks();
+      expect(ranks, contains('db:$_slug:1'));
+      expect(ranks['uid:1'], greaterThan(ranks['db:$_slug:2']!));
+    });
+
+    test('אותו עץ נבנה פעם אחת עד הטעינה הבאה', () async {
+      final library = _library();
+      IndexingRepository.invalidateBookOrder();
+      final first = await IndexingRepository.buildBookOrder(library);
+      expect(await IndexingRepository.buildBookOrder(library), same(first));
+      IndexingRepository.invalidateBookOrder();
       expect(
-        await IndexingRepository.bookOrderRanks(),
-        contains('db:$_slug:1'),
+        await IndexingRepository.buildBookOrder(library),
+        isNot(same(first)),
       );
     });
   });

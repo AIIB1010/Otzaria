@@ -115,9 +115,9 @@ void main() {
         hiddenStore: store,
       );
 
-      await repository.indexBooks(
-        [hidden, visible],
+      await repository.runIndexing(
         library,
+        books: [hidden, visible],
         onProgress: (_, _) {},
       );
       expect(engine.committedCounts.keys, {
@@ -250,86 +250,6 @@ void main() {
       final library = _buildLibrary(bavliBooks: const [('שבת', 1)]);
       expect(
         IndexingRepository.shouldSkipManualReindexCheck(library),
-        isFalse,
-      );
-    });
-  });
-
-  group('IndexingRepository.areAllIndexableBooksIndexed', () {
-    test('מחזיר true כשכל הספרים האינדקסביליים קיימים באינדקס', () {
-      final library = _buildLibrary(
-        bavliBooks: const [('שבת', 1)],
-        additionalBooks: [
-          PdfBook(
-            title: 'קובץ PDF',
-            path: r'C:\library\sample.pdf',
-            categoryPath: 'ספרים אישיים',
-          ),
-          ExternalLibraryBook(
-            title: 'ספר חיצוני',
-            id: 900,
-            link: 'https://example.com/book',
-          ),
-        ],
-      );
-
-      final indexedFilePaths = library
-          .getAllBooks()
-          .where(IndexingRepository.isIndexableBook)
-          .map(IndexingRepository.buildIndexedBookFilePath)
-          .toSet();
-
-      expect(
-        IndexingRepository.areAllIndexableBooksIndexed(
-          library.getAllBooks(),
-          indexedFilePaths,
-        ),
-        isTrue,
-      );
-    });
-
-    test('מחזיר false כשחסר ספר אינדקסבילי אחד', () {
-      final library = _buildLibrary(
-        bavliBooks: const [('שבת', 1)],
-        additionalBooks: [
-          DocxBook(
-            title: 'מסמך',
-            path: r'C:\library\doc.docx',
-            categoryPath: 'ספרים אישיים',
-          ),
-        ],
-      );
-
-      final indexedFilePaths = {
-        IndexingRepository.buildIndexedBookFilePath(
-          library.getAllBooks().first,
-        ),
-      };
-
-      expect(
-        IndexingRepository.areAllIndexableBooksIndexed(
-          library.getAllBooks(),
-          indexedFilePaths,
-        ),
-        isFalse,
-      );
-    });
-
-    test('מחזיר false כשאין כלל ספרים אינדקסביליים', () {
-      final library = Library(categories: []);
-      library.books.add(
-        ExternalLibraryBook(
-          title: 'ספר חיצוני',
-          id: 901,
-          link: 'https://example.com/ext',
-        ),
-      );
-
-      expect(
-        IndexingRepository.areAllIndexableBooksIndexed(
-          library.getAllBooks(),
-          const <String>{},
-        ),
         isFalse,
       );
     });
@@ -574,33 +494,29 @@ void main() {
       ),
     ];
 
+    Set<String> keysOf(List<Book> books) => {
+      for (final book in books)
+        if (IndexingRepository.isIndexableBook(book))
+          IndexingRepository.buildIndexedBookFilePath(book),
+    };
+
     test('כל ספר בחבילה מאונדקס, ולכן אין אינדוקס אצל המשתמש', () {
       // אינדקס שנבנה במכונת ה-CI, ואותה ספרייה בנתיב שהמשתמש בחר.
-      final indexedOnBuildMachine = shippedLibraryAt(
-        '/ci/full_installer/books',
-      ).map(IndexingRepository.buildIndexedBookFilePath).toSet();
-
       expect(
-        IndexingRepository.areAllIndexableBooksIndexed(
-          shippedLibraryAt(r'D:\אוצריא\books'),
-          indexedOnBuildMachine,
-        ),
-        isTrue,
+        keysOf(shippedLibraryAt(r'D:\אוצריא\books')),
+        keysOf(shippedLibraryAt('/ci/full_installer/books')),
         reason: 'מפתח שתלוי בנתיב ההתקנה מחזיר את המשתמש לאינדוקס מלא',
       );
     });
 
     test('ספר PDF שנוסף אחרי הבנייה כן דורש אינדוקס', () {
-      final indexedOnBuildMachine = shippedLibraryAt(
-        '/ci/full_installer/books',
-      ).map(IndexingRepository.buildIndexedBookFilePath).toSet();
-
+      final added = PdfBook(
+        title: 'ספר שהמשתמש הוסיף',
+        path: r'D:\אוצריא\books\א.pdf',
+      );
       expect(
-        IndexingRepository.areAllIndexableBooksIndexed([
-          ...shippedLibraryAt(r'D:\אוצריא\books'),
-          PdfBook(title: 'ספר שהמשתמש הוסיף', path: r'D:\אוצריא\books\א.pdf'),
-        ], indexedOnBuildMachine),
-        isFalse,
+        keysOf(shippedLibraryAt('/ci/full_installer/books')),
+        isNot(contains(IndexingRepository.buildIndexedBookFilePath(added))),
       );
     });
   });
@@ -1344,6 +1260,114 @@ void main() {
       expect(events, ['text:ט1', 'pdf:א', 'text:ט2']);
       expect(engine.commitCount, 1);
       expect(engine.committedCounts[pdfKey], 1);
+    });
+
+    test(
+      'ביטול בזמן כתיבת ספר שהשתנה — נשאר בסימון ונכתב בריצת רענון הבאה',
+      () async {
+        final engine = _CancellationRecordingEngine();
+        final fresh = TextBook(id: 7, title: 'פסחים');
+        final changed = TextBook(id: 5, title: 'שבת');
+        final later = TextBook(id: 8, title: 'סוכה');
+        final library = Library(categories: [])
+          ..books.addAll([fresh, changed, later]);
+        final provider = providerWith(engine, [changed]);
+        engine.onTextAdded = (title) {
+          if (title == changed.title) provider.isIndexing.value = false;
+        };
+
+        final cancelled = await _ReindexProbeRepository(provider).runIndexing(
+          library,
+          books: [fresh],
+          changedBooks: [changed],
+          onProgress: (_, _) {},
+        );
+        expect(cancelled.completed, isFalse);
+        // הישן נמחק עם ה-commit של מה שנכתב לפניו, והחדש לא נכתב.
+        expect(engine.committedCounts, {'id:7': 1});
+        expect(await storedPending(), {'id:5'});
+        final repository = _ReindexProbeRepository(provider);
+        expect(await repository.hasUnindexedBooks(library), isTrue);
+
+        engine.onTextAdded = null;
+        final resumed = await repository.runIndexing(
+          library,
+          books: [later],
+          onProgress: (_, _) {},
+        );
+        expect(resumed.completed, isTrue);
+        expect(engine.committedCounts, {'id:5': 1, 'id:7': 1, 'id:8': 1});
+        expect(pendingFile().existsSync(), isFalse);
+      },
+    );
+
+    test('כשל חולף אחרי מחיקת הגרסה הישנה — הספר נשאר בסימון', () async {
+      final engine = _CancellationRecordingEngine();
+      final changed = TextBook(id: 5, title: 'שבת');
+      final library = Library(categories: [])..books.add(changed);
+      final provider = providerWith(engine, [changed]);
+      final repository = _ReindexProbeRepository(provider)
+        ..textFailureByTitle['שבת'] = StateError('קריאה נכשלה');
+
+      final result = await repository.runIndexing(
+        library,
+        changedBooks: [changed],
+        onProgress: (_, _) {},
+      );
+
+      expect(result.completed, isTrue);
+      expect(result.failures.single.isRetryable, isTrue);
+      expect(engine.committedCounts, isEmpty);
+      expect(await storedPending(), {'id:5'});
+      expect(await repository.hasUnindexedBooks(library), isTrue);
+    });
+
+    test('בדיקת ספרים מסוימים שבוטלה באמצע נשמרת ונעשית בריצה הבאה', () async {
+      final engine = _CancellationRecordingEngine()
+        ..fingerprints = {'db:lib:5': BigInt.one};
+      final attached = TextBook(
+        id: 5,
+        title: 'מצורף',
+        source: BookSource.attached('lib'),
+      );
+      final fresh = TextBook(id: 7, title: 'פסחים');
+      final library = Library(categories: [])..books.addAll([attached, fresh]);
+      final provider = providerWith(engine, [attached]);
+      final repository = _ReindexProbeRepository(provider);
+      var checked = 0;
+      repository.changeDetector = _textDetector(
+        repository,
+        loadText: (_) async {
+          checked++;
+          if (checked == 1) provider.isIndexing.value = false;
+          return 'טקסט';
+        },
+        fingerprintOf: (_, _) async => BigInt.from(2),
+      );
+
+      final cancelled = await repository.runIndexing(
+        library,
+        books: const [],
+        check: IndexCheckScope.books([attached]),
+        onProgress: (_, _) {},
+      );
+      expect(cancelled.completed, isFalse);
+      expect(
+        (await PendingReindexStore.forIndex(indexDir.path)!.read()).checkKeys,
+        {'db:lib:5'},
+      );
+      expect(await repository.hasUnindexedBooks(library), isTrue);
+
+      // ריצת רענון רגילה, בלי בדיקה — הבדיקה שנדחתה רצה בה.
+      final resumed = await repository.runIndexing(
+        library,
+        books: [fresh],
+        onProgress: (_, _) {},
+      );
+      expect(resumed.completed, isTrue);
+      expect(checked, 2);
+      expect(engine.committedCounts.keys, containsAll(['db:lib:5', 'id:7']));
+      expect(pendingFile().existsSync(), isFalse);
     });
 
     test('סימון של ספר שכבר אינו בספרייה נזרק', () async {
@@ -2376,9 +2400,9 @@ void main() {
         library,
         onProgress: (_, _) => progressCalls++,
       );
-      final specificRun = await repository.indexBooks(
-        library.books.cast<Book>(),
+      final specificRun = await repository.runIndexing(
         library,
+        books: library.books.cast<Book>(),
         onProgress: (_, _) => progressCalls++,
       );
       final reconcileRun = await _reconcile(
@@ -2412,9 +2436,9 @@ void main() {
 
         final runs = [
           await repository.indexAllBooks(library, onProgress: (_, _) {}),
-          await repository.indexBooks(
-            library.getAllBooks(),
+          await repository.runIndexing(
             library,
+            books: library.getAllBooks(),
             onProgress: (_, _) {},
           ),
           await _reconcile(
@@ -2764,7 +2788,11 @@ void main() {
           await expectLater(
             fullRun
                 ? repository.indexAllBooks(library, onProgress: (_, _) {})
-                : repository.indexBooks([book], library, onProgress: (_, _) {}),
+                : repository.runIndexing(
+                    library,
+                    books: [book],
+                    onProgress: (_, _) {},
+                  ),
             throwsStateError,
           );
           expect(jsonDecode(file.readAsStringSync()), {key: 2});
@@ -2794,7 +2822,11 @@ void main() {
             ),
           ),
         );
-        await repository.indexBooks([visible], library, onProgress: (_, _) {});
+        await repository.runIndexing(
+          library,
+          books: [visible],
+          onProgress: (_, _) {},
+        );
         expect(jsonDecode(file.readAsStringSync()), {
           hiddenKey: 1,
           'removed-book': 1,
@@ -2836,9 +2868,9 @@ void main() {
           if (fullRun) {
             await repository.indexAllBooks(library, onProgress: (_, _) {});
           } else {
-            await repository.indexBooks(
-              [crasher, healthy],
+            await repository.runIndexing(
               library,
+              books: [crasher, healthy],
               onProgress: (_, _) {},
             );
           }
@@ -3400,9 +3432,9 @@ void main() {
 
       final repository = _CancelDuringLoadRepository(provider);
       final progress = <(int, int)>[];
-      final result = await repository.indexBooks(
-        [first, second],
+      final result = await repository.runIndexing(
         library,
+        books: [first, second],
         onProgress: (p, t) => progress.add((p, t)),
       );
 
@@ -3426,9 +3458,9 @@ void main() {
     final book = TextBook(id: 101, title: 'ספר');
     final library = Library(categories: [])..books.add(book);
 
-    final result = await repository.indexBooks(
-      [book],
+    final result = await repository.runIndexing(
       library,
+      books: [book],
       onProgress: (_, _) {},
     );
 
@@ -3490,7 +3522,7 @@ void main() {
 
       await _FakeExtractionRepository(
         _RecordingTantivyDataProvider(engine),
-      ).indexBooks([book], library, onProgress: (_, _) {});
+      ).runIndexing(library, books: [book], onProgress: (_, _) {});
 
       expect(engine.optimizeCount, 0);
     });
@@ -3510,9 +3542,9 @@ void main() {
         if (title == second.title) provider.isIndexing.value = false;
       };
 
-      final cancelled = await repository.indexBooks(
-        [first, second],
+      final cancelled = await repository.runIndexing(
         library,
+        books: [first, second],
         onProgress: (_, _) {},
       );
       expect(cancelled.completed, isFalse);
@@ -3522,9 +3554,9 @@ void main() {
       expect(engine.removedFilePaths, contains(secondKey));
 
       engine.onTextAdded = null;
-      final resumed = await repository.indexBooks(
-        [second],
+      final resumed = await repository.runIndexing(
         library,
+        books: [second],
         onProgress: (_, _) {},
       );
       expect(resumed.completed, isTrue);
@@ -3542,9 +3574,9 @@ void main() {
         if (title == second.title) provider.isIndexing.value = false;
       };
 
-      final result = await repository.indexBooks(
-        [first, second],
+      final result = await repository.runIndexing(
         library,
+        books: [first, second],
         onProgress: (_, _) {},
       );
       expect(result.completed, isFalse);
@@ -3564,9 +3596,9 @@ void main() {
       final pdfKey = IndexingRepository.buildIndexedBookFilePath(pdf);
       engine.onPdfAdded = (_) => provider.isIndexing.value = false;
 
-      final cancelled = await repository.indexBooks(
-        [first, pdf],
+      final cancelled = await repository.runIndexing(
         library,
+        books: [first, pdf],
         onProgress: (_, _) {},
       );
       expect(cancelled.completed, isFalse);
@@ -3575,7 +3607,11 @@ void main() {
       expect(engine.removedFilePaths, contains(pdfKey));
 
       engine.onPdfAdded = null;
-      await repository.indexBooks([pdf], library, onProgress: (_, _) {});
+      await repository.runIndexing(
+        library,
+        books: [pdf],
+        onProgress: (_, _) {},
+      );
       expect(engine.committedCounts, {firstKey: 1, pdfKey: 1});
     });
 
@@ -4092,9 +4128,9 @@ void main() {
         );
         final library = Library(categories: [])
           ..books.addAll([fromDb, fromFile, personal]);
-        final result = await repository.indexBooks(
-          [fromDb, fromFile, personal],
+        final result = await repository.runIndexing(
           library,
+          books: [fromDb, fromFile, personal],
           onProgress: (_, _) {},
         );
         expect(result.completed, isTrue);

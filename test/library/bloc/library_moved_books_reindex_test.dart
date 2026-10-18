@@ -193,9 +193,9 @@ Future<void> main() async {
           matchTaamim: false,
         );
 
-        final initial = await indexer.indexBooks(
-          before.getIndexableBooks(),
+        final initial = await indexer.runIndexing(
           before,
+          books: before.getIndexableBooks(),
           onProgress: (_, _) {},
         );
         expect(initial.isClean, isTrue);
@@ -284,9 +284,9 @@ Future<void> main() async {
           ['מדרש']: [_userBook],
           ['הלכה']: [_officialBook],
         });
-        await indexer.indexBooks(
-          before.getIndexableBooks(),
+        await indexer.runIndexing(
           before,
+          books: before.getIndexableBooks(),
           onProgress: (_, _) {},
         );
         final read = <String>[];
@@ -327,9 +327,9 @@ Future<void> main() async {
         ],
       });
 
-      await _MemoryTextRepository(provider).indexBooks(
-        library.getIndexableBooks(),
+      await _MemoryTextRepository(provider).runIndexing(
         library,
+        books: library.getIndexableBooks(),
         onProgress: (_, _) {},
       );
 

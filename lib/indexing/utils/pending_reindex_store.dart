@@ -4,8 +4,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
-/// ספרים שמסמכיהם באינדקס ממתינים להחלפה, ובקשת בדיקה מלאה שטרם רצה —
-/// שורדים קריסה או ביטול. הקובץ: `{"version":1,"keys":[...],"checkLibrary":true}`.
+/// מה שנשאר לריצת האינדוקס הבאה ושורד קריסה או ביטול: ספרים שמסמכיהם ממתינים
+/// להחלפה ([PendingReindex.keys]), ובדיקות שטרם רצו — של כל הספרייה או של ספרים.
 class PendingReindexStore {
   PendingReindexStore._(this._file);
 
@@ -18,8 +18,7 @@ class PendingReindexStore {
       : PendingReindexStore._(File(p.join(indexPath, fileName)));
 
   // עותק בזיכרון: כשהכתיבה לדיסק נכשלת, ביטול באותה הפעלה עדיין לא מאבד אותו.
-  static final Map<String, ({Set<String> keys, bool checkLibrary})> _memory =
-      {};
+  static final Map<String, PendingReindex> _memory = {};
 
   /// האינדקס נמחק או הוחלף — מה שנזכר עליו כבר אינו נכון.
   static void clearMemory() => _memory.clear();
@@ -29,35 +28,55 @@ class PendingReindexStore {
 
   final File _file;
 
-  Future<({Set<String> keys, bool checkLibrary})> _read() async {
+  Future<PendingReindex> read() async {
     final cached = _memory[_file.path];
     final keys = {...?cached?.keys};
+    final checkKeys = {...?cached?.checkKeys};
     var checkLibrary = cached?.checkLibrary ?? false;
     try {
       if (await _file.exists()) {
         final json = jsonDecode(await _file.readAsString());
         if (json is Map && json['version'] == _version) {
           keys.addAll((json['keys'] as List).cast<String>());
+          checkKeys.addAll(
+            ((json['checkKeys'] as List?) ?? const []).cast<String>(),
+          );
           checkLibrary |= json['checkLibrary'] == true;
         }
       }
     } catch (e) {
       debugPrint('⚠️ קריאת רשימת הספרים להחלפה באינדקס נכשלה: $e');
     }
-    return (keys: keys, checkLibrary: checkLibrary);
+    return PendingReindex(
+      keys: keys,
+      checkKeys: checkKeys,
+      checkLibrary: checkLibrary,
+    );
   }
 
-  Future<Set<String>> load() async => (await _read()).keys;
+  Future<Set<String>> load() async => (await read()).keys;
 
   /// האם נדחתה בדיקה מלאה של הספרייה (ריצה שבוטלה לפני שבדקה).
-  Future<bool> checkLibraryPending() async => (await _read()).checkLibrary;
+  Future<bool> checkLibraryPending() async => (await read()).checkLibrary;
 
-  /// מחליף את הרשימה כולה; [checkLibrary] null שומר את הקיים. מחזיר האם נשמר.
-  Future<bool> save(Set<String> keys, {bool? checkLibrary}) async {
-    final check = checkLibrary ?? (await _read()).checkLibrary;
-    _memory[_file.path] = (keys: {...keys}, checkLibrary: check);
+  /// מחליף את הרשימה; [checkLibrary] ו-[checkKeys] null שומרים את הקיים.
+  /// מחזיר האם נשמר בדיסק.
+  Future<bool> save(
+    Set<String> keys, {
+    bool? checkLibrary,
+    Set<String>? checkKeys,
+  }) async {
+    final current = checkLibrary == null || checkKeys == null
+        ? await read()
+        : null;
+    final state = PendingReindex(
+      keys: {...keys},
+      checkKeys: {...?checkKeys ?? current?.checkKeys},
+      checkLibrary: checkLibrary ?? current!.checkLibrary,
+    );
+    _memory[_file.path] = state;
     try {
-      if (keys.isEmpty && !check) {
+      if (state.isEmpty) {
         if (await _file.exists()) await _file.delete();
         return true;
       }
@@ -65,8 +84,10 @@ class PendingReindexStore {
       await temp.writeAsString(
         jsonEncode({
           'version': _version,
-          'keys': keys.toList()..sort(),
-          if (check) 'checkLibrary': true,
+          'keys': state.keys.toList()..sort(),
+          if (state.checkLibrary) 'checkLibrary': true,
+          if (state.checkKeys.isNotEmpty)
+            'checkKeys': state.checkKeys.toList()..sort(),
         }),
         flush: true,
       );
@@ -77,4 +98,18 @@ class PendingReindexStore {
       return false;
     }
   }
+}
+
+class PendingReindex {
+  const PendingReindex({
+    required this.keys,
+    required this.checkKeys,
+    required this.checkLibrary,
+  });
+
+  final Set<String> keys;
+  final Set<String> checkKeys;
+  final bool checkLibrary;
+
+  bool get isEmpty => keys.isEmpty && checkKeys.isEmpty && !checkLibrary;
 }

@@ -311,7 +311,6 @@ packages:
           'tool/release/fetch_prebuilt_library_index.sh',
           indexDirectory,
           database.path,
-          talmud.path,
           lock.path,
         ],
         environment: {

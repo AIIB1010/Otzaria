@@ -2984,9 +2984,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
                   DataRepository.instance.library.then((library) {
                     if (!mounted || !context.mounted) return;
                     // חיתוך החיפוש בספר משווה בסדר המיפוי, גם בחלון משני.
-                    unawaited(
-                      IndexingRepository.refreshBookOrderRanks(library),
-                    );
+                    IndexingRepository.invalidateBookOrder();
                     // העץ המלא: ספר מוסתר שעדיין באינדקס ימוין במקומו.
                     context.read<IndexingBloc>()
                       ..add(SyncBookOrder(library))

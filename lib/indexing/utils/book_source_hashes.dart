@@ -42,9 +42,13 @@ class BookSourceHashes {
     final official = await _read(SqliteDataProvider.instance.repository);
     final attached = <String, Map<int, BigInt>?>{};
     for (final slug in attachedSlugs.toSet()) {
-      attached[slug] = await _read(
-        await AttachedLibraryRegistry.instance.repositoryFor(slug),
-      );
+      try {
+        attached[slug] = await _read(
+          await AttachedLibraryRegistry.instance.repositoryFor(slug),
+        );
+      } catch (e) {
+        debugPrint('⚠️ פתיחת המסד המצורף $slug לחותמי תוכן נכשלה: $e');
+      }
     }
     return BookSourceHashes(official, attached);
   }

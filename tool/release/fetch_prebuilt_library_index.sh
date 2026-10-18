@@ -2,8 +2,7 @@
 # Fetch the prebuilt library search index that Otzaria/SeforimLibrary publishes
 # alongside every database release, and verify it belongs to THIS build.
 #
-#   fetch_prebuilt_library_index.sh <index-dir> <seforim.db.zst> \
-#       <talmud_bavli_latest.tar.zst> <pubspec.lock>
+#   fetch_prebuilt_library_index.sh <index-dir> <seforim.db.zst> <pubspec.lock>
 #
 # Exit 3 = only the engine's index schema differs, so an index built from THIS
 # run fixes it; the library release tag is then written to
@@ -16,11 +15,10 @@
 # release. כאן רק מורידים אותו ומאמתים שהוא שייך בדיוק לבנייה הזאת.
 set -euo pipefail
 
-usage='usage: fetch_prebuilt_library_index.sh <index-dir> <seforim.db.zst> <talmud_bavli_latest.tar.zst> <pubspec.lock>'
+usage='usage: fetch_prebuilt_library_index.sh <index-dir> <seforim.db.zst> <pubspec.lock>'
 index_dir=${1:?$usage}
 database_archive=${2:?$usage}
-talmud_archive=${3:?$usage}
-pubspec_lock=${4:?$usage}
+pubspec_lock=${3:?$usage}
 
 # The same release the database itself is taken from. Overridable so the
 # packaging test can serve a fixture instead of the network.
@@ -32,7 +30,6 @@ manifest_name="$archive_name.manifest.json"
 fail() { echo "::error::$*" >&2; exit 1; }
 
 [ -f "$database_archive" ] || fail "database archive not found: $database_archive"
-[ -f "$talmud_archive" ] || fail "Talmud Bavli archive not found: $talmud_archive"
 [ -f "$pubspec_lock" ] || fail "pubspec.lock not found: $pubspec_lock"
 [ ! -e "$index_dir" ] || fail "index directory must not exist yet: $index_dir"
 

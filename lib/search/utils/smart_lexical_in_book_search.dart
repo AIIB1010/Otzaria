@@ -121,8 +121,9 @@ Future<List<SearchResult>> searchSmartLexicalInBook(
 // כסדר הקטלוג במנוע: מיקום הספר במיפוי (ספר שאינו בו — אחרי כולם לפי מספרו),
 // ובתוך ספר לפי id. בלי זה ספרים שחולקים נתיב נחתכים בסדר שונה מזה של הזרמים.
 int _compare(Map<String, int> order, SearchResult a, SearchResult b) {
+  // מיפוי הסדר הוא u32; ספר שאינו בו ממוין אחרי כולם, לפי מספרו.
   int rank(SearchResult r) =>
-      order[r.filePath] ?? order.length + (r.id >> 32).toInt();
+      order[r.filePath] ?? (1 << 32) + (r.id >> 32).toInt();
   final book = rank(a).compareTo(rank(b));
   if (book != 0) return book;
   final id = a.id.compareTo(b.id);
