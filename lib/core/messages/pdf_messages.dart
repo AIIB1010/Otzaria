@@ -42,4 +42,15 @@ abstract class PdfMessages {
 
   static String printError(Object error) => 'ההדפסה נכשלה: $error';
   static String printFailed(String printer) => 'ההדפסה למדפסת "$printer" נכשלה';
+  static String saferDirectPrint(String printer) =>
+      'מצב סייפר: ההדפסה נשלחת ישירות למדפסת "$printer", ללא דיאלוג ההדפסה של המערכת';
+  static const String printPreparing = 'מכין להדפסה…';
+  static const String printWorkTitle = 'הדפסה';
+  static const String printSpooling = 'שולח למדפסת…';
+  static String printSpoolingTo(String printer) => 'שולח ל-"$printer"…';
+  static const String printWorkFailed = 'ההדפסה נכשלה';
+  static const String closeWhilePrintingTitle = 'הדפסה פעילה';
+  static const String closeWhilePrinting =
+      'הדפסה עדיין נשלחת למדפסת. לצאת בכל זאת?';
+  static const String closeWhilePrintingConfirm = 'צא בכל זאת';
 }

@@ -26,6 +26,7 @@ import 'package:otzaria/plugins/storage/plugin_system_database.dart';
 import 'package:otzaria/plugins/services/plugin_crash_guard.dart';
 import 'package:otzaria/plugins/services/plugin_runtime_dispatcher.dart';
 import 'package:otzaria/plugins/view/webview_environment_holder.dart';
+import 'package:otzaria/printing/print_work_status.dart';
 import 'package:otzaria/tabs/utils/confirm_close_tabs.dart';
 import 'package:otzaria/tabs/tabs_repository.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
@@ -295,6 +296,7 @@ class AppWindowListener extends WindowListener {
     try {
       if (canClose != null && !canClose()) return;
       if (!await confirmAppCloseWithUnsavedChanges()) return;
+      if (!await confirmCloseWhilePrinting()) return;
       if (canClose != null && !canClose()) return;
 
       // הגיבוב עשוי להימשך מעבר לכלב השמירה של הכיבוי.

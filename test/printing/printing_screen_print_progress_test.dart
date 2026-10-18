@@ -9,11 +9,14 @@ import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/messages/pdf_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
+import 'package:otzaria/printing/print_work_status.dart';
 import 'package:otzaria/printing/view/printing_screen.dart';
 import 'package:otzaria/settings/engine/settings_bloc.dart';
 import 'package:otzaria/settings/engine/settings_event.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
 import 'package:otzaria/settings/engine/settings_state.dart';
+import 'package:otzaria/work_status/work_status_cubit.dart';
+import 'package:otzaria/work_status/work_status_item.dart';
 import 'package:pdf/pdf.dart' hide PdfDocument;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdfrx/pdfrx.dart';
@@ -75,6 +78,7 @@ void main() {
   const pathProviderChannel = MethodChannel('plugins.flutter.io/path_provider');
   late PrintingPlatform originalPlatform;
   late Directory tempDir;
+  late WorkStatusCubit workStatus;
   var layoutFails = false;
 
   setUpAll(() async {
@@ -101,6 +105,8 @@ void main() {
     addTearDown(tester.view.reset);
 
     layoutFails = false;
+    workStatus = WorkStatusCubit();
+    addTearDown(workStatus.close);
     final platform = _PendingPrintingPlatform();
     PrintingPlatform.instance = platform;
     final settingsBloc = _MockSettingsBloc();
@@ -117,8 +123,11 @@ void main() {
     await tester.pumpWidget(
       RepositoryProvider<SettingsRepository>.value(
         value: _FakeSettingsRepository(),
-        child: BlocProvider<SettingsBloc>.value(
-          value: settingsBloc,
+        child: MultiBlocProvider(
+          providers: [
+            BlocProvider<SettingsBloc>.value(value: settingsBloc),
+            BlocProvider<WorkStatusCubit>.value(value: workStatus),
+          ],
           child: MaterialApp(
             navigatorKey: navigatorKey,
             builder: (context, child) => MediaQuery(
@@ -167,7 +176,14 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   }
 
-  testWidgets('בזמן ההדפסה הכפתור מראה "מדפיס…" והמסך נשאר פתוח', (
+  Future<void> pumpFrames(WidgetTester tester) async {
+    // מעבר היציאה של המסך.
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+  }
+
+  testWidgets('עד שה-PDF נמסר הכפתור מראה "מכין להדפסה…" והמסך נשאר פתוח', (
     tester,
   ) async {
     final platform = await openScreen(tester);
@@ -176,15 +192,18 @@ void main() {
     await tester.pump();
 
     expect(platform.job, isNotNull);
-    expect(find.text('מדפיס…'), findsOneWidget);
+    expect(find.text(PdfMessages.printPreparing), findsOneWidget);
     expect(find.text('הדפסה'), findsNothing);
     expect(find.byType(PrintingScreen), findsOneWidget);
     // לחיצה נוספת אינה פותחת עבודה שנייה.
     final firstJob = platform.job;
-    await tester.tap(find.text('מדפיס…'), warnIfMissed: false);
+    await tester.tap(
+      find.text(PdfMessages.printPreparing),
+      warnIfMissed: false,
+    );
     await tester.pump();
     expect(platform.job, same(firstJob));
-    // גם ESC אינו סוגר את המסך באמצע ההדפסה.
+    // גם ESC אינו סוגר את המסך כל עוד דיאלוג ההדפסה פתוח.
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
@@ -192,13 +211,79 @@ void main() {
 
     platform.job!.complete(true);
     await tester.pump();
-    // מעבר היציאה של המסך.
-    for (var i = 0; i < 10; i++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
+    await pumpFrames(tester);
 
     expect(find.text(PdfMessages.printSent), findsOneWidget);
     expect(find.byType(PrintingScreen), findsNothing);
+    expect(workStatus.state.items, isEmpty);
+    await closeScreen(tester);
+  });
+
+  testWidgets('אחרי מסירת ה-PDF המסך נסגר וההדפסה ממשיכה בחיווי העבודה', (
+    tester,
+  ) async {
+    final platform = await openScreen(tester);
+    platform.requestLayout = true;
+
+    await tester.tap(find.text('הדפסה'));
+    await tester.pump();
+    await pumpFrames(tester);
+
+    expect(find.byType(PrintingScreen), findsNothing);
+    expect(PrintWorkStatus.hasActiveJobs, isTrue);
+    final item = workStatus.state.items.values.single;
+    expect(item.kind, WorkStatusKind.running);
+    expect(item.progress, isNull);
+    expect(item.message, PdfMessages.printSpooling);
+    expect(find.text(PdfMessages.printSent), findsNothing);
+
+    platform.job!.complete(true);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(workStatus.state.items, isEmpty);
+    expect(PrintWorkStatus.hasActiveJobs, isFalse);
+    expect(find.text(PdfMessages.printSent), findsOneWidget);
+    await closeScreen(tester);
+  });
+
+  testWidgets('כשל אחרי המסירה מוצג בחיווי העבודה ובהודעה אחת', (
+    tester,
+  ) async {
+    final platform = await openScreen(tester);
+    platform.requestLayout = true;
+
+    await tester.tap(find.text('הדפסה'));
+    await tester.pump();
+    await pumpFrames(tester);
+    platform.job!.completeError(StateError('spooler'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(tester.takeException(), isA<StateError>());
+    expect(PrintWorkStatus.hasActiveJobs, isFalse);
+    final item = workStatus.state.items.values.single;
+    expect(item.kind, WorkStatusKind.failed);
+    expect(item.autoDismissAfter, kPrintFailureAutoDismiss);
+    expect(find.textContaining('ההדפסה נכשלה:'), findsOneWidget);
+    await tester.pump(kPrintFailureAutoDismiss);
+    expect(workStatus.state.items, isEmpty);
+    await closeScreen(tester);
+  });
+
+  testWidgets('ביטול דיאלוג ההדפסה משאיר את המסך פתוח', (tester) async {
+    final platform = await openScreen(tester);
+
+    await tester.tap(find.text('הדפסה'));
+    await tester.pump();
+    platform.job!.complete(false);
+    await tester.pump();
+    await pumpFrames(tester);
+
+    expect(find.byType(PrintingScreen), findsOneWidget);
+    expect(find.text('הדפסה'), findsOneWidget);
+    expect(workStatus.state.items, isEmpty);
+    expect(PrintWorkStatus.hasActiveJobs, isFalse);
     await closeScreen(tester);
   });
 
@@ -216,6 +301,7 @@ void main() {
     expect(find.textContaining('ההדפסה נכשלה'), findsOneWidget);
     expect(find.text('הדפסה'), findsOneWidget);
     expect(find.byType(PrintingScreen), findsOneWidget);
+    expect(workStatus.state.items, isEmpty);
     await closeScreen(tester);
   });
 
@@ -229,8 +315,9 @@ void main() {
     await tester.pump();
 
     expect(find.text('הדפסה'), findsOneWidget);
-    expect(find.text('מדפיס…'), findsNothing);
+    expect(find.text(PdfMessages.printPreparing), findsNothing);
     expect(find.byType(PrintingScreen), findsOneWidget);
+    expect(workStatus.state.items, isEmpty);
     await closeScreen(tester);
   });
 }

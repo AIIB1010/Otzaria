@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:isolate';
 
 import 'package:flutter/widgets.dart';
@@ -5,11 +6,13 @@ import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 import 'package:otzaria/core/messages/pdf_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
-import 'package:otzaria/printing/exclusive_pdfium_print.dart';
 import 'package:otzaria/printing/safer_printer_filter.dart';
 import 'package:otzaria/printing/windows_printer_ports.dart';
 import 'package:otzaria/settings/services/safer_mode_guard.dart';
 import 'package:otzaria/widgets/dialogs/dialogs_exports.dart';
+
+/// נקרא פעם אחת, כשה-PDF נמסר להדפסה; [printerName] — כשהמדפסת ידועה מראש.
+typedef OnPrintSpooling = void Function(String? printerName);
 
 /// שולח PDF להדפסה. מחוץ למצב סייפר — דיאלוג ההדפסה של המערכת, כרגיל.
 /// במצב סייפר הדיאלוג הזה מוביל לסייר הקבצים (Print to PDF, "הדפס לקובץ",
@@ -17,7 +20,8 @@ import 'package:otzaria/widgets/dialogs/dialogs_exports.dart';
 /// וההדפסה ישירה. דיאלוג המערכת נפתח בסייפר רק אחרי סיסמה.
 ///
 /// מחזיר האם ההדפסה נשלחה. [context] — לבדיקת מצב הסייפר ולדיאלוגים;
-/// כשלא סופק משתמשים בחלון הראשי.
+/// כשלא סופק משתמשים בחלון הראשי. [onSpooling] נקרא רק ב-Windows: שם
+/// onLayout מגיע אחרי אישור המשתמש, ובמקומות אחרים לפני תצוגה מקדימה.
 Future<bool> printPdfWithSaferMode({
   required LayoutCallback onLayout,
   required String name,
@@ -25,19 +29,30 @@ Future<bool> printPdfWithSaferMode({
   bool dynamicLayout = true,
   bool usePrinterSettings = false,
   BuildContext? context,
+  OnPrintSpooling? onSpooling,
 }) async {
+  LayoutCallback reportSpooling(String? printerName) {
+    if (onSpooling == null || !Platform.isWindows) return onLayout;
+    var reported = false;
+    return (format) async {
+      final bytes = await onLayout(format);
+      if (!reported) {
+        reported = true;
+        onSpooling(printerName);
+      }
+      return bytes;
+    };
+  }
+
   final effectiveContext = context ?? navigatorKey.currentContext;
   if (effectiveContext == null ||
       !shouldRequireSaferModePassword(effectiveContext)) {
-    return printWithExclusivePdfium(
-      onLayout,
-      (onLayout) => Printing.layoutPdf(
-        onLayout: onLayout,
-        name: name,
-        format: format,
-        dynamicLayout: dynamicLayout,
-        usePrinterSettings: usePrinterSettings,
-      ),
+    return Printing.layoutPdf(
+      onLayout: reportSpooling(null),
+      name: name,
+      format: format,
+      dynamicLayout: dynamicLayout,
+      usePrinterSettings: usePrinterSettings,
     );
   }
 
@@ -56,15 +71,12 @@ Future<bool> printPdfWithSaferMode({
     );
     if (useSystemDialog != true || !effectiveContext.mounted) return false;
     if (!await verifySaferModePassword(effectiveContext)) return false;
-    return printWithExclusivePdfium(
-      onLayout,
-      (onLayout) => Printing.layoutPdf(
-        onLayout: onLayout,
-        name: name,
-        format: format,
-        dynamicLayout: dynamicLayout,
-        usePrinterSettings: usePrinterSettings,
-      ),
+    return Printing.layoutPdf(
+      onLayout: reportSpooling(null),
+      name: name,
+      format: format,
+      dynamicLayout: dynamicLayout,
+      usePrinterSettings: usePrinterSettings,
     );
   }
 
@@ -85,16 +97,14 @@ Future<bool> printPdfWithSaferMode({
   if (printer == null) return false;
   final selected = printer;
 
-  final printed = await printWithExclusivePdfium(
-    onLayout,
-    (onLayout) async => Printing.directPrintPdf(
-      printer: selected,
-      onLayout: onLayout,
-      name: name,
-      format: format,
-      dynamicLayout: dynamicLayout,
-      usePrinterSettings: usePrinterSettings,
-    ),
+  UiSnack.show(PdfMessages.saferDirectPrint(selected.name));
+  final printed = await Printing.directPrintPdf(
+    printer: selected,
+    onLayout: reportSpooling(selected.name),
+    name: name,
+    format: format,
+    dynamicLayout: dynamicLayout,
+    usePrinterSettings: usePrinterSettings,
   );
   if (!printed) UiSnack.showError(PdfMessages.printFailed(selected.name));
   return printed;

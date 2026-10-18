@@ -36,6 +36,7 @@ import 'package:otzaria/divine_names/models/divine_name_spans.dart';
 import 'package:otzaria/divine_names/repository/divine_names_repository.dart';
 import 'package:otzaria/book_protection/repository/book_protection_repository.dart';
 import 'package:otzaria/printing/commentary_print_limit.dart';
+import 'package:otzaria/printing/print_work_status.dart';
 import 'package:otzaria/printing/safer_print_service.dart';
 import 'package:otzaria/printing/view/slow_preview_hint.dart';
 import 'package:otzaria/printing/word_export_service.dart';
@@ -55,6 +56,8 @@ import 'package:otzaria/data/data_providers/file_system_data_provider.dart';
 import 'package:otzaria/printing/view/widgets/printing_widgets.dart';
 import 'package:otzaria/data/repository/text_book_repository.dart';
 import 'package:otzaria/text_display/text_display_exports.dart';
+import 'package:otzaria/work_status/work_status_cubit.dart';
+import 'package:provider/provider.dart';
 
 enum _AnchorKind { header, altHeader, line }
 
@@ -1694,6 +1697,12 @@ class _PrintingScreenState extends State<PrintingScreen> {
       case _PrintDestination.printer:
         if (_isPrinting) return;
         setState(() => _isPrinting = true);
+        final workStatus = Provider.of<WorkStatusCubit?>(
+          context,
+          listen: false,
+        );
+        // מהמסירה ואילך המסך סגור: רק [job] והקריאות הסטטיות.
+        PrintWorkStatus? job;
         final bool printed;
         try {
           printed = await printPdfWithSaferMode(
@@ -1702,8 +1711,20 @@ class _PrintingScreenState extends State<PrintingScreen> {
             usePrinterSettings: true,
             onLayout: _createPrintJobPdf,
             format: format,
+            onSpooling: (printerName) {
+              job = PrintWorkStatus.start(
+                workStatus,
+                documentName: widget.bookId,
+                printerName: printerName,
+              );
+              if (context.mounted) Navigator.of(context).pop(true);
+            },
           );
         } catch (e, stack) {
+          if (job != null) {
+            job!.fail(e, stack);
+            return;
+          }
           if (mounted) setState(() => _isPrinting = false);
           UiSnack.showError(PdfMessages.printError(e));
           FlutterError.reportError(
@@ -1713,6 +1734,10 @@ class _PrintingScreenState extends State<PrintingScreen> {
               library: 'printing',
             ),
           );
+          return;
+        }
+        if (job != null) {
+          job!.complete(printed);
           return;
         }
         if (mounted) setState(() => _isPrinting = false);
@@ -2538,7 +2563,7 @@ class _PrintingScreenState extends State<PrintingScreen> {
           Expanded(
             child: _isPrinting
                 ? const ActionButton.recommended(
-                    text: 'מדפיס…',
+                    text: PdfMessages.printPreparing,
                     iconWidget: SizedBox.square(
                       dimension: 16,
                       child: CircularProgressIndicator(strokeWidth: 2),
