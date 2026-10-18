@@ -120,7 +120,6 @@ dependencies:
   super_clipboard: ^0.9.1
   flutter_local_notifications: ^22.3.2
   timezone: ^0.11.2
-  flutter_single_instance: ^1.7.0
   xml: ^7.0.1
   markdown: ^7.3.1
   flutter_markdown: ^0.7.7+1

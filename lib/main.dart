@@ -12,7 +12,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show FrameCallback;
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
-import 'package:flutter_single_instance/flutter_single_instance.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
@@ -89,6 +88,7 @@ import 'package:otzaria/utils/navigation/book_open_coordinator.dart';
 
 import 'package:otzaria_search_engine/otzaria_search_engine.dart';
 import 'package:otzaria/core/app_paths.dart';
+import 'package:otzaria/core/single_instance_lock.dart';
 import 'package:otzaria/core/otzaria_capabilities.dart';
 import 'package:otzaria/core/data_root_writability_warning.dart';
 import 'package:otzaria/core/cli_command.dart';
@@ -519,15 +519,13 @@ Future<void> _initializeSentry() async {
 }
 
 Future<void> _runAppBootstrap() async {
-  // Check for single instance - skip on Apple platforms (macOS/iOS) due to sandbox restrictions
-  if (!Platform.isMacOS && !Platform.isIOS) {
-    // שם התהליך משמש רק לשם קובץ ה-pid; בלעדיו החבילה מריצה tasklist/ps
-    // חוסם (issue #989). לעותק מותקן הוא שם ה-EXE, כדי שמופע ישן וחדש יזהו זה את זה.
-    FlutterSingleInstance.processName ??= AppPaths.singleInstanceKey();
-    FlutterSingleInstance flutterSingleInstance = FlutterSingleInstance();
-    bool isFirstInstance = await StartupTimeline.instance.phase(
+  // Windows: ה-mutex ב-runner כבר אוכף מופע יחיד. בדיבאג מותרים כמה מופעים.
+  if (Platform.isLinux && !kDebugMode) {
+    final isFirstInstance = await StartupTimeline.instance.phase(
       'singleInstance',
-      flutterSingleInstance.isFirstInstance,
+      () => SingleInstanceLock.acquire(
+        SingleInstanceLock.linuxLockPath(AppPaths.singleInstanceKey()),
+      ),
     );
     if (!isFirstInstance) {
       // אם נשלח ack מוקדם לאתר החנות — ממתינים לסיומו לפני היציאה, אחרת
