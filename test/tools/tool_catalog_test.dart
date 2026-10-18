@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/plugins/bloc/plugin_system_state.dart';
 import 'package:otzaria/plugins/models/installed_plugin.dart';
@@ -155,6 +157,32 @@ void main() {
       final lastBuiltIn = entries.lastIndexWhere((e) => !e.isPlugin);
       expect(pluginIndex, greaterThan(lastBuiltIn));
     });
+
+    test(
+      'תוסף שמבקש במניפסט להקדים את הכלים המובנים מופיע אחריהם (issue #2460)',
+      () {
+        // שורה ממסד קיים: המניפסט ביקש להקדים והמשתמש אישר בהתקנה.
+        final plugin = InstalledPlugin.fromDbMap({
+          ..._plugin('p.first').toDbMap(),
+          'manifest_json': jsonEncode({
+            'id': 'p.first',
+            'name': 'p.first',
+            'version': '1.0.0',
+            'entrypoint': 'index.html',
+            'contributes': {
+              'toolTab': {'order': 1, 'allowOrderBeforeBuiltIns': true},
+            },
+          }),
+          'allow_order_before_built_ins_granted': 1,
+        });
+        final entries = buildToolCatalog(
+          hiddenBuiltInToolIds: const {},
+          isOfflineMode: false,
+          pluginState: PluginSystemLoaded([plugin]),
+        );
+        expect(entries.last.toolId, 'p.first');
+      },
+    );
 
     test('תוסף שאושר להקדים כלים מובנים מופיע לפניהם', () {
       final entries = buildToolCatalog(

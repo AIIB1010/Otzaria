@@ -667,6 +667,20 @@ void main() {
     },
   );
 
+  testWidgets('בקשת הקדמה במניפסט אינה מוצגת לאישור בהתקנה (issue #2460)', (
+    tester,
+  ) async {
+    final manifest = PluginManifest.fromJson({
+      ..._manifest().toJson(),
+      'contributes': {
+        'toolTab': {'title': 'Tab', 'allowOrderBeforeBuiltIns': true},
+      },
+    });
+    await _openDialog(tester, bloc, manifest);
+
+    expect(find.text('מיקום במסך כלים'), findsNothing);
+  });
+
   testWidgets(
     'תוסף שלא מבקש להופיע לפני כלים מובנים — ה-switch הייעודי לא מוצג',
     (tester) async {
