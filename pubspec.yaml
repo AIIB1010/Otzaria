@@ -169,7 +169,7 @@ dependency_overrides:
   printing:
     git:
       url: https://github.com/palmoni5/dart_pdf
-      ref: 757377dfe6c8c590fd99b1e9214618ee14ab930c
+      ref: f306c2c060684dc4ca7fb8eeecb4d6eaa25c52d9
       path: printing
   # החבילה המקורית בארכיון. בפורק: קפיצה אחרי שינוי רוחב נכשלה ב-layout
   # cycles (issue #1542).

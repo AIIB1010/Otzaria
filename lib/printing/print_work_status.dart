@@ -68,7 +68,7 @@ class PrintWorkStatus {
         autoDismissAfter: kPrintFailureAutoDismiss,
       ),
     );
-    UiSnack.showError(PdfMessages.printError(error));
+    UiSnack.showError(PdfMessages.printError);
     FlutterError.reportError(
       FlutterErrorDetails(exception: error, stack: stack, library: 'printing'),
     );

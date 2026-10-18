@@ -40,11 +40,12 @@ abstract class PdfMessages {
   static String fileExportFailed(Object error) => 'ייצוא הקובץ נכשל: $error';
   static const String printSent = 'המסמך נשלח להדפסה';
 
-  static String printError(Object error) => 'ההדפסה נכשלה: $error';
+  static const String printError =
+      'ההדפסה נכשלה. פרטי השגיאה נרשמו ביומן השגיאות.';
   static String printFailed(String printer) => 'ההדפסה למדפסת "$printer" נכשלה';
   static String saferDirectPrint(String printer) =>
       'מצב סייפר: ההדפסה נשלחת ישירות למדפסת "$printer", ללא דיאלוג ההדפסה של המערכת';
-  static const String printPreparing = 'מכין להדפסה…';
+  static const String printPreparing = 'מכין…';
   static const String printWorkTitle = 'הדפסה';
   static const String printSpooling = 'שולח למדפסת…';
   static String printSpoolingTo(String printer) => 'שולח ל-"$printer"…';

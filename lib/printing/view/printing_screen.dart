@@ -1709,7 +1709,7 @@ class _PrintingScreenState extends State<PrintingScreen> {
             context: context,
             name: widget.bookId,
             usePrinterSettings: true,
-            onLayout: _createPrintJobPdf,
+            onLayout: _createOutputPdf,
             format: format,
             onSpooling: (printerName) {
               job = PrintWorkStatus.start(
@@ -1726,7 +1726,7 @@ class _PrintingScreenState extends State<PrintingScreen> {
             return;
           }
           if (mounted) setState(() => _isPrinting = false);
-          UiSnack.showError(PdfMessages.printError(e));
+          UiSnack.showError(PdfMessages.printError);
           FlutterError.reportError(
             FlutterErrorDetails(
               exception: e,
@@ -1757,17 +1757,6 @@ class _PrintingScreenState extends State<PrintingScreen> {
         if (await _saveToFile(_ExportFormat.word) && context.mounted) {
           Navigator.of(context).pop(true);
         }
-    }
-  }
-
-  // אחרי כשל ב-onLayout ה-Future של printing לא מסתיים לעולם (העבודה נמחקת
-  // בצד הנייטיבי), ולכן מצב ההדפסה מתאפס כאן.
-  Future<Uint8List> _createPrintJobPdf(PdfPageFormat format) async {
-    try {
-      return await _createOutputPdf(format);
-    } catch (_) {
-      if (mounted) setState(() => _isPrinting = false);
-      rethrow;
     }
   }
 

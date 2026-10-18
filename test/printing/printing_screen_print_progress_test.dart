@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_settings_screens/flutter_settings_screens.dart';
@@ -38,7 +39,7 @@ class _FakeSettingsRepository extends Fake implements SettingsRepository {
 class _PendingPrintingPlatform extends PrintingPlatform {
   Completer<bool>? job;
 
-  /// כמו ה-plugin: מבקש את ה-PDF, וכשל ב-onLayout משאיר את העבודה תלויה.
+  /// כמו ה-plugin: מבקש את ה-PDF, וכשל ב-onLayout מסיים את העבודה בשגיאה.
   bool requestLayout = false;
 
   @override
@@ -55,12 +56,8 @@ class _PendingPrintingPlatform extends PrintingPlatform {
   ) async {
     final pending = job = Completer<bool>();
     if (requestLayout) {
-      try {
-        // פורמט של המדפסת, שונה מזה של התצוגה המקדימה השמורה.
-        await onLayout(PdfPageFormat.a5);
-      } catch (_) {
-        return Completer<bool>().future;
-      }
+      // פורמט של המדפסת, שונה מזה של התצוגה המקדימה השמורה.
+      await onLayout(PdfPageFormat.a5);
     }
     return pending.future;
   }
@@ -183,7 +180,7 @@ void main() {
     }
   }
 
-  testWidgets('עד שה-PDF נמסר הכפתור מראה "מכין להדפסה…" והמסך נשאר פתוח', (
+  testWidgets('עד שה-PDF נמסר הכפתור מראה "מכין…" והמסך נשאר פתוח', (
     tester,
   ) async {
     final platform = await openScreen(tester);
@@ -287,7 +284,7 @@ void main() {
     final item = workStatus.state.items.values.single;
     expect(item.kind, WorkStatusKind.failed);
     expect(item.autoDismissAfter, kPrintFailureAutoDismiss);
-    expect(find.textContaining('ההדפסה נכשלה:'), findsOneWidget);
+    expect(find.text(PdfMessages.printError), findsOneWidget);
     await tester.pump(kPrintFailureAutoDismiss);
     expect(workStatus.state.items, isEmpty);
     await closeScreen(tester);
@@ -320,7 +317,7 @@ void main() {
 
     expect(tester.takeException(), isA<StateError>());
 
-    expect(find.textContaining('ההדפסה נכשלה'), findsOneWidget);
+    expect(find.text(PdfMessages.printError), findsOneWidget);
     expect(find.text('הדפסה'), findsOneWidget);
     expect(find.byType(PrintingScreen), findsOneWidget);
     expect(workStatus.state.items, isEmpty);
@@ -336,10 +333,34 @@ void main() {
     await tester.pump();
     await tester.pump();
 
+    expect(tester.takeException(), isA<StateError>());
+    expect(find.text(PdfMessages.printError), findsOneWidget);
     expect(find.text('הדפסה'), findsOneWidget);
     expect(find.text(PdfMessages.printPreparing), findsNothing);
     expect(find.byType(PrintingScreen), findsOneWidget);
     expect(workStatus.state.items, isEmpty);
+    await closeScreen(tester);
+  });
+
+  testWidgets('"מכין…" נכנס בשורה אחת בכפתור של פאנל ההגדרות', (tester) async {
+    await openScreen(tester);
+
+    await tester.tap(find.text('הדפסה'));
+    await tester.pump();
+
+    final label = tester.renderObject<RenderParagraph>(
+      find.text(PdfMessages.printPreparing),
+    );
+    final lineTops = label
+        .getBoxesForSelection(
+          const TextSelection(
+            baseOffset: 0,
+            extentOffset: PdfMessages.printPreparing.length,
+          ),
+        )
+        .map((box) => box.top)
+        .toSet();
+    expect(lineTops, hasLength(1));
     await closeScreen(tester);
   });
 }
