@@ -218,6 +218,36 @@ void main() {
     expect(find.textContaining('…', findRichText: true), findsOneWidget);
   });
 
+  testWidgets('מספור רשימה מוזחת ושורות קוד זהים לעורך Quill', (tester) async {
+    await expectParity(
+      tester,
+      note([
+        {'insert': 'אחד'},
+        {
+          'insert': '\n',
+          'attributes': {'list': 'ordered'},
+        },
+        {'insert': 'פנימי'},
+        {
+          'insert': '\n',
+          'attributes': {'list': 'ordered', 'indent': 1},
+        },
+        {'insert': 'שתיים'},
+        {
+          'insert': '\n',
+          'attributes': {'list': 'ordered'},
+        },
+        {'insert': 'code'},
+        {
+          'insert': '\n',
+          'attributes': {'code-block': true},
+        },
+      ]),
+    );
+    expect(find.text('a.'), findsOneWidget);
+    expect(find.text('2.'), findsOneWidget);
+  });
+
   testWidgets('ציטוט ב-RTL מצויר עם קו בצד ימין', (tester) async {
     await pump(
       tester,

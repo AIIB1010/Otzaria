@@ -14,16 +14,28 @@ class NoteDeltaPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final styles = quill.DefaultStyles.getInstance(context);
     final direction = Directionality.of(context);
+    // מספור משותף לבלוקים עוקבים, כמו ב-QuillEditor (רמות הזחה הן בלוקים נפרדים).
+    final levelCounts = <int, int>{};
+    var prevOl = false;
+    var clearCounts = false;
+    final children = <Widget>[];
+    for (final node in document.root.children) {
+      final attrs = node.style.attributes;
+      final isOl = attrs[quill.Attribute.list.key] == quill.Attribute.ol;
+      if (prevOl && !isOl || attrs.isEmpty) clearCounts = true;
+      prevOl = isOl;
+      if (node is quill.Line) {
+        children.add(_rootLine(context, styles, node, direction));
+      } else if (node is quill.Block) {
+        if (clearCounts) levelCounts.clear();
+        clearCounts = false;
+        children.add(_block(context, styles, node, direction, levelCounts));
+      }
+    }
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (final node in document.root.children)
-          if (node is quill.Line)
-            _rootLine(context, styles, node, direction)
-          else if (node is quill.Block)
-            _block(context, styles, node, direction),
-      ],
+      children: children,
     );
   }
 
@@ -58,6 +70,7 @@ class NoteDeltaPreview extends StatelessWidget {
     quill.DefaultStyles styles,
     quill.Block block,
     TextDirection ambientDirection,
+    Map<int, int> levelCounts,
   ) {
     final attrs = block.style.attributes;
     // כמו ב-Quill: direction=rtl בתוך הקשר RTL הופך את הבלוק ל-LTR.
@@ -83,7 +96,6 @@ class NoteDeltaPreview extends StatelessWidget {
       decoration = decoration!.copyWith(border: Border(right: border.left));
     }
 
-    final levelCounts = <int, int>{};
     final lines = <Widget>[];
     var index = 0;
     for (final line in block.children.whereType<quill.Line>()) {
@@ -95,7 +107,9 @@ class NoteDeltaPreview extends StatelessWidget {
         styles,
         line,
         listAttr,
+        isCode,
         fontSize,
+        index,
         count,
         levelCounts,
       );
@@ -149,10 +163,43 @@ class NoteDeltaPreview extends StatelessWidget {
     quill.DefaultStyles styles,
     quill.Line line,
     quill.Attribute? listAttr,
+    bool isCode,
     double fontSize,
+    int index,
     int count,
     Map<int, int> levelCounts,
   ) {
+    String numberLabel() => quill.LeadingConfig(
+      attribute: listAttr ?? quill.Attribute.codeBlock,
+      attrs: line.style.attributes,
+      indentLevelCounts: levelCounts,
+      index: index,
+      count: count,
+      style: null,
+      width: null,
+      padding: null,
+      value: false,
+      onCheckboxTap: (_) {},
+    ).getIndexNumberByIndent!;
+    if (isCode) {
+      final codeStyle = styles.code!.style;
+      return quill.QuillNumberPoint(
+        index: numberLabel(),
+        indentLevelCounts: levelCounts,
+        count: count,
+        style: codeStyle.copyWith(
+          color: codeStyle.color!.withValues(alpha: 0.4),
+        ),
+        attrs: line.style.attributes,
+        width:
+            quill.TextBlockUtils.defaultNumberPointWidthBuilder(
+              fontSize,
+              count,
+            ) -
+            fontSize / 4,
+        padding: fontSize / 2,
+      );
+    }
     if (listAttr == null) return null;
     final firstOp = line.toDelta().operations.firstOrNull?.attributes;
     final color = _parseColor(firstOp?[quill.Attribute.color.key]);
@@ -169,13 +216,9 @@ class NoteDeltaPreview extends StatelessWidget {
       );
     }
     if (listAttr == quill.Attribute.ol) {
-      final level =
-          line.style.attributes[quill.Attribute.indent.key]?.value as int? ?? 0;
-      levelCounts.removeWhere((key, _) => key > level);
-      final number = levelCounts[level] = (levelCounts[level] ?? 0) + 1;
       return quill.QuillNumberPoint(
-        index: '$number',
-        indentLevelCounts: const {},
+        index: numberLabel(),
+        indentLevelCounts: levelCounts,
         count: count,
         style: leadingStyle,
         attrs: line.style.attributes,
@@ -272,7 +315,14 @@ class NoteDeltaPreview extends StatelessWidget {
       return quill.HorizontalSpacing(fontSize + extra, 0);
     }
     if (attrs.containsKey(quill.Attribute.codeBlock.key)) {
-      return quill.HorizontalSpacing(fontSize / 2, fontSize / 2);
+      final width = quill.TextBlockUtils.defaultNumberPointWidthBuilder(
+        fontSize,
+        count,
+      );
+      return quill.HorizontalSpacing(
+        width - fontSize / 4 + extra,
+        fontSize / 2,
+      );
     }
     final list = attrs[quill.Attribute.list.key];
     if (list == null) return quill.HorizontalSpacing(extra, 0);
