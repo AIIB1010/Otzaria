@@ -381,10 +381,10 @@ packages:
     dependency: "direct main"
     description:
       name: equatable
-      sha256: "3bce007a596ff8b3119c45d68aaef631272537c03d30e5d4534dd24bf4c5eaa2"
+      sha256: ea36e500cbf0ec18361deabca755434f73e42fe53c5130021c7e2d6b5ebe1702
       url: "https://pub.dev"
     source: hosted
-    version: "2.1.0"
+    version: "3.0.0"
   fake_async:
     dependency: "direct dev"
     description:
@@ -1201,8 +1201,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "1b199a28a0f99eb1725a705809c3334ce95b6808"
-      resolved-ref: "1b199a28a0f99eb1725a705809c3334ce95b6808"
+      ref: ba390eabcaec8690a4e78aadd57d45120da72d82
+      resolved-ref: ba390eabcaec8690a4e78aadd57d45120da72d82
       url: "https://github.com/Otzaria/otzaria_search_engine.git"
     source: git
     version: "4.1.0"
@@ -1597,8 +1597,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: e19880621773a289424ac33d400d48cb879f436a
-      resolved-ref: e19880621773a289424ac33d400d48cb879f436a
+      ref: "445744d354d40bde3c042f898c6f93c8f455ff40"
+      resolved-ref: "445744d354d40bde3c042f898c6f93c8f455ff40"
       url: "https://github.com/Otzaria/otzaria_library_updater"
     source: git
     version: "0.8.1"
