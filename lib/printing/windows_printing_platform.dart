@@ -20,6 +20,7 @@ import 'package:window_manager/window_manager.dart';
 
 /// Printing on Windows off the platform thread, where the `printing` plugin
 /// renders the whole job and freezes the window. Other calls go to the plugin.
+// TODO: להסיר כשיתוקן וישוחרר DavBfr/dart_pdf#1982 (הדפסה שאינה חוסמת ב-Windows).
 class WindowsPrintingPlatform extends PrintingPlatform {
   WindowsPrintingPlatform(this._plugin);
 
