@@ -13,6 +13,7 @@ import 'package:otzaria/data/data_providers/file_system_data_provider.dart';
 import 'package:otzaria/data/data_providers/tantivy_data_provider.dart';
 import 'package:otzaria/indexing/repository/indexing_repository.dart';
 import 'package:otzaria/data/repository/data_repository.dart';
+import 'package:otzaria/data/repository/book_search_worker.dart';
 import 'package:otzaria/find_ref/repository/find_ref_repository.dart';
 import 'package:otzaria/library/hidden/hidden_library_filter.dart';
 import 'package:otzaria/library/hidden/hidden_library_store.dart';
@@ -714,6 +715,7 @@ class LibraryBloc extends Bloc<LibraryEvent, LibraryState> {
         includeHebrewBooks: includeHebrewBooks,
         includeLocalHebrewBooks: includeLocalHebrewBooks,
         extraBooks: event.extraBooks,
+        supersedeKey: this,
       );
       final results = found.books;
 
@@ -758,6 +760,8 @@ class LibraryBloc extends Bloc<LibraryEvent, LibraryState> {
           isSearching: false,
         ),
       );
+    } on BookSearchSupersededException {
+      // החיפוש החדש שהחליף אותו הוא שיעדכן את המצב.
     } catch (e, stackTrace) {
       // בלי רישום ליומן, כשל בחיפוש הספרייה (issue #1012) אינו משאיר
       // עקבות לאבחון — errors.txt נשאר ריק.
