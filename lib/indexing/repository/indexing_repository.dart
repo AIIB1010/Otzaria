@@ -1954,31 +1954,6 @@ class IndexingRepository {
     );
   }
 
-  Future<String?> _loadTextBookText(TextBook book) async {
-    String? text;
-
-    if (book.categoryId != null) {
-      text = await SqliteDataProvider.instance.getBookTextFromDb(
-        book.title,
-        book.categoryId,
-        book.fileType ?? 'txt',
-        book.source,
-        true,
-      );
-      if (text != null) {
-        text = rehydrateInlineNotesInText(text, await _dbBookNotes(book));
-      }
-    }
-
-    if (text == null) {
-      text = await _loadTextForIndex(book);
-      if (text.isEmpty) return null;
-    }
-
-    // עקבי עם מסלול האינדוקס — טביעת האצבע מחושבת על הטקסט המנוקה.
-    return stripDataUrisOffFrame(text);
-  }
-
   /// טוען את טקסט הספר לאינדוקס, בלי להטמיע תמונות כשהממיר תומך בכך.
   ///
   /// לאינדקס אין שימוש ב-base64 של התמונות, והטמעתן מקצה מחרוזות של עשרות
