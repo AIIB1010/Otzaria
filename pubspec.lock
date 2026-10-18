@@ -1404,8 +1404,8 @@ packages:
     dependency: "direct main"
     description:
       path: printing
-      ref: f306c2c060684dc4ca7fb8eeecb4d6eaa25c52d9
-      resolved-ref: f306c2c060684dc4ca7fb8eeecb4d6eaa25c52d9
+      ref: f5efa21c2237002280f1ba056971ec1bf1e8cfd7
+      resolved-ref: f5efa21c2237002280f1ba056971ec1bf1e8cfd7
       url: "https://github.com/palmoni5/dart_pdf"
     source: git
     version: "5.15.1"

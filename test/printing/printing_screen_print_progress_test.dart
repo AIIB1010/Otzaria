@@ -56,8 +56,15 @@ class _PendingPrintingPlatform extends PrintingPlatform {
   ) async {
     final pending = job = Completer<bool>();
     if (requestLayout) {
-      // פורמט של המדפסת, שונה מזה של התצוגה המקדימה השמורה.
-      await onLayout(PdfPageFormat.a5);
+      try {
+        // פורמט של המדפסת, שונה מזה של התצוגה המקדימה השמורה.
+        await onLayout(PdfPageFormat.a5);
+      } catch (e, s) {
+        FlutterError.reportError(
+          FlutterErrorDetails(exception: e, stack: s, library: 'printing'),
+        );
+        pending.completeError(e.toString());
+      }
     }
     return pending.future;
   }

@@ -1703,13 +1703,21 @@ class _PrintingScreenState extends State<PrintingScreen> {
         );
         // מהמסירה ואילך המסך סגור: רק [job] והקריאות הסטטיות.
         PrintWorkStatus? job;
+        var layoutFailed = false;
         final bool printed;
         try {
           printed = await printPdfWithSaferMode(
             context: context,
             name: widget.bookId,
             usePrinterSettings: true,
-            onLayout: _createOutputPdf,
+            onLayout: (format) async {
+              try {
+                return await _createOutputPdf(format);
+              } catch (_) {
+                layoutFailed = true;
+                rethrow;
+              }
+            },
             format: format,
             onSpooling: (printerName) {
               job = PrintWorkStatus.start(
@@ -1727,13 +1735,16 @@ class _PrintingScreenState extends State<PrintingScreen> {
           }
           if (mounted) setState(() => _isPrinting = false);
           UiSnack.showError(PdfMessages.printError);
-          FlutterError.reportError(
-            FlutterErrorDetails(
-              exception: e,
-              stack: stack,
-              library: 'printing',
-            ),
-          );
+          // כשל ב-onLayout כבר דווח על ידי printing, עם החריגה המקורית.
+          if (!layoutFailed) {
+            FlutterError.reportError(
+              FlutterErrorDetails(
+                exception: e,
+                stack: stack,
+                library: 'printing',
+              ),
+            );
+          }
           return;
         }
         if (job != null) {
