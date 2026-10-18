@@ -306,7 +306,9 @@ class _LinkHoverPreviewContentState extends State<LinkHoverPreviewContent> {
                     justifyText: true,
                   ),
                 );
-                if (maxContentLines == null) return content;
+                if (maxContentLines == null) {
+                  return Flexible(child: SingleChildScrollView(child: content));
+                }
                 if (_expanded) {
                   return ConstrainedBox(
                     constraints: BoxConstraints(
