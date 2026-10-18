@@ -16,6 +16,7 @@ import 'package:otzaria/semantic_search/models/semantic_vectors_release.dart';
 import 'package:otzaria/semantic_search/repository/semantic_release_locator.dart';
 import 'package:otzaria/semantic_search/repository/semantic_search_repository.dart'
     show SemanticFileDownloader;
+import 'package:otzaria/utils/file/native_sha256.dart';
 import 'package:path/path.dart' as p;
 import 'package:seforim_library_updater/seforim_library_updater.dart'
     show PatchDownloadCancelled;
@@ -383,6 +384,5 @@ class SemanticStagedImport {
 Future<bool> _fileMatches(String path, int size, String sha) async {
   final file = File(path);
   if (await file.length() != size) return false;
-  return (await sha256.bind(file.openRead()).first).toString() ==
-      sha.toLowerCase();
+  return await sha256OfFileFast(path) == sha.toLowerCase();
 }

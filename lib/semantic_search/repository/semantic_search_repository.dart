@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 
-import 'package:archive/archive.dart' show ZipDecoder;
-import 'package:crypto/crypto.dart';
+import 'package:archive/archive.dart'
+    show InputFileStream, OutputFileStream, ZipDecoder;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -35,6 +35,7 @@ import 'package:otzaria/semantic_search/repository/semantic_staged_import.dart';
 import 'package:otzaria/services/data_collection_service.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
 import 'package:otzaria/utils/file/disk_free_space.dart';
+import 'package:otzaria/utils/file/native_sha256.dart';
 import 'package:otzaria_search_engine/otzaria_search_engine.dart'
     show
         SemanticHighlightTarget,
@@ -1323,7 +1324,7 @@ Future<bool> _verifyModelFile(
 ) => Isolate.run(() async {
   final file = File(path);
   if (!await file.exists() || await file.length() != expectedSize) return false;
-  return (await sha256.bind(file.openRead()).first).toString() == expectedSha;
+  return await sha256OfFileFast(path) == expectedSha;
 });
 
 /// [file] מתוך ה-zip [archive] אל [dest]: רשומה יחידה בשמו ובגודלו, ואז ה-SHA-256 שלו.
@@ -1334,24 +1335,35 @@ Future<void> _unzipModelFile(
 ) async {
   final name = file.name;
   final size = file.size;
-  final zipBytes = await File(archive).readAsBytes();
-  final bytes = await Isolate.run(() {
+  final extracted = await Isolate.run(() {
+    final input = InputFileStream(archive);
     try {
-      final entries = ZipDecoder().decodeBytes(zipBytes).files;
-      if (entries.length != 1) return null;
+      final entries = ZipDecoder().decodeStream(input).files;
+      if (entries.length != 1) return false;
       final entry = entries.single;
       if (!entry.isFile || entry.name != name || entry.size != size) {
-        return null;
+        return false;
       }
-      final content = entry.readBytes();
-      return content != null && content.length == size ? content : null;
+      final output = OutputFileStream(dest);
+      try {
+        entry.writeContent(output);
+      } finally {
+        output.closeSync();
+      }
+      File(dest).openSync(mode: FileMode.append)
+        ..flushSync()
+        ..closeSync();
+      return File(dest).lengthSync() == size;
+    } on FileSystemException {
+      rethrow;
     } catch (_) {
       // zip פגום (גם RangeError של נתונים קטועים) אינו מחזיק את הקובץ.
-      return null;
+      return false;
+    } finally {
+      input.closeSync();
     }
   });
-  if (bytes != null) await File(dest).writeAsBytes(bytes, flush: true);
-  if (bytes == null || !await _verifyModelFile(dest, size, file.sha256)) {
+  if (!extracted || !await _verifyModelFile(dest, size, file.sha256)) {
     await CompanionAssetsService.discardDownload(dest);
     throw SemanticFailure(
       SemanticFailureKind.checksumMismatch,
