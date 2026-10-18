@@ -773,6 +773,34 @@ void main() {
       verify: (bloc) => expect(repositoryOf(bloc).cancelCalls, 1),
     );
 
+    test('ביטול מנקז ריצות שבתור, ושומר את הספרים שהשתנו בהן', () async {
+      final repository = _FakeIndexingRepository()..runGate = Completer<void>();
+      final bloc = _FakeIndexingBloc(repository);
+      final library = libraryWithBooks(2);
+      final changed = [library.books.first];
+      final settled = Completer<void>();
+      bloc.add(StartIndexing(library));
+      bloc.add(RunIndexing(library, books: const [], changedBooks: changed));
+      bloc.add(IndexingWorkBarrier(onSettled: settled.complete));
+      await Future<void>.delayed(Duration.zero);
+      expect(repository.runs, hasLength(1));
+
+      bloc.add(CancelIndexing());
+      await Future<void>.delayed(Duration.zero);
+      repository.runGate!.complete();
+      await settled.future.timeout(const Duration(seconds: 2));
+
+      expect(repository.runs, hasLength(1));
+      expect(repository.rememberedChanged, changed);
+
+      // ריצה שנשלחה אחרי הביטול רצה כרגיל.
+      final after = Completer<void>();
+      bloc.add(StartIndexing(library, onSettled: after.complete));
+      await after.future.timeout(const Duration(seconds: 2));
+      expect(repository.runs, hasLength(2));
+      await bloc.close();
+    });
+
     blocTest<IndexingBloc, IndexingState>(
       'ClearIndex מנקה ומחזיר למצב התחלתי',
       seed: () => IndexingStopped(),

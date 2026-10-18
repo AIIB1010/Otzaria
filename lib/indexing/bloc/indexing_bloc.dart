@@ -28,6 +28,10 @@ class IndexingBloc extends Bloc<IndexingEvent, IndexingState> {
   bool _isEconomy = false;
   bool _isFinalizing = false;
 
+  // ביטול מנקז את ריצות האינדוקס שכבר בתור: הן נשלחו לפני שהמשתמש עצר.
+  final _enqueuedAtCancelCount = Expando<int>();
+  int _cancelCount = 0;
+
   IndexingBloc(
     this._repository, {
     void Function(IndexingRunResult result, Duration elapsed)? reportFailures,
@@ -62,6 +66,12 @@ class IndexingBloc extends Bloc<IndexingEvent, IndexingState> {
     );
   }
 
+  @override
+  void add(IndexingEvent event) {
+    if (event is RunIndexing) _enqueuedAtCancelCount[event] = _cancelCount;
+    super.add(event);
+  }
+
   /// כל מצבי ההתקדמות נפלטים דרך כאן כדי שדגלי ההשהיה והמצב החסכוני
   /// יישמרו על פני כל עדכון התקדמות.
   IndexingInProgress _inProgress({
@@ -83,6 +93,17 @@ class IndexingBloc extends Bloc<IndexingEvent, IndexingState> {
     IndexingWorkEvent event,
     Emitter<IndexingState> emit,
   ) async {
+    if (event is RunIndexing &&
+        (_enqueuedAtCancelCount[event] ?? _cancelCount) != _cancelCount) {
+      // הסימון "השתנה" שורד: הריצה הבאה תחליף את הספרים האלה.
+      try {
+        await _repository.rememberChangedBooks(event.changedBooks);
+      } catch (e) {
+        debugPrint('⚠️ שמירת ספרים שהשתנו מריצה שבוטלה נכשלה: $e');
+      }
+      return;
+    }
+
     // רק בקשה שהמשתמש יזם מדווחת. אירועי התחזוקה האוטומטיים (ניקוי יתומים,
     // ספרים חדשים/שהשתנו) נשלחים בכל חלון בכל טעינת ספרייה, וההודעה עליהם
     // קפצה בכל פתיחת חלון משני.
@@ -351,6 +372,7 @@ class IndexingBloc extends Bloc<IndexingEvent, IndexingState> {
   ) {
     _activeWorkId = null;
     _isPaused = false;
+    _cancelCount++;
     _repository.cancelIndexing();
     emit(IndexingStopped());
   }
