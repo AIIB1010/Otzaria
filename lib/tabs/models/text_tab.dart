@@ -11,7 +11,7 @@ import 'package:otzaria/tabs/models/reading_tab_search_state.dart';
 import 'package:otzaria/tabs/models/tab.dart';
 import 'package:otzaria/text_book/view/page_shape/utils/page_shape_plugin_api.dart';
 import 'package:otzaria/text_book/view/page_shape/utils/page_shape_settings_manager.dart';
-import 'package:flutter_settings_screens/flutter_settings_screens.dart';
+import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:flutter/foundation.dart';
 import 'package:otzaria/search/models/search_configuration.dart';
 import 'package:otzaria/utils/text/ref_helper.dart';

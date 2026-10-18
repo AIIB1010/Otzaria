@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:flutter_settings_screens/flutter_settings_screens.dart';
+import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:otzaria/data/constants/database_constants.dart';
 import 'package:otzaria/settings/settings_exports.dart';
 

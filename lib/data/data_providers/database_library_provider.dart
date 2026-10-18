@@ -57,7 +57,7 @@ import 'package:otzaria/utils/file/document_format.dart';
 import 'package:otzaria/utils/file/file_book_path_resolver.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
 import 'link_visibility_sql.dart';
-import 'package:flutter_settings_screens/flutter_settings_screens.dart';
+import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:path/path.dart' as p;
 
