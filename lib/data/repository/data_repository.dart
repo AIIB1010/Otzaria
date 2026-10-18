@@ -72,6 +72,7 @@ class DataRepository {
   }
 
   final BookSearchWorker _bookSearchWorker = BookSearchWorker();
+  final Map<Object, Object> _pendingBookSearches = {};
 
   @visibleForTesting
   BookSearchWorker get bookSearchWorkerForTesting => _bookSearchWorker;
@@ -210,93 +211,105 @@ class DataRepository {
     bool sortByRatio = true,
     Object? supersedeKey,
   }) async {
-    const empty = (books: <Book>[], categories: <Category>[]);
-    final normalizedQuery = _normalizeForSearch(query);
-    final queryWords = normalizedQuery
-        .split(RegExp(r'\s+'))
-        .where((w) => w.isNotEmpty)
-        .toList();
-    if (queryWords.isEmpty) {
-      return empty;
-    }
+    final request = Object();
+    if (supersedeKey != null) _pendingBookSearches[supersedeKey] = request;
+    try {
+      const empty = (books: <Book>[], categories: <Category>[]);
+      final normalizedQuery = _normalizeForSearch(query);
+      final queryWords = normalizedQuery
+          .split(RegExp(r'\s+'))
+          .where((w) => w.isNotEmpty)
+          .toList();
+      if (queryWords.isEmpty) {
+        return empty;
+      }
 
-    final allBooks = <Book>[
-      ...(category?.getAllBooks() ?? (await library).getAllBooks()),
-    ];
+      final allBooks = <Book>[
+        ...(category?.getAllBooks() ?? (await library).getAllBooks()),
+      ];
 
-    if (includeOtzar) {
-      allBooks.addAll(await otzarBooks);
-    }
-    if (includeHebrewBooks) {
-      allBooks.addAll(await hebrewBooks);
-    } else if (includeLocalHebrewBooks) {
-      // ספרי היברובוקס שיש להם PDF מקומי הם ספרים שכבר נמצאים במחשב, ולכן
-      // מוצגים גם כשהצגת הקטלוג החיצוני כבויה — עד שהמשתמש מכבה זאת.
-      allBooks.addAll(await localHebrewBooks);
-    }
-    // ספרים מבחוץ (של תוספים) אחרונים ברשימה.
-    allBooks.addAll(extraBooks);
+      if (includeOtzar) {
+        allBooks.addAll(await otzarBooks);
+      }
+      if (includeHebrewBooks) {
+        allBooks.addAll(await hebrewBooks);
+      } else if (includeLocalHebrewBooks) {
+        // ספרי היברובוקס שיש להם PDF מקומי הם ספרים שכבר נמצאים במחשב, ולכן
+        // מוצגים גם כשהצגת הקטלוג החיצוני כבויה — עד שהמשתמש מכבה זאת.
+        allBooks.addAll(await localHebrewBooks);
+      }
+      // ספרים מבחוץ (של תוספים) אחרונים ברשימה.
+      allBooks.addAll(extraBooks);
 
-    // no-op אם הקאשים כבר חוממו בעליית האפליקציה
-    await AcronymsCache.instance.warmUp();
-    // מסד מצורף איטי (כונן רשת) אינו מעכב את החיפוש — הקריאה נמשכת ב-isolate.
-    await AcronymsCache.instance.warmUpAttached().timeout(
-      attachedAcronymsWait,
-      onTimeout: () {},
-    );
-    await GenerationCache.instance.warmUp();
-
-    final searchEntries = <BookSearchEntry>[
-      for (var i = 0; i < allBooks.length; i++)
-        buildBookSearchEntry(
-          i,
-          allBooks[i],
-          acronymsFor: AcronymsCache.instance.acronymsFor,
-          eraOrderForId: GenerationCache.instance.getOrderForBook,
-        ),
-    ];
-
-    // הקטגוריות מצטרפות לאותה ריצת isolate; מזוהות באינדקסים שמעל הספרים.
-    final allCategories =
-        category?.getAllCategories() ?? (await library).getAllCategories();
-    for (var i = 0; i < allCategories.length; i++) {
-      searchEntries.add(
-        BookSearchEntry(
-          index: allBooks.length + i,
-          title: allCategories[i].title,
-          author: '',
-          topics: '',
-        ),
+      // no-op אם הקאשים כבר חוממו בעליית האפליקציה
+      await AcronymsCache.instance.warmUp();
+      // מסד מצורף איטי (כונן רשת) אינו מעכב את החיפוש — הקריאה נמשכת ב-isolate.
+      await AcronymsCache.instance.warmUpAttached().timeout(
+        attachedAcronymsWait,
+        onTimeout: () {},
       );
-    }
+      await GenerationCache.instance.warmUp();
 
-    final matchingIndices = await _bookSearchWorker.search(
-      searchEntries,
-      BookSearchQuery(
-        queryWords: queryWords,
-        topics: topics ?? const <String>[],
-        sortByRatio: sortByRatio,
-        normalizedQuery: normalizedQuery,
-      ),
-      supersedeKey: supersedeKey,
-    );
+      final searchEntries = <BookSearchEntry>[
+        for (var i = 0; i < allBooks.length; i++)
+          buildBookSearchEntry(
+            i,
+            allBooks[i],
+            acronymsFor: AcronymsCache.instance.acronymsFor,
+            eraOrderForId: GenerationCache.instance.getOrderForBook,
+          ),
+      ];
 
-    final books = <Book>[];
-    final categories = <Category>[];
-    for (final index in matchingIndices) {
-      if (index < allBooks.length) {
-        books.add(allBooks[index]);
-      } else {
-        categories.add(allCategories[index - allBooks.length]);
+      // הקטגוריות מצטרפות לאותה ריצת isolate; מזוהות באינדקסים שמעל הספרים.
+      final allCategories =
+          category?.getAllCategories() ?? (await library).getAllCategories();
+      for (var i = 0; i < allCategories.length; i++) {
+        searchEntries.add(
+          BookSearchEntry(
+            index: allBooks.length + i,
+            title: allCategories[i].title,
+            author: '',
+            topics: '',
+          ),
+        );
+      }
+
+      if (supersedeKey != null &&
+          !identical(_pendingBookSearches[supersedeKey], request)) {
+        throw const BookSearchSupersededException();
+      }
+      final matchingIndices = await _bookSearchWorker.search(
+        searchEntries,
+        BookSearchQuery(
+          queryWords: queryWords,
+          topics: topics ?? const <String>[],
+          sortByRatio: sortByRatio,
+          normalizedQuery: normalizedQuery,
+        ),
+        supersedeKey: supersedeKey,
+      );
+
+      final books = <Book>[];
+      final categories = <Category>[];
+      for (final index in matchingIndices) {
+        if (index < allBooks.length) {
+          books.add(allBooks[index]);
+        } else {
+          categories.add(allCategories[index - allBooks.length]);
+        }
+      }
+      // סינון נושאים פעיל מסתיר את קבוצת התיקיות — לקטגוריה אין נושאים.
+      return (
+        books: books,
+        categories: (topics?.isNotEmpty ?? false)
+            ? const <Category>[]
+            : categories,
+      );
+    } finally {
+      if (identical(_pendingBookSearches[supersedeKey], request)) {
+        _pendingBookSearches.remove(supersedeKey);
       }
     }
-    // סינון נושאים פעיל מסתיר את קבוצת התיקיות — לקטגוריה אין נושאים.
-    return (
-      books: books,
-      categories: (topics?.isNotEmpty ?? false)
-          ? const <Category>[]
-          : categories,
-    );
   }
 
   String _normalizeForSearch(String input) => _normalizeBookSearchText(input);

@@ -88,6 +88,9 @@ class BookSearchWorker {
 
   Future<List<int>> _searchOnWorker(_BookSearchJob job) async {
     final port = await _ensureStarted();
+    if (!identical(port, _toWorker)) {
+      throw StateError('book search worker disposed before sending');
+    }
     if (!_sameEntries(_workerEntries, job.entries)) {
       _workerEntries = job.entries;
       indexUploads++;

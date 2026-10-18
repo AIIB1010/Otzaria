@@ -87,4 +87,29 @@ void main() {
       expect(worker.usesWorker, isTrue);
     },
   );
+
+  test(
+    'dispose after a warm search does not strand active or queued jobs',
+    () async {
+      await worker.search(_entries(), _query('שולחן'));
+      final pending = worker.search(_entries(), _query('הלכה'));
+      final queued = worker.search(_entries(), _query('חיים'));
+      worker.dispose();
+
+      expect(
+        await pending.timeout(const Duration(seconds: 2)),
+        _direct(_entries(), 'הלכה'),
+      );
+      expect(
+        await queued.timeout(const Duration(seconds: 2)),
+        _direct(_entries(), 'חיים'),
+      );
+      expect(
+        await worker
+            .search(_entries(), _query('מב'))
+            .timeout(const Duration(seconds: 2)),
+        _direct(_entries(), 'מב'),
+      );
+    },
+  );
 }
