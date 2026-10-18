@@ -36,6 +36,32 @@ String _spacingValuesSignature(Map<String, String> values) {
   return keys.map((key) => '$key=${values[key]}').join('|');
 }
 
+/// סט ב-props בהשוואה לפי תוכן ב-O(n): equatable משווה סטים ב-O(n²), וסט
+/// שורות תוצאות החיפוש עשוי להכיל אלפי שורות.
+// TODO: להסיר אחרי מיזוג ושחרור felangel/equatable#223 (setEquals ב-O(n)).
+class _SetProp {
+  const _SetProp(this.values);
+
+  final Set<Object?>? values;
+
+  @override
+  bool operator ==(Object other) {
+    if (other is! _SetProp) return false;
+    final a = values;
+    final b = other.values;
+    if (identical(a, b)) return true;
+    if (a == null || b == null) return false;
+    return a.length == b.length && b.containsAll(a);
+  }
+
+  @override
+  int get hashCode =>
+      values == null ? null.hashCode : Object.hashAllUnordered(values!);
+
+  @override
+  String toString() => '$values';
+}
+
 abstract class TextBookState extends Equatable {
   final TextBook book;
   final int index;
@@ -131,7 +157,7 @@ class TextBookInitial extends TextBookState {
     searchMode,
     searchDistance,
     matchPolicy,
-    initialSearchResultLines,
+    _SetProp(initialSearchResultLines),
     splitedView,
     showPageShapeView,
     pinpointHighlightIndex,
@@ -732,12 +758,12 @@ class TextBookLoaded extends TextBookState {
     activeCommentators,
     commentatorGroups,
     availableCommentators.length,
-    rareCommentators,
+    _SetProp(rareCommentators),
     links.length,
     visibleLinks.length,
     // השוואה לפי תוכן — החלפת סוג אחד באחר שומרת על אותו גודל ותיבלע
     // בהשוואת ה-state, והסינון לא יתעדכן.
-    selectedLinkTypes,
+    _SetProp(selectedLinkTypes),
     tableOfContents.length,
     isTanach,
     displayOverrides,
@@ -747,7 +773,7 @@ class TextBookLoaded extends TextBookState {
     continuousReadingMode,
     visibleIndices,
     selectedIndex,
-    selectedIndices,
+    _SetProp(selectedIndices),
     pinLeftPane,
     searchText,
     _searchOptionsSignature(searchOptions),
@@ -757,7 +783,7 @@ class TextBookLoaded extends TextBookState {
     searchDistance,
     matchPolicy,
     searchWholeWord,
-    searchResultLines,
+    _SetProp(searchResultLines),
     currentTitle,
     selectedTextForNote,
     selectedTextSectionIndex,

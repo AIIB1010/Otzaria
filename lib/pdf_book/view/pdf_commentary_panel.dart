@@ -1613,11 +1613,16 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
           headerIndexOut: <String, int>{},
           linkIndexOut: linkFlatIndex,
         );
+        // הבחירה המלאה תלויה רק בהגדרות שמות הקודש.
+        context.select(
+          (SettingsBloc bloc) =>
+              (bloc.state.replaceHolyNames, bloc.state.holyNameStyle),
+        );
         if (currentGroups != null) {
           _prepareFullSelection(
             currentGroups,
             flatItems,
-            context.watch<SettingsBloc>().state,
+            context.read<SettingsBloc>().state,
           );
         }
         _flatItems = flatItems;
