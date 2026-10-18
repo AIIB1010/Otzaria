@@ -8,6 +8,7 @@ import 'package:otzaria/data/data_providers/file_system_data_provider.dart';
 import 'package:otzaria/data/repository/data_repository.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/data/repository/text_book_repository.dart';
+import 'package:otzaria/tools/tikkun_korim/engine/raw_text_cleaner.dart';
 import 'package:otzaria/tools/tikkun_korim/engine/stam_width_model.dart';
 import 'package:otzaria/tools/tikkun_korim/engine/tikkun_processor.dart';
 import 'package:otzaria/tools/tikkun_korim/models/tikkun_models.dart';
@@ -62,10 +63,10 @@ class TikkunKorimRepository {
     TikkunComputeRunner? computeRunner,
   }) : _run = computeRunner ?? _defaultRunner;
 
-  /// כמה ספרים מעובדים (מלבד התורה) נשמרים בו-זמנית — LRU.
+  /// כמה עיבודי ספרים (מלבד התורה) נשמרים בו-זמנית — LRU.
   static const int maxCachedBooks = 3;
 
-  final Map<String, ProcessedBook> _bookCache = {};
+  final Map<(String, String), ProcessedBook> _bookCache = {};
   final Map<String, List<TikkunPage>> _pagesCache = {};
   final Map<String, ProcessedTorah> _torahByMethod = {};
   String? _widthModelId;
@@ -94,7 +95,7 @@ class TikkunKorimRepository {
       textLoader.loadRawText(hebrewBookName);
 
   /// שמות הספרים שבמטמון, מהישן לחדש — לבדיקות.
-  Iterable<String> get cachedBookNames => _bookCache.keys;
+  Iterable<String> get cachedBookNames => _bookCache.keys.map((key) => key.$1);
 
   /// כל חמשת החומשים מעובדים יחד. עוגני העמודים כופים שבירות שורה שונות בכל
   /// שיטה, ולכן העימוד נשמר לכל שיטה ולא לכל מסורת.
@@ -145,13 +146,15 @@ class TikkunKorimRepository {
 
   Future<ProcessedBook> processedBook(
     String hebrewBookName,
-    StamWidthModel widths,
-  ) async {
+    StamWidthModel widths, {
+    String nusach = 'ashkenaz',
+  }) async {
     _adoptWidthModel(widths);
     final generation = _cacheGeneration;
-    final cached = _bookCache.remove(hebrewBookName);
+    final key = (hebrewBookName, nusach);
+    final cached = _bookCache.remove(key);
     if (cached != null) {
-      _bookCache[hebrewBookName] = cached;
+      _bookCache[key] = cached;
       return cached;
     }
     final raw = await rawText(hebrewBookName);
@@ -159,14 +162,14 @@ class TikkunKorimRepository {
     final taam = _decalogueTaam;
     final processed = await _run(
       () => engine.processBook(
-        raw,
+        applyMegillahNusach(raw, nusach),
         hebrewBookName,
         widths,
         decalogueTaam: taam,
       ),
     );
     if (generation != _cacheGeneration) return processed;
-    _bookCache[hebrewBookName] = processed;
+    _bookCache[key] = processed;
     while (_bookCache.length > maxCachedBooks) {
       _bookCache.remove(_bookCache.keys.first);
     }
