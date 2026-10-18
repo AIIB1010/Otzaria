@@ -434,6 +434,10 @@ jobs:
       - name: Install Rust for native source fallback
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Test splash timeline
+        shell: pwsh
+        run: windows/runner/test/run_splash_timeline_test.ps1
+
       # זה הצעד שבגללו ה-job קיים: MSBuild, רישום התוספים הנייטיביים
       # וה-build hooks. debug ולא release — הוא מפעיל את אותה שרשרת נייטיבית
       # בשבריר מהזמן, ובניית ה-release כבר מכוסה ב-build-and-announce.
