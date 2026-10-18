@@ -8,6 +8,7 @@ import 'package:otzaria/core/messages/common_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/personal_notes/models/personal_note.dart';
 import 'package:otzaria/personal_notes/utils/note_link_detection.dart';
+import 'package:otzaria/personal_notes/widgets/note_delta_preview.dart';
 import 'package:otzaria/widgets/dialogs/app_dialogs.dart';
 import 'package:otzaria/widgets/misc/app_menu_exports.dart';
 import 'package:otzaria/widgets/misc/app_selection_area.dart';
@@ -41,6 +42,10 @@ class PersonalNoteContentView extends StatefulWidget {
   /// במצב לא-נגלל מחשב layout לכל הטקסט, כך שהקיצור הוא שמונע jank.
   final int? maxPreviewChars;
 
+  /// כש-false התוכן מוצג כטקסט עשיר קל, בלי QuillEditor: אין בחירה ואין
+  /// לחיצה על קישורים בגוף. לתצוגות מקדימות שאינן מקבלות קלט.
+  final bool interactive;
+
   const PersonalNoteContentView({
     super.key,
     required this.note,
@@ -48,6 +53,7 @@ class PersonalNoteContentView extends StatefulWidget {
     this.textAlign = TextAlign.justify,
     this.onLinkTap,
     this.maxPreviewChars,
+    this.interactive = true,
   });
 
   @override
@@ -58,6 +64,7 @@ class PersonalNoteContentView extends StatefulWidget {
 class _PersonalNoteContentViewState extends State<PersonalNoteContentView> {
   final _editorKey = GlobalKey();
   quill.QuillController? _controller;
+  quill.Document? _previewDocument;
   FocusNode? _focusNode;
   ScrollController? _scrollController;
   List<({String label, String url})> _links = const [];
@@ -73,6 +80,7 @@ class _PersonalNoteContentViewState extends State<PersonalNoteContentView> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (!widget.interactive) return;
     final host = AppSelectionArea.maybeOf(context);
     if (host == _host) return;
     _host?.removeSelectionSource(_selectedText);
@@ -98,7 +106,8 @@ class _PersonalNoteContentViewState extends State<PersonalNoteContentView> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.note.content != widget.note.content ||
         oldWidget.note.contentFormat != widget.note.contentFormat ||
-        oldWidget.maxPreviewChars != widget.maxPreviewChars) {
+        oldWidget.maxPreviewChars != widget.maxPreviewChars ||
+        oldWidget.interactive != widget.interactive) {
       _disposeControllers();
       _buildContent();
     }
@@ -139,12 +148,16 @@ class _PersonalNoteContentViewState extends State<PersonalNoteContentView> {
         ? quill.Document.fromJson(effectiveDelta)
         : (quill.Document()..insert(0, note.content));
 
-    _controller = quill.QuillController(
-      document: document,
-      selection: const TextSelection.collapsed(offset: 0),
-    )..readOnly = true;
-    _focusNode = FocusNode();
-    _scrollController = ScrollController();
+    if (widget.interactive) {
+      _controller = quill.QuillController(
+        document: document,
+        selection: const TextSelection.collapsed(offset: 0),
+      )..readOnly = true;
+      _focusNode = FocusNode();
+      _scrollController = ScrollController();
+    } else {
+      _previewDocument = document;
+    }
     // חילוץ הקישורים מה-Delta האפקטיבי (המקוצר בתצוגה מקדימה, המלא אחרת)
     // כדי שלא נבנה chips לקישורים שכלל לא מוצגים בתצוגה המקוצרת.
     _links = effectiveDelta != null ? _extractLinks(effectiveDelta) : const [];
@@ -155,12 +168,17 @@ class _PersonalNoteContentViewState extends State<PersonalNoteContentView> {
     _focusNode?.dispose();
     _scrollController?.dispose();
     _controller = null;
+    _previewDocument = null;
     _focusNode = null;
     _scrollController = null;
   }
 
   @override
   Widget build(BuildContext context) {
+    final previewDocument = _previewDocument;
+    if (previewDocument != null) {
+      return _withLinks(context, NoteDeltaPreview(document: previewDocument));
+    }
     final controller = _controller;
     if (controller != null) {
       // בתוך AppSelectionArea תפריט ההעתקה מגיע ממנו; שני אזורי תפריט מקוננים
@@ -211,19 +229,7 @@ class _PersonalNoteContentViewState extends State<PersonalNoteContentView> {
         );
       }
 
-      return DefaultTextStyle(
-        style: widget.textStyle ?? Theme.of(context).textTheme.bodyMedium!,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            editor,
-            if (_links.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              _buildLinks(context, _links),
-            ],
-          ],
-        ),
-      );
+      return _withLinks(context, editor);
     }
 
     return Column(
@@ -239,6 +245,22 @@ class _PersonalNoteContentViewState extends State<PersonalNoteContentView> {
           _buildLinks(context, _links),
         ],
       ],
+    );
+  }
+
+  Widget _withLinks(BuildContext context, Widget body) {
+    return DefaultTextStyle(
+      style: widget.textStyle ?? Theme.of(context).textTheme.bodyMedium!,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          body,
+          if (_links.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _buildLinks(context, _links),
+          ],
+        ],
+      ),
     );
   }
 
