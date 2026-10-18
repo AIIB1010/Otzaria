@@ -9,6 +9,12 @@ const _fonts = {
   'KetiaAshkenazi': 'fonts/tikkun_korim/Ashkenazi-Stam.ttf',
   'KetiaSefardi': 'fonts/tikkun_korim/Sefardi-Stam.ttf',
   'KetiaKeter': 'fonts/KeterYG-Medium.ttf',
+  'KetiaAshurit': 'package:otzaria_ashurit/OtzariaAshurit-Regular.otf',
+  'KetiaAshuritBold': 'package:otzaria_ashurit/OtzariaAshurit-Bold.otf',
+  'KetiaAshuritNikud':
+      'package:otzaria_ashurit/OtzariaAshuritNikud-Regular.otf',
+  'KetiaAshuritNikudBold':
+      'package:otzaria_ashurit/OtzariaAshuritNikud-Bold.otf',
 };
 
 TextPainter _painter(String family, int code) => TextPainter(
@@ -23,7 +29,10 @@ void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     for (final entry in _fonts.entries) {
-      final bytes = await File(entry.value).readAsBytes();
+      final uri = Uri.parse(entry.value);
+      final bytes = uri.scheme == 'package'
+          ? (await rootBundle.load('packages/${uri.path}')).buffer.asUint8List()
+          : await File(entry.value).readAsBytes();
       await (FontLoader(
         entry.key,
       )..addFont(Future.value(ByteData.sublistView(bytes)))).load();
