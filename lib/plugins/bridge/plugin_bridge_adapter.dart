@@ -3125,7 +3125,10 @@ class PluginBridgeAdapter {
         // spec: closeTab({ index }) — האינדקס ברשימת openTabs של getCurrentState.
         {
           final target = _tabAt(args);
-          final unsaved = unsavedPluginTabs([target]);
+          final unsaved = [
+            ...unsavedPluginTabs([target]),
+            ...await unpersistedCorrectionTabs([target]),
+          ];
           if (unsaved.isNotEmpty) {
             final confirmed = await _dependencies.showWarningDialog(
               title: unsavedChangesDialogTitle,

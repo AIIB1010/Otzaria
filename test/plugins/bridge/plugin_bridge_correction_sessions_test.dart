@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -22,8 +23,10 @@ import 'package:otzaria/plugins/services/plugin_correction_session_service.dart'
 import 'package:otzaria/search/search_repository.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
 import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
+import 'package:otzaria/tabs/bloc/tabs_event.dart';
 import 'package:otzaria/tabs/bloc/tabs_state.dart';
 import 'package:otzaria/tabs/models/text_tab.dart';
+import 'package:otzaria/tabs/utils/confirm_close_tabs.dart';
 import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
@@ -34,6 +37,7 @@ import 'package:path/path.dart' as path;
 import 'package:sqlite3/sqlite3.dart' as sqlite3;
 
 import '../../helpers/seforim_fixture_db.dart';
+import '../../test_helpers/controllable_correction_draft_repository.dart';
 import '../../test_helpers/memory_cache_provider.dart';
 
 class _History extends Mock implements HistoryBloc {}
@@ -52,8 +56,11 @@ class _Coordinator extends Mock implements BookOpenCoordinator {}
 
 class _Tabs extends Mock implements TabsBloc {
   late TabsState current;
+  final added = <TabsEvent>[];
   @override
   TabsState get state => current;
+  @override
+  void add(TabsEvent event) => added.add(event);
 }
 
 class _Grants extends PluginRegistryRepository {
@@ -164,6 +171,9 @@ void main() {
   final payloads = <Map<String, dynamic>>[];
   const permissions = ['reader.open', 'reader.local_edit'];
 
+  final warnings = <String>[];
+  var confirmClose = true;
+
   PluginBridgeAdapter buildAdapter({
     String owner = 'owner',
     List<String> grants = permissions,
@@ -182,7 +192,10 @@ void main() {
       themePayloadBuilder: () => {},
       showConfirmDialog: ({required title, required content}) async => true,
       showWarningDialog:
-          ({required title, required content, required subtitle}) async => true,
+          ({required title, required content, required subtitle}) async {
+            warnings.add(content);
+            return confirmClose;
+          },
       dispatchEventToPlugin: (pluginId, topic, payload, {instanceId}) async {
         events.add(topic);
         payloads.add(Map<String, dynamic>.from(payload));
@@ -253,6 +266,8 @@ void main() {
     tabs.current = TabsState(tabs: readers, currentTabIndex: 0);
     events.clear();
     payloads.clear();
+    warnings.clear();
+    confirmClose = true;
     draftDb = sqlite3.sqlite3.openInMemory();
     service.draftRepository = PluginCorrectionDraftRepository.direct(draftDb);
     adapter = buildAdapter();
@@ -971,6 +986,7 @@ void main() {
         'version': null,
         'persisted': true,
         'pending': false,
+        'displaced': false,
         'error': null,
         'conflicts': isEmpty,
       });
@@ -1236,6 +1252,93 @@ void main() {
         expect(response['error']['code'], 'permission_denied', reason: method);
       }
       expect((await call('listCorrectionDrafts', {}))['drafts'], hasLength(1));
+    });
+  });
+
+  group('reader.closeTab על לשונית קורא עם תיקונים', () {
+    late ControllableCorrectionDraftRepository drafts;
+
+    setUp(() {
+      drafts = ControllableCorrectionDraftRepository(
+        PluginCorrectionDraftRepository.direct(draftDb),
+      );
+      service.draftRepository = drafts;
+      addTearDown(() {
+        drafts.failWrites = false;
+        if (drafts.gate case final gate? when !gate.isCompleted) {
+          gate.complete();
+        }
+      });
+    });
+
+    Future<Object?> closeFirst() =>
+        adapter.execute('reader', 'closeTab', {'index': 0});
+
+    test('טיוטה שנשמרה נסגרת בלי אזהרה', () async {
+      final session = await begin();
+      await call('restoreCorrectionDraft', draft(session));
+      expect(await closeFirst(), isTrue);
+      expect(warnings, isEmpty);
+      expect(tabs.added.single, isA<RemoveTab>());
+    });
+
+    test('כתיבה ממתינה מושלמת לפני הסגירה, בלי אזהרת אובדן', () async {
+      final session = await begin();
+      drafts.gate = Completer<void>();
+      await call('restoreCorrectionDraft', draft(session));
+      final closing = closeFirst();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(tabs.added, isEmpty, reason: 'הסגירה ממתינה לשמירה');
+      drafts.gate!.complete();
+      expect(await closing, isTrue);
+      expect(warnings, isEmpty);
+      expect(tabs.added.single, isA<RemoveTab>());
+      final stored = await service.getDraft(
+        'owner',
+        session['draft']['draftId'],
+      );
+      expect((stored['changes'] as List).single['proposedText'], 'תיקון 😀');
+    });
+
+    test(
+      'כתיבה שנכשלת: אזהרה; ביטול משאיר את הלשונית, הסשן והשינויים',
+      () async {
+        final session = await begin();
+        drafts.failWrites = true;
+        final edited = await call('restoreCorrectionDraft', draft(session));
+        confirmClose = false;
+
+        expect(await closeFirst(), isFalse);
+        expect(warnings.single, contains(unsavedCorrectionsMessage('owner')));
+        expect(tabs.added, isEmpty);
+        final after = await call('getCorrectionSession', {
+          'sessionId': session['sessionId'],
+        });
+        expect(after['revision'], edited['revision']);
+        expect(_content(after), _content(edited));
+        expect(after['draft']['persisted'], isFalse);
+
+        // אחרי תיקון התקלה הסגירה עוברת בלי אזהרה.
+        drafts.failWrites = false;
+        expect(await closeFirst(), isTrue);
+        expect(warnings, hasLength(1));
+        expect(tabs.added.single, isA<RemoveTab>());
+      },
+    );
+
+    test('כתיבה שנכשלת: אישור סוגר, והמצב נשאר באזהרת היציאה', () async {
+      final session = await begin();
+      drafts.failWrites = true;
+      await call('restoreCorrectionDraft', draft(session));
+      expect(await closeFirst(), isTrue);
+      expect(warnings, hasLength(1));
+      expect(tabs.added.single, isA<RemoveTab>());
+      // ה-RemoveTab מגיע ל-bloc אמיתי שמשחרר את הלשונית; כאן מדמים את ה-dispose.
+      service.removeTab(PluginCorrectionSessionService.tabIdFor(readers[0]));
+      expect(
+        [for (final state in await service.unsavedStates()) state.ownerName],
+        ['owner'],
+      );
     });
   });
 }

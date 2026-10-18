@@ -42,7 +42,9 @@ class _FlakyDrafts implements PluginCorrectionDraftRepository {
   }
 
   @override
-  Future<({String token, int? version, String changes, String conflicts})>
+  Future<
+    ({String token, int epoch, int? version, String changes, String conflicts})
+  >
   acquire({
     required String pluginId,
     required String draftId,
@@ -60,6 +62,30 @@ class _FlakyDrafts implements PluginCorrectionDraftRepository {
   );
 
   @override
+  Future<({String status, int? version})> rescue({
+    required String pluginId,
+    required String draftId,
+    required String bookUid,
+    required String bookId,
+    required String bookSource,
+    required String libraryVersion,
+    required String entriesJson,
+    required int sinceEpoch,
+  }) async {
+    if (failWrites) throw StateError('disk full');
+    return inner.rescue(
+      pluginId: pluginId,
+      draftId: draftId,
+      bookUid: bookUid,
+      bookId: bookId,
+      bookSource: bookSource,
+      libraryVersion: libraryVersion,
+      entriesJson: entriesJson,
+      sinceEpoch: sinceEpoch,
+    );
+  }
+
+  @override
   Future<void> release({
     required String pluginId,
     required String draftId,
@@ -69,8 +95,34 @@ class _FlakyDrafts implements PluginCorrectionDraftRepository {
   @override
   Future<void> purge(String pluginId) => inner.purge(pluginId);
 
+  int gets = 0;
+
   @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+  Future<Map<String, Object?>?> get(String pluginId, String draftId) {
+    gets++;
+    return inner.get(pluginId, draftId);
+  }
+
+  @override
+  Future<Map<String, Object?>> acknowledge({
+    required String pluginId,
+    required String draftId,
+    required int version,
+  }) => inner.acknowledge(
+    pluginId: pluginId,
+    draftId: draftId,
+    version: version,
+  );
+
+  @override
+  Future<List<Map<String, Object?>>> list(String pluginId) =>
+      inner.list(pluginId);
+
+  @override
+  Future<void> heartbeat() => inner.heartbeat();
+
+  @override
+  Future<void> dispose() => inner.dispose();
 }
 
 /// תשובת שמירה נשלטת, בלי מאגר.
@@ -83,12 +135,14 @@ class _FakeService extends PluginCorrectionSessionService {
   @override
   bool hasSessionForTab(String tabId) => true;
   @override
-  Future<Set<String>> unpersistedTabIds(
-    Iterable<String> tabIds, {
-    Duration? timeout,
-  }) async {
-    asked.add(tabIds.toList());
-    return unpersisted.intersection(tabIds.toSet());
+  Future<List<({String tabId, String ownerName, String bookId})>>
+  unsavedStates({Iterable<String>? tabIds, Duration? timeout}) async {
+    if (tabIds != null) asked.add(tabIds.toList());
+    return [
+      for (final tabId in unpersisted)
+        if (tabIds == null || tabIds.contains(tabId))
+          (tabId: tabId, ownerName: 'בודק', bookId: 'ברכות'),
+    ];
   }
 }
 
@@ -141,7 +195,95 @@ void main() {
         CombinedTab(rightTab: tab, leftTab: textTab()),
       ], service: service);
       expect(entries, isEmpty);
+
+      // get קורא את הטיוטה העמידה ומחזיר את הגרסה שלה, לא מדלג על הקריאה.
+      final sessionId = service.sessionIdForTab('p1', tabId)!;
+      final snapshot = await service.get('p1', sessionId);
+      expect(drafts.gets, 1);
+      final durable = await service.getDraft(
+        'p1',
+        snapshot['draft']['draftId'],
+      );
+      expect(snapshot['draft']['version'], durable['version']);
     });
+
+    test(
+      'סיום עריכה לפני שהשמירה הצליחה אינו מסיר את הלשונית מהאזהרה',
+      () async {
+        drafts.failWrites = true;
+        service.editParagraph(tabId, 0, 'מקור', 'תיקון');
+        service.endByUser(tabId);
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        expect(service.hasSessionForTab(tabId), isFalse);
+        final entries = await unpersistedCorrectionTabs([
+          tab,
+        ], service: service);
+        expect(entries.single.tab, same(tab));
+        expect(entries.single.message, unsavedCorrectionsMessage('בודק'));
+      },
+    );
+
+    testWidgets(
+      'סגירת התוכנה: לשונית שכבר נסגרה עם תיקונים שלא נשמרו מציגה אזהרה, '
+      'ואחרי שמירה מוצלחת לא',
+      (tester) async {
+        PluginCorrectionSessionService.flushTimeout = const Duration(
+          milliseconds: 20,
+        );
+        addTearDown(
+          () => PluginCorrectionSessionService.flushTimeout = const Duration(
+            seconds: 3,
+          ),
+        );
+        await tester.runAsync(() async {
+          drafts.failWrites = true;
+          service.editParagraph(tabId, 0, 'מקור', 'תיקון');
+          service.removeTab(tabId);
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        });
+
+        late Future<bool> result;
+        Future<void> close() async {
+          await tester.pumpWidget(
+            MaterialApp(
+              home: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () => result = confirmCloseTabs(
+                    context,
+                    const [],
+                    corrections: service,
+                    includeClosedTabCorrections: true,
+                  ),
+                  child: const Text('close'),
+                ),
+              ),
+            ),
+          );
+          await tester.tap(find.text('close'));
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 100)),
+          );
+          await tester.pumpAndSettle();
+        }
+
+        await close();
+        expect(find.text(unsavedChangesDialogTitle), findsOneWidget);
+        expect(find.textContaining('ברכות'), findsOneWidget);
+        await tester.tap(find.text('ביטול'));
+        await tester.pumpAndSettle();
+        expect(await result, isFalse);
+
+        // אחרי ניסיון חוזר מוצלח המצב שמור, ואין אזהרה מטעה.
+        drafts.failWrites = false;
+        await tester.runAsync(() async {
+          service.retryDraftWrites();
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        });
+        await close();
+        expect(find.text(unsavedChangesDialogTitle), findsNothing);
+        expect(await result, isTrue);
+      },
+    );
 
     test('טיוטה שלא נשמרה מחזירה את הלשונית עם שם התוסף', () async {
       drafts.failWrites = true;

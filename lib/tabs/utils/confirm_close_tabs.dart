@@ -49,21 +49,37 @@ Future<List<UnsavedTabEntry>> unpersistedCorrectionTabs(
   PluginCorrectionSessionService? service,
 }) async {
   final sessions = service ?? PluginCorrectionSessionService.instance;
-  final panes = <String, ({TextBookTab tab, String name})>{};
-  for (final tab in tabs) {
-    for (final pane in leafPanes(tab)) {
-      if (pane is! TextBookTab) continue;
-      final tabId = PluginCorrectionSessionService.knownTabIdFor(pane);
-      final name = tabId == null ? null : sessions.ownerNameForTab(tabId);
-      if (name != null) panes[tabId!] = (tab: pane, name: name);
-    }
-  }
+  final panes = _correctionPanes(tabs);
   if (panes.isEmpty) return const [];
-  final unpersisted = await sessions.unpersistedTabIds(panes.keys);
+  // כולל סשן שהסתיים (סיום עריכה, השבתה) וטרם נשמר — הוא עדיין בלשונית.
   return [
-    for (final MapEntry(key: tabId, value: pane) in panes.entries)
-      if (unpersisted.contains(tabId))
-        (tab: pane.tab, message: unsavedCorrectionsMessage(pane.name)),
+    for (final state in await sessions.unsavedStates(tabIds: panes.keys))
+      (
+        tab: panes[state.tabId]!,
+        message: unsavedCorrectionsMessage(state.ownerName),
+      ),
+  ];
+}
+
+Map<String, TextBookTab> _correctionPanes(Iterable<OpenedTab> tabs) => {
+  for (final tab in tabs)
+    for (final pane in leafPanes(tab))
+      if (pane is TextBookTab)
+        ?PluginCorrectionSessionService.knownTabIdFor(pane): pane,
+};
+
+/// תיקונים שלא נשמרו ושאינם שייכים לאף אחת מ-[tabs] — הלשונית שלהם נסגרה.
+Future<List<String>> unsavedClosedTabCorrections(
+  Iterable<OpenedTab> tabs, {
+  PluginCorrectionSessionService? service,
+}) async {
+  final sessions = service ?? PluginCorrectionSessionService.instance;
+  final open = _correctionPanes(tabs).keys.toSet();
+  return [
+    for (final state in await sessions.unsavedStates())
+      if (!open.contains(state.tabId))
+        'תיקוני התוסף ‹${state.ownerName}› בספר "${state.bookId}" עדיין לא '
+            'נשמרו לטיוטת ההתאוששות.',
   ];
 }
 
@@ -93,20 +109,35 @@ Future<bool> confirmCloseTabs(
   Iterable<OpenedTab> tabs, {
   String subtitle = unsavedChangesDialogSubtitle,
   PluginCorrectionSessionService? corrections,
+  bool includeClosedTabCorrections = false,
 }) async {
   final entries = [
     ...unsavedPluginTabs(tabs),
     ...await unpersistedCorrectionTabs(tabs, service: corrections),
   ];
-  if (entries.isEmpty || !context.mounted) return entries.isEmpty;
+  final closed = includeClosedTabCorrections
+      ? await unsavedClosedTabCorrections(tabs, service: corrections)
+      : const <String>[];
+  final clean = entries.isEmpty && closed.isEmpty;
+  if (clean || !context.mounted) return clean;
   final confirmed = await showWarningDialog(
     context: context,
     title: unsavedChangesDialogTitle,
-    content: unsavedChangesDialogContent(entries),
+    content: [
+      if (entries.isNotEmpty) unsavedChangesDialogContent(entries),
+      ...closed,
+    ].join('\n'),
     subtitle: subtitle,
     confirmText: unsavedChangesCloseAnyway,
   );
   return confirmed == true;
+}
+
+/// העברת לשונית לחלון אחר סוגרת אותה במקור, ולכן נבדקת כמו סגירה.
+Future<bool> confirmTabTransferWithUnsavedChanges(OpenedTab tab) async {
+  final context = navigatorKey.currentContext;
+  if (context == null) return true;
+  return confirmCloseTabs(context, [tab]);
 }
 
 Future<bool>? _pendingAppClose;
@@ -128,6 +159,7 @@ Future<bool> confirmAppCloseWithUnsavedChanges() {
     subtitle: WindowBus.instance.hasOtherWindows
         ? unsavedChangesWindowCloseSubtitle
         : unsavedChangesAppCloseSubtitle,
+    includeClosedTabCorrections: true,
   ).whenComplete(() => _pendingAppClose = null);
   _pendingAppClose = future;
   return future;

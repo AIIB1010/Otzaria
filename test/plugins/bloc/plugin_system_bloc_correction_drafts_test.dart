@@ -67,6 +67,9 @@ class _FakeRepo implements PluginRegistryRepository {
   Future<void> detachDevelopmentPlugin(String pluginId) async =>
       plugins.remove(pluginId);
   @override
+  Future<void> savePlugin(InstalledPlugin plugin) async =>
+      plugins[plugin.pluginId] = plugin;
+  @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
 
@@ -146,5 +149,50 @@ void main() {
   test('ניתוק תוסף פיתוח שומר את הטיוטות', () async {
     await run(const DetachDevelopmentPluginRequested('p1'));
     expect(await drafts.list('p1'), hasLength(1));
+  });
+
+  group('סשן פעיל: העריכה האחרונה נשמרת בלי צרכן לאירוע', () {
+    final service = PluginCorrectionSessionService.instance;
+    const tabId = 'lifecycle-tab';
+
+    Future<void> beginAndEdit() async {
+      // אין onEvent: סביבת התוסף כבר אינה זמינה לקבל את אירוע הסיום.
+      await service.begin(
+        owner: 'p1',
+        tabId: tabId,
+        bookId: 'ספר',
+        bookUid: 'id:1',
+        libraryVersion: 'v1',
+        loadSource: (_) async => 'מקור',
+      );
+      service.editParagraph(tabId, 0, 'מקור', 'עריכה אחרונה');
+    }
+
+    Future<void> expectLastEditKept() async {
+      expect(service.hasSessionForTab(tabId), isFalse);
+      expect(await service.flushAll(), isTrue);
+      // השחרור רץ אחרי השמירה, בפעולות המאגר הבאות בתור.
+      for (var i = 0; i < 20; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      final stored = await drafts.get('p1', correctionDraftId('p1', 'id:1'));
+      expect(
+        (stored!['changes'] as List).single['proposedText'],
+        'עריכה אחרונה',
+      );
+      expect(stored['active'], isFalse, reason: 'ה-lease שוחרר');
+    }
+
+    for (final (name, event) in [
+      ('השבתת התוסף', const DisablePluginRequested('p1')),
+      // מה שדיאלוג "נמצא תוסף ישן באותו שם" שולח בהסרת הכפיל.
+      ('הסרת כפיל', const UninstallPluginRequested('p1')),
+    ]) {
+      test(name, () async {
+        await beginAndEdit();
+        await run(event);
+        await expectLastEditKept();
+      });
+    }
   });
 }
