@@ -1403,10 +1403,11 @@ packages:
   printing:
     dependency: "direct main"
     description:
-      name: printing
-      sha256: "0f72f29f2e08b8453b7a45b6c7781eb792b1da3468bf0910be0eb3b1d6781f49"
-      url: "https://pub.dev"
-    source: hosted
+      path: printing
+      ref: e51b6c08e1916bf433417ef88cb01b1fb66f0ba0
+      resolved-ref: e51b6c08e1916bf433417ef88cb01b1fb66f0ba0
+      url: "https://github.com/palmoni5/dart_pdf"
+    source: git
     version: "5.15.1"
   process:
     dependency: transitive
