@@ -655,13 +655,6 @@ class PluginExtendedValidator {
       warnings,
     );
     _checkNameVsToolTabTitle(manifestJson, warnings);
-    final tabIcon = manifest.toolTabIconName;
-    if (tabIcon != null && pluginIconFromName(tabIcon) == null) {
-      warnings.add(
-        'contributes.toolTab.iconName: האייקון "$tabIcon" אינו מוכר '
-        'ויוצג אייקון פאזל (ראו docs/plugin-sdk/ICONS.md)',
-      );
-    }
     _validateHeadless(manifest, manifestJson, declaredPermissions, errors);
 
     final files = directoryPath == null

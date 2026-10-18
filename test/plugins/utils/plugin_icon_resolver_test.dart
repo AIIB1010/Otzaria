@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:otzaria/plugins/models/plugin_manifest.dart';
-import 'package:otzaria/plugins/services/plugin_extended_validator.dart';
 import 'package:otzaria/plugins/services/plugin_manifest_validator.dart';
 import 'package:otzaria/plugins/utils/fluent_icon_resolver.dart';
 import 'package:otzaria/plugins/utils/plugin_icon_resolver.dart';
@@ -195,36 +194,6 @@ void main() {
           ),
         ),
       );
-    });
-  });
-
-  group('תת-קבוצת פלואנט', () {
-    test('שם פלואנט שמחוץ לתת-הקבוצה אינו נפתר', () {
-      expect(pluginIconFromName('airplane_24_regular'), isNull);
-      expect(pluginIconFromName('fluent:airplane_24_regular'), isNull);
-    });
-
-    List<String> tabIconWarnings(String iconName) {
-      final json = {
-        'id': 'test.icons',
-        'name': 'Icons',
-        'version': '1.0.0',
-        'entrypoint': 'index.html',
-        'contributes': {
-          'toolTab': {'title': 'Icons', 'iconName': iconName},
-        },
-      };
-      return PluginExtendedValidator.validate(
-        manifest: PluginManifest.fromJson(json),
-        manifestJson: json,
-        directoryPath: null,
-      ).warnings.where((w) => w.contains('toolTab.iconName')).toList();
-    }
-
-    test('הוולידציה מזהירה על toolTab.iconName שאינו נפתר', () {
-      expect(tabIconWarnings('airplane_24_regular'), hasLength(1));
-      expect(tabIconWarnings('settings_24_regular'), isEmpty);
-      expect(tabIconWarnings('alef_24_regular'), isEmpty);
     });
   });
 }

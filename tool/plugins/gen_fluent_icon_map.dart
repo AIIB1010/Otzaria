@@ -1,16 +1,11 @@
 // ignore_for_file: avoid_print
 //
-// מחולל `lib/plugins/utils/fluent_icon_resolver.dart` — מפת שמות פלואנט
-// שתוספים יכולים להצהיר עליהם. המפה כוללת רק את השמות שב-
-// `tool/plugins/fluent_icon_subset.txt`: כל IconData במפה נשמר בגופן ה-release,
-// ומפה של כל 4,500 האייקונים מנטרלת את tree-shaking של גופני פלואנט.
-//
+// מפת שמות Fluent לתוספים, עם מפתח בסיס משותף למשקלים.
 // הרצה: dart run tool/plugins/gen_fluent_icon_map.dart [--check]
 
 import 'dart:convert';
 import 'dart:io';
 
-const String subsetPath = 'tool/plugins/fluent_icon_subset.txt';
 const String outputPath = 'lib/plugins/utils/fluent_icon_resolver.dart';
 
 final RegExp _iconLine = RegExp(
@@ -28,13 +23,7 @@ class _FluentIcon {
 
 void main(List<String> args) {
   final root = Directory.current;
-  final String output;
-  try {
-    output = buildFluentIconMap(root);
-  } on FluentIconSubsetError catch (error) {
-    stderr.writeln(error);
-    exit(1);
-  }
+  final output = buildFluentIconMap(root);
   final file = File('${root.path}/$outputPath');
   final current = file.existsSync()
       ? file.readAsStringSync().replaceAll('\r\n', '\n')
@@ -45,7 +34,7 @@ void main(List<String> args) {
   }
   if (args.contains('--check')) {
     stderr.writeln(
-      '$outputPath אינו תואם ל-$subsetPath. הרץ: '
+      '$outputPath אינו תואם לספריית פלואנט. הרץ: '
       'dart run tool/plugins/gen_fluent_icon_map.dart',
     );
     exit(1);
@@ -54,49 +43,13 @@ void main(List<String> args) {
   print('נכתב $outputPath.');
 }
 
-class FluentIconSubsetError implements Exception {
-  final String message;
-  const FluentIconSubsetError(this.message);
-  @override
-  String toString() => message;
-}
-
-/// בונה את תוכן `fluent_icon_resolver.dart` מקובץ התת-קבוצה ומהחבילה.
+/// בונה את מפת כל שמות פלואנט הנתמכים מתוך החבילה הנעוצה.
 String buildFluentIconMap(Directory root) {
   final packageRoot = _packageRoot(root, 'fluentui_system_icons');
-  final version = _packageVersion(packageRoot);
   final icons = _parseIcons(
     File('$packageRoot/lib/src/fluent_icons.dart').readAsStringSync(),
-  );
-  final subset = parseSubset(
-    File('${root.path}/$subsetPath').readAsStringSync(),
-  );
-
-  final problems = <String>[];
-  for (final name in subset) {
-    final icon = icons[name];
-    if (icon == null) {
-      problems.add('$name: לא קיים ב-fluentui_system_icons $version');
-    } else if (icon.matchTextDirection) {
-      problems.add('$name: אייקון כיווני (matchTextDirection) אינו נתמך');
-    }
-  }
-  if (problems.isNotEmpty) {
-    throw FluentIconSubsetError(
-      'שמות לא תקינים ב-$subsetPath:\n${problems.join('\n')}',
-    );
-  }
-  return _render(version, subset, icons);
-}
-
-/// שמות הקובץ בסדר הופעתם, בלי הערות (`#`), שורות ריקות וכפילויות.
-List<String> parseSubset(String text) {
-  final names = <String>{};
-  for (final raw in LineSplitter.split(text)) {
-    final line = raw.split('#').first.trim();
-    if (line.isNotEmpty) names.add(line);
-  }
-  return names.toList();
+  )..removeWhere((_, icon) => icon.matchTextDirection);
+  return _render(_packageVersion(packageRoot), icons);
 }
 
 Map<String, _FluentIcon> _parseIcons(String source) => {
@@ -108,21 +61,19 @@ Map<String, _FluentIcon> _parseIcons(String source) => {
     ),
 };
 
-String _render(
-  String version,
-  List<String> subset,
-  Map<String, _FluentIcon> icons,
-) {
-  final sorted = [...subset]
-    ..sort((a, b) {
-      final byFamily = icons[a]!.fontFamily.compareTo(icons[b]!.fontFamily);
-      return byFamily != 0 ? byFamily : a.compareTo(b);
-    });
+String _render(String version, Map<String, _FluentIcon> icons) {
+  final variants = <String, Map<String, _FluentIcon>>{};
+  for (final entry in icons.entries) {
+    final separator = entry.key.lastIndexOf('_24_');
+    variants.putIfAbsent(
+      entry.key.substring(0, separator),
+      () => {},
+    )[entry.key.substring(separator + 4)] = entry.value;
+  }
+  final bases = variants.keys.toList()..sort();
   final buffer = StringBuffer()
     ..writeln('// GENERATED — do not edit manually.')
-    ..writeln(
-      '// Source: fluentui_system_icons $version, names from $subsetPath.',
-    )
+    ..writeln('// Source: fluentui_system_icons $version (24px variants only).')
     ..writeln(
       '// Regenerate with: dart run tool/plugins/gen_fluent_icon_map.dart',
     )
@@ -131,26 +82,40 @@ String _render(
     ..writeln("const _kFontPkg = 'fluentui_system_icons';")
     ..writeln()
     ..writeln(
-      "/// ממיר שם אייקון FluentUI (למשל 'bookmark_24_regular') ל-IconData.",
-    )
-    ..writeln('///')
-    ..writeln(
-      '/// תומך רק בתת-הקבוצה שב-$subsetPath; שם אחר מחזיר null.',
+      '/// ממיר שם אייקון FluentUI בגודל 24 ל-IconData; שם לא מוכר מחזיר null.',
     )
     ..writeln('IconData? fluentIconFromName(String? name) {')
-    ..writeln('  if (name == null) return null;')
-    ..writeln('  return _iconMap[name];')
+    ..writeln('  if (name == null) return null;');
+  for (final (index, weight) in ['regular', 'filled', 'light'].indexed) {
+    final suffix = '_24_$weight';
+    buffer
+      ..writeln("  if (name.endsWith('$suffix')) {")
+      ..writeln(
+        '    return _iconMap[name.substring(0, name.length - ${suffix.length})]?.\$${index + 1};',
+      )
+      ..writeln('  }');
+  }
+  buffer
+    ..writeln('  return null;')
     ..writeln('}')
     ..writeln()
-    ..writeln('const _iconMap = <String, IconData>{');
-  for (final name in sorted) {
-    final icon = icons[name]!;
-    buffer
-      ..writeln("  '$name': IconData(")
-      ..writeln('    ${icon.codePoint},')
-      ..writeln("    fontFamily: '${icon.fontFamily}',")
-      ..writeln('    fontPackage: _kFontPkg,')
-      ..writeln('  ),');
+    ..writeln('const _iconMap = <String, (IconData?, IconData?, IconData?)>{');
+  for (final base in bases) {
+    buffer.writeln("  '$base': (");
+    for (final weight in ['regular', 'filled', 'light']) {
+      final icon = variants[base]![weight];
+      if (icon == null) {
+        buffer.writeln('    null,');
+      } else {
+        buffer
+          ..writeln('    IconData(')
+          ..writeln('      ${icon.codePoint},')
+          ..writeln("      fontFamily: '${icon.fontFamily}',")
+          ..writeln('      fontPackage: _kFontPkg,')
+          ..writeln('    ),');
+      }
+    }
+    buffer.writeln('  ),');
   }
   buffer.writeln('};');
   return buffer.toString();

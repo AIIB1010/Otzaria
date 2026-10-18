@@ -4,8 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/plugins/utils/fluent_icon_resolver.dart';
 import 'package:otzaria_icons/otzaria_icons.dart';
 
-import '../../../tool/plugins/gen_fluent_icon_map.dart';
-
 /// `docs/plugin-sdk/ICONS.md` הוא הרשימה שמחברי תוספים עובדים לפיה, והיא
 /// נגזרת משתי ספריות שממשיכות לגדול (גרסת `otzaria_icons` מתחלפת בכל
 /// עדכון `ref`).
@@ -17,11 +15,8 @@ import '../../../tool/plugins/gen_fluent_icon_map.dart';
 /// מחברי תוספים ושם שנמחק ממנה שובר תוסף מותקן.
 const String kIconsDocPath = 'docs/plugin-sdk/ICONS.md';
 
-const String _otzariaBlock = 'otzaria-icons';
-const String _fluentBlock = 'fluent-icons';
-
-String _beginMarker([String id = _otzariaBlock]) => '<!-- BEGIN GENERATED: $id';
-String _endMarker([String id = _otzariaBlock]) => '<!-- END GENERATED: $id -->';
+const String _beginMarker = '<!-- BEGIN GENERATED: otzaria-icons';
+const String _endMarker = '<!-- END GENERATED: otzaria-icons -->';
 
 /// הפקודה שמרעננת את הבלוק. מופיעה גם בהודעת הכישלון וגם ב-ICONS.md עצמו,
 /// כדי שמי שנתקל בכישלון לא יצטרך לחפש אותה.
@@ -59,55 +54,22 @@ String buildGeneratedBlock() {
   return buffer.toString().trimRight();
 }
 
-/// שמות פלואנט הנתמכים, לפי שם בסיס: לכל אחד הווריאנטים שבתת-הקבוצה.
-String buildFluentBlock() {
-  final names = parseSubset(File(subsetPath).readAsStringSync());
-  final variants = <String, Set<String>>{};
-  for (final name in names) {
-    final cut = name.lastIndexOf('_24_');
-    variants
-        .putIfAbsent(name.substring(0, cut), () => {})
-        .add(name.substring(cut + 4));
-  }
-  final bases = variants.keys.toList()..sort();
-  final buffer = StringBuffer()
-    ..writeln(
-      'נתמכים **${names.length} אייקוני פלואנט** '
-      '(${bases.length} שמות בסיס).',
-    )
-    ..writeln()
-    ..writeln('| שם בסיס | `_24_regular` | `_24_filled` | `_24_light` |')
-    ..writeln('|-----|:---:|:---:|:---:|');
-  for (final base in bases) {
-    final v = variants[base]!;
-    String mark(String variant) => v.contains(variant) ? '✔' : '';
-    buffer.writeln(
-      '| `$base` | ${mark('regular')} | ${mark('filled')} | ${mark('light')} |',
-    );
-  }
-  return buffer.toString().trimRight();
-}
-
 /// מחליף את התוכן שבין הסמנים, ומשאיר את הסמנים ואת שאר הקובץ כמות שהם.
-String replaceGeneratedBlock(
-  String doc,
-  String block, [
-  String id = _otzariaBlock,
-]) {
-  final begin = doc.indexOf(_beginMarker(id));
+String replaceGeneratedBlock(String doc, String block) {
+  final begin = doc.indexOf(_beginMarker);
   final beginEnd = doc.indexOf('-->', begin);
-  final end = doc.indexOf(_endMarker(id), beginEnd);
+  final end = doc.indexOf(_endMarker, beginEnd);
   return '${doc.substring(0, beginEnd + 3)}\n\n$block\n\n'
       '${doc.substring(end)}';
 }
 
 /// התוכן שבין הסמנים, או null כשאחד מהם חסר.
-String? extractGeneratedBlock(String doc, [String id = _otzariaBlock]) {
-  final begin = doc.indexOf(_beginMarker(id));
+String? extractGeneratedBlock(String doc) {
+  final begin = doc.indexOf(_beginMarker);
   if (begin < 0) return null;
   final beginEnd = doc.indexOf('-->', begin);
   if (beginEnd < 0) return null;
-  final end = doc.indexOf(_endMarker(id), beginEnd);
+  final end = doc.indexOf(_endMarker, beginEnd);
   if (end < 0) return null;
   return normalizeEol(doc.substring(beginEnd + 3, end).trim());
 }
@@ -134,11 +96,6 @@ void main() {
     if (kUpdateMode) {
       final original = file.readAsStringSync();
       var updated = replaceGeneratedBlock(original, buildGeneratedBlock());
-      updated = replaceGeneratedBlock(
-        updated,
-        buildFluentBlock(),
-        _fluentBlock,
-      );
       // שמירה על סופי השורה שהיו בקובץ. כתיבה ב-LF על קובץ ש-git הוציא
       // ב-CRLF הייתה מסמנת את כל הקובץ כמשונה, גם כשהתוכן זהה.
       if (original.contains('\r\n')) {
@@ -173,29 +130,14 @@ void main() {
       );
     });
 
-    test('בלוק פלואנט תואם לתת-הקבוצה', () {
-      expect(
-        extractGeneratedBlock(doc, _fluentBlock),
-        buildFluentBlock(),
-        reason:
-            'רשימת אייקוני פלואנט ב-$kIconsDocPath אינה תואמת ל-$subsetPath.\n'
-            'הרץ:\n  $kRegenerateCommand',
-      );
-    });
-
-    test('כל שם בתת-הקבוצה נפתר בפלואנט', () {
-      for (final name in parseSubset(File(subsetPath).readAsStringSync())) {
-        expect(fluentIconFromName(name), isNotNull, reason: name);
-      }
-    });
-
     test('הפרוזה שמחוץ לבלוק אינה נושאת מספרים שיתיישנו', () {
       final outside = doc.replaceRange(
-        doc.indexOf(_beginMarker()),
-        doc.indexOf(_endMarker()) + _endMarker().length,
+        doc.indexOf(_beginMarker),
+        doc.indexOf(_endMarker) + _endMarker.length,
         '',
       );
-      // מספרי האייקונים חייבים לחיות רק בבלוקים המגונררים.
+      // המספר של פלואנט מעוגל בכוונה ("כ-4,500") ואינו מתיישן; מספר
+      // האייקונים של אוצריא, לעומתו, חייב לחיות רק בבלוק המגונרר.
       expect(
         outside,
         isNot(contains('${OtzariaIcons.allIcons.length} אייקונים')),
@@ -249,12 +191,12 @@ void main() {
 
       expect(extractGeneratedBlock(rewritten), 'תוכן חדש');
       expect(
-        rewritten.substring(0, rewritten.indexOf(_beginMarker())),
-        original.substring(0, original.indexOf(_beginMarker())),
+        rewritten.substring(0, rewritten.indexOf(_beginMarker)),
+        original.substring(0, original.indexOf(_beginMarker)),
       );
       expect(
-        rewritten.substring(rewritten.indexOf(_endMarker())),
-        original.substring(original.indexOf(_endMarker())),
+        rewritten.substring(rewritten.indexOf(_endMarker)),
+        original.substring(original.indexOf(_endMarker)),
       );
     });
   });

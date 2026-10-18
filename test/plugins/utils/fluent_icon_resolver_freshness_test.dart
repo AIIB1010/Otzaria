@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../../tool/plugins/gen_fluent_icon_map.dart';
 
 void main() {
-  test('fluent_icon_resolver.dart תואם ל-fluent_icon_subset.txt', () {
+  test('fluent_icon_resolver.dart תואם לספריית פלואנט הנעוצה', () {
     expect(
       File(outputPath).readAsStringSync().replaceAll('\r\n', '\n'),
       buildFluentIconMap(Directory.current),
