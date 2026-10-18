@@ -773,14 +773,23 @@ void main() {
       verify: (bloc) => expect(repositoryOf(bloc).cancelCalls, 1),
     );
 
-    test('ביטול מנקז ריצות שבתור, ושומר את הספרים שהשתנו בהן', () async {
+    test('ביטול מנקז ריצות שבתור, ושומר את מה שהיו מחליפות ובודקות', () async {
       final repository = _FakeIndexingRepository()..runGate = Completer<void>();
       final bloc = _FakeIndexingBloc(repository);
       final library = libraryWithBooks(2);
       final changed = [library.books.first];
+      final checked = [library.books.last];
       final settled = Completer<void>();
       bloc.add(StartIndexing(library));
-      bloc.add(RunIndexing(library, books: const [], changedBooks: changed));
+      bloc.add(
+        RunIndexing(
+          library,
+          books: const [],
+          changedBooks: changed,
+          check: IndexCheckScope.books(checked),
+        ),
+      );
+      bloc.add(RunIndexing(library, check: IndexCheckScope.library));
       bloc.add(IndexingWorkBarrier(onSettled: settled.complete));
       await Future<void>.delayed(Duration.zero);
       expect(repository.runs, hasLength(1));
@@ -791,7 +800,9 @@ void main() {
       await settled.future.timeout(const Duration(seconds: 2));
 
       expect(repository.runs, hasLength(1));
-      expect(repository.rememberedChanged, changed);
+      // ספר שנשלח לבדיקה נזכר כשונה, ובקשת הבדיקה המלאה נדחית לריצה הבאה.
+      expect(repository.rememberedChanged, [...changed, ...checked]);
+      expect(repository.rememberedLibraryCheck, isTrue);
 
       // ריצה שנשלחה אחרי הביטול רצה כרגיל.
       final after = Completer<void>();
@@ -1042,6 +1053,7 @@ class _FakeIndexingRepository extends IndexingRepository {
   int get indexAllCalls => runs.where((run) => run.books == null).length;
   int get indexBooksCalls => runs.where((run) => run.books != null).length;
   final rememberedChanged = <Book>[];
+  bool rememberedLibraryCheck = false;
 
   /// כשהוא מסופק — כל ריצה ממתינה לו לפני שהיא מתחילה.
   Completer<void>? runGate;
@@ -1107,8 +1119,12 @@ class _FakeIndexingRepository extends IndexingRepository {
   }
 
   @override
-  Future<void> rememberChangedBooks(List<Book> books) async {
+  Future<void> rememberChangedBooks(
+    List<Book> books, {
+    bool checkLibrary = false,
+  }) async {
     rememberedChanged.addAll(books);
+    rememberedLibraryCheck |= checkLibrary;
   }
 
   @override

@@ -30,6 +30,7 @@ import 'package:otzaria/data/constants/database_constants.dart';
 import 'package:otzaria/data/data_providers/tantivy_data_provider.dart';
 import 'package:otzaria/indexing/models/catalogue_order_resolver.dart';
 import 'package:otzaria/indexing/models/index_check_scope.dart';
+import 'package:otzaria/indexing/models/index_commit_policy.dart';
 import 'package:otzaria/indexing/models/index_update_mode.dart';
 import 'package:otzaria/indexing/models/indexing_run_result.dart';
 import 'package:otzaria/indexing/repository/indexing_repository.dart';
@@ -1157,6 +1158,190 @@ void main() {
       );
     });
 
+    test('ספר שחזר למעקב באמצע הריצה אינו נמחק ונשאר בסימון', () async {
+      // רענון ספרייה טוען מחדש את המעקב מהדיסק בלי להמתין לאינדוקס.
+      final engine = _CancellationRecordingEngine();
+      final fresh = TextBook(id: 7, title: 'פסחים');
+      final changed = TextBook(id: 5, title: 'שבת');
+      final library = Library(categories: [])..books.addAll([fresh, changed]);
+      final provider = providerWith(engine, [changed]);
+      engine.onTextAdded = (title) {
+        if (title == fresh.title) provider.indexedFilePaths.add('id:5');
+      };
+
+      final result = await _ReindexProbeRepository(provider).runIndexing(
+        library,
+        changedBooks: [changed],
+        onProgress: (_, _) {},
+      );
+
+      expect(result.completed, isTrue);
+      expect(engine.removedFilePaths, isNot(contains('id:5')));
+      expect(engine.committedCounts, {'id:5': 1, 'id:7': 1});
+      expect(await storedPending(), {'id:5'});
+    });
+
+    test(
+      'ביטול לפני כתיבת ספר שהשתנה מחזיר אותו למעקב — הסתרה תסיר אותו',
+      () async {
+        final engine = _CancellationRecordingEngine();
+        final fresh = TextBook(id: 7, title: 'פסחים');
+        final changed = TextBook(id: 5, title: 'שבת');
+        final library = Library(categories: [])..books.addAll([fresh, changed]);
+        final provider = providerWith(engine, [changed]);
+        engine.onTextAdded = (title) {
+          if (title == fresh.title) provider.isIndexing.value = false;
+        };
+
+        await _ReindexProbeRepository(provider).runIndexing(
+          library,
+          changedBooks: [changed],
+          onProgress: (_, _) {},
+        );
+        expect(provider.indexedFilePaths, contains('id:5'));
+
+        final hiding = _ReindexProbeRepository(
+          provider,
+          hiddenStore: _FixedHiddenStore(
+            HiddenLibrarySelection(
+              bookKeys: {PerBookSettings.bookKey(changed)},
+            ),
+          ),
+        );
+        expect(await hiding.dropHiddenIndexEntries(library), isTrue);
+        expect(engine.removedFilePaths, contains('id:5'));
+      },
+    );
+
+    test('בדיקה מלאה שנדחתה רצה בריצה הבאה על כל הספרייה, ואז מתנקה', () async {
+      final engine = _CancellationRecordingEngine()
+        ..fingerprints = {'id:5': BigInt.from(1)};
+      final book = TextBook(id: 5, title: 'שבת');
+      final library = Library(categories: [])..books.add(book);
+      final provider = providerWith(engine, [book]);
+      final repository = _ReindexProbeRepository(provider);
+      var checked = 0;
+      repository.changeDetector = FingerprintChangeDetector(
+        repository,
+        loadText: (_) async {
+          checked++;
+          return 'טקסט';
+        },
+        fingerprintOf: (_, _) async => BigInt.from(1),
+      );
+
+      await repository.rememberChangedBooks(const [], checkLibrary: true);
+      expect(await repository.hasUnindexedBooks(library), isTrue);
+
+      final result = await repository.runIndexing(
+        library,
+        onProgress: (_, _) {},
+      );
+
+      expect(result.completed, isTrue);
+      expect(checked, 1);
+      expect(
+        await PendingReindexStore.forIndex(
+          indexDir.path,
+        )!.checkLibraryPending(),
+        isFalse,
+      );
+      expect(await repository.hasUnindexedBooks(library), isFalse);
+    });
+
+    test('בדיקה מלאה שבוטלה באמצע נשמרת לריצה הבאה', () async {
+      final engine = _CancellationRecordingEngine()
+        ..fingerprints = {'id:5': BigInt.from(1)};
+      final book = TextBook(id: 5, title: 'שבת');
+      final library = Library(categories: [])..books.add(book);
+      final provider = providerWith(engine, [book]);
+      final repository = _ReindexProbeRepository(provider);
+      repository.changeDetector = FingerprintChangeDetector(
+        repository,
+        loadText: (_) async {
+          provider.isIndexing.value = false;
+          return 'טקסט';
+        },
+        fingerprintOf: (_, _) async => BigInt.from(1),
+      );
+
+      final result = await repository.runIndexing(
+        library,
+        books: const [],
+        check: IndexCheckScope.library,
+        onProgress: (_, _) {},
+      );
+
+      expect(result.completed, isFalse);
+      expect(
+        await PendingReindexStore.forIndex(
+          indexDir.path,
+        )!.checkLibraryPending(),
+        isTrue,
+      );
+    });
+
+    test('commit ביניים מוציא מהסימון רק ספרים שהוחלפו ונחתמו', () async {
+      final engine = _CancellationRecordingEngine();
+      final first = TextBook(id: 5, title: 'שבת');
+      final second = TextBook(id: 6, title: 'עירובין');
+      final library = Library(categories: [])..books.addAll([first, second]);
+      final provider = providerWith(engine, [first, second]);
+      IndexingRepository.newCommitPolicy = () => IndexCommitPolicy(maxDocs: 1);
+      addTearDown(
+        () => IndexingRepository.newCommitPolicy = IndexCommitPolicy.new,
+      );
+      Set<String>? pendingDuringSecond;
+      engine.onTextAdded = (title) {
+        if (title != second.title) return;
+        pendingDuringSecond = jsonDecode(
+          pendingFile().readAsStringSync(),
+        )['keys'].cast<String>().toSet();
+        provider.isIndexing.value = false;
+      };
+
+      final result = await _ReindexProbeRepository(provider).runIndexing(
+        library,
+        changedBooks: [first, second],
+        onProgress: (_, _) {},
+      );
+
+      expect(result.completed, isFalse);
+      expect(pendingDuringSecond, {'id:6'});
+      // השני נמחק ונכתב בחוצץ, ובביטול נזרק: התוכן הישן נשאר חתום עד הריצה הבאה.
+      expect(engine.committedCounts, {'id:5': 1, 'id:6': 1});
+      expect(await storedPending(), {'id:6'});
+    });
+
+    test('PDF שהשתנה ונוקז מוקדם — מסמכיו הישנים נמחקים לפני כתיבתו', () async {
+      final engine = _CancellationRecordingEngine();
+      final text1 = TextBook(id: 1, title: 'ט1');
+      final text2 = TextBook(id: 2, title: 'ט2');
+      final pdf = PdfBook(id: 3, title: 'א', path: r'C:\pdfs\א.pdf');
+      final library = Library(categories: [])
+        ..books.addAll([text1, text2, pdf]);
+      final provider = providerWith(engine, [pdf]);
+      final pdfKey = keyOf(pdf);
+      final events = <String>[];
+      engine.onTextAdded = (title) => events.add('text:$title');
+      engine.onPdfAdded = (title) {
+        events.add('pdf:$title');
+        expect(engine.removedFilePaths, [pdfKey]);
+      };
+
+      final result = await _FakeExtractionRepository(provider).runIndexing(
+        library,
+        changedBooks: [pdf],
+        onProgress: (_, _) {},
+      );
+
+      expect(result.completed, isTrue);
+      // נוקז מוקדם: נכתב לפני הספר שהלולאה עמדה עליו.
+      expect(events, ['text:ט1', 'pdf:א', 'text:ט2']);
+      expect(engine.commitCount, 1);
+      expect(engine.committedCounts[pdfKey], 1);
+    });
+
     test('סימון של ספר שכבר אינו בספרייה נזרק', () async {
       final engine = _CancellationRecordingEngine();
       final book = TextBook(id: 5, title: 'שבת');
@@ -1198,9 +1383,11 @@ void main() {
         check: IndexCheckScope.library,
         onProgress: (_, _) {},
       );
+      while (!provider.isIndexing.value) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
       await pumpEventQueue();
       expect(loads, 0);
-      expect(provider.isIndexing.value, isTrue);
 
       repository.resumeIndexing();
       expect((await run).completed, isTrue);
@@ -1226,7 +1413,7 @@ void main() {
     });
   });
 
-  group('IndexingRepository.reconcileIndexWithLibrary', () {
+  group('IndexingRepository.runIndexing — שלב הבדיקה', () {
     TextBook book(int id, String title) => TextBook(id: id, title: title);
 
     group('מסד שהתרוקן', () {
@@ -4560,7 +4747,7 @@ class _RecordingSearchEngine implements SearchEngine {
   }
 }
 
-/// בדיקה בלבד, בלי אינדוקס ספרים חדשים — המסלול שהיה reconcileIndexWithLibrary.
+/// שלב בדיקה והחלפה בלבד, בלי אינדוקס ספרים חדשים.
 Future<IndexingRunResult> _reconcile(
   IndexingRepository repository,
   Library library, {
@@ -4588,7 +4775,7 @@ Future<IndexingRunResult> _reconcile(
   );
 }
 
-/// החלפת ספרים שדווחו כשונים, בלי ספרים חדשים — המסלול שהיה reindexChangedBooks.
+/// החלפת ספרים שדווחו כשונים, בלי ספרים חדשים.
 Future<IndexingRunResult> _reindex(
   IndexingRepository repository,
   List<Book> changedBooks,

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path/path.dart' as p;
 import 'package:otzaria_search_engine/otzaria_search_engine.dart';
+import 'package:otzaria/indexing/utils/pending_reindex_store.dart';
 import 'package:otzaria/data/data_providers/catalogue_order_revision.dart';
 import 'package:otzaria/search/models/search_configuration.dart';
 import 'package:otzaria/data/constants/database_constants.dart';
@@ -669,6 +670,7 @@ class TantivyDataProvider {
   Future<void> clear() async {
     isIndexing.value = false;
     indexedFilePaths.clear();
+    PendingReindexStore.clearMemory();
 
     // שחרור משאבים לפני מחיקה פיזית של הקבצים (חשוב במיוחד ב-Windows
     // שבו קבצים פתוחים אינם ניתנים למחיקה).

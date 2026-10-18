@@ -256,6 +256,34 @@ void main() {
       },
     );
 
+    test(
+      'ספר שהשתנה באצווה: מסמכיו הישנים נמחקים לפני האצווה, באותו commit',
+      () async {
+        final books = officialBooks(3);
+        provider.indexedFilePaths.addAll(['id:1', 'id:2', 'id:3']);
+        engine.committedFilePaths.addAll(['id:1', 'id:2', 'id:3']);
+        List<String>? removedBeforeBatch;
+        engine.duringBatch = (_, inputs) {
+          removedBeforeBatch = [...engine.removedFilePaths];
+          return inputs.length;
+        };
+
+        final result = await repository.runIndexing(
+          libraryOf(books),
+          changedBooks: [books[1]],
+          onProgress: (_, _) {},
+        );
+
+        expect(result.completed, isTrue);
+        expect(engine.batches, [
+          ['id:2'],
+        ]);
+        expect(removedBeforeBatch, ['id:2']);
+        expect(engine.commitCount, 1);
+        expect(provider.indexedFilePaths, {'id:1', 'id:2', 'id:3'});
+      },
+    );
+
     test('ספר אישי משורות המסד נשלח באותה אצווה מ-user_books.db', () async {
       await LibraryLineSource.configureUserBooks('/db/user_books.db');
       final official = TextBook(id: 1, title: 'רשמי', categoryId: 1);

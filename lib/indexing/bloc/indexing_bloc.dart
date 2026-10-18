@@ -95,9 +95,13 @@ class IndexingBloc extends Bloc<IndexingEvent, IndexingState> {
   ) async {
     if (event is RunIndexing &&
         (_enqueuedAtCancelCount[event] ?? _cancelCount) != _cancelCount) {
-      // הסימון "השתנה" שורד: הריצה הבאה תחליף את הספרים האלה.
+      // הריצה הבאה תחליף ותבדוק את מה שזו הייתה מטפלת בו; ספרים שנשלחו
+      // לבדיקה מוחלפים — החלפה מיותרת עדיפה על תוכן ישן.
       try {
-        await _repository.rememberChangedBooks(event.changedBooks);
+        await _repository.rememberChangedBooks(
+          [...event.changedBooks, ...event.check.books],
+          checkLibrary: event.check.wholeLibrary,
+        );
       } catch (e) {
         debugPrint('⚠️ שמירת ספרים שהשתנו מריצה שבוטלה נכשלה: $e');
       }

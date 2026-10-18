@@ -4,11 +4,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
-/// ספרים שהוחלט להחליף את מסמכיהם באינדקס, וטרם נחתמו מחדש.
-///
-/// עד ה-commit הספר נשאר באינדקס עם תוכנו הישן, ולכן הסימון חייב לשרוד
-/// קריסה או ביטול — אחרת הספר ייחשב מאונדקס ולא יוחלף לעולם.
-/// הקובץ: `{"version": 1, "keys": ["id:5", ...]}` בתוך תיקיית האינדקס.
+/// ספרים שמסמכיהם באינדקס ממתינים להחלפה, ובקשת בדיקה מלאה שטרם רצה —
+/// שורדים קריסה או ביטול. הקובץ: `{"version":1,"keys":[...],"checkLibrary":true}`.
 class PendingReindexStore {
   PendingReindexStore._(this._file);
 
@@ -21,43 +18,56 @@ class PendingReindexStore {
       : PendingReindexStore._(File(p.join(indexPath, fileName)));
 
   // עותק בזיכרון: כשהכתיבה לדיסק נכשלת, ביטול באותה הפעלה עדיין לא מאבד אותו.
-  static final Map<String, Set<String>> _memory = {};
+  static final Map<String, ({Set<String> keys, bool checkLibrary})> _memory =
+      {};
+
+  /// האינדקס נמחק או הוחלף — מה שנזכר עליו כבר אינו נכון.
+  static void clearMemory() => _memory.clear();
 
   @visibleForTesting
-  static void resetMemoryForTesting() => _memory.clear();
+  static void resetMemoryForTesting() => clearMemory();
 
   final File _file;
 
-  Set<String> get _cached => _memory.putIfAbsent(_file.path, () => {});
-
-  Future<Set<String>> load() async {
-    final keys = {..._cached};
+  Future<({Set<String> keys, bool checkLibrary})> _read() async {
+    final cached = _memory[_file.path];
+    final keys = {...?cached?.keys};
+    var checkLibrary = cached?.checkLibrary ?? false;
     try {
       if (await _file.exists()) {
         final json = jsonDecode(await _file.readAsString());
         if (json is Map && json['version'] == _version) {
           keys.addAll((json['keys'] as List).cast<String>());
+          checkLibrary |= json['checkLibrary'] == true;
         }
       }
     } catch (e) {
       debugPrint('⚠️ קריאת רשימת הספרים להחלפה באינדקס נכשלה: $e');
     }
-    return keys;
+    return (keys: keys, checkLibrary: checkLibrary);
   }
 
-  /// מחליף את הרשימה כולה; רשימה ריקה מוחקת את הקובץ. מחזיר האם נשמר בדיסק.
-  Future<bool> save(Set<String> keys) async {
-    _cached
-      ..clear()
-      ..addAll(keys);
+  Future<Set<String>> load() async => (await _read()).keys;
+
+  /// האם נדחתה בדיקה מלאה של הספרייה (ריצה שבוטלה לפני שבדקה).
+  Future<bool> checkLibraryPending() async => (await _read()).checkLibrary;
+
+  /// מחליף את הרשימה כולה; [checkLibrary] null שומר את הקיים. מחזיר האם נשמר.
+  Future<bool> save(Set<String> keys, {bool? checkLibrary}) async {
+    final check = checkLibrary ?? (await _read()).checkLibrary;
+    _memory[_file.path] = (keys: {...keys}, checkLibrary: check);
     try {
-      if (keys.isEmpty) {
+      if (keys.isEmpty && !check) {
         if (await _file.exists()) await _file.delete();
         return true;
       }
       final temp = File('${_file.path}.tmp');
       await temp.writeAsString(
-        jsonEncode({'version': _version, 'keys': keys.toList()..sort()}),
+        jsonEncode({
+          'version': _version,
+          'keys': keys.toList()..sort(),
+          if (check) 'checkLibrary': true,
+        }),
         flush: true,
       );
       await temp.rename(_file.path);

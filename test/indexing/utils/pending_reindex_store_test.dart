@@ -71,4 +71,31 @@ void main() {
     );
     expect(await store.load(), isEmpty);
   });
+
+  test('בקשת בדיקה מלאה נשמרת גם בלי ספרים, ומתנקה במפורש', () async {
+    final store = PendingReindexStore.forIndex(indexDir.path)!;
+
+    await store.save({}, checkLibrary: true);
+    PendingReindexStore.resetMemoryForTesting();
+    expect(await store.checkLibraryPending(), isTrue);
+
+    // שמירת רשימה בלי לציין את הבקשה אינה מוחקת אותה.
+    await store.save({'id:5'});
+    expect(await store.checkLibraryPending(), isTrue);
+
+    await store.save({}, checkLibrary: false);
+    expect(await store.checkLibraryPending(), isFalse);
+    expect(fileOf(indexDir).existsSync(), isFalse);
+  });
+
+  test('מחיקת האינדקס או החלפתו מנקה את מה שנזכר בזיכרון', () async {
+    final missing = Directory(p.join(indexDir.path, 'missing'));
+    final store = PendingReindexStore.forIndex(missing.path)!;
+    await store.save({'id:5'}, checkLibrary: true);
+
+    PendingReindexStore.clearMemory();
+
+    expect(await store.load(), isEmpty);
+    expect(await store.checkLibraryPending(), isFalse);
+  });
 }

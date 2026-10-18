@@ -128,6 +128,9 @@ class IndexingRepository {
   })
   libraryFingerprint = libraryBookContentFingerprint;
 
+  @visibleForTesting
+  static IndexCommitPolicy Function() newCommitPolicy = IndexCommitPolicy.new;
+
   /// שלב הבדיקה שבתחילת [runIndexing].
   late IndexChangeDetector changeDetector = FingerprintChangeDetector(this);
 
@@ -359,11 +362,11 @@ class IndexingRepository {
   /// ספר שממתין להחלפה ([PendingReindexStore]) נחשב כחסר: תוכנו באינדקס ישן.
   Future<bool> hasUnindexedBooks(Library library) async {
     await _tantivyDataProvider.engine;
-    final pending =
-        await PendingReindexStore.forIndex(
-          _tantivyDataProvider.activeIndexPath,
-        )?.load() ??
-        const <String>{};
+    final store = PendingReindexStore.forIndex(
+      _tantivyDataProvider.activeIndexPath,
+    );
+    if (await store?.checkLibraryPending() ?? false) return true;
+    final pending = await store?.load() ?? const <String>{};
     return booksForIndexing(
       library.getIndexableBooks(),
       includePdfBooks: true,
@@ -404,16 +407,8 @@ class IndexingRepository {
     onFinalizing: onFinalizing,
   );
 
-  /// ריצת אינדוקס אחת: שלב בדיקה (לפי [check]) ← לולאה אחת שמאנדקסת ספרים
-  /// חדשים ושהשתנו יחד ← commit ואיחוד אחד בסוף.
-  ///
-  /// [books] — הספרים לאינדוקס; null לכל הספרייה. ספר שכבר באינדקס מדולג,
-  /// אלא אם הוא ב-[changedBooks], נמצא שונה בבדיקה, או נשאר ברשימת ההחלפה
-  /// ([PendingReindexStore]) מריצה שלא הושלמה. מסמכיו הישנים של ספר כזה
-  /// נמחקים רגע לפני כתיבתו, באותו commit — עד אז הוא נשאר בר-חיפוש.
-  /// [onScanProgress] מדווח על שלב הבדיקה; [onWorkListReady] נקרא פעם אחת
-  /// עם מספר הספרים לעבודה, ורק כשיש עבודה. ההתקדמות נמדדת ביחס אליו.
-  /// [onFinalizing] נקרא לפני ה-commit הסופי כשאחריו מגיע איחוד הקבצים.
+  /// בדיקה ([check]) ← לולאה אחת לספרים חדשים ([books], null לכל הספרייה)
+  /// ושהשתנו, שמסמכיהם הישנים נמחקים רגע לפני כתיבתם ← commit ואיחוד אחד.
   Future<IndexingRunResult> runIndexing(
     Library library, {
     List<Book>? books,
@@ -485,6 +480,10 @@ class IndexingRepository {
       _tantivyDataProvider.activeIndexPath,
     );
     final storedPending = await pendingStore?.load() ?? const <String>{};
+    // בדיקה מלאה שנדחתה (ריצה שבוטלה לפני שבדקה) רצה בריצה הבאה על כל הספרייה.
+    final deferredCheck =
+        wholeLibrary && (await pendingStore?.checkLibraryPending() ?? false);
+    if (deferredCheck) check = IndexCheckScope.library;
     final changedByKey = <String, Book>{
       for (final book in explicitChanged) buildIndexedBookFilePath(book): book,
     };
@@ -497,10 +496,20 @@ class IndexingRepository {
       }
     }
     final pending = changedByKey.keys.toSet();
-    if (!setEquals(pending, storedPending)) await pendingStore?.save(pending);
+    if (!setEquals(pending, storedPending) ||
+        (check.wholeLibrary && !deferredCheck)) {
+      await pendingStore?.save(
+        pending,
+        checkLibrary: check.wholeLibrary ? true : null,
+      );
+    }
 
+    // מפתחות שהוצאו מהמעקב וטרם נמחקו חוזרים אליו בסוף: מסמכיהם עדיין באינדקס.
+    final removedFromIndexed = <String>{};
     List<Book> buildWorkList() {
-      _tantivyDataProvider.indexedFilePaths.removeAll(changedByKey.keys);
+      final indexed = _tantivyDataProvider.indexedFilePaths;
+      removedFromIndexed.addAll(changedByKey.keys.where(indexed.contains));
+      indexed.removeAll(changedByKey.keys);
       final seen = <String>{};
       return orderBooksForIndexing([
         for (final book in [...scope, ...changedByKey.values])
@@ -533,7 +542,7 @@ class IndexingRepository {
     PdfExtractionPrefetcher? prefetcher;
     var processedBooks = 0;
     var actuallyIndexed = 0;
-    final commitPolicy = IndexCommitPolicy();
+    final commitPolicy = newCommitPolicy();
     final libraryBatches = _LibraryBatches();
     var skipped = 0;
     var errors = 0;
@@ -541,11 +550,9 @@ class IndexingRepository {
     // מפתחות שמסמכיהם הישנים טרם נמחקו מה-writer.
     final replaceKeys = {...pending};
 
-    // ספר שהוחלף ונחתם יוצא מרשימת ההחלפה שבדיסק.
+    // אחרי commit, ספר שמסמכיו הישנים נמחקו נחתם מוחלף או נעדר (ויאונדקס כחדש).
     Future<void> savePendingAfterCommit() async {
-      final remaining = pending
-          .where((key) => !_tantivyDataProvider.indexedFilePaths.contains(key))
-          .toSet();
+      final remaining = pending.where(replaceKeys.contains).toSet();
       if (remaining.length == pending.length) return;
       pending
         ..clear()
@@ -582,8 +589,11 @@ class IndexingRepository {
           debugPrint('🔁 בדיקה: ${detected.length} ספרים השתנו — מוחלפים');
           pending.addAll(changedByKey.keys);
           replaceKeys.addAll(pending);
-          await pendingStore?.save(pending);
         }
+        await pendingStore?.save(
+          pending,
+          checkLibrary: check.wholeLibrary ? false : null,
+        );
         allBooks = buildWorkList();
         if (allBooks.isEmpty) {
           debugPrint('🔎 בדיקה: האינדקס תואם את הספרייה — אין מה לעדכן');
@@ -699,6 +709,7 @@ class IndexingRepository {
               failure,
               catalogueOrder,
               failures,
+              replaceKeys: replaceKeys,
             );
             if (handled) {
               commitPolicy.recordBook();
@@ -715,7 +726,6 @@ class IndexingRepository {
 
         var bookWasIndexed = false;
         try {
-          await _dropReplacedDocs(replaceKeys, [book]);
           // ספרי מסמך עוברים אינדוקס דרך זרימת TextBook (העטיפה
           // משמרת id/categoryId כדי ש-`book.text` יחלץ קובץ → text).
           // catalogueOrderKey של העטוף זהה למקור: כשיש id המפתח הוא
@@ -749,6 +759,7 @@ class IndexingRepository {
                   cancelled = true;
                   break;
                 }
+                await _dropReplacedDocs(replaceKeys, [book]);
                 final docs = await _indexTextBook(
                   textBookForIndex,
                   catalogueOrder: catalogueOrder,
@@ -787,6 +798,7 @@ class IndexingRepository {
                 bookIndex + 1,
                 shouldPrefetch: shouldPrefetch,
               );
+              await _dropReplacedDocs(replaceKeys, [book]);
               final droppedPages = await _indexPdfBook(
                 book,
                 catalogueOrder: catalogueOrder,
@@ -853,6 +865,7 @@ class IndexingRepository {
             failure,
             catalogueOrder,
             failures,
+            replaceKeys: replaceKeys,
           );
           if (handled) {
             commitPolicy.recordBook();
@@ -888,8 +901,7 @@ class IndexingRepository {
         final index = await _commitIndex();
         debugPrint('💾 commit סופי: ${commitStopwatch.elapsedMilliseconds}ms');
         _stampCatalogueOrderAfterCommit();
-        // כל ספר שהוחלף נחתם או נעדר מהאינדקס, ויאונדקס כחדש בריצה הבאה.
-        if (pending.isNotEmpty) await pendingStore?.save(const {});
+        await savePendingAfterCommit();
         if (compact) {
           final optimizeStopwatch = Stopwatch()..start();
           await optimizeIndexBestEffort(index.optimize);
@@ -922,6 +934,9 @@ class IndexingRepository {
               failures: List.unmodifiable(failures),
             );
     } finally {
+      _tantivyDataProvider.indexedFilePaths.addAll(
+        removedFromIndexed.where(replaceKeys.contains),
+      );
       prefetcher?.dispose();
       IndexingCrashCanary.current?.finish();
       _tantivyDataProvider.isIndexing.value = false;
@@ -1389,12 +1404,14 @@ class IndexingRepository {
     Book book,
     IndexingFailure failure,
     CatalogueOrderResolver catalogueOrder,
-    List<IndexingFailure> failures,
-  ) async {
+    List<IndexingFailure> failures, {
+    Set<String> replaceKeys = const {},
+  }) async {
     if (failure.isRetryable) return false;
     if (!_tantivyDataProvider.isIndexing.value) return false;
 
     try {
+      await _dropReplacedDocs(replaceKeys, [book]);
       await _writeEmptyBookMarker(
         book,
         catalogueOrder: catalogueOrder,
@@ -2279,9 +2296,12 @@ class IndexingRepository {
     onFinalizing: onFinalizing,
   );
 
-  /// מוסיף לרשימת ההחלפה ספרים שהשתנו וריצתם בוטלה לפני שהתחילה.
-  Future<void> rememberChangedBooks(List<Book> books) async {
-    if (books.isEmpty || WindowRole.isSecondary) return;
+  /// שומר לריצה הבאה את מה שריצה שבוטלה לפני שהתחילה הייתה מחליפה ובודקת.
+  Future<void> rememberChangedBooks(
+    List<Book> books, {
+    bool checkLibrary = false,
+  }) async {
+    if ((books.isEmpty && !checkLibrary) || WindowRole.isSecondary) return;
     await _tantivyDataProvider.engine;
     final store = PendingReindexStore.forIndex(
       _tantivyDataProvider.activeIndexPath,
@@ -2290,7 +2310,7 @@ class IndexingRepository {
     await store.save({
       ...await store.load(),
       for (final book in books) buildIndexedBookFilePath(book),
-    });
+    }, checkLibrary: checkLibrary ? true : null);
   }
 
   /// Cancels the ongoing indexing process.
@@ -2667,11 +2687,8 @@ class _LibraryBatches {
   bool disabled = false;
 }
 
-/// בדיקה לפי טביעת הטקסט: משחזר לכל ספר טקסט מאונדקס את החתימה שהאינדוקס
-/// היה חותם (טקסט + metadata) ומשווה לזו שבאינדקס. ל-PDF אין טביעת אצבע —
-/// הוא מכוסה ע"י זיהוי mtime/גודל בסריקת הקבצים.
-///
-/// [loadText], [fingerprintOf] ו-[fingerprintLibraryPath] ניתנים להזרקה בבדיקות.
+/// משחזר לכל ספר טקסט מאונדקס את טביעת הטקסט+metadata ומשווה לאינדקס.
+/// ל-PDF אין טביעה — הוא מכוסה בזיהוי mtime/גודל בסריקת הקבצים.
 class FingerprintChangeDetector implements IndexChangeDetector {
   FingerprintChangeDetector(
     this._repository, {
