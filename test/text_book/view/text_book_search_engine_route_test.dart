@@ -60,10 +60,15 @@ Future<void> main() async {
     Future<List<TextSearchResult>> Function(List<String>, String)?
     simpleSearchRunner,
     String bookTitle = 'ספר בדיקה',
+    bool removeNikud = false,
   }) async {
     final textBookBloc = _TestTextBookBloc(
       bookLoaded
-          ? _loadedState(content: content, bookTitle: bookTitle)
+          ? _loadedState(
+              content: content,
+              bookTitle: bookTitle,
+              removeNikud: removeNikud,
+            )
           : TextBookInitial.named(
               TextBook(title: bookTitle),
               0,
@@ -474,6 +479,40 @@ Future<void> main() async {
   );
 
   testWidgets(
+    'תוצאת מנוע מנוקדת מוצגת לפי הגדרת הניקוד של הלשונית',
+    (tester) async {
+      final repository = _RecordingSearchRepository(
+        results: [
+          _result(
+            title: 'בראשית',
+            reference: 'פרק טו',
+            segment: 0,
+            text: 'יָדֹ֨עַ <font color=red>תֵּדַ֜ע</font> כִּי־גֵ֣ר',
+          ),
+        ],
+      );
+
+      await (await pumpSearchView(
+        tester,
+        searchRepository: repository,
+        initialQuery: 'תדע כי',
+        searchDistance: 1,
+        bookTitle: 'בראשית',
+        content: const ['ידע תדע כי־גר'],
+        removeNikud: true,
+      )).settle();
+
+      final shown = tester
+          .widgetList<RichText>(find.byType(RichText))
+          .map((widget) => widget.text.toPlainText())
+          .where((text) => text.contains('תדע'));
+      // כמו בספר: הסרת ניקוד וטעמים הופכת גם מקף לרווח.
+      expect(shown, ['ידע תדע כי גר']);
+    },
+    skip: !engineReady,
+  );
+
+  testWidgets(
     'תוצאת מנוע שנמשכת לשורה הבאה נספרת פעם אחת ומסמנת את שתי השורות',
     (tester) async {
       final repository = _RecordingSearchRepository(
@@ -698,6 +737,7 @@ class _RecordingSearchRepository extends SearchRepository {
 TextBookLoaded _loadedState({
   List<String> content = const ['שורה א'],
   String bookTitle = 'ספר בדיקה',
+  bool removeNikud = false,
 }) {
   return TextBookLoaded(
     book: TextBook(title: bookTitle),
@@ -712,7 +752,7 @@ TextBookLoaded _loadedState({
     visibleLinks: const [],
     linksByLine: const {},
     tableOfContents: const [],
-    removeNikud: false,
+    removeNikud: removeNikud,
     visibleIndices: const [0],
     selectedIndex: 0,
     pinLeftPane: false,

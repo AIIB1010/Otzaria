@@ -856,6 +856,7 @@ class TextBookSearchViewState extends State<TextBookSearchView>
     // חלון חלקי סביב מקום הקריאה, ולפיו היו נזרקות תוצאות מנוע תקפות.
     final int? contentLength = _content?.length;
     final state = context.read<TextBookBloc>().state;
+    final profile = state is TextBookLoaded ? state.bodyDisplayProfile : null;
     final List<TextSearchResult> converted = [];
     for (final result in results) {
       try {
@@ -865,10 +866,14 @@ class TextBookSearchViewState extends State<TextBookSearchView>
           converted.add(
             TextSearchResult(
               index: lineNumber,
-              snippet: isResultTextUnavailable(result)
-                  ? _loadedLineSnippet(lineNumber, state) ??
-                        unavailableResultText
-                  : result.text,
+              snippet: utils.removeMarks(
+                isResultTextUnavailable(result)
+                    ? _loadedLineSnippet(lineNumber, state) ??
+                          unavailableResultText
+                    : result.text,
+                nikud: profile?.removeNikud ?? false,
+                teamim: profile?.removeTeamim ?? false,
+              ),
               address: result.reference,
               query: searchTextController.text,
               continuesToNextLine: result.continuesToNextLine,
