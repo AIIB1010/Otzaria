@@ -380,6 +380,35 @@ void main() {
     );
   }
 
+  testWidgets('קיצור חלונית הניווט פותח וסוגר אותה (issue #2678)', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1600, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final sourceTab = PdfBookTab(
+      book: PdfBook(title: 'PDF בדיקה', path: '/tmp/book.pdf'),
+      pageNumber: 1,
+    );
+    addTearDown(sourceTab.dispose);
+    final tab = PdfCommentatorsTab(sourceTab: sourceTab);
+    await tester.pumpWidget(_wrap(PdfCommentatorsTabScreen(tab: tab)));
+    await tester.pump();
+
+    for (final expected in [true, false]) {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyL);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<NavSidePanel>(find.byType(NavSidePanel)).isOpen,
+        expected,
+      );
+    }
+  });
+
   testWidgets('חלונית הניווט בעיצוב האחיד: NavSidePanel, כותרת ועץ כרטיסים', (
     tester,
   ) async {
