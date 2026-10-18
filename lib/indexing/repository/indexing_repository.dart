@@ -1304,7 +1304,10 @@ class IndexingRepository {
     final stopwatch = Stopwatch()..start();
     try {
       _beginBook(book);
-      final extracted = await _extractPdfPages(book);
+      // pdfium של האינדוקס ממתין בתור ה-worker לכל עבודה אחרת (הקורא קודם).
+      final extracted = await Pdfrx.runAsBackgroundWork(
+        () => _extractPdfPages(book),
+      );
       return (
         pages: extracted.pages,
         outline: extracted.outline,
