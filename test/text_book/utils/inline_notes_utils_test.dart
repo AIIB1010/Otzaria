@@ -5,6 +5,62 @@ import 'package:otzaria/text_book/models/book_notes.dart';
 import 'package:otzaria/text_book/utils/inline_notes_utils.dart';
 
 void main() {
+  test('תג הערה בתוך sup אינו גוף שכבר שוחזר', () {
+    const stored =
+        'א<sup class="footnote-marker">1<i class="footnote"></i></sup> ב';
+    final notes =
+        (BookNotesBuilder()
+              ..add(0, 0, '1<i class="footnote"></i>', 'זרזיר', charPos: 2))
+            .build();
+    final restored = rehydrateInlineNotes(stored, notes.notesAt(0));
+    expect(restored, contains('</sup><i class="footnote">זרזיר</i>'));
+    expect(rehydrateInlineNotes(restored, notes.notesAt(0)), restored);
+    expect(notesForLines([stored], [0], dbNotes: notes), hasLength(1));
+    expect(stripInlineNotes(restored), stored);
+    expect(
+      addInlineNotePreviewLinks(stored, lineIndex: 0, dbNotes: notes),
+      contains('line=0&note=0'),
+    );
+  });
+
+  test('sup רגיל עם תג הערה פנימי אינו חוסם הערה לא מעוגנת', () {
+    const stored = 'א<sup>1<i class="footnote">סמן</i></sup> ב';
+    final notes =
+        (BookNotesBuilder()..add(0, 0, null, 'הערה רחוקה', charPos: 7)).build();
+    final restored = rehydrateInlineNotes(stored, notes.notesAt(0));
+    expect(restored, contains('הערה רחוקה'));
+    expect(restored, contains('<sup>1<i class="footnote">סמן</i></sup>'));
+    expect(rehydrateInlineNotes(restored, notes.notesAt(0)), restored);
+  });
+
+  for (final marker in ['1<i class="footnote"></i>', '']) {
+    test('הערות צמודות באותו אופסט נשארות מחוץ לסמן ובסדרן: $marker', () {
+      final stored = '<sup class="footnote-marker">$marker</sup>';
+      final notes =
+          (BookNotesBuilder()
+                ..add(0, 0, marker, 'ראשונה', charPos: marker.isEmpty ? 0 : 1)
+                ..add(0, 1, null, 'שנייה', charPos: marker.isEmpty ? 0 : 1))
+              .build();
+      final restored = rehydrateInlineNotes(stored, notes.notesAt(0));
+      expect(
+        restored,
+        '$stored<i class="footnote">ראשונה</i><i class="footnote">שנייה</i>',
+      );
+      expect(rehydrateInlineNotes(restored, notes.notesAt(0)), restored);
+    });
+  }
+
+  test('שחזור בסוף פסקה נשאר לפניה ושומר על גבול המילה', () {
+    const stored =
+        '<p>ראשון<sup class="footnote-marker">א</sup></p><p>המשך</p>';
+    final notes = (BookNotesBuilder()..add(0, 0, 'א', 'הערה', charPos: 6))
+        .build();
+    expect(
+      rehydrateInlineNotes(stored, notes.notesAt(0)),
+      '<p>ראשון<sup class="footnote-marker">א</sup><i class="footnote">הערה</i></p><p>המשך</p>',
+    );
+  });
+
   group('addInlineNotePreviewLinks', () {
     test('מחליף את הסמן הצמוד בקישור להערה', () {
       const line =

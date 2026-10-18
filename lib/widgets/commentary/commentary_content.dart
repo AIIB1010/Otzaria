@@ -16,9 +16,8 @@ import 'package:otzaria/widgets/misc/middle_click_open.dart';
 import 'package:otzaria/widgets/feedback/app_future_builder.dart';
 import 'package:otzaria/widgets/smart_text/smart_text.dart';
 import 'package:otzaria/book_common/utils/commentary_search_utils.dart';
-import 'package:otzaria/book_common/utils/link_anchor_markers.dart';
-import 'package:otzaria/divine_names/models/divine_name_spans.dart';
-import 'package:otzaria/divine_names/repository/divine_names_repository.dart';
+import 'package:otzaria/book_common/utils/link_anchor_markers.dart'
+    show wrapVisibleRange;
 import 'package:otzaria/text_book/utils/note_inline_render.dart';
 import 'package:otzaria/book_common/selection/selected_text_restore.dart';
 import 'package:otzaria/book_common/selection/commentary_copy_guard.dart';
@@ -97,7 +96,6 @@ class CommentaryContent extends StatefulWidget {
 class _CommentaryContentState extends State<CommentaryContent>
     with PanelAnchorLinksMixin<CommentaryContent> {
   late Future<String> content;
-  DivineNameSpans _divineNames = DivineNameSpans.empty;
 
   @override
   Link get anchorSourceLink => widget.link;
@@ -109,7 +107,6 @@ class _CommentaryContentState extends State<CommentaryContent>
   void initState() {
     super.initState();
     _loadContent();
-    _loadDivineNames();
     startAnchorLinks();
   }
 
@@ -133,41 +130,16 @@ class _CommentaryContentState extends State<CommentaryContent>
     }
   }
 
-  void _loadDivineNames() {
-    final link = widget.link;
-    // קטע שמשתרע על כמה שורות — אין שורה אחת שהאופסטים שלה מתאימים לו.
-    if (link.path2.isEmpty ||
-        (link.index2End != null && link.index2End != link.index2)) {
-      _divineNames = DivineNameSpans.empty;
-      return;
-    }
-    DivineNamesRepository.instance
-        .spansFor(
-          utils.getTitleFromPath(link.path2),
-          categoryId: link.targetCategoryId,
-          source: link.targetSource,
-          fileType: link.targetFileType,
-        )
-        .then((spans) {
-          if (!mounted || !identical(widget.link, link)) return;
-          if (identical(spans, _divineNames)) return;
-          setState(() => _divineNames = spans);
-        });
-  }
-
   @override
   void didUpdateWidget(CommentaryContent oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // עדכון תוכן הפירוש כאשר הקישור משתנה
-    // בודקים אם הקישור השתנה על ידי השוואת המאפיינים המזהים שלו
-    if (oldWidget.link.path2 != widget.link.path2 ||
-        oldWidget.link.index2 != widget.link.index2 ||
-        oldWidget.link.heRef != widget.link.heRef) {
+    if (oldWidget.link.contentIdentityKey != widget.link.contentIdentityKey ||
+        oldWidget.link.heRef != widget.link.heRef ||
+        oldWidget.displayProfile.showAnchorMarkers !=
+            widget.displayProfile.showAnchorMarkers) {
       setState(() {
         _loadContent();
-        _divineNames = DivineNameSpans.empty;
       });
-      _loadDivineNames();
       restartAnchorLinks();
     }
   }
@@ -260,11 +232,7 @@ class _CommentaryContentState extends State<CommentaryContent>
                     widget.link.index2,
                   );
                   var displayData = buildAnnotatedLineHtml(
-                    rawLine: injectDivineNameMarkers(
-                      injectAnchorLinks(data),
-                      _divineNames,
-                      widget.link.index2 - 1,
-                    ),
+                    rawLine: injectAnchorLinks(data),
                     notesForLine: notesForLine,
                     lineIndex0: widget.link.index2 - 1,
                     underlineColor: Theme.of(context).colorScheme.primary,

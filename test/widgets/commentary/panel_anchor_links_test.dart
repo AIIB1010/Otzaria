@@ -4,9 +4,13 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/data/data_providers/library_provider.dart';
+import 'package:otzaria/divine_names/models/divine_name_spans.dart';
+import 'package:otzaria/divine_names/repository/divine_names_repository.dart';
 import 'package:otzaria/data/data_providers/library_provider_manager.dart';
 import 'package:otzaria/models/link_types.dart';
 import 'package:otzaria/models/links.dart';
+import 'package:otzaria/utils/text/text_manipulation.dart'
+    show stripHtmlIfNeeded;
 import 'package:otzaria/services/target_line_links_service.dart';
 import 'package:otzaria/settings/engine/settings_bloc.dart';
 import 'package:otzaria/settings/engine/settings_event.dart';
@@ -104,6 +108,24 @@ String _renderedHtml(WidgetTester tester) =>
     tester.widget<SmartTextWidget>(find.byType(SmartTextWidget)).text;
 
 void main() {
+  setUp(() {
+    BookNotesRepository.instance
+      ..clear()
+      ..debugLoader = (title, {categoryId, required source}) async =>
+          BookNotes.empty;
+    DivineNamesRepository.instance
+      ..clear()
+      ..debugLoader = (title, {categoryId, required source}) async =>
+          DivineNameSpans.empty;
+  });
+  tearDown(() {
+    BookNotesRepository.instance
+      ..debugLoader = null
+      ..clear();
+    DivineNamesRepository.instance
+      ..debugLoader = null
+      ..clear();
+  });
   tearDown(TargetLineLinksService.resetInstanceForTesting);
   tearDown(LibraryProviderManager.instance.resetForTesting);
 
@@ -365,10 +387,11 @@ void main() {
             '<small>(1)</small>, <b>חייבין</b> <small>(2)</small> <b>לזמן</b> - '
             'להזדמן ולהצטרף יחד, כדי לברך "ברכת הזימון" בלשון רבים '
             '<small>(3)</small>.',
-      ].join('<br>');
+      ];
       await _pumpPanel(
         tester,
-        displayed: Link(
+        displayed: _RangeLink(
+          html,
           heRef: 'חברותא על ברכות, מח ב–נ א',
           index1: 1,
           path2: 'חברותא על ברכות',
@@ -388,13 +411,14 @@ void main() {
             ),
           _anchored(index1: 4227, charStart: 0, charEnd: 5),
         ],
-        html: html,
+        html: html.join('<br>'),
       );
 
-      expect(_renderedHtml(tester), isNot(contains('note-marker')));
+      expect(_renderedHtml(tester), contains('note-marker?line=4226&num=2'));
+      expect(_renderedHtml(tester), contains('note-marker?line=4232&num=2'));
       expect(_renderedHtml(tester), contains('anchor?ref=4226_0&range=1'));
       expect(
-        _renderedHtml(tester).split('<small>(2)</small>').length,
+        stripHtmlIfNeeded(_renderedHtml(tester)).split('(2)').length,
         3,
       );
     });
@@ -526,6 +550,45 @@ void main() {
       expect(previewContent(tester), contains('בביאור הלכה'));
     });
 
+    testWidgets('טווח שומר על זהות הערה חוזרת ועל שמות השורה השנייה', (
+      tester,
+    ) async {
+      notes =
+          (BookNotesBuilder()
+                ..add(2, 0, 'א', 'ראשונה')
+                ..add(3, 0, 'א', 'שנייה'))
+              .build();
+      DivineNamesRepository.instance
+        ..clear()
+        ..debugLoader = (title, {categoryId, required source}) async =>
+            (DivineNameSpansBuilder()..add(3, 0, 5, DivineNameKind.elohim))
+                .build();
+      final lines = [
+        'ראשון<br>המשך<sup class="footnote-marker">א</sup>',
+        'אלהים<sup class="footnote-marker">א</sup>',
+      ];
+      await _pumpPanel(
+        tester,
+        loaded: const [],
+        html: lines.join('<br>'),
+        displayed: _RangeLink(
+          lines,
+          heRef: 'טווח',
+          index1: 1,
+          path2: 'רש״י',
+          index2: 3,
+          index2End: 4,
+          connectionType: LinkTypes.commentary,
+        ),
+      );
+      expect(_renderedHtml(tester), contains('book-note?line=2&note=0'));
+      expect(_renderedHtml(tester), contains('book-note?line=3&note=0'));
+      expect(_renderedHtml(tester), contains('class="divine-name"'));
+      await hover(tester, 'otzaria://book-note?line=3&note=0');
+      expect(previewContent(tester), contains('שנייה'));
+      expect(previewContent(tester), isNot(contains('ראשונה')));
+    });
+
     testWidgets('בלי הערות בשורה המוצגת — אין ריחוף', (tester) async {
       notes = (BookNotesBuilder()..add(9, 0, '(26)', 'שורה אחרת')).build();
       await _pumpPanel(
@@ -561,4 +624,22 @@ class _TestLibraryProvider extends Fake implements LibraryProvider {
   @override
   Future<String> getLinkContent(Link link) async =>
       contentByPath[link.path2] ?? 'תוכן בדיקה';
+}
+
+class _RangeLink extends Link {
+  _RangeLink(
+    this.lines, {
+    required super.heRef,
+    required super.index1,
+    required super.path2,
+    required super.index2,
+    required super.index2End,
+    required super.connectionType,
+  });
+  final List<String> lines;
+  @override
+  Future<List<LinkContentLine>> get contentLines async => [
+    for (final (i, line) in lines.indexed)
+      (lineIndex: index2 - 1 + i, content: line),
+  ];
 }

@@ -11,6 +11,7 @@ import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/models/links.dart';
+import 'package:otzaria/divine_names/utils/divine_name_markers.dart';
 import 'package:otzaria/book_protection/models/book_protection.dart';
 import 'package:otzaria/printing/commentary_print_builder.dart';
 import 'package:otzaria/printing/print_content_models.dart';
@@ -282,6 +283,44 @@ void main() {
       contains('מפרש, בדיקה'),
     );
     expect(xml, contains(applyTextDisplayProfile(_verse, profile)));
+  });
+
+  testWidgets('בלוקים מוכנים מחילים החלפת שמות בגוף ובהערה ב-Word', (
+    tester,
+  ) async {
+    final marked = '${divineNameMarkerOpen(5)}אלהים</span>';
+    final xml = await _exportWord(
+      tester,
+      const TextDisplayProfile(divineNames: DivineNamesDisplay.substitute),
+      blocks: [
+        PrintBlock(
+          kind: PrintBlockKind.commentary,
+          text:
+              '$marked<sup class="footnote-marker">א</sup><i class="footnote">$marked</i>',
+        ),
+      ],
+      verifyPdf: (tester) async {
+        final dynamic state = tester.state(find.byType(PrintingScreen));
+        final text = await tester.runAsync(() async {
+          final bytes =
+              await (state.createPdf(PdfPageFormat.a4) as Future<Uint8List>);
+          final document = await PdfDocument.openData(bytes);
+          try {
+            return (await document.pages.first.loadText())!.fullText;
+          } finally {
+            await document.dispose();
+          }
+        });
+        expect(text!.split('אלקים'), hasLength(3));
+        expect(text, isNot(contains('אלהים')));
+      },
+    );
+    final text = XmlDocument.parse(
+      xml,
+    ).findAllElements('w:t').map((node) => node.innerText).join(' ');
+    expect(text.split('אלקים'), hasLength(3));
+    expect(text, isNot(contains('אלהים')));
+    expect(xml, isNot(contains('divine-name')));
   });
 
   for (final commentaryPunctuation in MarkVisibility.values) {

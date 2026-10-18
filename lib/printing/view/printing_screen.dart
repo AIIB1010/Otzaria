@@ -22,6 +22,8 @@ import 'package:otzaria/personal_notes/models/personal_note.dart';
 import 'package:otzaria/personal_notes/repository/personal_notes_repository.dart';
 import 'package:otzaria/personal_notes/utils/personal_notes_book_key.dart';
 import 'package:otzaria/printing/print_content_models.dart';
+import 'package:otzaria/printing/commentary_print_builder.dart';
+import 'package:otzaria/divine_names/utils/divine_name_markers.dart';
 import 'package:otzaria/printing/serial_latest_runner.dart';
 import 'package:otzaria/printing/printing_helpers.dart';
 import 'package:otzaria/printing/pdf_sheet_composer.dart';
@@ -1113,44 +1115,18 @@ class _PrintingScreenState extends State<PrintingScreen> {
         holyNameStyle: _shouldReplaceHolyNames ? _holyNameStyle : null,
       );
 
-  /// כמו [_withStoredLineData] לקטע מפרש, לפי נתוני ספר המפרש.
-  Future<String> _withCommentaryStoredData(Link link, String rawText) async {
-    // קטע שמשתרע על כמה שורות — אין שורה אחת שהאופסטים שלה מתאימים לו.
-    if (link.index2End != null && link.index2End != link.index2) {
-      return rawText;
-    }
-    final title = getTitleFromPath(link.path2);
-    final notes = await BookNotesRepository.instance.notesFor(
-      title,
-      categoryId: link.targetCategoryId,
-      source: link.targetSource,
-      fileType: link.targetFileType,
-    );
-    final profile = _screenProfile(commentary: true);
-    final holyNameStyle = profile.replaceHolyNames
-        ? profile.holyNameStyle
-        : null;
-    final names = _substituteDivineNames || holyNameStyle != null
-        ? await DivineNamesRepository.instance.spansFor(
-            title,
-            categoryId: link.targetCategoryId,
-            source: link.targetSource,
-            fileType: link.targetFileType,
-          )
-        : DivineNameSpans.empty;
-    return applyStoredLineData(
-      rawText,
-      link.index2 - 1,
-      names: names,
-      notes: notes,
-      substituteOtherNames: _substituteDivineNames,
-      holyNameStyle: holyNameStyle,
+  /// מחיל את פרופיל הייצוא; מתגי הניקוד, הטעמים ושם הוי"ה שבמסך גוברים עליו.
+  String _applyTextTransforms(String input, {bool commentary = false}) {
+    final profile = _screenProfile(commentary: commentary);
+    return applyTextDisplayProfile(
+      resolveDivineNameMarkers(
+        input,
+        substituteOtherNames: _substituteDivineNames,
+        holyNameStyle: profile.replaceHolyNames ? profile.holyNameStyle : null,
+      ),
+      profile,
     );
   }
-
-  /// מחיל את פרופיל הייצוא; מתגי הניקוד, הטעמים ושם הוי"ה שבמסך גוברים עליו.
-  String _applyTextTransforms(String input, {bool commentary = false}) =>
-      applyTextDisplayProfile(input, _screenProfile(commentary: commentary));
 
   // שם הוי"ה במפרשים נשאר לפי פרופיל המפרשים כל עוד לא שונה במסך.
   TextDisplayProfile _screenProfile({bool commentary = false}) {
@@ -1817,7 +1793,7 @@ class _PrintingScreenState extends State<PrintingScreen> {
     if (cached != null) return cached;
 
     var text = _applyTextTransforms(
-      await _withCommentaryStoredData(link, await link.content),
+      await contentWithBookNotes(link),
       commentary: true,
     );
     if (!keepHtml) {

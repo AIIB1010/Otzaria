@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:otzaria/text_book/utils/inline_notes_utils.dart';
+import 'package:otzaria/divine_names/repository/divine_names_repository.dart';
 import 'package:otzaria/text_book/repository/book_notes_repository.dart';
 import 'package:otzaria/book_protection/models/book_protection.dart';
 import 'package:otzaria/printing/commentary_print_limit.dart';
@@ -11,18 +12,33 @@ import 'package:otzaria/utils/text/text_manipulation.dart';
 /// פותר את תוכן הקישור (טקסט המפרש). ניתן להזרקה בבדיקות.
 typedef CommentaryContentResolver = Future<String> Function(Link link);
 
-/// תוכן הקישור עם הערות השוליים שהוצאו מהשורה למסד, בחזרה במקומן.
+/// תוכן הקישור עם הערות במקומן וסמני שמות הקודש, לפני החלת פרופיל הייצוא.
 Future<String> contentWithBookNotes(Link link) async {
-  final content = await link.content;
-  // קטע שמשתרע על כמה שורות — ההערות ממופות לשורה אחת בלבד.
-  if (link.index2End != null && link.index2End != link.index2) return content;
+  final lines = (link.index2End ?? link.index2) <= link.index2
+      ? [(lineIndex: link.index2 - 1, content: await link.content)]
+      : await link.contentLines;
+  final title = getTitleFromPath(link.path2);
   final notes = await BookNotesRepository.instance.notesFor(
-    getTitleFromPath(link.path2),
+    title,
     categoryId: link.targetCategoryId,
     source: link.targetSource,
     fileType: link.targetFileType,
   );
-  return rehydrateInlineNotes(content, notes.notesAt(link.index2 - 1));
+  final names = await DivineNamesRepository.instance.spansFor(
+    title,
+    categoryId: link.targetCategoryId,
+    source: link.targetSource,
+    fileType: link.targetFileType,
+  );
+  return [
+    for (final line in lines)
+      markStoredLineData(
+        line.content,
+        line.lineIndex,
+        names: names,
+        notes: notes,
+      ),
+  ].join('<br>');
 }
 
 /// בונה בלוקי מפרשים להדפסה; [keepHtml] משמר את התגיות כדי להחיל את פרופיל

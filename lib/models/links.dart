@@ -10,6 +10,9 @@ import 'package:otzaria/models/link_types.dart';
 import 'package:otzaria/utils/text/ref_helper.dart';
 import 'package:otzaria/utils/text/text_manipulation.dart' as utils;
 
+/// שורת יעד גולמית עם האינדקס שלה בספר (0-based), גם בטווח שיש בו חורים.
+typedef LinkContentLine = ({int lineIndex, String content});
+
 /// שורת סיכום של קישורי ספר לפי ספר-יעד וסוג חיבור — תחליף קל-משקל לטעינת
 /// כל הקישורים כשנדרשת רק רשימת המפרשים/היעדים של הספר (פאנל מפרשים ב-PDF).
 class LinkTargetSummary {
@@ -219,7 +222,9 @@ class Link {
       return cached;
     }
 
-    final future = LibraryProviderManager.instance.getLinkContent(this);
+    final future = contentLines.then(
+      (lines) => lines.map((line) => line.content).join('<br>'),
+    );
     _contentCache[key] = future;
     // כשל (למשל מסד שנסגר בזמן סנכרון) הוא חולף — לא ננעל עד הפעלה מחדש.
     void evictFailure() {
@@ -238,6 +243,41 @@ class Link {
       _contentCache.remove(_contentCache.keys.first);
     }
     return future;
+  }
+
+  /// שורות המקור של טווח היעד; תגי br בתוך שורה נשארים חלק ממנה.
+  Future<List<LinkContentLine>> get contentLines {
+    final key = _contentKey;
+    final cached = _lineContentCache.remove(key);
+    if (cached != null) {
+      _lineContentCache[key] = cached;
+      return cached;
+    }
+    final future = LibraryProviderManager.instance.getLinkContentLines(this);
+    _lineContentCache[key] = future;
+    void evict() {
+      if (identical(_lineContentCache[key], future)) {
+        _lineContentCache.remove(key);
+      }
+    }
+
+    future.then((lines) {
+      if (lines.isEmpty || lines.first.content.startsWith('שגיאה')) evict();
+    }, onError: (_) => evict());
+    if (_lineContentCache.length > _maxContentCacheEntries) {
+      _lineContentCache.remove(_lineContentCache.keys.first);
+    }
+    return future;
+  }
+
+  static final _lineContentCache = <String, Future<List<LinkContentLine>>>{};
+
+  /// תוכן היעדים אינו תקף אחרי החלפה או רענון של מסד.
+  static void clearContentCache() {
+    _contentCache.clear();
+    _loadedContent.clear();
+    _lineContentCache.clear();
+    _displayReferenceCache.clear();
   }
 
   /// ה-heRef כפי שהוא מוצג למשתמש, בלי הרמה האחרונה. בספר תלת-רמתי כמו

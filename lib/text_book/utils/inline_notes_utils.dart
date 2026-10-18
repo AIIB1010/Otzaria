@@ -37,6 +37,24 @@ List<Match> _strippedMarkers(String html) => [
     if (_footnoteBodyStartRegExp.matchAsPrefix(html, match.end) == null) match,
 ];
 
+final _supRegExp = RegExp(
+  r'<sup\b[^>]*>.*?</sup>',
+  caseSensitive: false,
+  dotAll: true,
+);
+
+// תג footnote בתוך הסמן שייך לסמן, ולא לגוף הערה שכבר שוחזר.
+Iterable<Match> _footnoteBodies(String html) sync* {
+  final markers = _supRegExp.allMatches(html).iterator;
+  var marker = markers.moveNext() ? markers.current : null;
+  for (final body in _footnoteBodyRegExp.allMatches(html)) {
+    while (marker != null && marker.end <= body.start) {
+      marker = markers.moveNext() ? markers.current : null;
+    }
+    if (marker == null || body.start < marker.start) yield body;
+  }
+}
+
 /// הערות הטבלה של שורה, בסדר הקריאה.
 List<BookNote> _dbNotesAt(BookNotes? dbNotes, int lineIndex) =>
     dbNotes == null || lineIndex < 0 ? const [] : dbNotes.notesAt(lineIndex);
@@ -57,7 +75,7 @@ String addInlineNotePreviewLinks(
 
   final replacements = <({int start, int end, String value})>[];
   var noteIndex = 0;
-  for (final bodyMatch in _footnoteBodyRegExp.allMatches(html)) {
+  for (final bodyMatch in _footnoteBodies(html)) {
     final before = html.substring(0, bodyMatch.start);
     final closeIndex = before.lastIndexOf(_supCloseTag);
     if (closeIndex < 0 ||
@@ -137,7 +155,11 @@ String? inlineNoteFromPreviewUrl(
 /// משאיר את ה-<sup> במקומו כעוגן ויזואלי לאיפה הייתה ההערה.
 String stripInlineNotes(String html) {
   if (!html.contains('footnote')) return html;
-  return html.replaceAll(_footnoteBodyRegExp, '');
+  var result = html;
+  for (final body in _footnoteBodies(html).toList().reversed) {
+    result = result.replaceRange(body.start, body.end, '');
+  }
+  return result;
 }
 
 /// מסיר גם את אות ההפניה וגם את גוף ההערה — לחיפוש ולאינדוקס, שבהם תגי ה-HTML
@@ -153,7 +175,7 @@ String stripInlineNotesForSearch(String html) {
 bool hasInlineNotes(List<String> content, {BookNotes? dbNotes}) {
   if (dbNotes != null && !dbNotes.isEmpty) return true;
   for (final line in content) {
-    if (line.contains('footnote') && _footnoteBodyRegExp.hasMatch(line)) {
+    if (line.contains('footnote') && _footnoteBodies(line).isNotEmpty) {
       return true;
     }
   }
@@ -172,7 +194,7 @@ List<String> notesForLines(
     if (idx < 0) continue;
     if (idx < content.length && content[idx].contains('footnote')) {
       final line = content[idx];
-      for (final iMatch in _footnoteBodyRegExp.allMatches(line)) {
+      for (final iMatch in _footnoteBodies(line)) {
         results.add(_inlineNoteHtml(line, iMatch));
       }
     }
@@ -217,21 +239,34 @@ String rehydrateInlineNotes(
   List<BookNote> notes, {
   String Function(BookNote note)? bodyOf,
 }) {
-  if (notes.isEmpty || _footnoteBodyRegExp.hasMatch(line)) return line;
+  if (notes.isEmpty || _footnoteBodies(line).isNotEmpty) return line;
   final markers = _strippedMarkers(line);
+  final superscripts = _supRegExp.allMatches(line).toList(growable: false);
   final inserts = <({int at, int order, String html})>[];
   var anchoredSeen = 0;
   for (var order = 0; order < notes.length; order++) {
     final note = notes[order];
-    final int at;
+    int at;
     if (note.charPos >= 0) {
-      at = _rawInsertionPoint(line, note.charPos);
+      final raw = _rawInsertionPoint(line, note.charPos, superscripts);
+      final marker = note.marker != null && anchoredSeen < markers.length
+          ? markers[anchoredSeen]
+          : null;
+      at = marker != null && raw >= marker.start && raw < marker.end
+          ? marker.end
+          : raw;
     } else if (note.marker != null && anchoredSeen < markers.length) {
       at = markers[anchoredSeen].end;
     } else {
       at = line.length;
     }
     if (note.marker != null) anchoredSeen++;
+    if (order > 0 &&
+        note.charPos >= 0 &&
+        notes[order - 1].charPos == note.charPos &&
+        inserts.last.at > at) {
+      at = inserts.last.at;
+    }
     inserts.add((
       at: at,
       order: order,
@@ -255,7 +290,12 @@ String rehydrateInlineNotes(
 
 /// האינדקס הגולמי אחרי התו הגלוי ה-[visible] (ישות = תו אחד, כמו
 /// `line.charCount`). תגי סגירה צמודים שייכים לתו שלפניהם, למשל `</sup>`.
-int _rawInsertionPoint(String html, int visible) {
+final _inlineCloseTag = RegExp(
+  r'</(?:b|i|em|strong|u|s|strike|span|sup|sub|small|big|font|del|ins|a|abbr|acronym|cite|code|dfn|kbd|q|samp|tt|var|mark|bdi|bdo|ruby|rt|rp)\s*>',
+  caseSensitive: false,
+);
+
+int _rawInsertionPoint(String html, int visible, List<Match> superscripts) {
   var seen = 0;
   var i = 0;
   final len = html.length;
@@ -276,7 +316,14 @@ int _rawInsertionPoint(String html, int visible) {
     seen++;
   }
   if (seen < visible) return len;
-  while (i < len && html.startsWith('</', i)) {
+  for (final sup in superscripts) {
+    if (sup.start >= i) break;
+    if (i < sup.end) {
+      i = sup.end;
+      break;
+    }
+  }
+  while (i < len && _inlineCloseTag.matchAsPrefix(html, i) != null) {
     final close = html.indexOf('>', i);
     if (close < 0) break;
     i = close + 1;
@@ -305,6 +352,18 @@ String bookNoteBodyWithDivineNames(
   return spans.isEmpty ? note.body : wrapDivineNameSpans(note.body, spans);
 }
 
+/// השורה והערותיה עם סמני שמות הקודש, לפני החלת פרופיל תצוגה או ייצוא.
+String markStoredLineData(
+  String line,
+  int lineIndex, {
+  required DivineNameSpans names,
+  required BookNotes notes,
+}) => rehydrateInlineNotes(
+  injectDivineNameMarkers(line, names, lineIndex),
+  notes.notesAt(lineIndex),
+  bodyOf: (note) => bookNoteBodyWithDivineNames(notes, lineIndex, note),
+);
+
 /// שורה [lineIndex] השמורה עם שמות הקודש של השורה ושל גופי ההערות, וההערות
 /// במקומן — למסלולי ההדפסה והייצוא. האופסטים נמדדים לפני כל שינוי גלוי.
 String applyStoredLineData(
@@ -319,10 +378,11 @@ String applyStoredLineData(
   if (!substituteOtherNames && holyNameStyle == null) {
     return rehydrateInlineNotes(line, lineNotes);
   }
-  final marked = rehydrateInlineNotes(
-    injectDivineNameMarkers(line, names, lineIndex),
-    lineNotes,
-    bodyOf: (note) => bookNoteBodyWithDivineNames(notes, lineIndex, note),
+  final marked = markStoredLineData(
+    line,
+    lineIndex,
+    names: names,
+    notes: notes,
   );
   if (identical(marked, line)) return line;
   return resolveDivineNameMarkers(

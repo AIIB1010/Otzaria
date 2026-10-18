@@ -475,7 +475,41 @@ class LibraryProviderManager {
   }
 
   /// Gets the content of a specific link from the appropriate provider
-  Future<String> getLinkContent(Link link) async {
+  Future<String> getLinkContent(Link link) => _getLinkContent(
+    link,
+    (provider) => provider.getLinkContent(link),
+    (content) => content.isNotEmpty && !content.startsWith('שגיאה'),
+    'שגיאה: לא נמצא תוכן',
+  );
+
+  /// שומר גבולות שורות מקור עבור אופסטי שמות הקודש וההערות.
+  Future<List<LinkContentLine>> getLinkContentLines(Link link) =>
+      _getLinkContent(
+        link,
+        (provider) async => provider is LinkLinesProvider
+            ? await (provider as LinkLinesProvider).getLinkContentLines(link)
+            : await Future.wait([
+                for (
+                  var i = link.index2;
+                  i <= (link.index2End ?? link.index2);
+                  i++
+                )
+                  provider
+                      .getLinkContent(link.withTargetRange(i, i))
+                      .then((content) => (lineIndex: i - 1, content: content)),
+              ]),
+        (lines) =>
+            lines.isNotEmpty &&
+            lines.every((line) => !line.content.startsWith('שגיאה')),
+        [(lineIndex: link.index2 - 1, content: 'שגיאה: לא נמצא תוכן')],
+      );
+
+  Future<T> _getLinkContent<T>(
+    Link link,
+    Future<T> Function(LibraryProvider) load,
+    bool Function(T) valid,
+    T missing,
+  ) async {
     final targetName = link.path2.split('/').last;
     final targetExtension = p.extension(targetName).toLowerCase();
     final targetTitle =
@@ -488,8 +522,8 @@ class LibraryProviderManager {
 
     if (provider != null) {
       try {
-        final content = await provider.getLinkContent(link);
-        if (content.isNotEmpty && !content.startsWith('שגיאה')) {
+        final content = await load(provider);
+        if (valid(content)) {
           return content;
         }
       } catch (e) {
@@ -502,8 +536,8 @@ class LibraryProviderManager {
     // Fallback: try each provider
     for (final p in _providers) {
       try {
-        final content = await p.getLinkContent(link);
-        if (content.isNotEmpty && !content.startsWith('שגיאה')) {
+        final content = await load(p);
+        if (valid(content)) {
           return content;
         }
       } catch (_) {
@@ -511,7 +545,7 @@ class LibraryProviderManager {
       }
     }
 
-    return 'שגיאה: לא נמצא תוכן';
+    return missing;
   }
 
   /// Builds a unified library catalog from all providers.

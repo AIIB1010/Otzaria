@@ -2,6 +2,9 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 
+import 'package:otzaria/models/links.dart';
+import 'package:otzaria/text_book/repository/book_notes_repository.dart';
+import 'package:otzaria/divine_names/repository/divine_names_repository.dart';
 import 'package:flutter/foundation.dart'
     show ValueNotifier, debugPrint, visibleForTesting;
 import 'package:otzaria/attached_libraries/models/attached_library.dart';
@@ -326,6 +329,7 @@ class AttachedLibrariesRepository {
       await _registry.syncEngineSources();
     }
     await swap.discardBackup(current.path);
+    _clearStoredLineCaches();
     // [accept] checked the key and library_id, so a moved manifest URL is
     // re-pinned instead of being flagged as a changed source.
     final updated = _applyProbe(
@@ -459,8 +463,15 @@ class AttachedLibrariesRepository {
     final contentChanged = _contentChangedSlugs(before, resolved);
     await _store.saveLibraries(resolved);
     _registry.update(resolved);
+    _clearStoredLineCaches();
     _changes.add(contentChanged);
     return true;
+  }
+
+  static void _clearStoredLineCaches() {
+    Link.clearContentCache();
+    BookNotesRepository.instance.clear();
+    DivineNamesRepository.instance.clear();
   }
 
   static Set<String> _contentChangedSlugs(
