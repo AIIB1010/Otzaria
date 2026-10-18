@@ -2,10 +2,12 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/rendering.dart' show Rect;
 import 'package:otzaria/printing/windows_print_data.dart';
 import 'package:otzaria/printing/windows_print_native.dart';
 import 'package:otzaria/printing/windows_printer_ports.dart';
+import 'package:otzaria/utils/file/file_picker_dialog_options.dart';
 import 'package:otzaria/utils/file/save_file_with_extension.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdfrx/pdfrx.dart';
@@ -76,27 +78,48 @@ class WindowsPrintingPlatform extends PrintingPlatform {
       port: port,
     );
     if (extension != null) {
-      outputPath = await saveFileWithExtension(
+      // Not saveFileWithExtension: in safer mode the system dialog that chose
+      // this printer was already behind the password.
+      final picked = await FilePicker.saveFile(
         fileName: printOutputFileName(name, extension),
-        extension: extension,
         bytes: Uint8List(0),
+        windowsOptions: kModalWindowsOptions,
       );
-      if (outputPath == null) return false;
+      if (picked == null) return false;
+      outputPath = await ensureFileExtension(picked.toFilePath(), extension);
     }
 
-    final caps = await Isolate.run(() => queryPrinterDeviceCaps(target));
-    if (caps == null) return false;
-    final pdf = await onLayout(pageFormatFromDeviceCaps(caps));
+    var printed = false;
+    try {
+      final caps = await Isolate.run(() => queryPrinterDeviceCaps(target));
+      if (caps == null) return false;
+      final pdf = await onLayout(pageFormatFromDeviceCaps(caps));
 
-    await pdfrxFlutterInitialize();
-    return PdfrxEntryFunctions.instance.compute(runWindowsPrintJob, (
-      pdfiumModulePath: Pdfrx.pdfiumModulePath,
-      target: target,
-      name: name,
-      outputPath: outputPath,
-      pdf: pdf,
-      ranges: ranges,
-    ));
+      await pdfrxFlutterInitialize();
+      return printed = await PdfrxEntryFunctions.instance.compute(
+        runWindowsPrintJob,
+        (
+          pdfiumModulePath: Pdfrx.pdfiumModulePath,
+          target: target,
+          name: name,
+          outputPath: outputPath,
+          pdf: pdf,
+          ranges: ranges,
+        ),
+      );
+    } finally {
+      if (!printed && outputPath != null) await _deleteIfEmpty(outputPath);
+    }
+  }
+
+  /// The file picker creates the file empty; a failed job leaves it so.
+  static Future<void> _deleteIfEmpty(String path) async {
+    try {
+      final file = File(path);
+      if (await file.length() == 0) await file.delete();
+    } on FileSystemException {
+      // Best effort: the file may be gone or locked.
+    }
   }
 
   @override
