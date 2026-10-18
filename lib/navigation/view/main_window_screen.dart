@@ -1681,7 +1681,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
         return const MultiWindowService().openEmptyWindow();
       case ReindexLibraryAction():
         // רענון הקטלוג מהדיסק; ה-listener על completedRefreshRequestIds מריץ
-        // StartIndexing + ReconcileIndex כשהרענון שקלט את הבקשה מסתיים.
+        // ריצת אינדוקס עם בדיקה מלאה כשהרענון שקלט את הבקשה מסתיים.
         // מתעלם מהגדרת עדכון האינדקס האוטומטי — זו בקשה מפורשת של המשתמש.
         final requestId = _nextIndexRequestId++;
         _pendingIndexRequests[requestId] = (
@@ -2983,9 +2983,12 @@ class MainWindowScreenState extends State<MainWindowScreen>
                 unawaited(
                   DataRepository.instance.library.then((library) {
                     if (!mounted || !context.mounted) return;
-                    context.read<IndexingBloc>().add(
-                      ReconcileHiddenIndex(library),
-                    );
+                    // חיתוך החיפוש בספר משווה בסדר המיפוי, גם בחלון משני.
+                    IndexingRepository.invalidateBookOrder();
+                    // העץ המלא: ספר מוסתר שעדיין באינדקס ימוין במקומו.
+                    context.read<IndexingBloc>()
+                      ..add(SyncBookOrder(library))
+                      ..add(ReconcileHiddenIndex(library));
                     _checkAndStartIndexing(context, library);
                     // ניקוי יתומים חייב לקבל את העץ המלא, כולל מהדורות מחוץ לעץ.
                     context.read<IndexingBloc>().add(

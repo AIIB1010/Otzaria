@@ -1,4 +1,5 @@
 import 'package:otzaria/indexing/bloc/indexing_event.dart';
+import 'package:otzaria/indexing/models/index_check_scope.dart';
 import 'package:otzaria/indexing/models/index_update_mode.dart';
 import 'package:otzaria/library/models/library.dart';
 import 'package:otzaria/models/books.dart';
@@ -34,11 +35,11 @@ resolveCompletedIndexRequests({
   );
 }
 
-/// בונה את רשימת אירועי האינדוקס לרענון ספרייה בודד, בסדר ההזרמה.
+/// בונה את אירועי האינדוקס לרענון ספרייה בודד: לכל היותר ריצת אינדוקס אחת.
 ///
 /// [newBooks] / [changedBooks] - הספרים שהרענון דיווח עליהם.
-/// [indexWholeLibrary] - הרענון בא אחרי עדכון DB או בקשת reindex, ואז
-/// `StartIndexing` עובר על כל הספרייה במקום על [newBooks] בלבד.
+/// [indexWholeLibrary] - הרענון בא אחרי עדכון DB או בקשת reindex, ואז הריצה
+/// עוברת על כל הספרייה במקום על [newBooks] בלבד.
 /// [reconcile] - נדרשת השוואת טביעות-אצבע מול כל הספרייה (הורדה מלאה, או
 /// שינוי בטבלאות שאינן ניתנות למיפוי לספרים מסוימים).
 /// [indexUpdateMode] - הגדרת המשתמש; כשהיא כבויה לא רצה עבודת אינדוקס, ובמצב
@@ -63,42 +64,35 @@ List<IndexingEvent> buildRefreshIndexingPlan({
     newBooks = newBooks.where(indexUpdateMode.admits).toList();
     changedBooks = changedBooks.where(indexUpdateMode.admits).toList();
   }
-  final events = <IndexingEvent>[];
-  if (indexWholeLibrary) {
-    // מדלג על ספרים שכבר באינדקס, ולכן מכסה את newBooks בלי מסלול נפרד.
-    events.add(StartIndexing(library));
-  } else if (newBooks.isNotEmpty) {
-    events.add(IndexSpecificBooks(newBooks, library));
+  // קובץ מסד מצורף מדווח כשינוי של כל ספריו; השוואת טביעת האצבע מחליפה רק
+  // את אלה שתוכנם באמת השתנה. ל-PDF אין טביעת אצבע, ולכן הוא מוחלף כמדווח.
+  final checkedBooks = <Book>[];
+  final explicitChanged = <Book>[];
+  for (final book in changedBooks) {
+    (book.source.isAttached && book is! PdfBook
+            ? checkedBooks
+            : explicitChanged)
+        .add(book);
   }
-
-  if (reconcile) {
-    // ReconcileIndex מטפל רק בספרים שיש להם טביעת אצבע; PDF נשאר במסלול
-    // המדויק של הספרים שהשתנו, כי אין לו טביעת אצבע להשוואה.
-    events.add(ReconcileIndex(library));
-    final changedPdfBooks = changedBooks.whereType<PdfBook>().toList();
-    if (changedPdfBooks.isNotEmpty) {
-      events.add(ReindexChangedBooks(changedPdfBooks, library));
-    }
-  } else if (changedBooks.isNotEmpty) {
-    // קובץ מסד מצורף מדווח כשינוי של כל ספריו; ההשוואה לפי טביעת אצבע
-    // מאנדקסת מחדש רק את אלה שתוכנם באמת השתנה.
-    final attachedTextBooks = <Book>[];
-    final otherBooks = <Book>[];
-    for (final book in changedBooks) {
-      (book.source.isAttached && book is! PdfBook
-              ? attachedTextBooks
-              : otherBooks)
-          .add(book);
-    }
-    if (attachedTextBooks.isNotEmpty) {
-      events.add(ReconcileIndex(library, books: attachedTextBooks));
-    }
-    // StartIndexing מדלג על ספרים קיימים — לשונים נדרש מסלול משלהם.
-    if (otherBooks.isNotEmpty) {
-      events.add(ReindexChangedBooks(otherBooks, library));
-    }
+  final check = reconcile
+      ? IndexCheckScope.library
+      : checkedBooks.isEmpty
+      ? IndexCheckScope.none
+      : IndexCheckScope.books(checkedBooks);
+  if (!indexWholeLibrary &&
+      newBooks.isEmpty &&
+      explicitChanged.isEmpty &&
+      check.isNone) {
+    return const [];
   }
-  return events;
+  return [
+    RunIndexing(
+      library,
+      books: indexWholeLibrary ? null : newBooks,
+      changedBooks: explicitChanged,
+      check: check,
+    ),
+  ];
 }
 
 /// מצב העדכון לתוכנית רענון: בקשה מפורשת ([respectSetting] false) רצה גם

@@ -1,12 +1,13 @@
 // Regression test: אחרי עדכון ספרייה שדורש reconcile רצו שני מסלולי אינדוקס
-// חופפים על אותו רענון — ReconcileIndex (כל ספר שטביעת אצבעו השתנתה) ומיד
-// אחריו ReindexChangedBooks על אותם ספרים, כ-12,000 פעולות במקום ~6,000.
+// חופפים על אותו רענון, כ-12,000 פעולות במקום ~6,000. כעת כל רענון מייצר
+// לכל היותר ריצת אינדוקס אחת.
 //
 // הטסט מייבא ומריץ את הקוד האמיתי מ-lib/navigation/utils/refresh_indexing_plan
 // .dart — אותן פונקציות שה-listener ב-main_window_screen.dart קורא להן.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/indexing/bloc/indexing_event.dart';
+import 'package:otzaria/indexing/models/index_check_scope.dart';
 import 'package:otzaria/indexing/models/index_update_mode.dart';
 import 'package:otzaria/library/models/library.dart';
 import 'package:otzaria/models/book_source.dart';
@@ -35,111 +36,120 @@ void main() {
     indexUpdateMode: indexUpdateMode,
   );
 
+  RunIndexing single(List<IndexingEvent> events) {
+    expect(events, hasLength(1));
+    return events.single as RunIndexing;
+  }
+
   group('buildRefreshIndexingPlan', () {
-    test('reconcile — רק StartIndexing ו-ReconcileIndex, בלי מסלול שני', () {
-      final events = plan(indexWholeLibrary: true, reconcile: true);
+    test('reconcile — ריצה אחת על כל הספרייה עם בדיקה מלאה', () {
+      final run = single(plan(indexWholeLibrary: true, reconcile: true));
 
-      expect(events, hasLength(2));
-      expect(events[0], isA<StartIndexing>());
-      expect(events[1], isA<ReconcileIndex>());
-      expect(
-        events.whereType<ReindexChangedBooks>(),
-        isEmpty,
-        reason: 'ReconcileIndex כבר מאנדקס מחדש כל ספר שהשתנה',
-      );
-      expect(
-        events.whereType<IndexSpecificBooks>(),
-        isEmpty,
-        reason: 'StartIndexing כבר מכסה את הספרים החדשים',
-      );
+      expect(run.books, isNull, reason: 'כל הספרייה מכסה את הספרים החדשים');
+      expect(run.check, IndexCheckScope.library);
+      // ספר שדווח כשונה מוחלף ישירות, ואינו נבדק פעם שנייה.
+      expect(run.changedBooks, changedBooks);
     });
 
-    test('reconcile מאנדקס מחדש PDF שדווח כשונה, ולא את ספרי הטקסט', () {
+    test('reconcile מחליף PDF שדווח כשונה — אין לו טביעת אצבע', () {
       final changedPdf = PdfBook(title: 'ספר סרוק', path: '/tmp/scanned.pdf');
-      final events = buildRefreshIndexingPlan(
-        library: library,
-        newBooks: newBooks,
-        changedBooks: [changedBooks.single, changedPdf],
-        indexWholeLibrary: true,
-        reconcile: true,
-        indexUpdateMode: IndexUpdateMode.all,
+      final run = single(
+        buildRefreshIndexingPlan(
+          library: library,
+          newBooks: newBooks,
+          changedBooks: [changedBooks.single, changedPdf],
+          indexWholeLibrary: true,
+          reconcile: true,
+          indexUpdateMode: IndexUpdateMode.all,
+        ),
       );
 
-      expect(events.map((event) => event.runtimeType), [
-        StartIndexing,
-        ReconcileIndex,
-        ReindexChangedBooks,
-      ]);
-      expect((events.last as ReindexChangedBooks).books, [changedPdf]);
+      expect(run.check, IndexCheckScope.library);
+      expect(run.changedBooks, [changedBooks.single, changedPdf]);
     });
 
-    test('ספרי מסד מצורף שהשתנה — השוואת טביעת אצבע רק להם, אחרים כרגיל', () {
+    test('ספרי מסד מצורף שהשתנה — נבדקים, ואחרים מוחלפים, באותה ריצה', () {
       final attached = TextBook(
         id: 1,
         title: 'ספר ממסד',
         source: BookSource.attached('lib-a'),
       );
       final regular = TextBook(title: 'ספר רגיל');
-      final events = buildRefreshIndexingPlan(
-        library: library,
-        newBooks: const [],
-        changedBooks: [attached, regular],
-        indexWholeLibrary: false,
-        reconcile: false,
-        indexUpdateMode: IndexUpdateMode.all,
+      final run = single(
+        buildRefreshIndexingPlan(
+          library: library,
+          newBooks: const [],
+          changedBooks: [attached, regular],
+          indexWholeLibrary: false,
+          reconcile: false,
+          indexUpdateMode: IndexUpdateMode.all,
+        ),
       );
 
-      expect(events.map((event) => event.runtimeType), [
-        ReconcileIndex,
-        ReindexChangedBooks,
-      ]);
-      expect((events[0] as ReconcileIndex).books, [attached]);
-      expect((events[1] as ReindexChangedBooks).books, [regular]);
+      expect(run.books, isEmpty);
+      expect(run.check, IndexCheckScope.books([attached]));
+      expect(run.changedBooks, [regular]);
     });
 
-    test('PDF ממסד מצורף שהשתנה — אינדוקס מחדש מלא, בלי טביעת אצבע', () {
+    test('החלפת מסד גדול מחלקת ספרים לבדיקה בזמן ליניארי', () {
+      final attached = List.generate(200, _ComparisonCountingBook.new);
+      _ComparisonCountingBook.comparisons = 0;
+
+      final run = single(
+        buildRefreshIndexingPlan(
+          library: library,
+          newBooks: const [],
+          changedBooks: attached,
+          indexWholeLibrary: false,
+          reconcile: false,
+          indexUpdateMode: IndexUpdateMode.all,
+        ),
+      );
+
+      expect(
+        _ComparisonCountingBook.comparisons,
+        lessThan(attached.length * 5),
+      );
+      expect(run.check.books, hasLength(attached.length));
+      expect(run.changedBooks, isEmpty);
+    });
+
+    test('PDF ממסד מצורף שהשתנה — מוחלף, בלי טביעת אצבע', () {
       final attachedPdf = PdfBook(
         id: 2,
         title: 'סרוק ממסד',
         path: '/tmp/attached.pdf',
         source: BookSource.attached('lib-a'),
       );
-      final events = buildRefreshIndexingPlan(
-        library: library,
-        newBooks: const [],
-        changedBooks: [attachedPdf],
-        indexWholeLibrary: false,
-        reconcile: false,
-        indexUpdateMode: IndexUpdateMode.all,
+      final run = single(
+        buildRefreshIndexingPlan(
+          library: library,
+          newBooks: const [],
+          changedBooks: [attachedPdf],
+          indexWholeLibrary: false,
+          reconcile: false,
+          indexUpdateMode: IndexUpdateMode.all,
+        ),
       );
 
-      expect(events.map((event) => event.runtimeType), [ReindexChangedBooks]);
-      expect((events.single as ReindexChangedBooks).books, [attachedPdf]);
+      expect(run.check, IndexCheckScope.none);
+      expect(run.changedBooks, [attachedPdf]);
     });
 
-    test('עדכון דלתא בלי reconcile — ReindexChangedBooks כן רץ', () {
-      final events = plan(indexWholeLibrary: true);
+    test('עדכון דלתא בלי reconcile — חדשים ושהשתנו בריצה אחת', () {
+      final run = single(plan(indexWholeLibrary: true));
 
-      expect(events, hasLength(2));
-      expect(events[0], isA<StartIndexing>());
-      expect(
-        events[1],
-        isA<ReindexChangedBooks>(),
-        reason:
-            'StartIndexing מדלג על ספרים קיימים — השונים חייבים מסלול משלהם',
-      );
-      expect(events.whereType<ReconcileIndex>(), isEmpty);
+      expect(run.books, isNull);
+      expect(run.changedBooks, changedBooks);
+      expect(run.check, IndexCheckScope.none);
     });
 
-    test('רענון רגיל (בלי עדכון ספרייה) — ספציפי לספרים שדווחו', () {
-      final events = plan();
+    test('רענון רגיל (בלי עדכון ספרייה) — רק הספרים שדווחו', () {
+      final run = single(plan());
 
-      expect(events, hasLength(2));
-      expect(events[0], isA<IndexSpecificBooks>());
-      expect((events[0] as IndexSpecificBooks).books, same(newBooks));
-      expect(events[1], isA<ReindexChangedBooks>());
-      expect((events[1] as ReindexChangedBooks).books, changedBooks);
-      expect(events.whereType<StartIndexing>(), isEmpty);
+      expect(run.books, same(newBooks));
+      expect(run.changedBooks, changedBooks);
+      expect(run.check, IndexCheckScope.none);
     });
 
     test('אינדוקס אוטומטי כבוי — אין עבודת אינדוקס, רק CheckIndexStatus', () {
@@ -161,15 +171,17 @@ void main() {
       );
     });
 
-    test('אין ספרים חדשים או שונים — StartIndexing בלבד', () {
-      final events = plan(
-        indexWholeLibrary: true,
-        withNew: false,
-        withChanged: false,
+    test('אין ספרים חדשים או שונים — ריצה על כל הספרייה בלבד', () {
+      final run = single(
+        plan(indexWholeLibrary: true, withNew: false, withChanged: false),
       );
 
-      expect(events, hasLength(1));
-      expect(events.single, isA<StartIndexing>());
+      expect(run.books, isNull);
+      expect(run.changedBooks, isEmpty);
+    });
+
+    test('רענון בלי שום שינוי — אין ריצה', () {
+      expect(plan(withNew: false, withChanged: false), isEmpty);
     });
   });
 
@@ -234,10 +246,9 @@ void main() {
           respectSetting: resolved.respectAutoUpdateSetting,
         ),
       );
-      expect(events.map((e) => e.runtimeType), [
-        StartIndexing,
-        ReconcileIndex,
-      ]);
+      final run = single(events);
+      expect(run.books, isNull);
+      expect(run.check, IndexCheckScope.library);
     });
 
     test('כמה בקשות שהתמזגו לרענון אחד — reconcile גובר', () {
@@ -296,15 +307,10 @@ void main() {
         indexUpdateMode: IndexUpdateMode.all,
       );
 
-      expect(planB.map((e) => e.runtimeType), [
-        StartIndexing,
-        ReconcileIndex,
-      ]);
-      expect(
-        planB.whereType<ReindexChangedBooks>(),
-        isEmpty,
-        reason: 'זה היה הבאג: ReindexChangedBooks רץ מעל ה-ReconcileIndex',
-      );
+      // זה היה הבאג: שני מסלולים חופפים על אותם ספרים. כעת ריצה אחת.
+      final run = single(planB);
+      expect(run.books, isNull);
+      expect(run.check, IndexCheckScope.library);
       expect(pending, isEmpty);
     });
   });
@@ -343,8 +349,7 @@ void main() {
         indexUpdateMode: IndexUpdateMode.libraryOnly,
       );
 
-      expect(events, hasLength(1));
-      expect((events.single as IndexSpecificBooks).books, newBooks);
+      expect(single(events).books, newBooks);
     });
 
     test('בקשה מפורשת כשהעדכון כבוי רצה על כל הספרים', () {
@@ -401,4 +406,20 @@ void main() {
       expect(change(IndexUpdateMode.libraryOnly, IndexUpdateMode.off), isEmpty);
     });
   });
+}
+
+class _ComparisonCountingBook extends TextBook {
+  _ComparisonCountingBook(int id)
+    : super(id: id, title: 'ספר $id', source: BookSource.attached('large'));
+
+  static int comparisons = 0;
+
+  @override
+  bool operator ==(Object other) {
+    comparisons++;
+    return identical(this, other);
+  }
+
+  @override
+  int get hashCode => identityHashCode(this);
 }

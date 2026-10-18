@@ -31,7 +31,7 @@ Future<void> main() async {
     engine = await SearchEngine.newInstance(path: temporary.path);
     for (var i = 0; i < lines.length; i++) {
       await engine.addDocument(
-        id: BigInt.from(i + 1),
+        ordinal: i,
         title: 'ספר',
         reference: 'שורה $i',
         topics: book,
@@ -161,8 +161,6 @@ Future<void> main() async {
         title: 'ספר גדול',
         topics: bigBook,
         filePath: 'id:2',
-        catalogueOrder: 2,
-        generationOrder: 0,
         text: List.filled(3000, 'שמע בני ישראל').join('\n'),
         textStorage: TextStorage.inIndex,
       );

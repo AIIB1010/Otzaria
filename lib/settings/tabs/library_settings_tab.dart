@@ -13,6 +13,7 @@ import 'package:otzaria/settings/engine/settings_engine_exports.dart';
 import 'package:otzaria/settings/l10n/settings_text.dart';
 import 'package:otzaria/settings/search/settings_search_models.dart';
 import 'package:otzaria/settings/view/settings_screen.dart';
+import 'package:otzaria/data/repository/data_repository.dart';
 import 'package:otzaria/library/bloc/library_bloc.dart';
 import 'package:otzaria/library/bloc/library_event.dart';
 import 'package:otzaria/library/bloc/library_state.dart';
@@ -702,6 +703,11 @@ class _LibrarySettingsTabState extends State<LibrarySettingsTab> {
             subtitleText = context.settingsText(
               'מסיים ומאחד את קבצי האינדקס',
             );
+          } else if (isActive && indexingState.isScanning) {
+            subtitleText = context.settingsText(
+              'בודק אילו ספרים דורשים עדכון: {processed}/{total}',
+              args: {'processed': processed, 'total': total},
+            );
           } else if (isActive) {
             subtitleText = context.settingsText(
               'התקדמות האינדקס: {processed}/{total}',
@@ -764,7 +770,9 @@ class _LibrarySettingsTabState extends State<LibrarySettingsTab> {
                     if (!await _indexingRepository.clearIndex()) return;
                     if (!mounted) return;
                     setState(() => _requiresManualReindex = false);
-                    indexingBloc.add(StartIndexing(library));
+                    indexingBloc.add(
+                      StartIndexing(await DataRepository.instance.library),
+                    );
                   },
                 )
               else if (indexingState is IndexingComplete)
@@ -788,11 +796,11 @@ class _LibrarySettingsTabState extends State<LibrarySettingsTab> {
               else
                 ActionButton.recommended(
                   text: context.settingsText('עדכן'),
-                  onPressed: () {
-                    final library = context.read<LibraryBloc>().state.library;
-                    if (library != null) {
-                      context.read<IndexingBloc>().add(StartIndexing(library));
-                    }
+                  onPressed: () async {
+                    final indexingBloc = context.read<IndexingBloc>();
+                    // העץ המלא: העץ של LibraryBloc מסונן מהסתרות.
+                    final library = await DataRepository.instance.library;
+                    indexingBloc.add(StartIndexing(library));
                   },
                 ),
             ],

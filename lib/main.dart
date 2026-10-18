@@ -56,6 +56,7 @@ import 'package:otzaria/tabs/tabs_repository.dart';
 import 'package:otzaria/workspaces/bloc/workspace_bloc.dart';
 import 'package:otzaria/workspaces/bloc/workspace_event.dart';
 import 'package:otzaria/workspaces/workspace_repository.dart';
+import 'package:otzaria/data/data_providers/tantivy_data_provider.dart';
 import 'package:otzaria/data/repository/data_repository.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:otzaria/app_bloc_observer.dart';
@@ -927,6 +928,23 @@ Future<void> _initializeRestartableRuntime() async {
   unawaited(_runDeferredAttachedLibraries());
   unawaited(_runDeferredLibraryChangesNotes());
   unawaited(_runDeferredCapabilitiesWrite());
+  unawaited(_runDeferredBookOrderWarmUp());
+}
+
+/// בונה את טבלאות סדר הקטלוג במנוע, כדי שהחיפוש הממוין הראשון לא ישלם עליהן.
+Future<void> _runDeferredBookOrderWarmUp() async {
+  try {
+    await _mainWindowRevealedCompleter.future.timeout(
+      const Duration(seconds: 20),
+    );
+  } on TimeoutException {
+    // ממשיכים בכל זאת — בלי חימום החיפוש הראשון בונה את הטבלאות בעצמו.
+  }
+  try {
+    await (await TantivyDataProvider.instance.engine).warmBookOrder();
+  } catch (error, stackTrace) {
+    _logNonFatalInitializationError('Book order warm-up', error, stackTrace);
+  }
 }
 
 /// כשקונטיינמנט ה-Job Object לא הוקם, תהליכי msedgewebview2.exe שורדים את

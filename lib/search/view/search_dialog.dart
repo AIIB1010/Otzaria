@@ -34,6 +34,7 @@ import 'package:otzaria/plugins/services/plugin_page_launcher.dart';
 import 'package:otzaria/plugins/services/plugin_search_dialog_registry.dart';
 import 'package:otzaria/plugins/services/plugin_search_selection_preferences.dart';
 import 'package:otzaria/search/utils/category_query_parser.dart';
+import 'package:otzaria/data/repository/data_repository.dart';
 import 'package:otzaria/library/bloc/library_bloc.dart';
 import 'package:otzaria/search/view/enhanced_search_field.dart';
 import 'package:otzaria/search/view/advanced_search_controls.dart';
@@ -406,11 +407,11 @@ class _SearchDialogState extends State<SearchDialog> {
                 child: ActionButton.recommended(
                   text: context.settingsText('בנה אינדקס'),
                   icon: FluentIcons.play_24_regular,
-                  onPressed: () {
-                    final library = context.read<LibraryBloc>().state.library;
-                    if (library != null) {
-                      context.read<IndexingBloc>().add(StartIndexing(library));
-                    }
+                  onPressed: () async {
+                    final indexingBloc = context.read<IndexingBloc>();
+                    // העץ המלא: העץ של LibraryBloc מסונן מהסתרות.
+                    final library = await DataRepository.instance.library;
+                    indexingBloc.add(StartIndexing(library));
                   },
                 ),
               ),

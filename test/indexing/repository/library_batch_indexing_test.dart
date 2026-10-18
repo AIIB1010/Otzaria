@@ -10,6 +10,7 @@ import 'package:otzaria/data/data_providers/tantivy_data_provider.dart';
 import 'package:otzaria/indexing/models/index_commit_policy.dart';
 import 'package:otzaria/indexing/models/indexing_run_result.dart';
 import 'package:otzaria/indexing/repository/indexing_repository.dart';
+import 'package:otzaria/indexing/utils/pending_reindex_store.dart';
 import 'package:otzaria/library/models/library.dart';
 import 'package:otzaria/models/book_source.dart';
 import 'package:otzaria/models/books.dart';
@@ -256,6 +257,34 @@ void main() {
       },
     );
 
+    test(
+      'ספר שהשתנה באצווה: מסמכיו הישנים נמחקים לפני האצווה, באותו commit',
+      () async {
+        final books = officialBooks(3);
+        provider.indexedFilePaths.addAll(['id:1', 'id:2', 'id:3']);
+        engine.committedFilePaths.addAll(['id:1', 'id:2', 'id:3']);
+        List<String>? removedBeforeBatch;
+        engine.duringBatch = (_, inputs) {
+          removedBeforeBatch = [...engine.removedFilePaths];
+          return inputs.length;
+        };
+
+        final result = await repository.runIndexing(
+          libraryOf(books),
+          changedBooks: [books[1]],
+          onProgress: (_, _) {},
+        );
+
+        expect(result.completed, isTrue);
+        expect(engine.batches, [
+          ['id:2'],
+        ]);
+        expect(removedBeforeBatch, ['id:2']);
+        expect(engine.commitCount, 1);
+        expect(provider.indexedFilePaths, {'id:1', 'id:2', 'id:3'});
+      },
+    );
+
     test('ספר אישי משורות המסד נשלח באותה אצווה מ-user_books.db', () async {
       await LibraryLineSource.configureUserBooks('/db/user_books.db');
       final official = TextBook(id: 1, title: 'רשמי', categoryId: 1);
@@ -372,6 +401,57 @@ void main() {
       expect(engine.removedFilePaths, isEmpty);
     });
 
+    test(
+      'ביטול באמצע אצווה עם ספר שהשתנה — נשאר בסימון ונכתב בריצה הבאה',
+      () async {
+        final indexDir = await Directory.systemTemp.createTemp('batch_replace');
+        addTearDown(() async {
+          PendingReindexStore.resetMemoryForTesting();
+          await indexDir.delete(recursive: true);
+        });
+        PendingReindexStore.resetMemoryForTesting();
+        provider.activeIndexPath = indexDir.path;
+        final books = officialBooks(3);
+        provider.indexedFilePaths.add('id:2');
+        engine.committedFilePaths.add('id:2');
+        engine.duringBatch = (token, inputs) {
+          repository.cancelIndexing();
+          return 1;
+        };
+
+        final cancelled = await repository.runIndexing(
+          libraryOf(books),
+          books: [books[0], books[2]],
+          changedBooks: [books[1]],
+          onProgress: (_, _) {},
+        );
+        expect(cancelled.completed, isFalse);
+        // המסמכים הישנים נמחקו לפני האצווה, והספר לא נכתב בה.
+        expect(engine.removedFilePaths, contains('id:2'));
+        expect(provider.indexedFilePaths, isNot(contains('id:2')));
+        expect(
+          await PendingReindexStore.forIndex(indexDir.path)!.load(),
+          {'id:2'},
+        );
+
+        engine.duringBatch = null;
+        final resumed = await repository.runIndexing(
+          libraryOf(books),
+          books: [books[2]],
+          onProgress: (_, _) {},
+        );
+        expect(resumed.completed, isTrue);
+        expect(
+          provider.indexedFilePaths,
+          containsAll(['id:1', 'id:2', 'id:3']),
+        );
+        expect(
+          await PendingReindexStore.forIndex(indexDir.path)!.load(),
+          isEmpty,
+        );
+      },
+    );
+
     test('השהיה באמצע אצווה: שאר הספרים נשלחים באצווה הבאה', () async {
       final books = officialBooks(4);
       engine.duringBatch = (token, inputs) {
@@ -434,7 +514,11 @@ void main() {
         engine.batchDeleteError = StateError('batch cleanup failed');
 
         Future<IndexingRunResult> run() => specificBooks
-            ? repository.indexBooks(books, library, onProgress: (_, _) {})
+            ? repository.runIndexing(
+                library,
+                books: books,
+                onProgress: (_, _) {},
+              )
             : repository.indexAllBooks(library, onProgress: (_, _) {});
 
         final result = await run();
@@ -507,9 +591,9 @@ void main() {
     test('indexBooks משתמש באותה אצווה', () async {
       final books = officialBooks(2);
 
-      final result = await repository.indexBooks(
-        books,
+      final result = await repository.runIndexing(
         libraryOf(books),
+        books: books,
         onProgress: (_, _) {},
       );
 
@@ -633,9 +717,6 @@ class _Provider implements TantivyDataProvider {
   bool get requiresManualReindex => false;
 
   @override
-  bool ensureCatalogueOrderStamp() => true;
-
-  @override
   Future<SearchEngine> get engine async => _engine;
 
   @override
@@ -672,6 +753,10 @@ class _BatchEngine implements SearchEngine {
 
   @override
   Future<void> openIndexWriter() async => openWriterCalls++;
+
+  @override
+  Future<BigInt> setBookOrder({required List<BookOrderEntry> entries}) async =>
+      BigInt.one;
 
   @override
   Future<List<LibraryBookResult>> addLibraryBooks({
@@ -713,6 +798,9 @@ class _BatchEngine implements SearchEngine {
       textStorage: book.textStorage,
       contentHash: BigInt.zero,
       textHash: BigInt.zero,
+      bookNumber: 1,
+      metadataHash: BigInt.zero,
+      sourceHash: book.sourceHash ?? BigInt.zero,
     );
   }
 
@@ -721,9 +809,8 @@ class _BatchEngine implements SearchEngine {
     required String title,
     required String topics,
     required String filePath,
-    required int catalogueOrder,
-    required int generationOrder,
     required List<int> text,
+    BigInt? sourceHash,
     List<String>? extraFacets,
     required TextStorage textStorage,
     Uint32List? storedLines,

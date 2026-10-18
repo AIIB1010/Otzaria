@@ -311,7 +311,6 @@ packages:
           'tool/release/fetch_prebuilt_library_index.sh',
           indexDirectory,
           database.path,
-          talmud.path,
           lock.path,
         ],
         environment: {
@@ -370,16 +369,15 @@ packages:
       isFalse,
     );
 
-    // כרכי תלמוד אחרים: catalogueOrder של כמעט כל הספרייה היה זז מול
-    // מה שהאפליקציה מחשבת אצל המשתמש, בלי ששום בדיקה הייתה תופסת זאת.
-    final wrongTalmud = await fetch(
+    // סדר הקטלוג אינו במזהי המסמכים — האפליקציה דוחפת את המיפוי בעצמה, ולכן
+    // סט כרכי תלמוד אחר אינו פוסל את האינדקס.
+    final otherTalmud = await fetch(
       databaseSha256: await sha256Of(database.path),
       engineVersion: '0.8.4',
-      indexDirectory: p.join(temp.path, 'wrong-talmud', 'index'),
+      indexDirectory: p.join(temp.path, 'other-talmud', 'index'),
       volumesDigest: 'e' * 64,
     );
-    expect(wrongTalmud.exitCode, isNot(0));
-    expect(wrongTalmud.stderr, contains('catalogue order'));
+    expect(otherTalmud.exitCode, 0, reason: '${otherTalmud.stderr}');
   });
 
   test('ה-workflow שומר את ה-SHA שנבחר ותומך בתיקון חירום', () {

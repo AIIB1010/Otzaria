@@ -188,8 +188,6 @@ void main() {
             title: 'ספר הערות',
             topics: '/test',
             filePath: 'id:305',
-            catalogueOrder: 0,
-            generationOrder: 0,
             textStorage: TextStorage.libraryDb,
           ),
         ],

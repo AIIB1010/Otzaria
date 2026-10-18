@@ -1,14 +1,18 @@
+import 'dart:math';
 import 'package:flutter/foundation.dart' show ValueNotifier;
+import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/attached_libraries/models/attached_library.dart';
 import 'package:otzaria/data/data_providers/tantivy_data_provider.dart';
-import 'package:otzaria/indexing/models/catalogue_order_resolver.dart';
+import 'package:otzaria/data/repository/data_repository.dart';
 import 'package:otzaria/indexing/repository/indexing_repository.dart';
 import 'package:otzaria/search/utils/search_catalogue_order_helper.dart';
 import 'package:otzaria/library/models/library.dart';
 import 'package:otzaria/models/book_source.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria_search_engine/otzaria_search_engine.dart';
+
+import '../../test_helpers/memory_cache_provider.dart';
 
 const _slug = 'lib-a';
 final _attached = BookSource.attached(_slug);
@@ -62,66 +66,141 @@ void main() {
     });
   });
 
-  group('סדר הקטלוג עם מסד מצורף', () {
-    test('צירוף מסד — גם ממוזג לקטגוריה רשמית — אינו מזיז ספרים קיימים', () {
-      final before = _library();
-      final orderBefore = IndexingRepository.buildCatalogueOrderResolver(
-        before,
-      );
-      final keysBefore = before
-          .getIndexableBooks()
-          .map(IndexingRepository.catalogueOrderKey)
-          .toList();
+  group('מיפוי הסדר עם מסד מצורף', () {
+    Future<Map<String, int>> orderOf(Library library) async => {
+      for (final entry in await IndexingRepository.buildBookOrder(library))
+        entry.filePath: entry.catalogueOrder,
+    };
 
-      final after = _library(withAttached: true);
-      final orderAfter = IndexingRepository.buildCatalogueOrderResolver(after);
+    test(
+      'צירוף מסד — גם ממוזג לקטגוריה רשמית — אינו מזיז ספרים קיימים',
+      () async {
+        final before = await orderOf(_library());
+        final after = await orderOf(_library(withAttached: true));
 
-      for (final key in keysBefore) {
+        for (final MapEntry(:key, :value) in before.entries) {
+          expect(after[key], value, reason: key);
+        }
+        final officialMax = [after['id:1']!, after['id:2']!].reduce(max);
+        expect(after['db:$_slug:1'], greaterThan(officialMax));
+        expect(after['db:$_slug:2'], greaterThan(officialMax));
+        // ספרים אישיים אחרי הספרייה והמסדים המצורפים.
+        expect(after['uid:1'], greaterThan(after['db:$_slug:2']!));
+      },
+    );
+
+    test(
+      'המיפוי כולל ספרים אישיים, רשמיים ומצורפים, כל מפתח פעם אחת',
+      () async {
+        final library = _library(withAttached: true);
+        final entries = await IndexingRepository.buildBookOrder(library);
+        final keys = entries.map((entry) => entry.filePath).toList();
+
+        expect(keys.toSet(), hasLength(keys.length));
         expect(
-          orderAfter.orderFor(key),
-          orderBefore.orderFor(key),
-          reason: key,
+          keys.toSet(),
+          library
+              .getIndexableBooks()
+              .map(IndexingRepository.buildIndexedBookFilePath)
+              .toSet(),
         );
-      }
-      // ספרים אישיים בטווח נפרד מעל הספרייה והמסדים המצורפים.
-      final maxExisting = keysBefore
-          .where((key) => !key.startsWith('uid:'))
-          .map(orderAfter.orderFor)
-          .reduce((a, b) => a > b ? a : b);
-      expect(orderAfter.orderFor('db:$_slug:1'), greaterThan(maxExisting));
-      expect(orderAfter.orderFor('db:$_slug:2'), greaterThan(maxExisting));
-    });
+      },
+    );
 
-    test('ניתוק המסד מחזיר את הסדר הקודם בדיוק', () {
-      final order = IndexingRepository.buildCatalogueOrderResolver(_library());
-      final reattached = IndexingRepository.buildCatalogueOrderResolver(
-        _library(withAttached: true),
-      );
-      for (final key in ['id:1', 'id:2', 'uid:1', 'uid:9']) {
-        expect(reattached.orderFor(key), order.orderFor(key), reason: key);
-      }
-    });
-  });
-
-  group('סדר הקטלוג עם ספרים אישיים', () {
-    test('ספרים רשמיים ומצורפים שומרים את מקומם ברצף, ואישיים בטווח שלהם', () {
+    test('הסדר זהה לזה שנצרב במזהים הצפופים הישנים', () async {
       final library = _library(withAttached: true);
-      final positions = SearchCatalogueOrderHelper.buildKeyOrderMap(
+      final category = library.subCategories.first;
+      final extra = [
+        PdfBook(title: 'סרוק', path: r'C:\pdfs\a.pdf', category: category),
+        PdfBook(
+          title: 'סרוק חיצוני',
+          path: r'C:\pdfs\b.pdf',
+          externalLibraryId: 'hb:7',
+          category: category,
+        ),
+        TextBook(
+          title: 'חיצוני',
+          externalLibraryId: 'hb:8',
+          category: category,
+        ),
+        TextBook(
+          title: 'קובץ',
+          filePath: r'C:\books\a.txt',
+          source: BookSource.user,
+          category: category,
+        ),
+      ];
+      category.books.addAll(extra);
+
+      // הסמנטיקה הישנה: מקום ברצף, וספר אישי בטווח משלו אחרי כל הספרייה.
+      final positions = SearchCatalogueOrderHelper.buildKeyOrderMap<String>(
         library,
         keyOf: (book) => IndexingRepository.catalogueOrderKey(book as Book),
       );
-      final order = IndexingRepository.buildCatalogueOrderResolver(library);
+      int oldOrder(Book book) {
+        final key = IndexingRepository.catalogueOrderKey(book);
+        final personalId = key.startsWith('uid:')
+            ? int.tryParse(key.substring(4))
+            : null;
+        return personalId != null ? (1 << 23) + personalId : positions[key]!;
+      }
 
-      for (final MapEntry(:key, :value) in positions.entries) {
+      final mapping = {
+        for (final entry in await IndexingRepository.buildBookOrder(library))
+          entry.filePath: entry,
+      };
+      final indexable = library.getIndexableBooks();
+      expect(mapping, hasLength(indexable.length));
+      for (final book in indexable) {
+        final entry =
+            mapping[IndexingRepository.buildIndexedBookFilePath(book)];
+        expect(entry, isNotNull, reason: book.title);
+        expect(entry!.catalogueOrder, oldOrder(book), reason: book.title);
         expect(
-          order.orderFor(key),
-          key.startsWith('uid:')
-              ? CatalogueOrderResolver.personalOrderBase +
-                    int.parse(key.substring(4))
-              : value,
-          reason: key,
+          entry.generationOrder,
+          IndexingRepository.chronologicalOrderForBook(book),
+          reason: book.title,
         );
       }
+    });
+
+    test('טעינת ספרייה מבטלת את הסדר שהחיפוש בספר משווה לפיו', () async {
+      await Settings.init(cacheProvider: MemoryCacheProvider());
+      final previous = DataRepository.instance.cachedLibraryFutureForTesting;
+      addTearDown(() {
+        if (previous != null) {
+          DataRepository.instance.library = previous;
+        } else {
+          DataRepository.instance.invalidateLibraryCache();
+        }
+        IndexingRepository.invalidateBookOrder();
+      });
+      DataRepository.instance.library = Future.value(_library());
+      IndexingRepository.invalidateBookOrder();
+      expect(
+        await IndexingRepository.bookOrderRanks(),
+        isNot(contains('db:$_slug:1')),
+      );
+
+      DataRepository.instance.library = Future.value(
+        _library(withAttached: true),
+      );
+      IndexingRepository.invalidateBookOrder();
+      final ranks = await IndexingRepository.bookOrderRanks();
+      expect(ranks, contains('db:$_slug:1'));
+      expect(ranks['uid:1'], greaterThan(ranks['db:$_slug:2']!));
+    });
+
+    test('אותו עץ נבנה פעם אחת עד הטעינה הבאה', () async {
+      final library = _library();
+      IndexingRepository.invalidateBookOrder();
+      final first = await IndexingRepository.buildBookOrder(library);
+      expect(await IndexingRepository.buildBookOrder(library), same(first));
+      IndexingRepository.invalidateBookOrder();
+      expect(
+        await IndexingRepository.buildBookOrder(library),
+        isNot(same(first)),
+      );
     });
   });
 

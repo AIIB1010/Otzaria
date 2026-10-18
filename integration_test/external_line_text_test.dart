@@ -11,7 +11,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:otzaria/data/data_providers/book_text_reader.dart';
 import 'package:otzaria/data/sqlite/sqlite3_api.dart' as sqlite3;
-import 'package:otzaria/indexing/models/catalogue_order_resolver.dart';
 import 'package:otzaria/indexing/repository/indexing_repository.dart';
 import 'package:otzaria/migration/database/line_content_encoder.dart';
 import 'package:otzaria/search/library_line_source.dart';
@@ -195,8 +194,6 @@ void main() {
             title: book.title,
             topics: '/it',
             filePath: filePath,
-            catalogueOrder: book.id,
-            generationOrder: 0,
             text: bytes,
             textStorage: storage,
             storedLines: storedLines,
@@ -205,8 +202,6 @@ void main() {
             title: book.title,
             topics: '/it',
             filePath: filePath,
-            catalogueOrder: book.id,
-            generationOrder: 0,
             text: cleaned.text!,
             textStorage: storage,
             storedLines: storedLines,
@@ -259,7 +254,7 @@ void main() {
     test('המילון המורפולוגי נטען ומרחיב את החיפוש המקורב', () async {
       final engine = await newEngine('magic');
       await engine.addDocument(
-        id: BigInt.one,
+        ordinal: 0,
         title: 'a',
         reference: 'a',
         topics: '/it',
@@ -461,11 +456,6 @@ void main() {
 
     final personalKey = IndexingRepository.userBookKey(personalId);
     final officialKey = IndexingRepository.officialBookKey(personalId);
-    final order = CatalogueOrderResolver.fromPositions({
-      officialKey: 0,
-      personalKey: 1,
-    });
-    expect(order.orderFor(officialKey), isNot(order.orderFor(personalKey)));
 
     // מסלול האפליקציה: בייטים מפוענחים מהמסד, וההחלטה של textStorageFor.
     Future<BookContentBytes> readBytes(String dbPath, BookTextKey book) async {
@@ -505,8 +495,6 @@ void main() {
         title: _plainBook.title,
         topics: '/it',
         filePath: officialKey,
-        catalogueOrder: order.orderFor(officialKey),
-        generationOrder: 0,
         text: official.bytes,
         textStorage: mode,
       );
@@ -514,8 +502,6 @@ void main() {
         title: personalTitle,
         topics: '/it',
         filePath: personalKey,
-        catalogueOrder: order.orderFor(personalKey),
-        generationOrder: 0,
         text: personal.bytes,
         textStorage: mode,
       );

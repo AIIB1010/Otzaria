@@ -1201,8 +1201,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: ba390eabcaec8690a4e78aadd57d45120da72d82
-      resolved-ref: ba390eabcaec8690a4e78aadd57d45120da72d82
+      ref: "30e8f1682428d5cc252b3e610f2c9cc06c04b81f"
+      resolved-ref: "30e8f1682428d5cc252b3e610f2c9cc06c04b81f"
       url: "https://github.com/Otzaria/otzaria_search_engine.git"
     source: git
     version: "4.1.0"
