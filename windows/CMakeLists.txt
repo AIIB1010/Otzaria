@@ -57,11 +57,6 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 add_subdirectory("runner")
 
 
-# printing and pdfium_dart both ship pdfium.dll and only one copy survives, so
-# printing must build against pdfium_dart's release (checked by a test).
-# TODO: remove once DavBfr/dart_pdf#1984 (lazy PDFium, PRINTING_PDFIUM_DIR) is released.
-set(PDFIUM_VERSION "7811" CACHE STRING "Version of pdfium used" FORCE)
-
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
 include(flutter/generated_plugins.cmake)

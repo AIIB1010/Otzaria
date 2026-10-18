@@ -2,36 +2,27 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/rendering.dart' show Rect;
-import 'package:otzaria/printing/windows_print_data.dart';
 import 'package:otzaria/printing/windows_print_native.dart';
-import 'package:otzaria/printing/windows_printer_ports.dart';
-import 'package:otzaria/utils/file/file_picker_dialog_options.dart';
-import 'package:otzaria/utils/file/save_file_with_extension.dart';
 import 'package:pdf/pdf.dart';
-import 'package:pdfrx/pdfrx.dart';
 import 'package:printing/printing.dart';
 // ignore: implementation_imports
 import 'package:printing/src/interface.dart';
 // ignore: implementation_imports
 import 'package:printing/src/method_channel.dart';
-import 'package:window_manager/window_manager.dart';
 
-/// Printing on Windows off the platform thread, where the `printing` plugin
-/// renders the whole job and freezes the window. Other calls go to the plugin.
-// TODO: להסיר כש-DavBfr/dart_pdf#1985 (הדפסה ב-thread נפרד) ימוזג וישוחרר.
+/// מונה מדפסות ב-Windows מחוץ ל-thread של הממשק; שאר הקריאות מועברות לחבילה.
+// TODO: להסיר כש-DavBfr/dart_pdf#1985 ישוחרר עם מניית מדפסות ברקע.
 class WindowsPrintingPlatform extends PrintingPlatform {
   WindowsPrintingPlatform(this._plugin);
 
   final PrintingPlatform _plugin;
 
-  /// Routes `Printing` through this class on Windows, unless something other
-  /// than the plugin's default (such as a test fake) is already installed.
+  /// מתקין ב-Windows בלבד, בלי לדרוס מימוש מותאם שכבר הותקן.
   static void install() {
     if (!Platform.isWindows) return;
     final current = PrintingPlatform.instance;
-    if (current is MethodChannelPrinting) {
+    if (current.runtimeType == MethodChannelPrinting) {
       PrintingPlatform.instance = WindowsPrintingPlatform(current);
     }
   }
@@ -47,80 +38,18 @@ class WindowsPrintingPlatform extends PrintingPlatform {
     OutputType outputType,
     bool forceCustomPrintPaper,
     bool windowsModernDialog,
-  ) async {
-    final paper = usePrinterSettings ? null : paperDevMode(format);
-    final WindowsPrintTarget target;
-    List<(int, int)>? ranges;
-    final String? port;
-    if (printer == null) {
-      // Every window of the app shares the platform thread, so its active
-      // window may be another of ours; the engine knows its own.
-      final ownWindow = await windowManager.getId();
-      final owner = ownWindow != 0 ? ownWindow : printDialogFallbackOwner();
-      // On the platform thread the dialog's modal loop would run engine tasks
-      // into Dart while it is still inside the FFI call.
-      final choice = await Isolate.run(
-        () => showWindowsPrintDialog(owner, paper),
-      );
-      if (choice == null) return false;
-      target = choice.target;
-      ranges = choice.ranges;
-      port = choice.port;
-    } else {
-      target = (driver: 'WINSPOOL', device: printer.url, devMode: paper);
-      port = (await Isolate.run(windowsPrinterPorts))[printer.url];
-    }
-
-    // Asked here, since a driver asking from PDFium's worker would block all
-    // PDF rendering behind a dialog that has no owner window.
-    String? outputPath;
-    final extension = fileOutputExtension(
-      printerName: target.device,
-      port: port,
+  ) {
+    return _plugin.layoutPdf(
+      printer,
+      onLayout,
+      name,
+      format,
+      dynamicLayout,
+      usePrinterSettings,
+      outputType,
+      forceCustomPrintPaper,
+      windowsModernDialog,
     );
-    if (extension != null) {
-      // Not saveFileWithExtension: in safer mode the system dialog that chose
-      // this printer was already behind the password.
-      final picked = await FilePicker.saveFile(
-        fileName: printOutputFileName(name, extension),
-        bytes: Uint8List(0),
-        windowsOptions: kModalWindowsOptions,
-      );
-      if (picked == null) return false;
-      outputPath = await ensureFileExtension(picked.toFilePath(), extension);
-    }
-
-    var printed = false;
-    try {
-      final caps = await Isolate.run(() => queryPrinterDeviceCaps(target));
-      if (caps == null) return false;
-      final pdf = await onLayout(pageFormatFromDeviceCaps(caps));
-
-      await pdfrxFlutterInitialize();
-      return printed = await PdfrxEntryFunctions.instance.compute(
-        runWindowsPrintJob,
-        (
-          pdfiumModulePath: Pdfrx.pdfiumModulePath,
-          target: target,
-          name: name,
-          outputPath: outputPath,
-          pdf: pdf,
-          ranges: ranges,
-        ),
-      );
-    } finally {
-      if (!printed && outputPath != null) await _deleteIfEmpty(outputPath);
-    }
-  }
-
-  /// The file picker creates the file empty; a failed job leaves it so.
-  static Future<void> _deleteIfEmpty(String path) async {
-    try {
-      final file = File(path);
-      if (await file.length() == 0) await file.delete();
-    } on FileSystemException {
-      // Best effort: the file may be gone or locked.
-    }
   }
 
   @override
