@@ -3,7 +3,7 @@
 אוצריא מציגה אייקונים של תוספים משתי ספריות:
 
 - **[Otzaria Icons](https://github.com/Otzaria/otzaria_icons)** — אייקונים מקוריים לעולם התוכן היהודי (ספרים, אותיות, צורת הדף, קישורים, חיפוש בספרייה), בסגנון Fluent ובאותה מוסכמת שמות. הרשימה המלאה והמספר המדויק — [למטה](#רשימת-האייקונים-של-אוצריא).
-- **[FluentUI System Icons](https://github.com/microsoft/fluentui-system-icons)** — כ-4,500 אייקוני 24px כלליים.
+- **[FluentUI System Icons](https://github.com/microsoft/fluentui-system-icons)** — תת-קבוצה נבחרת של אייקוני 24px כלליים. [הרשימה הנתמכת](#אייקוני-פלואנט-הנתמכים) למטה.
 
 בכל שדה `icon` / `iconName` של תוסף אפשר לכתוב שם מכל אחת מהן — אין צורך להצהיר על ספרייה.
 
@@ -12,7 +12,8 @@
 1. **כתבו שם, לא קובץ.** בשדה `icon` / `iconName` כותבים שם כמו `book_24_regular`, ואוצריא מציירת את האייקון **בעצמה**, בצד שלה. אין מה לארוז בתוסף ואין API שמחזיר קובץ אייקון.
 2. **השם הוא `<שם>_24_regular` או `<שם>_24_filled`** — קווי או מלא. אין גדלים אחרים.
 3. **שם שקיים בשתי הספריות נפתר לאוצריא.** כדי לבחור ספרייה במפורש: `otzaria:<שם>` או `fluent:<שם>`.
-4. **שם שגוי לא זורק שגיאה** — מוצג אייקון פאזל או שאין אייקון בכלל (לפי המקום). [בדיקת שם](#איך-בודקים-ששם-נפתר) נעשית בקריאה אחת.
+4. **מפלואנט נתמכים רק השמות [שברשימה](#אייקוני-פלואנט-הנתמכים)**, לא כל ספריית פלואנט.
+5. **שם שגוי לא זורק שגיאה** — מוצג אייקון פאזל או שאין אייקון בכלל (לפי המקום). [בדיקת שם](#איך-בודקים-ששם-נפתר) נעשית בקריאה אחת.
 
 ## המלצה: הצהירו על אייקונים דרך אוצריא
 
@@ -69,7 +70,7 @@
 ## כללי השם
 
 - **בשדה `iconName` שבמניפסט** הסיומת חייבת להיות `_24_regular` או `_24_filled` — `_20_`, `_16_` ו-`_24_light` נדחים בוולידציה. בשדות `icon` של ה-API בזמן ריצה אין ולידציה כלל, ושם גם `document_24_light` נפתר בפועל.
-- שם שאינו קיים באף אחת מהספריות אינו זורק שגיאה: בלשונית הכלים ובפקד סרגל עליון יוצג אייקון פאזל ברירת מחדל; בפריט תפריט, בילד של תפריט נפתח ובשורת צבעים פשוט לא יוצג אייקון.
+- שם שאינו קיים באוצריא ואינו ב[רשימת פלואנט הנתמכת](#אייקוני-פלואנט-הנתמכים) אינו זורק שגיאה: בלשונית הכלים ובפקד סרגל עליון יוצג אייקון פאזל ברירת מחדל; בפריט תפריט, בילד של תפריט נפתח ובשורת צבעים פשוט לא יוצג אייקון.
 - אייקוני אוצריא אינם מתהפכים ב-RTL — הם מצוירים מלכתחילה לכיוון הממשק.
 - **`regular` ו-`filled`.** בספריית אוצריא לכל אייקון יש שתי הגרסאות. `regular` הוא ציור קווי ו-`filled` ציור מלא, בעובי כבד יותר. השתמשו ב-`filled` למצב פעיל/נבחר וב-`regular` למצב רגיל, ואל תערבבו בין השניים באותה שורת פקדים בלי סיבה.
 
@@ -299,7 +300,503 @@ icon: 'links_24_regular'            // שרשרת קישורים
 ## איך מוצאים אייקון
 
 - **אוצריא** — הטבלה שלמטה, או הקטלוג האינטראקטיבי [`index.html`](https://github.com/Otzaria/otzaria_icons/blob/main/index.html) (חיפוש לפי שם ותצוגה בגדלים שונים). הוא טוען את הפונט בנתיב יחסי, ולכן צריך לשכפל את הריפו כולו ולפתוח את הקובץ מתוכו — הורדת הקובץ הבודד תציג שמות בלי גליפים.
-- **פלואנט** — [מאגר FluentUI](https://github.com/microsoft/fluentui-system-icons), או חיפוש `FluentIcons.xxx_24_regular` בקוד אוצריא.
+- **פלואנט** — [הרשימה הנתמכת](#אייקוני-פלואנט-הנתמכים) שלמטה. לתצוגת הגליפים: [מאגר FluentUI](https://github.com/microsoft/fluentui-system-icons) — אבל רק שם שמופיע ברשימה ייפתר.
+
+## אייקוני פלואנט הנתמכים
+
+אוצריא אינה כוללת את כל ספריית פלואנט: כל אייקון שזמין לתוספים נשמר בגופן של התוכנה, והספרייה המלאה מוסיפה כמגה-בייט של גופנים לכל התקנה. לכן נתמכת **תת-קבוצה נבחרת**: כל אייקון פלואנט שתוספים בחנות משתמשים בו, האייקונים שאוצריא עצמה מציגה, ואוסף כללי של פעולות, ניווט, מסמכים, מדיה, מצב, לוח שנה והגדרות — ברוב המקרים בשני המשקלים.
+
+- **שם שאינו ברשימה** מתנהג כמו שם שגוי: אייקון פאזל או בלי אייקון, לפי [הטבלה](#איפה-תוסף-מצהיר-על-אייקון). האריזה (`otzaria pack-plugin`) מזהירה על `toolTab.iconName` לא מוכר, ובמצב פיתוח (`--dev-plugins`) גם שם לא מוכר בזמן ריצה נרשם ללוג.
+- **צריכים אייקון שחסר?** פתחו PR שמוסיף את השם ל-[`tool/plugins/fluent_icon_subset.txt`](../../tool/plugins/fluent_icon_subset.txt) ומריץ `dart run tool/plugins/gen_fluent_icon_map.dart`. שם שנוסף זמין מהגרסה הבאה של אוצריא; עד אז העדיפו אייקון קרוב מהרשימה או מאוצריא.
+- שם שנכנס לרשימה אינו יוצא ממנה — תוסף מותקן עלול להסתמך עליו.
+
+<!-- BEGIN GENERATED: fluent-icons — אל תערכו ידנית, ראו "עדכון הרשימה" למטה -->
+
+נתמכים **900 אייקוני פלואנט** (479 שמות בסיס).
+
+| שם בסיס | `_24_regular` | `_24_filled` | `_24_light` |
+|-----|:---:|:---:|:---:|
+| `add` | ✔ | ✔ |  |
+| `add_circle` | ✔ | ✔ |  |
+| `add_square` | ✔ | ✔ |  |
+| `alert` | ✔ | ✔ |  |
+| `alert_badge` | ✔ |  |  |
+| `alert_off` | ✔ | ✔ |  |
+| `alert_on` | ✔ | ✔ |  |
+| `alert_urgent` | ✔ |  |  |
+| `align_center_horizontal` | ✔ |  |  |
+| `animal_rabbit` | ✔ |  |  |
+| `app_title` | ✔ |  |  |
+| `apps` | ✔ | ✔ |  |
+| `apps_add_in` | ✔ | ✔ |  |
+| `apps_list` | ✔ | ✔ |  |
+| `apps_list_detail` | ✔ | ✔ |  |
+| `archive` | ✔ | ✔ |  |
+| `archive_arrow_back` | ✔ | ✔ |  |
+| `arrow_bidirectional_left_right` | ✔ |  |  |
+| `arrow_circle_down` | ✔ | ✔ |  |
+| `arrow_circle_up` | ✔ | ✔ |  |
+| `arrow_clockwise` | ✔ | ✔ |  |
+| `arrow_clockwise_dashes` | ✔ | ✔ |  |
+| `arrow_collapse_all` | ✔ |  |  |
+| `arrow_counterclockwise` | ✔ | ✔ |  |
+| `arrow_down` | ✔ | ✔ |  |
+| `arrow_download` | ✔ | ✔ |  |
+| `arrow_expand` | ✔ | ✔ |  |
+| `arrow_expand_all` | ✔ |  |  |
+| `arrow_export` | ✔ | ✔ |  |
+| `arrow_hook_up_left` | ✔ | ✔ |  |
+| `arrow_maximize` | ✔ | ✔ |  |
+| `arrow_minimize` | ✔ | ✔ |  |
+| `arrow_redo` | ✔ | ✔ |  |
+| `arrow_repeat_all` | ✔ | ✔ |  |
+| `arrow_reset` | ✔ | ✔ |  |
+| `arrow_routing` | ✔ | ✔ |  |
+| `arrow_shuffle` | ✔ | ✔ |  |
+| `arrow_sort` | ✔ | ✔ |  |
+| `arrow_sort_down` | ✔ | ✔ |  |
+| `arrow_sort_up` | ✔ | ✔ |  |
+| `arrow_square_down` | ✔ | ✔ |  |
+| `arrow_step_in` | ✔ | ✔ |  |
+| `arrow_step_out` | ✔ | ✔ |  |
+| `arrow_swap` | ✔ | ✔ |  |
+| `arrow_sync` | ✔ | ✔ |  |
+| `arrow_sync_circle` |  | ✔ |  |
+| `arrow_trending` | ✔ | ✔ |  |
+| `arrow_undo` | ✔ | ✔ |  |
+| `arrow_up` | ✔ | ✔ |  |
+| `arrow_upload` | ✔ | ✔ |  |
+| `attach` | ✔ | ✔ |  |
+| `battery_saver` | ✔ |  |  |
+| `beach` | ✔ | ✔ |  |
+| `beaker` | ✔ | ✔ |  |
+| `board` | ✔ | ✔ |  |
+| `book` | ✔ | ✔ |  |
+| `book_add` | ✔ | ✔ |  |
+| `book_arrow_clockwise` | ✔ | ✔ |  |
+| `book_clock` | ✔ | ✔ |  |
+| `book_compass` | ✔ | ✔ |  |
+| `book_contacts` | ✔ | ✔ |  |
+| `book_database` | ✔ | ✔ |  |
+| `book_exclamation_mark` | ✔ | ✔ |  |
+| `book_globe` | ✔ | ✔ |  |
+| `book_information` | ✔ | ✔ |  |
+| `book_letter` | ✔ | ✔ |  |
+| `book_number` | ✔ | ✔ |  |
+| `book_open` | ✔ | ✔ |  |
+| `book_open_globe` | ✔ | ✔ |  |
+| `book_pulse` | ✔ | ✔ |  |
+| `book_question_mark` | ✔ | ✔ |  |
+| `book_search` | ✔ | ✔ |  |
+| `book_star` | ✔ | ✔ |  |
+| `book_toolbox` | ✔ | ✔ |  |
+| `bookmark` | ✔ | ✔ |  |
+| `bookmark_add` | ✔ | ✔ |  |
+| `bookmark_multiple` | ✔ |  |  |
+| `bookmark_off` | ✔ | ✔ |  |
+| `border_outside` | ✔ |  |  |
+| `box` | ✔ | ✔ |  |
+| `braces` | ✔ | ✔ |  |
+| `brain_circuit` | ✔ |  |  |
+| `branch_fork` | ✔ |  |  |
+| `brightness_high` | ✔ | ✔ |  |
+| `broom` | ✔ |  |  |
+| `bug` | ✔ | ✔ |  |
+| `building` | ✔ | ✔ |  |
+| `building_bank` | ✔ |  |  |
+| `building_shop` | ✔ | ✔ |  |
+| `calculator` | ✔ | ✔ |  |
+| `calendar` | ✔ | ✔ |  |
+| `calendar_add` | ✔ | ✔ |  |
+| `calendar_arrow_down` | ✔ |  |  |
+| `calendar_arrow_right` | ✔ |  |  |
+| `calendar_cancel` | ✔ | ✔ |  |
+| `calendar_checkmark` | ✔ | ✔ |  |
+| `calendar_clock` | ✔ | ✔ |  |
+| `calendar_day` | ✔ | ✔ |  |
+| `calendar_edit` | ✔ | ✔ |  |
+| `calendar_empty` | ✔ | ✔ |  |
+| `calendar_ltr` | ✔ | ✔ |  |
+| `calendar_month` | ✔ | ✔ |  |
+| `calendar_multiple` | ✔ |  |  |
+| `calendar_rtl` | ✔ | ✔ |  |
+| `calendar_star` | ✔ | ✔ |  |
+| `calendar_sync` | ✔ | ✔ |  |
+| `calendar_today` | ✔ | ✔ |  |
+| `calendar_week_numbers` | ✔ | ✔ |  |
+| `calendar_week_start` | ✔ | ✔ |  |
+| `call` | ✔ | ✔ |  |
+| `camera` | ✔ | ✔ |  |
+| `caret_down` | ✔ | ✔ |  |
+| `caret_left` | ✔ | ✔ |  |
+| `caret_right` | ✔ | ✔ |  |
+| `caret_up` | ✔ | ✔ |  |
+| `cart` | ✔ | ✔ |  |
+| `certificate` | ✔ | ✔ |  |
+| `channel` | ✔ |  |  |
+| `chart_multiple` | ✔ | ✔ |  |
+| `chat` | ✔ | ✔ |  |
+| `chat_help` | ✔ | ✔ |  |
+| `chat_multiple` | ✔ | ✔ |  |
+| `check` | ✔ | ✔ |  |
+| `checkbox_checked` | ✔ | ✔ |  |
+| `checkbox_indeterminate` | ✔ |  |  |
+| `checkbox_unchecked` | ✔ |  |  |
+| `checkmark` | ✔ | ✔ |  |
+| `checkmark_circle` | ✔ | ✔ |  |
+| `checkmark_lock` | ✔ |  |  |
+| `checkmark_square` | ✔ | ✔ |  |
+| `checkmark_starburst` | ✔ | ✔ |  |
+| `chevron_down` | ✔ | ✔ |  |
+| `chevron_up` | ✔ | ✔ |  |
+| `chevron_up_down` | ✔ | ✔ |  |
+| `circle` | ✔ | ✔ |  |
+| `circle_highlight` | ✔ |  |  |
+| `clipboard` | ✔ | ✔ |  |
+| `clipboard_paste` | ✔ | ✔ |  |
+| `clipboard_text_ltr` | ✔ | ✔ |  |
+| `clipboard_text_rtl` | ✔ | ✔ |  |
+| `clock` | ✔ | ✔ |  |
+| `clock_alarm` | ✔ | ✔ |  |
+| `clock_dismiss` | ✔ | ✔ |  |
+| `cloud` | ✔ | ✔ |  |
+| `cloud_arrow_down` | ✔ | ✔ |  |
+| `cloud_arrow_up` | ✔ | ✔ |  |
+| `cloud_off` | ✔ | ✔ |  |
+| `code` | ✔ | ✔ |  |
+| `code_block` | ✔ | ✔ |  |
+| `collections` | ✔ | ✔ |  |
+| `collections_add` | ✔ | ✔ |  |
+| `color` | ✔ | ✔ |  |
+| `column_triple` | ✔ |  |  |
+| `comment` | ✔ | ✔ |  |
+| `comment_add` | ✔ | ✔ |  |
+| `comment_edit` | ✔ | ✔ |  |
+| `compass_northwest` | ✔ | ✔ |  |
+| `contact_card` | ✔ | ✔ |  |
+| `copy` | ✔ | ✔ |  |
+| `cube` | ✔ | ✔ |  |
+| `cursor` | ✔ | ✔ |  |
+| `cut` | ✔ | ✔ |  |
+| `dark_theme` | ✔ | ✔ |  |
+| `data_area` | ✔ | ✔ |  |
+| `data_bar_horizontal` | ✔ | ✔ |  |
+| `data_bar_vertical` | ✔ | ✔ |  |
+| `data_histogram` | ✔ | ✔ |  |
+| `data_pie` | ✔ | ✔ |  |
+| `data_trending` | ✔ | ✔ |  |
+| `data_usage` | ✔ |  |  |
+| `database` | ✔ | ✔ |  |
+| `database_search` | ✔ | ✔ |  |
+| `delete` | ✔ | ✔ |  |
+| `delete_dismiss` | ✔ | ✔ |  |
+| `desktop` | ✔ | ✔ |  |
+| `developer_board` | ✔ | ✔ |  |
+| `dismiss` | ✔ | ✔ |  |
+| `dismiss_circle` | ✔ | ✔ |  |
+| `document` | ✔ | ✔ | ✔ |
+| `document_add` | ✔ | ✔ |  |
+| `document_arrow_down` | ✔ | ✔ |  |
+| `document_bullet_list` | ✔ | ✔ |  |
+| `document_checkmark` | ✔ | ✔ |  |
+| `document_copy` | ✔ | ✔ |  |
+| `document_dismiss` | ✔ | ✔ |  |
+| `document_edit` | ✔ | ✔ |  |
+| `document_error` | ✔ | ✔ |  |
+| `document_folder` | ✔ |  |  |
+| `document_footer` | ✔ | ✔ |  |
+| `document_header` | ✔ | ✔ |  |
+| `document_landscape` | ✔ | ✔ |  |
+| `document_lock` | ✔ | ✔ |  |
+| `document_multiple` | ✔ | ✔ |  |
+| `document_one_page` | ✔ | ✔ |  |
+| `document_page_break` | ✔ | ✔ |  |
+| `document_pdf` | ✔ | ✔ |  |
+| `document_question_mark` | ✔ | ✔ |  |
+| `document_ribbon` | ✔ | ✔ |  |
+| `document_search` | ✔ | ✔ |  |
+| `document_sparkle` | ✔ | ✔ | ✔ |
+| `document_sync` | ✔ | ✔ |  |
+| `document_table` | ✔ | ✔ |  |
+| `document_text` | ✔ | ✔ |  |
+| `door_arrow_left` | ✔ | ✔ |  |
+| `drafts` | ✔ |  |  |
+| `drag` | ✔ | ✔ |  |
+| `draw_text` | ✔ | ✔ |  |
+| `earth` | ✔ | ✔ |  |
+| `edit` | ✔ | ✔ |  |
+| `emoji` | ✔ | ✔ |  |
+| `emoji_smile_slight` | ✔ | ✔ |  |
+| `eraser` | ✔ | ✔ |  |
+| `error_circle` | ✔ | ✔ |  |
+| `eye` | ✔ | ✔ |  |
+| `eye_off` | ✔ | ✔ |  |
+| `fast_forward` | ✔ | ✔ |  |
+| `filter` | ✔ | ✔ |  |
+| `filter_dismiss` | ✔ | ✔ |  |
+| `fingerprint` | ✔ | ✔ |  |
+| `fire` | ✔ | ✔ |  |
+| `flag` | ✔ | ✔ |  |
+| `flash` | ✔ | ✔ |  |
+| `folder` | ✔ | ✔ |  |
+| `folder_add` | ✔ | ✔ |  |
+| `folder_arrow_right` | ✔ |  |  |
+| `folder_arrow_up` | ✔ | ✔ |  |
+| `folder_link` | ✔ | ✔ |  |
+| `folder_open` | ✔ | ✔ |  |
+| `folder_sync` | ✔ |  |  |
+| `folder_zip` | ✔ | ✔ |  |
+| `font_decrease` | ✔ |  |  |
+| `font_increase` | ✔ |  |  |
+| `full_screen_maximize` | ✔ | ✔ |  |
+| `full_screen_minimize` | ✔ | ✔ |  |
+| `gift` | ✔ | ✔ |  |
+| `gift_card` | ✔ | ✔ |  |
+| `gift_card_add` | ✔ |  |  |
+| `globe` | ✔ | ✔ |  |
+| `globe_add` | ✔ |  |  |
+| `globe_prohibited` | ✔ |  |  |
+| `globe_search` | ✔ | ✔ |  |
+| `grid` | ✔ | ✔ |  |
+| `group` | ✔ | ✔ |  |
+| `group_list` | ✔ | ✔ |  |
+| `hand_left` | ✔ | ✔ |  |
+| `hand_wave` | ✔ | ✔ |  |
+| `hard_drive` | ✔ | ✔ |  |
+| `headphones` | ✔ | ✔ |  |
+| `heart` | ✔ | ✔ |  |
+| `heart_pulse` | ✔ | ✔ |  |
+| `highlight` | ✔ | ✔ |  |
+| `history` | ✔ | ✔ |  |
+| `history_dismiss` | ✔ |  |  |
+| `home` | ✔ | ✔ |  |
+| `home_more` | ✔ | ✔ |  |
+| `hourglass` | ✔ | ✔ |  |
+| `hourglass_half` | ✔ | ✔ |  |
+| `hourglass_one_quarter` | ✔ | ✔ |  |
+| `image` | ✔ | ✔ |  |
+| `image_add` | ✔ | ✔ |  |
+| `image_edit` | ✔ | ✔ |  |
+| `image_multiple` | ✔ | ✔ |  |
+| `image_off` | ✔ |  |  |
+| `info` | ✔ | ✔ |  |
+| `key` | ✔ | ✔ |  |
+| `keyboard` | ✔ | ✔ |  |
+| `keyboard_shift` | ✔ | ✔ |  |
+| `laptop` | ✔ | ✔ |  |
+| `layer` | ✔ | ✔ |  |
+| `layer_diagonal` | ✔ | ✔ |  |
+| `layout_column_two` | ✔ | ✔ |  |
+| `layout_row_two` | ✔ | ✔ |  |
+| `leaf_one` | ✔ |  |  |
+| `library` | ✔ | ✔ |  |
+| `lightbulb` | ✔ | ✔ |  |
+| `lightbulb_filament` | ✔ | ✔ |  |
+| `line_horizontal_1` | ✔ |  |  |
+| `line_horizontal_3` | ✔ | ✔ |  |
+| `link` | ✔ | ✔ |  |
+| `link_add` | ✔ | ✔ |  |
+| `link_dismiss` | ✔ | ✔ |  |
+| `link_multiple` | ✔ |  |  |
+| `list` | ✔ | ✔ |  |
+| `location` | ✔ | ✔ |  |
+| `lock_closed` | ✔ | ✔ |  |
+| `lock_open` | ✔ | ✔ |  |
+| `mail` | ✔ | ✔ |  |
+| `mail_add` | ✔ | ✔ |  |
+| `mail_inbox_arrow_up` | ✔ |  |  |
+| `mail_read` | ✔ | ✔ |  |
+| `map` | ✔ | ✔ |  |
+| `mention` | ✔ | ✔ |  |
+| `merge` | ✔ |  |  |
+| `mic` | ✔ | ✔ |  |
+| `mic_off` | ✔ | ✔ |  |
+| `money` | ✔ | ✔ |  |
+| `more_horizontal` | ✔ | ✔ |  |
+| `more_vertical` | ✔ | ✔ |  |
+| `music_note_1` | ✔ | ✔ |  |
+| `music_note_2` | ✔ | ✔ |  |
+| `my_location` | ✔ | ✔ |  |
+| `navigation` | ✔ | ✔ |  |
+| `next` | ✔ | ✔ |  |
+| `note` | ✔ | ✔ |  |
+| `note_add` | ✔ | ✔ |  |
+| `note_edit` | ✔ | ✔ |  |
+| `notebook` | ✔ | ✔ |  |
+| `notebook_add` | ✔ | ✔ |  |
+| `notebook_lightning` | ✔ | ✔ |  |
+| `notepad` | ✔ | ✔ |  |
+| `number_row` | ✔ |  |  |
+| `number_symbol` | ✔ |  |  |
+| `open` | ✔ | ✔ |  |
+| `open_folder` | ✔ | ✔ |  |
+| `options` | ✔ | ✔ |  |
+| `page_fit` | ✔ |  |  |
+| `paint_brush` | ✔ | ✔ |  |
+| `paint_bucket` | ✔ | ✔ |  |
+| `panel_left` | ✔ | ✔ |  |
+| `panel_right` | ✔ | ✔ |  |
+| `panel_right_contract` | ✔ |  |  |
+| `pause` | ✔ | ✔ |  |
+| `pause_circle` | ✔ | ✔ |  |
+| `payment` | ✔ |  |  |
+| `pen` | ✔ | ✔ |  |
+| `people` | ✔ | ✔ |  |
+| `people_add` | ✔ | ✔ |  |
+| `people_community` | ✔ | ✔ |  |
+| `people_team` | ✔ | ✔ |  |
+| `person` | ✔ | ✔ |  |
+| `person_accounts` | ✔ |  |  |
+| `person_add` | ✔ | ✔ |  |
+| `person_circle` | ✔ | ✔ |  |
+| `person_edit` | ✔ | ✔ |  |
+| `person_feedback` | ✔ |  |  |
+| `person_question_mark` | ✔ | ✔ |  |
+| `person_star` | ✔ | ✔ |  |
+| `phone` | ✔ | ✔ |  |
+| `phone_laptop` | ✔ | ✔ |  |
+| `pin` | ✔ | ✔ |  |
+| `pin_off` | ✔ | ✔ |  |
+| `play` | ✔ | ✔ |  |
+| `play_circle` | ✔ | ✔ |  |
+| `plug_connected` | ✔ | ✔ |  |
+| `plug_disconnected` | ✔ | ✔ |  |
+| `poll` | ✔ | ✔ |  |
+| `power` | ✔ | ✔ |  |
+| `previous` | ✔ | ✔ |  |
+| `print` | ✔ | ✔ |  |
+| `prohibited` | ✔ | ✔ |  |
+| `pulse` | ✔ | ✔ |  |
+| `puzzle_cube` | ✔ | ✔ |  |
+| `puzzle_piece` | ✔ | ✔ |  |
+| `question` | ✔ | ✔ |  |
+| `question_circle` | ✔ | ✔ |  |
+| `re_order_dots_vertical` | ✔ |  |  |
+| `receipt` | ✔ | ✔ |  |
+| `record` | ✔ | ✔ |  |
+| `record_stop` | ✔ | ✔ |  |
+| `rename` | ✔ | ✔ |  |
+| `rewind` | ✔ | ✔ |  |
+| `ribbon` | ✔ | ✔ |  |
+| `ribbon_star` | ✔ | ✔ |  |
+| `ruler` | ✔ | ✔ |  |
+| `save` | ✔ | ✔ |  |
+| `save_arrow_right` | ✔ |  |  |
+| `save_copy` | ✔ | ✔ |  |
+| `scales` | ✔ | ✔ |  |
+| `scan_text` | ✔ | ✔ |  |
+| `search` | ✔ | ✔ |  |
+| `search_info` | ✔ | ✔ |  |
+| `search_square` | ✔ | ✔ |  |
+| `search_visual` | ✔ | ✔ |  |
+| `select_all_off` | ✔ | ✔ |  |
+| `select_all_on` | ✔ | ✔ |  |
+| `send` | ✔ | ✔ |  |
+| `send_clock` | ✔ | ✔ |  |
+| `server` | ✔ | ✔ |  |
+| `settings` | ✔ | ✔ |  |
+| `settings_chat` | ✔ | ✔ |  |
+| `shapes` | ✔ | ✔ |  |
+| `share` | ✔ | ✔ |  |
+| `share_android` | ✔ | ✔ |  |
+| `shield` | ✔ | ✔ |  |
+| `shield_checkmark` | ✔ | ✔ |  |
+| `shield_error` | ✔ | ✔ |  |
+| `shield_lock` | ✔ | ✔ |  |
+| `shield_task` | ✔ | ✔ |  |
+| `sign_out` | ✔ | ✔ |  |
+| `slide_text` | ✔ | ✔ |  |
+| `sparkle` | ✔ | ✔ |  |
+| `speaker_2` | ✔ | ✔ |  |
+| `speaker_mute` | ✔ | ✔ |  |
+| `speaker_off` | ✔ | ✔ |  |
+| `split_horizontal` | ✔ |  |  |
+| `square` | ✔ | ✔ |  |
+| `stack` | ✔ | ✔ |  |
+| `star` | ✔ | ✔ |  |
+| `star_add` | ✔ | ✔ |  |
+| `star_off` | ✔ | ✔ |  |
+| `status` | ✔ | ✔ |  |
+| `stop` | ✔ | ✔ |  |
+| `storage` | ✔ | ✔ |  |
+| `store_microsoft` | ✔ | ✔ |  |
+| `subtract` | ✔ | ✔ |  |
+| `subtract_circle` | ✔ | ✔ |  |
+| `tab` | ✔ | ✔ |  |
+| `tab_add` | ✔ | ✔ |  |
+| `tab_desktop` | ✔ | ✔ |  |
+| `tab_desktop_multiple` | ✔ |  |  |
+| `table` | ✔ | ✔ |  |
+| `table_add` | ✔ | ✔ |  |
+| `table_edit` | ✔ | ✔ |  |
+| `tag` | ✔ | ✔ |  |
+| `tag_multiple` | ✔ | ✔ |  |
+| `task_list_ltr` | ✔ | ✔ |  |
+| `task_list_square_ltr` | ✔ | ✔ |  |
+| `tent` | ✔ | ✔ |  |
+| `tetris_app` | ✔ | ✔ |  |
+| `text_align_center` | ✔ | ✔ |  |
+| `text_align_distributed` | ✔ |  |  |
+| `text_align_justify` | ✔ | ✔ |  |
+| `text_bold` | ✔ | ✔ |  |
+| `text_bullet_list` | ✔ | ✔ |  |
+| `text_bullet_list_square` | ✔ |  |  |
+| `text_case_title` | ✔ | ✔ |  |
+| `text_clear_formatting` | ✔ |  |  |
+| `text_column_one` | ✔ | ✔ |  |
+| `text_column_three` | ✔ | ✔ |  |
+| `text_column_two` | ✔ | ✔ |  |
+| `text_continuous` | ✔ | ✔ |  |
+| `text_description` | ✔ | ✔ |  |
+| `text_edit_style` | ✔ | ✔ |  |
+| `text_effects` | ✔ | ✔ |  |
+| `text_font` | ✔ | ✔ |  |
+| `text_font_info` | ✔ |  |  |
+| `text_font_size` | ✔ | ✔ |  |
+| `text_grammar_wand` | ✔ | ✔ |  |
+| `text_header_1` | ✔ | ✔ |  |
+| `text_header_2` | ✔ | ✔ |  |
+| `text_header_3` | ✔ | ✔ |  |
+| `text_indent_decrease_ltr` | ✔ | ✔ |  |
+| `text_indent_increase_ltr` | ✔ | ✔ |  |
+| `text_italic` | ✔ | ✔ |  |
+| `text_number_list_ltr` | ✔ | ✔ |  |
+| `text_paragraph` | ✔ | ✔ |  |
+| `text_quote` | ✔ | ✔ |  |
+| `text_sort_ascending` | ✔ | ✔ |  |
+| `text_sort_descending` | ✔ | ✔ |  |
+| `text_strikethrough` | ✔ | ✔ |  |
+| `text_underline` | ✔ | ✔ |  |
+| `text_word_count` | ✔ | ✔ |  |
+| `textbox` | ✔ | ✔ |  |
+| `thumb_dislike` | ✔ | ✔ |  |
+| `thumb_like` | ✔ | ✔ |  |
+| `timer` | ✔ | ✔ |  |
+| `timer_off` | ✔ | ✔ |  |
+| `toolbox` | ✔ | ✔ |  |
+| `top_speed` | ✔ |  |  |
+| `translate` | ✔ | ✔ |  |
+| `trophy` | ✔ | ✔ |  |
+| `video` | ✔ | ✔ |  |
+| `video_clip` | ✔ | ✔ |  |
+| `wallet` | ✔ | ✔ |  |
+| `warning` | ✔ | ✔ |  |
+| `weather_moon` | ✔ | ✔ |  |
+| `weather_rain` | ✔ | ✔ |  |
+| `weather_sunny` | ✔ | ✔ |  |
+| `weather_sunny_high` | ✔ | ✔ |  |
+| `weather_sunny_low` | ✔ |  |  |
+| `wifi_1` | ✔ | ✔ |  |
+| `wifi_off` | ✔ | ✔ |  |
+| `window` | ✔ | ✔ |  |
+| `window_apps` | ✔ |  |  |
+| `window_new` | ✔ | ✔ |  |
+| `wrench` | ✔ | ✔ |  |
+| `zoom_fit` | ✔ | ✔ |  |
+| `zoom_in` | ✔ | ✔ |  |
+| `zoom_out` | ✔ | ✔ |  |
+
+<!-- END GENERATED: fluent-icons -->
 
 ## רשימת האייקונים של אוצריא
 
@@ -596,7 +1093,7 @@ icon: 'links_24_regular'            // שרשרת קישורים
 
 ### עדכון הרשימה
 
-הרשימה נגזרת משתי הספריות בזמן הבדיקה, ולכן כל שינוי בהן (אייקון שנוסף, אייקון שנמחק, או שם שהתחיל להתקיים גם בפלואנט) מפיל את
+הרשימות נגזרות מהספריות ומ-`tool/plugins/fluent_icon_subset.txt` בזמן הבדיקה, ולכן כל שינוי בהן (אייקון שנוסף, אייקון שנמחק, או שם שהתחיל להתקיים גם בפלואנט) מפיל את
 `test/plugins/utils/plugin_icon_resolver_docs_test.dart`. התיקון הוא פקודה אחת ולא עריכה ידנית:
 
 ```bash

@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:otzaria/plugins/utils/fluent_icon_resolver.dart';
+import 'package:otzaria/plugins/utils/plugin_dev_tools_mode.dart';
 import 'package:otzaria_icons/otzaria_icons.dart';
 
 /// תחילית שכופה פתרון מספריית האייקונים של אוצריא בלבד.
@@ -12,6 +13,18 @@ const String kFluentIconPrefix = 'fluent:';
 /// תחילית כופה ספרייה אחת בלבד; שם לא מוכר מחזיר null.
 IconData? pluginIconFromName(String? name) {
   if (name == null) return null;
+  final icon = _resolve(name);
+  if (icon == null && PluginDevToolsMode.enabled && _warned.add(name)) {
+    debugPrint(
+      '[plugins] אייקון "$name" אינו נתמך — ראו docs/plugin-sdk/ICONS.md',
+    );
+  }
+  return icon;
+}
+
+final _warned = <String>{};
+
+IconData? _resolve(String name) {
   if (name.startsWith(kOtzariaIconPrefix)) {
     return _otzariaIconFromName(name.substring(kOtzariaIconPrefix.length));
   }
