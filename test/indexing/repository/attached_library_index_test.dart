@@ -1,8 +1,10 @@
+import 'dart:math';
 import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/attached_libraries/models/attached_library.dart';
 import 'package:otzaria/data/data_providers/tantivy_data_provider.dart';
 import 'package:otzaria/indexing/repository/indexing_repository.dart';
+import 'package:otzaria/search/utils/search_catalogue_order_helper.dart';
 import 'package:otzaria/library/models/library.dart';
 import 'package:otzaria/models/book_source.dart';
 import 'package:otzaria/models/books.dart';
@@ -67,7 +69,7 @@ void main() {
     };
 
     test(
-      'צירוף מסד — גם ממוזג לקטגוריה רשמית — מוסיף בסוף בלי להזיז',
+      'צירוף מסד — גם ממוזג לקטגוריה רשמית — אינו מזיז ספרים קיימים',
       () async {
         final before = await orderOf(_library());
         final after = await orderOf(_library(withAttached: true));
@@ -75,9 +77,11 @@ void main() {
         for (final MapEntry(:key, :value) in before.entries) {
           expect(after[key], value, reason: key);
         }
-        final maxExisting = before.values.reduce((a, b) => a > b ? a : b);
-        expect(after['db:$_slug:1'], greaterThan(maxExisting));
-        expect(after['db:$_slug:2'], greaterThan(maxExisting));
+        final officialMax = [after['id:1']!, after['id:2']!].reduce(max);
+        expect(after['db:$_slug:1'], greaterThan(officialMax));
+        expect(after['db:$_slug:2'], greaterThan(officialMax));
+        // ספרים אישיים אחרי הספרייה והמסדים המצורפים.
+        expect(after['uid:1'], greaterThan(after['db:$_slug:2']!));
       },
     );
 
@@ -96,12 +100,81 @@ void main() {
               .map(IndexingRepository.buildIndexedBookFilePath)
               .toSet(),
         );
-        expect(
-          entries.map((entry) => entry.catalogueOrder),
-          List.generate(entries.length, (i) => i),
-        );
       },
     );
+
+    test('הסדר זהה לזה שנצרב במזהים הצפופים הישנים', () async {
+      final library = _library(withAttached: true);
+      final category = library.subCategories.first;
+      final extra = [
+        PdfBook(title: 'סרוק', path: r'C:\pdfs\a.pdf', category: category),
+        PdfBook(
+          title: 'סרוק חיצוני',
+          path: r'C:\pdfs\b.pdf',
+          externalLibraryId: 'hb:7',
+          category: category,
+        ),
+        TextBook(
+          title: 'חיצוני',
+          externalLibraryId: 'hb:8',
+          category: category,
+        ),
+        TextBook(
+          title: 'קובץ',
+          filePath: r'C:\books\a.txt',
+          source: BookSource.user,
+          category: category,
+        ),
+      ];
+      category.books.addAll(extra);
+
+      // הסמנטיקה הישנה: מקום ברצף, וספר אישי בטווח משלו אחרי כל הספרייה.
+      final positions = SearchCatalogueOrderHelper.buildKeyOrderMap<String>(
+        library,
+        keyOf: (book) => IndexingRepository.catalogueOrderKey(book as Book),
+      );
+      int oldOrder(Book book) {
+        final key = IndexingRepository.catalogueOrderKey(book);
+        final personalId = key.startsWith('uid:')
+            ? int.tryParse(key.substring(4))
+            : null;
+        return personalId != null ? (1 << 23) + personalId : positions[key]!;
+      }
+
+      final mapping = {
+        for (final entry in await IndexingRepository.buildBookOrder(library))
+          entry.filePath: entry,
+      };
+      final indexable = library.getIndexableBooks();
+      expect(mapping, hasLength(indexable.length));
+      for (final book in indexable) {
+        final entry =
+            mapping[IndexingRepository.buildIndexedBookFilePath(book)];
+        expect(entry, isNotNull, reason: book.title);
+        expect(entry!.catalogueOrder, oldOrder(book), reason: book.title);
+        expect(
+          entry.generationOrder,
+          IndexingRepository.chronologicalOrderForBook(book),
+          reason: book.title,
+        );
+      }
+    });
+
+    test('רענון בונה מחדש את הסדר שהחיפוש בספר משווה לפיו', () async {
+      await IndexingRepository.refreshBookOrderRanks(_library());
+      expect(
+        await IndexingRepository.bookOrderRanks(),
+        isNot(contains('db:$_slug:1')),
+      );
+
+      await IndexingRepository.refreshBookOrderRanks(
+        _library(withAttached: true),
+      );
+      expect(
+        await IndexingRepository.bookOrderRanks(),
+        contains('db:$_slug:1'),
+      );
+    });
   });
 
   group('dropOrphanedIndexEntries — מפתחות db:', () {

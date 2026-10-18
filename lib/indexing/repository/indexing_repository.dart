@@ -135,6 +135,10 @@ class IndexingRepository {
   static Future<BookSourceHashes> Function({Iterable<String> attachedSlugs})
   loadSourceHashes = BookSourceHashes.load;
 
+  @visibleForTesting
+  static Future<BigInt> Function({required List<int> text}) contentFingerprint =
+      computeContentFingerprintBytes;
+
   /// שלב הבדיקה שבתחילת [runIndexing].
   late IndexChangeDetector changeDetector = StampChangeDetector(this);
 
@@ -1389,6 +1393,10 @@ class IndexingRepository {
           filePath: buildIndexedBookFilePath(book),
           extraFacets: _bookExtraFacets(book),
           sourceHash: _dbSourceHash(book, sourceHashes),
+          // טביעת הטקסט הריק: כך ספר שנשאר ריק נמצא תואם בבדיקה הבאה.
+          textHash: book is PdfBook
+              ? null
+              : await contentFingerprint(text: const []),
         ),
       ],
     );
@@ -2067,26 +2075,49 @@ class IndexingRepository {
       GenerationCache.instance.warmUp(),
       ReferenceBooksCache.instance.warmUp(),
     ]);
-    final books = <String, Book>{};
+    final positions = SearchCatalogueOrderHelper.buildKeyOrderMap<String>(
+      library,
+      keyOf: (book) => catalogueOrderKey(book as Book),
+    );
+    final entries = <String, BookOrderEntry>{};
     for (final book in SearchCatalogueOrderHelper.buildOrderedKeys<Book>(
       library,
       keyOf: (book) => book as Book,
     )) {
-      if (isIndexableBook(book)) {
-        books.putIfAbsent(buildIndexedBookFilePath(book), () => book);
-      }
+      if (!isIndexableBook(book)) continue;
+      final key = buildIndexedBookFilePath(book);
+      entries[key] ??= BookOrderEntry(
+        filePath: key,
+        catalogueOrder: _catalogueOrderOf(catalogueOrderKey(book), positions),
+        generationOrder: chronologicalOrderForBook(book),
+      );
     }
     _bookOrderRanks = {
-      for (final (order, key) in books.keys.indexed) key: order,
+      for (final entry in entries.values) entry.filePath: entry.catalogueOrder,
     };
-    return [
-      for (final (order, entry) in books.entries.indexed)
-        BookOrderEntry(
-          filePath: entry.key,
-          catalogueOrder: order,
-          generationOrder: chronologicalOrderForBook(entry.value),
-        ),
-    ];
+    return entries.values.toList();
+  }
+
+  // ספרים אישיים ממוינים אחרי כל הספרייה והמסדים המצורפים, לפי id, כפי שהיו.
+  static const _personalOrderBase = 1 << 23;
+  static const _maxPersonalOrder = (1 << 24) - 2;
+
+  static int _catalogueOrderOf(String key, Map<String, int> positions) {
+    final position = positions[key]!;
+    if (!key.startsWith('uid:')) return position;
+    final id = int.tryParse(key.substring(4));
+    if (id == null || id < 0 || 'uid:$id' != key) return position;
+    final order = _personalOrderBase + id;
+    return order > _maxPersonalOrder ? position : order;
+  }
+
+  /// בונה מחדש את [bookOrderRanks] לעץ שנטען — בכל חלון, בלי כתיבה למנוע.
+  static Future<void> refreshBookOrderRanks(Library library) async {
+    try {
+      await buildBookOrder(library);
+    } catch (e) {
+      debugPrint('⚠️ בניית סדר הספרים נכשלה: $e');
+    }
   }
 
   static Map<String, int>? _bookOrderRanks;
@@ -2308,6 +2339,45 @@ class IndexingRepository {
     if (bytes == null || bytes.isEmpty) return true;
 
     return await computeContentFingerprintBytes(text: bytes) == indexHash;
+  }
+
+  /// טביעת הטקסט הנוכחית של ספר טקסט, כפי שהאינדוקס היה חותם, או null כשאין
+  /// לספר מקור. ספר שהתרוקן במסד מקבל את טביעת הטקסט הריק — לא "לא ידוע".
+  Future<BigInt?> currentTextFingerprint(Book book) async {
+    final textBook = _asTextBookForIndex(book);
+    if (textBook == null) return null;
+    final engineSource = _engineBookSource(book);
+    if (engineSource != null) {
+      try {
+        final hash = await libraryFingerprint(
+          source: engineSource,
+          bookId: book.id!,
+          attachedSlug: _attachedSlug(book),
+          dbTitle: book.title,
+        );
+        if (hash != null) return hash;
+      } catch (error) {
+        debugPrint('⚠️ טביעת תוכן מהמנוע נכשלה ל-${book.title}: $error');
+      }
+    }
+    final source = await loadTextBookSource(textBook);
+    final text = source.text;
+    final bytes =
+        source.bytes ??
+        (text == null || text.isEmpty ? null : utf8.encode(text));
+    if (bytes != null && bytes.isNotEmpty) {
+      return contentFingerprint(text: bytes);
+    }
+    // המנוע ומסלול הבייטים אינם מבחינים בין ספר ריק לספר חסר; המסד כן.
+    if (textBook.categoryId == null) return null;
+    final dbText = await SqliteDataProvider.instance.getBookTextFromDb(
+      textBook.title,
+      textBook.categoryId,
+      textBook.fileType ?? 'txt',
+      textBook.source,
+      true,
+    );
+    return dbText == null ? null : contentFingerprint(text: const []);
   }
 
   /// האם רשומת הספר באינדקס מאוחסנת לפי נתיב מוחלט (ולכן תישבר בהעברת
@@ -2824,8 +2894,10 @@ class StampChangeDetector implements IndexChangeDetector {
   // ספר פגום אחד אינו מבטל את הבדיקה — הוא רק אינו בר-השוואה.
   Future<bool> _textMatches(Book book, BigInt textHash) async {
     try {
-      return await (_textMatchesIndex?.call(book, textHash) ??
-          _repository.textBookContentMatchesIndex(book, textHash));
+      final injected = _textMatchesIndex;
+      if (injected != null) return await injected(book, textHash);
+      final current = await _repository.currentTextFingerprint(book);
+      return current == null || current == textHash;
     } on DocumentConversionException catch (e) {
       debugPrint('🔎 בדיקה: דילוג על "${book.title}" — $e');
       return true;

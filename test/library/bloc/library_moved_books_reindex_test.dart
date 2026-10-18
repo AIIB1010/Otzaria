@@ -72,6 +72,7 @@ Library _libraryOf(Map<List<String>, List<Book Function(Category)>> tree) {
 }
 
 const _userBookTitle = 'אנציקלופדיה תלמודית אות מ';
+const _emptyTitle = 'ספר ריק';
 
 TextBook _userBook(Category category) => TextBook(
   id: 5,
@@ -201,9 +202,10 @@ Future<void> main() async {
         final originalIds = {
           for (final hit in await search('שלום')) hit.filePath: hit.id,
         };
+        // ספרים אישיים אחרי הספרייה והמסדים המצורפים, כפי שהיו.
         expect(
           originalIds.keys,
-          ['id:1', 'id:9', 'uid:5', 'db:reference:5'],
+          ['id:1', 'id:9', 'db:reference:5', 'uid:5'],
           reason: 'סדר הקטלוג של העץ הקודם',
         );
         expect(await search('שלום', ['/מדרש']), isEmpty);
@@ -222,9 +224,9 @@ Future<void> main() async {
         final hits = await search('שלום');
         expect(hits.map((hit) => hit.filePath), [
           'id:1',
-          'uid:5',
           'id:9',
           'db:reference:5',
+          'uid:5',
         ]);
         // מספר הספר יציב: גם הספר שנכתב מחדש שומר על המזהים שלו.
         expect({for (final hit in hits) hit.filePath: hit.id}, originalIds);
@@ -310,6 +312,35 @@ Future<void> main() async {
       skip: nativeAvailable ? false : searchEngineSkipReason,
     );
 
+    test('סמן של ספר ריק נושא את טביעת הטקסט הריק של המנוע', () async {
+      final directory = await Directory.systemTemp.createTemp('empty_marker_');
+      final engine = await SearchEngine.newInstance(path: directory.path);
+      final provider = _NativeIndex(engine)..activeIndexPath = directory.path;
+      addTearDown(() async {
+        provider.isIndexing.dispose();
+        engine.dispose();
+        await directory.delete(recursive: true);
+      });
+      final library = _libraryOf({
+        ['הלכה']: [
+          (category) => TextBook(id: 3, title: _emptyTitle, category: category),
+        ],
+      });
+
+      await _MemoryTextRepository(provider).indexBooks(
+        library.getIndexableBooks(),
+        library,
+        onProgress: (_, _) {},
+      );
+
+      final stamp = (await engine.getBookStamps()).single;
+      expect(
+        stamp.textHash,
+        await computeContentFingerprintBytes(text: const []),
+      );
+      expect(stamp.textHash, isNot(BigInt.zero));
+    }, skip: nativeAvailable ? false : searchEngineSkipReason);
+
     test('רענון שלא הזיז ספרים — אין אינדוקס מחדש (issue #1977)', () async {
       Library build() => _libraryOf({
         ['מילונים וספרי יעץ', 'אנציקלופדיות']: [_userBook],
@@ -378,7 +409,11 @@ class _MemoryTextRepository extends IndexingRepository {
   })
   _source(TextBook book) => (
     bytes: null,
-    text: book.source.isUser ? 'שלום\nעולם אישי' : 'שלום\nאחר רשמי',
+    text: book.title == _emptyTitle
+        ? ''
+        : book.source.isUser
+        ? 'שלום\nעולם אישי'
+        : 'שלום\nאחר רשמי',
     libraryDbBookId: null,
     userBooksDbBookId: null,
     attachedDbBookId: null,

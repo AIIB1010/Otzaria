@@ -1,8 +1,11 @@
+import 'dart:isolate';
+
 import 'package:flutter/foundation.dart';
 import 'package:otzaria/attached_libraries/repository/attached_library_registry.dart';
 import 'package:otzaria/data/data_providers/sqlite_data_provider.dart';
 import 'package:otzaria/migration/database/repository/seforim_repository.dart';
 import 'package:otzaria/models/book_source.dart';
+import 'package:sqlite3/sqlite3.dart';
 
 /// חותם התוכן שהמסד מחזיק לכל ספר (`book.contentHash`, סכמה 7) — נצרב באינדקס
 /// כ-sourceHash ומושווה אליו כדי לגלות שינוי בלי לקרוא את טקסט הספר.
@@ -51,14 +54,27 @@ class BookSourceHashes {
     try {
       final capabilities = await repository.database.capabilities;
       if (!capabilities.hasColumn('book', 'contentHash')) return null;
-      final db = await repository.database.database;
+      // כל טבלת book: עשרות ms (נמדד 34ms ב-7,766 ספרים) — מחוץ ל-UI isolate.
+      final path = repository.database.path;
+      final rows = await Isolate.run(() => _readRows(path));
       return {
-        for (final row in db.select('SELECT id, contentHash FROM book'))
-          row['id'] as int: toUnsigned(row['contentHash'] as int),
+        for (final (id, hash) in rows) id: toUnsigned(hash),
       };
     } catch (e) {
       debugPrint('⚠️ קריאת חותמי התוכן מהמסד נכשלה: $e');
       return null;
+    }
+  }
+
+  static List<(int, int)> _readRows(String path) {
+    final db = sqlite3.open(path, mode: OpenMode.readOnly);
+    try {
+      return [
+        for (final row in db.select('SELECT id, contentHash FROM book'))
+          (row['id'] as int, row['contentHash'] as int),
+      ];
+    } finally {
+      db.close();
     }
   }
 

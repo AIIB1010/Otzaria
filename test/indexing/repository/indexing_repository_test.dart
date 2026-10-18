@@ -51,8 +51,14 @@ import 'package:pdfrx/pdfrx.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  setUp(() => IndexingCrashCanary.writeLog = (_) {});
-  tearDown(() => IndexingCrashCanary.writeLog = ErrorLogFile.appendText);
+  setUp(() {
+    IndexingCrashCanary.writeLog = (_) {};
+    IndexingRepository.contentFingerprint = _fakeContentFingerprint;
+  });
+  tearDown(() {
+    IndexingCrashCanary.writeLog = ErrorLogFile.appendText;
+    IndexingRepository.contentFingerprint = computeContentFingerprintBytes;
+  });
   group('הסתרות ואינדקס מלא', () {
     test('סטטוס כולל מהדורה גלויה מחוץ לעץ ומחריג קטגוריה מוסתרת', () async {
       final library = Library(categories: []);
@@ -1693,11 +1699,6 @@ void main() {
               library,
               onlyBooks: [emptied],
               onProgress: (_, _) {},
-              loadText: (_) async => '',
-              fingerprintOf: (_, text) async {
-                expect(text, isEmpty);
-                return BigInt.one;
-              },
             );
 
             expect(result.completed, isTrue);
@@ -1707,10 +1708,38 @@ void main() {
             expect(engine.addedDocuments.single.filePath, key);
             expect(engine.addedDocuments.single.text, isEmpty);
             expect(engine.addedDocuments.single.segment, BigInt.zero);
+            // הסמן נושא את טביעת הטקסט הריק, ולכן ספר שנשאר ריק לא יוחלף שוב.
+            expect(
+              engine.addedDocuments.single.textHash,
+              await _fakeContentFingerprint(text: const []),
+            );
             expect(provider.indexedFilePaths, {key});
           });
         }
       }
+
+      test('ספר שנשאר ריק אינו מוחלף שוב בבדיקה הבאה', () async {
+        final engine = _RecordingSearchEngine();
+        final provider = _RecordingTantivyDataProvider(engine);
+        final emptied = TextBook(id: 7, title: 'ספר שהתרוקן', categoryId: 7);
+        final key = IndexingRepository.buildIndexedBookFilePath(emptied);
+        // הסמן שנכתב בהחלפה הקודמת: טביעת הטקסט הריק.
+        engine.fingerprints = {
+          key: await _fakeContentFingerprint(text: const []),
+        };
+        provider.indexedFilePaths.add(key);
+
+        final result = await _reconcile(
+          IndexingRepository(provider),
+          Library(categories: [])..books.add(emptied),
+          onlyBooks: [emptied],
+          onProgress: (_, _) {},
+        );
+
+        expect(result.completed, isTrue);
+        expect(engine.removedFilePaths, isEmpty);
+        expect(engine.addedDocuments, isEmpty);
+      });
 
       for (final (id, title) in [(7, 'ספר שהתרוקן'), (8, 'שורה שהתרוקנה')]) {
         test('ספר ריק ממקור אחר אינו מוחק תוכן אישי: $title', () async {
@@ -4940,3 +4969,6 @@ class _PathCountingCategory extends Category {
     return super.path;
   }
 }
+
+Future<BigInt> _fakeContentFingerprint({required List<int> text}) async =>
+    BigInt.from(1000 + text.length);
