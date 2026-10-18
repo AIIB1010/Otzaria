@@ -94,4 +94,46 @@ void main() {
     expect(format.marginRight, closeTo(18, 0.01));
     expect(format.marginBottom, closeTo(18, 0.01));
   });
+
+  group('fileOutputExtension', () {
+    test('פורט שמבקש שם קובץ — סיומת לפי סוג המדפסת', () {
+      expect(
+        fileOutputExtension(
+          printerName: 'Microsoft Print to PDF',
+          port: 'PORTPROMPT:',
+        ),
+        'pdf',
+      );
+      expect(
+        fileOutputExtension(
+          printerName: 'Microsoft XPS Document Writer',
+          port: ' portprompt: ',
+        ),
+        'oxps',
+      );
+      expect(
+        fileOutputExtension(printerName: 'HP LaserJet', port: 'FILE:'),
+        'prn',
+      );
+    });
+
+    test('מדפסות Microsoft לקובץ מזוהות גם בלי פורט', () {
+      expect(fileOutputExtension(printerName: 'Microsoft Print to PDF'), 'pdf');
+    });
+
+    test('מדפסת נייר אינה מבקשת קובץ', () {
+      for (final port in ['USB001', 'LPT1:', 'WSD-abc', 'nul:', null]) {
+        expect(
+          fileOutputExtension(printerName: 'HP LaserJet', port: port),
+          isNull,
+          reason: port,
+        );
+      }
+    });
+  });
+
+  test('printOutputFileName מנקה תווים אסורים', () {
+    expect(printOutputFileName('שו"ע: או"ח/א', 'pdf'), 'שו_ע_ או_ח_א.pdf');
+    expect(printOutputFileName('  ', 'oxps'), 'document.oxps');
+  });
 }

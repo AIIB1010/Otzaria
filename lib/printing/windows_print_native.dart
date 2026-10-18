@@ -1,4 +1,4 @@
-/// Win32 printing calls. Each entry point except [printDialogOwnerWindow] runs
+/// Win32 printing calls. Each entry point except [printDialogFallbackOwner] runs
 /// on a background isolate, so a slow driver or spooler never freezes the UI.
 library;
 
@@ -23,6 +23,7 @@ typedef WindowsPrintTarget = ({
 /// inclusive; null means all pages.
 typedef WindowsPrintChoice = ({
   WindowsPrintTarget target,
+  String port,
   List<(int, int)>? ranges,
 });
 
@@ -193,6 +194,11 @@ final _coUninitialize = _ole32.lookupFunction<Void Function(), void Function()>(
 
 final _getActiveWindow = _user32
     .lookupFunction<Pointer Function(), Pointer Function()>('GetActiveWindow');
+final _getProp = _user32
+    .lookupFunction<
+      Pointer Function(Pointer, Pointer<Utf16>),
+      Pointer Function(Pointer, Pointer<Utf16>)
+    >('GetPropW');
 
 typedef _RenderPageNative =
     Void Function(
@@ -217,24 +223,26 @@ typedef _RenderPage =
       int,
     );
 
-/// The window the print dialog belongs to. Must run on the platform thread,
-/// whose active window is the app's.
-int printDialogOwnerWindow() {
+/// A fallback owner for the print dialog when the engine's own window is
+/// unknown: the active window of the platform thread, else the main window.
+int printDialogFallbackOwner() {
   final active = _getActiveWindow();
   if (active.address != 0) return active.address;
-  // In the background the foreground window is another app's, which the
-  // modal dialog would disable; take this process's own Flutter window.
+  // Every window of the app lives in this process; only the main one carries
+  // this property (windows/runner/main.cpp).
   return using((arena) {
     final className = win32.PCWSTR(
       'FLUTTER_RUNNER_WIN32_WINDOW'.toNativeUtf16(allocator: arena),
     );
+    final mainProperty = 'OtzariaMainWindow'.toNativeUtf16(allocator: arena);
     final processId = arena<Uint32>();
     win32.HWND? window;
     while (true) {
       window = win32.FindWindowEx(null, window, className, null).value;
       if (window.address == 0) return 0;
       win32.GetWindowThreadProcessId(window, processId);
-      if (processId.value == win32.GetCurrentProcessId()) {
+      if (processId.value == win32.GetCurrentProcessId() &&
+          _getProp(window, mainProperty).address != 0) {
         return window.address;
       }
     }
@@ -242,7 +250,7 @@ int printDialogOwnerWindow() {
 }
 
 /// Shows the system print dialog, owned by [ownerWindow] and blocking until
-/// it closes. Returns null when the user cancels.
+/// it closes. Returns null when the user cancels or the dialog fails.
 WindowsPrintChoice? showWindowsPrintDialog(
   int ownerWindow,
   Uint8List? devMode,
@@ -260,7 +268,7 @@ WindowsPrintChoice? showWindowsPrintDialog(
             _pdUseDevModeCopiesAndCollate |
             _pdNoSelection |
             _pdNoCurrentPage |
-            // The job never sets an output file, so the checkbox would be ignored.
+            // Print-to-file printers get their file name from us instead.
             _pdHidePrintToFile
         ..nMaxPageRanges = _maxPageRanges
         ..lpPageRanges = ranges
@@ -271,9 +279,10 @@ WindowsPrintChoice? showWindowsPrintDialog(
       final result = _printDlgEx(dialog);
       try {
         if (result != 0) {
-          throw StateError(
+          debugPrint(
             'PrintDlgEx failed: 0x${result.toUnsigned(32).toRadixString(16)}',
           );
+          return null;
         }
         if (dialog.ref.dwResultAction != _pdResultPrint) return null;
         final names = parseDevNames(_globalBytes(dialog.ref.hDevNames));
@@ -286,6 +295,7 @@ WindowsPrintChoice? showWindowsPrintDialog(
                 ? null
                 : _globalBytes(dialog.ref.hDevMode),
           ),
+          port: names.port,
           ranges: pageNums
               ? [
                   for (var i = 0; i < dialog.ref.nPageRanges; i++)

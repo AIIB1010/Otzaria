@@ -117,3 +117,26 @@ PdfPageFormat pageFormatFromDeviceCaps(PrinterDeviceCaps caps) {
     marginBottom: height - caps.printableHeight / dpiY - marginTop,
   );
 }
+
+/// The extension of the file a print-to-file printer writes, or null when the
+/// printer prints to paper and needs no file name.
+String? fileOutputExtension({required String printerName, String? port}) {
+  final name = printerName.trim().toLowerCase();
+  final normalizedPort = port?.trim().toLowerCase();
+  final toFile =
+      normalizedPort == 'portprompt:' ||
+      normalizedPort == 'file:' ||
+      name == 'microsoft print to pdf' ||
+      name == 'microsoft xps document writer';
+  if (!toFile) return null;
+  if (name.contains('xps')) return 'oxps';
+  if (name.contains('pdf')) return 'pdf';
+  return 'prn';
+}
+
+/// [jobName] as a file name with [extension], without the characters Windows
+/// forbids in file names.
+String printOutputFileName(String jobName, String extension) {
+  final base = jobName.replaceAll(RegExp(r'[\/:*?"<>|\x00-\x1F]'), '_').trim();
+  return '${base.isEmpty ? 'document' : base}.$extension';
+}

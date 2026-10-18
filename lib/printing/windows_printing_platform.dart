@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:flutter/rendering.dart' show Rect;
 import 'package:otzaria/printing/windows_print_data.dart';
 import 'package:otzaria/printing/windows_print_native.dart';
+import 'package:otzaria/printing/windows_printer_ports.dart';
+import 'package:otzaria/utils/file/save_file_with_extension.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:printing/printing.dart';
@@ -12,6 +14,7 @@ import 'package:printing/printing.dart';
 import 'package:printing/src/interface.dart';
 // ignore: implementation_imports
 import 'package:printing/src/method_channel.dart';
+import 'package:window_manager/window_manager.dart';
 
 /// Printing on Windows off the platform thread, where the `printing` plugin
 /// renders the whole job and freezes the window. Other calls go to the plugin.
@@ -45,8 +48,12 @@ class WindowsPrintingPlatform extends PrintingPlatform {
     final paper = usePrinterSettings ? null : paperDevMode(format);
     final WindowsPrintTarget target;
     List<(int, int)>? ranges;
+    final String? port;
     if (printer == null) {
-      final owner = printDialogOwnerWindow();
+      // Every window of the app shares the platform thread, so its active
+      // window may be another of ours; the engine knows its own.
+      final ownWindow = await windowManager.getId();
+      final owner = ownWindow != 0 ? ownWindow : printDialogFallbackOwner();
       // On the platform thread the dialog's modal loop would run engine tasks
       // into Dart while it is still inside the FFI call.
       final choice = await Isolate.run(
@@ -55,8 +62,26 @@ class WindowsPrintingPlatform extends PrintingPlatform {
       if (choice == null) return false;
       target = choice.target;
       ranges = choice.ranges;
+      port = choice.port;
     } else {
       target = (driver: 'WINSPOOL', device: printer.url, devMode: paper);
+      port = (await Isolate.run(windowsPrinterPorts))[printer.url];
+    }
+
+    // Asked here, since a driver asking from PDFium's worker would block all
+    // PDF rendering behind a dialog that has no owner window.
+    String? outputPath;
+    final extension = fileOutputExtension(
+      printerName: target.device,
+      port: port,
+    );
+    if (extension != null) {
+      outputPath = await saveFileWithExtension(
+        fileName: printOutputFileName(name, extension),
+        extension: extension,
+        bytes: Uint8List(0),
+      );
+      if (outputPath == null) return false;
     }
 
     final caps = await Isolate.run(() => queryPrinterDeviceCaps(target));
@@ -68,7 +93,7 @@ class WindowsPrintingPlatform extends PrintingPlatform {
       pdfiumModulePath: Pdfrx.pdfiumModulePath,
       target: target,
       name: name,
-      outputPath: null,
+      outputPath: outputPath,
       pdf: pdf,
       ranges: ranges,
     ));
