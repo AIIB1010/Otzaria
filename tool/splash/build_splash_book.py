@@ -1,4 +1,5 @@
-"""Builds the frame strips of the Windows splash (windows/runner/resources/splash_book_*.png).
+"""Builds the frame strips of the native splash (native/splash/splash_book_*.png), shared by the
+Windows and Linux runners.
 
 Source: the 24 book-opening frames of the download assistant art (`book_00_250.png`..`book_23_250.png`),
 the release pinned in installer/assistant_art.pin.json, or `download-assistant/out` of otzaria-design.
@@ -19,7 +20,7 @@ FRAMES = 24
 # whole 1024px iconnew.png): the logo is 176 of the frame's 220 units.
 LOGICAL = 177
 SCALES = {100: 1.0, 150: 1.5, 200: 2.0}
-OUT = Path(__file__).resolve().parents[2] / "windows" / "runner" / "resources"
+OUT = Path(__file__).resolve().parents[2] / "native" / "splash"
 
 
 def main() -> None:

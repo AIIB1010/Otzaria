@@ -40,8 +40,6 @@ windows/runner/*
 !windows/runner/resources/
 !windows/runner/splash_window.cpp
 !windows/runner/splash_window.h
-!windows/runner/splash_timeline.h
-!windows/runner/test/
 !windows/runner/jump_list_manager.cpp
 !windows/runner/jump_list_manager.h
 !windows/runner/drag_preview_window.cpp

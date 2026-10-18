@@ -7,7 +7,7 @@
 #include <string>
 
 #include "resource.h"
-#include "splash_timeline.h"
+#include "../../native/splash/splash_timeline.h"
 
 #pragma comment(lib, "windowscodecs.lib")
 
@@ -32,7 +32,7 @@ struct StripResource {
   int side;
   int id;
 };
-// רצועה אנכית לכל דלי DPI (tool/splash/build_splash_book.py).
+// רצועה אנכית לכל דלי DPI (native/splash, משותף ל-Linux).
 // נבחרת הקטנה שמכסה את הגודל.
 constexpr StripResource kStrips[] = {
     {177, IDR_SPLASH_BOOK_100},

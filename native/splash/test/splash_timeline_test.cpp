@@ -1,5 +1,5 @@
 // טסט עצמאי לציר הזמן של ה-splash.
-// הרצה: windows/runner/test/run_splash_timeline_test.ps1
+// הרצה: native/splash/test/run_splash_timeline_test.sh, או ה-ps1 שלצדו ב-Windows.
 #include "../splash_timeline.h"
 
 #include <cmath>
