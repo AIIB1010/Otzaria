@@ -1621,10 +1621,11 @@ packages:
   sentry_flutter:
     dependency: "direct main"
     description:
-      name: sentry_flutter
-      sha256: bdd8897b38ce31185c42ed910628059c4eccbc0b0641213e8d1c63e2fda3f5a3
-      url: "https://pub.dev"
-    source: hosted
+      path: "packages/flutter"
+      ref: e31f9068de53d0dd826d217e4dc7c8ccd7dd5261
+      resolved-ref: e31f9068de53d0dd826d217e4dc7c8ccd7dd5261
+      url: "https://github.com/Otzaria/sentry-dart"
+    source: git
     version: "9.30.1"
   shared_preferences:
     dependency: transitive
