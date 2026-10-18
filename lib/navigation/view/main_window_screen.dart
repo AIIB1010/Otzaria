@@ -2983,9 +2983,10 @@ class MainWindowScreenState extends State<MainWindowScreen>
                 unawaited(
                   DataRepository.instance.library.then((library) {
                     if (!mounted || !context.mounted) return;
-                    context.read<IndexingBloc>().add(
-                      ReconcileHiddenIndex(library),
-                    );
+                    // העץ המלא: ספר מוסתר שעדיין באינדקס ימוין במקומו.
+                    context.read<IndexingBloc>()
+                      ..add(SyncBookOrder(library))
+                      ..add(ReconcileHiddenIndex(library));
                     _checkAndStartIndexing(context, library);
                     // ניקוי יתומים חייב לקבל את העץ המלא, כולל מהדורות מחוץ לעץ.
                     context.read<IndexingBloc>().add(

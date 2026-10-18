@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show ValueNotifier;
+import 'package:otzaria/indexing/models/index_check_scope.dart';
 import 'package:otzaria/indexing/repository/indexing_repository.dart';
 import 'package:otzaria_search_engine/otzaria_search_engine.dart';
 
@@ -69,6 +70,8 @@ Library _libraryOf(Map<List<String>, List<Book Function(Category)>> tree) {
   }
   return library;
 }
+
+const _userBookTitle = 'אנציקלופדיה תלמודית אות מ';
 
 TextBook _userBook(Category category) => TextBook(
   id: 5,
@@ -143,7 +146,7 @@ Future<void> main() async {
     );
 
     test(
-      'מיזוג אישי מעדכן את הטווח הקטלוגי ומשאיר חיפוש חוצה שורות בתוך הספר',
+      'מיזוג אישי: רק הספר שעבר מאונדקס, הסדר מהמיפוי והמזהים יציבים',
       () async {
         final directory = await Directory.systemTemp.createTemp(
           'moved_book_index_',
@@ -200,16 +203,14 @@ Future<void> main() async {
         };
         expect(
           originalIds.keys,
-          unorderedEquals(['id:1', 'id:9', 'uid:5', 'db:reference:5']),
+          ['id:1', 'id:9', 'uid:5', 'db:reference:5'],
+          reason: 'סדר הקטלוג של העץ הקודם',
         );
-        expect((await search('שלום עולם')).map((r) => r.filePath), ['uid:5']);
         expect(await search('שלום', ['/מדרש']), isEmpty);
 
+        // רק הספר שעבר קטגוריה מוחלף: שכנו שזז ברצף ממוין לפי המיפוי.
         final changed = await refreshBetween(before, after);
-        expect(
-          changed?.map(IndexingRepository.catalogueOrderKey),
-          unorderedEquals(['uid:5', 'id:9']),
-        );
+        expect(changed?.map(IndexingRepository.catalogueOrderKey), ['uid:5']);
         final result = await indexer.runIndexing(
           after,
           books: const [],
@@ -217,64 +218,94 @@ Future<void> main() async {
           onProgress: (_, _) {},
         );
         expect(result.isClean, isTrue);
-        expect(result.indexedBooks, 2);
+        expect(result.indexedBooks, 1);
         final hits = await search('שלום');
-        expect(hits, hasLength(4));
-        expect(hits.map((hit) => hit.id).toSet(), hasLength(4));
-        final currentOrder = IndexingRepository.buildCatalogueOrderResolver(
-          after,
-        );
-        for (final book in after.getIndexableBooks()) {
-          final key = IndexingRepository.catalogueOrderKey(book);
-          final hit = hits.singleWhere((hit) => hit.filePath == key);
-          expect(
-            hit.id,
-            IndexingRepository.buildCatalogueDocumentId(
-              catalogueOrder: currentOrder.orderFor(key),
-              ordinal: 0,
-            ),
-          );
-        }
-        for (final key in ['id:1', 'db:reference:5']) {
-          expect(
-            hits.singleWhere((hit) => hit.filePath == key).id,
-            originalIds[key],
-          );
-        }
-        for (final hit in hits) {
-          expect(
-            (await engine.getDocumentById(id: hit.id))?.filePath,
-            hit.filePath,
-          );
-        }
+        expect(hits.map((hit) => hit.filePath), [
+          'id:1',
+          'uid:5',
+          'id:9',
+          'db:reference:5',
+        ]);
+        // מספר הספר יציב: גם הספר שנכתב מחדש שומר על המזהים שלו.
+        expect({for (final hit in hits) hit.filePath: hit.id}, originalIds);
         expect((await search('שלום עולם')).map((r) => r.filePath), ['uid:5']);
         expect((await search('שלום', ['/מדרש'])).map((r) => r.filePath), [
           'uid:5',
         ]);
         expect(await search('שלום', ['/ספרים אישיים']), isEmpty);
         expect(await refreshBetween(after, after), isNull);
+
         final reversed = await refreshBetween(after, before);
-        expect(
-          reversed?.map(IndexingRepository.catalogueOrderKey),
-          unorderedEquals(['uid:5', 'id:9']),
-        );
-        final reverseResult = await indexer.runIndexing(
+        expect(reversed?.map(IndexingRepository.catalogueOrderKey), ['uid:5']);
+        await indexer.runIndexing(
           before,
           books: const [],
           changedBooks: reversed!,
           onProgress: (_, _) {},
         );
-        expect(reverseResult.isClean, isTrue);
-        expect(reverseResult.indexedBooks, 2);
-        expect({
-          for (final hit in await search('שלום')) hit.filePath: hit.id,
-        }, originalIds);
-        expect((await search('שלום עולם')).map((r) => r.filePath), ['uid:5']);
+        expect(
+          (await search('שלום')).map((hit) => hit.filePath),
+          originalIds.keys,
+        );
         expect(
           (await search('שלום', ['/ספרים אישיים'])).map((r) => r.filePath),
           ['uid:5'],
         );
-        expect(await search('שלום', ['/מדרש']), isEmpty);
+      },
+      skip: nativeAvailable ? false : searchEngineSkipReason,
+    );
+
+    test(
+      'בדיקה מלאה מול המנוע: שינוי סדר אינו מאנדקס, שינוי קטגוריה כן',
+      () async {
+        final directory = await Directory.systemTemp.createTemp('stamp_check_');
+        final engine = await SearchEngine.newInstance(path: directory.path);
+        final provider = _NativeIndex(engine)..activeIndexPath = directory.path;
+        addTearDown(() async {
+          provider.isIndexing.dispose();
+          engine.dispose();
+          await directory.delete(recursive: true);
+        });
+        final indexer = _MemoryTextRepository(provider);
+        TextBook earlyBook(Category category) =>
+            TextBook(id: 1, title: 'ספר מוקדם', category: category);
+        final before = _libraryOf({
+          ['הלכה']: [_officialBook],
+          ['ספרים אישיים']: [_userBook],
+          ['תנ"ך']: [earlyBook],
+        });
+        // ספר חדש לפני כולם, והאישי עבר קטגוריה.
+        TextBook newcomer(Category category) =>
+            TextBook(id: 2, title: 'ספר חדש', category: category);
+        final after = _libraryOf({
+          ['תנ"ך']: [newcomer, earlyBook],
+          ['מדרש']: [_userBook],
+          ['הלכה']: [_officialBook],
+        });
+        await indexer.indexBooks(
+          before.getIndexableBooks(),
+          before,
+          onProgress: (_, _) {},
+        );
+        final read = <String>[];
+        indexer.onLoad = read.add;
+
+        final result = await indexer.runIndexing(
+          after,
+          books: const [],
+          check: IndexCheckScope.library,
+          onProgress: (_, _) {},
+        );
+
+        expect(result.completed, isTrue);
+        // רק האישי הוחלף (topics); הרשמיים נבדקו בטביעת טקסט ונמצאו תואמים.
+        expect(result.indexedBooks, 1);
+        expect(read.where((title) => title == _userBookTitle), hasLength(1));
+        final stamps = {
+          for (final stamp in await engine.getBookStamps())
+            stamp.filePath: stamp,
+        };
+        expect(stamps.keys.toSet(), {'id:1', 'id:9', 'uid:5'});
       },
       skip: nativeAvailable ? false : searchEngineSkipReason,
     );
@@ -305,8 +336,6 @@ class _NativeIndex extends Fake implements TantivyDataProvider {
   @override
   bool get isTempFallback => false;
   @override
-  bool ensureCatalogueOrderStamp() => true;
-  @override
   Future<SearchEngine> get engine async => value;
   @override
   Future<bool> reopenIndex({bool force = false}) async {
@@ -332,7 +361,22 @@ class _MemoryTextRepository extends IndexingRepository {
       Uint32List? dataUriLines,
     })
   >
-  loadTextBookSource(TextBook book) async => (
+  loadTextBookSource(TextBook book) async {
+    onLoad?.call(book.title);
+    return _source(book);
+  }
+
+  void Function(String title)? onLoad;
+
+  ({
+    Uint8List? bytes,
+    String? text,
+    int? libraryDbBookId,
+    int? userBooksDbBookId,
+    int? attachedDbBookId,
+    Uint32List? dataUriLines,
+  })
+  _source(TextBook book) => (
     bytes: null,
     text: book.source.isUser ? 'שלום\nעולם אישי' : 'שלום\nאחר רשמי',
     libraryDbBookId: null,

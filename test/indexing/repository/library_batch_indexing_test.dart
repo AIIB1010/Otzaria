@@ -661,9 +661,6 @@ class _Provider implements TantivyDataProvider {
   bool get requiresManualReindex => false;
 
   @override
-  bool ensureCatalogueOrderStamp() => true;
-
-  @override
   Future<SearchEngine> get engine async => _engine;
 
   @override
@@ -700,6 +697,10 @@ class _BatchEngine implements SearchEngine {
 
   @override
   Future<void> openIndexWriter() async => openWriterCalls++;
+
+  @override
+  Future<BigInt> setBookOrder({required List<BookOrderEntry> entries}) async =>
+      BigInt.one;
 
   @override
   Future<List<LibraryBookResult>> addLibraryBooks({
@@ -741,6 +742,9 @@ class _BatchEngine implements SearchEngine {
       textStorage: book.textStorage,
       contentHash: BigInt.zero,
       textHash: BigInt.zero,
+      bookNumber: 1,
+      metadataHash: BigInt.zero,
+      sourceHash: book.sourceHash ?? BigInt.zero,
     );
   }
 
@@ -749,9 +753,8 @@ class _BatchEngine implements SearchEngine {
     required String title,
     required String topics,
     required String filePath,
-    required int catalogueOrder,
-    required int generationOrder,
     required List<int> text,
+    BigInt? sourceHash,
     List<String>? extraFacets,
     required TextStorage textStorage,
     Uint32List? storedLines,

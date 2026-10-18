@@ -755,6 +755,15 @@ void main() {
     );
 
     blocTest<IndexingBloc, IndexingState>(
+      'עדכון סדר הספרים עובר למאגר בלי פליטת מצב',
+      build: _FakeIndexingBloc.new,
+      act: (bloc) => bloc.add(SyncBookOrder(libraryWithBooks(2))),
+      expect: () => <IndexingState>[],
+      verify: (bloc) =>
+          expect(repositoryOf(bloc).syncedOrders.single.books, hasLength(2)),
+    );
+
+    blocTest<IndexingBloc, IndexingState>(
       'ריצה בלי עבודה אינה פולטת InProgress',
       build: _FakeIndexingBloc.new,
       act: (bloc) => bloc.add(
@@ -1117,6 +1126,12 @@ class _FakeIndexingRepository extends IndexingRepository {
     }
     return _finish(onProgress);
   }
+
+  final syncedOrders = <Library>[];
+
+  @override
+  Future<void> syncBookOrder(Library library) async =>
+      syncedOrders.add(library);
 
   @override
   Future<void> rememberChangedBooks(

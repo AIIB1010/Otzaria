@@ -51,6 +51,16 @@ class StartIndexing extends RunIndexing {
   const StartIndexing(super.library, {super.onSettled});
 }
 
+/// מעדכן במנוע את סדר הקטלוג והדורות של העץ המלא, בלי פליטת מצב.
+class SyncBookOrder extends IndexingWorkEvent {
+  final Library library;
+
+  const SyncBookOrder(this.library);
+
+  @override
+  List<Object?> get props => [library];
+}
+
 /// ניקוי רשומות יתומות מהאינדקס — ספרים שכבר אינם בספרייה (ספר אישי
 /// שנמחק, תיקייה מותאמת שהוסרה). רץ בתור העבודה הסדרתי, בלי UI התקדמות.
 class DropOrphanedIndexEntries extends IndexingWorkEvent {

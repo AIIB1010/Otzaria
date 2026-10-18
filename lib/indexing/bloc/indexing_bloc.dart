@@ -130,6 +130,11 @@ class IndexingBloc extends Bloc<IndexingEvent, IndexingState> {
       return;
     }
 
+    if (event is SyncBookOrder) {
+      await _repository.syncBookOrder(event.library);
+      return;
+    }
+
     if (event is ReconcileHiddenIndex) {
       var success = false;
       try {
