@@ -1681,7 +1681,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
         return const MultiWindowService().openEmptyWindow();
       case ReindexLibraryAction():
         // רענון הקטלוג מהדיסק; ה-listener על completedRefreshRequestIds מריץ
-        // StartIndexing + ReconcileIndex כשהרענון שקלט את הבקשה מסתיים.
+        // ריצת אינדוקס עם בדיקה מלאה כשהרענון שקלט את הבקשה מסתיים.
         // מתעלם מהגדרת עדכון האינדקס האוטומטי — זו בקשה מפורשת של המשתמש.
         final requestId = _nextIndexRequestId++;
         _pendingIndexRequests[requestId] = (

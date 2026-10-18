@@ -149,7 +149,7 @@ Future<void> main() async {
           'moved_book_index_',
         );
         final engine = await SearchEngine.newInstance(path: directory.path);
-        final provider = _NativeIndex(engine);
+        final provider = _NativeIndex(engine)..activeIndexPath = directory.path;
         addTearDown(() async {
           provider.isIndexing.dispose();
           engine.dispose();
@@ -210,9 +210,10 @@ Future<void> main() async {
           changed?.map(IndexingRepository.catalogueOrderKey),
           unorderedEquals(['uid:5', 'id:9']),
         );
-        final result = await indexer.reindexChangedBooks(
-          changed!,
+        final result = await indexer.runIndexing(
           after,
+          books: const [],
+          changedBooks: changed!,
           onProgress: (_, _) {},
         );
         expect(result.isClean, isTrue);
@@ -257,9 +258,10 @@ Future<void> main() async {
           reversed?.map(IndexingRepository.catalogueOrderKey),
           unorderedEquals(['uid:5', 'id:9']),
         );
-        final reverseResult = await indexer.reindexChangedBooks(
-          reversed!,
+        final reverseResult = await indexer.runIndexing(
           before,
+          books: const [],
+          changedBooks: reversed!,
           onProgress: (_, _) {},
         );
         expect(reverseResult.isClean, isTrue);
