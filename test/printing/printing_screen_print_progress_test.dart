@@ -35,6 +35,9 @@ class _FakeSettingsRepository extends Fake implements SettingsRepository {
 class _PendingPrintingPlatform extends PrintingPlatform {
   Completer<bool>? job;
 
+  /// כמו ה-plugin: מבקש את ה-PDF, וכשל ב-onLayout משאיר את העבודה תלויה.
+  bool requestLayout = false;
+
   @override
   Future<bool> layoutPdf(
     Printer? printer,
@@ -46,8 +49,17 @@ class _PendingPrintingPlatform extends PrintingPlatform {
     OutputType outputType,
     bool forceCustomPrintPaper,
     bool windowsModernDialog,
-  ) {
-    return (job = Completer<bool>()).future;
+  ) async {
+    final pending = job = Completer<bool>();
+    if (requestLayout) {
+      try {
+        // פורמט של המדפסת, שונה מזה של התצוגה המקדימה השמורה.
+        await onLayout(PdfPageFormat.a5);
+      } catch (_) {
+        return Completer<bool>().future;
+      }
+    }
+    return pending.future;
   }
 
   @override
@@ -63,6 +75,7 @@ void main() {
   const pathProviderChannel = MethodChannel('plugins.flutter.io/path_provider');
   late PrintingPlatform originalPlatform;
   late Directory tempDir;
+  var layoutFails = false;
 
   setUpAll(() async {
     await Settings.init(cacheProvider: MemorySettingsCache());
@@ -87,6 +100,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
+    layoutFails = false;
     final platform = _PendingPrintingPlatform();
     PrintingPlatform.instance = platform;
     final settingsBloc = _MockSettingsBloc();
@@ -124,7 +138,10 @@ void main() {
           builder: (_) => PrintingScreen(
             data: Future.value(''),
             bookId: 'test',
-            createPdfOverride: (_) async => source!,
+            createPdfOverride: (_) async {
+              if (layoutFails) throw StateError('layout');
+              return source!;
+            },
           ),
         ),
       ),
@@ -167,6 +184,11 @@ void main() {
     await tester.tap(find.text('מדפיס…'), warnIfMissed: false);
     await tester.pump();
     expect(platform.job, same(firstJob));
+    // גם ESC אינו סוגר את המסך באמצע ההדפסה.
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(PrintingScreen), findsOneWidget);
 
     platform.job!.complete(true);
     await tester.pump();
@@ -189,8 +211,25 @@ void main() {
     await tester.pump();
     await tester.pump();
 
+    expect(tester.takeException(), isA<StateError>());
+
     expect(find.textContaining('ההדפסה נכשלה'), findsOneWidget);
     expect(find.text('הדפסה'), findsOneWidget);
+    expect(find.byType(PrintingScreen), findsOneWidget);
+    await closeScreen(tester);
+  });
+
+  testWidgets('כשל ביצירת ה-PDF מחזיר את הכפתור לפעולה', (tester) async {
+    final platform = await openScreen(tester);
+    platform.requestLayout = true;
+    layoutFails = true;
+
+    await tester.tap(find.text('הדפסה'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('הדפסה'), findsOneWidget);
+    expect(find.text('מדפיס…'), findsNothing);
     expect(find.byType(PrintingScreen), findsOneWidget);
     await closeScreen(tester);
   });

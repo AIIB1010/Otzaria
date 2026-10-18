@@ -1700,12 +1700,19 @@ class _PrintingScreenState extends State<PrintingScreen> {
             context: context,
             name: widget.bookId,
             usePrinterSettings: true,
-            onLayout: _createOutputPdf,
+            onLayout: _createPrintJobPdf,
             format: format,
           );
-        } catch (e) {
+        } catch (e, stack) {
           if (mounted) setState(() => _isPrinting = false);
           UiSnack.showError(PdfMessages.printError(e));
+          FlutterError.reportError(
+            FlutterErrorDetails(
+              exception: e,
+              stack: stack,
+              library: 'printing',
+            ),
+          );
           return;
         }
         if (mounted) setState(() => _isPrinting = false);
@@ -1725,6 +1732,17 @@ class _PrintingScreenState extends State<PrintingScreen> {
         if (await _saveToFile(_ExportFormat.word) && context.mounted) {
           Navigator.of(context).pop(true);
         }
+    }
+  }
+
+  // אחרי כשל ב-onLayout ה-Future של printing לא מסתיים לעולם (העבודה נמחקת
+  // בצד הנייטיבי), ולכן מצב ההדפסה מתאפס כאן.
+  Future<Uint8List> _createPrintJobPdf(PdfPageFormat format) async {
+    try {
+      return await _createOutputPdf(format);
+    } catch (_) {
+      if (mounted) setState(() => _isPrinting = false);
+      rethrow;
     }
   }
 
@@ -2495,7 +2513,8 @@ class _PrintingScreenState extends State<PrintingScreen> {
     return Actions(
       actions: {
         DismissIntent: CallbackAction<DismissIntent>(
-          onInvoke: (_) => Navigator.of(context).maybePop(),
+          onInvoke: (_) =>
+              _isPrinting ? null : Navigator.of(context).maybePop(),
         ),
       },
       child: Focus(autofocus: true, skipTraversal: true, child: dialog),
