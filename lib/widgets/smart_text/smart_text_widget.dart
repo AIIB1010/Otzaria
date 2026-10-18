@@ -9,6 +9,7 @@ import 'package:otzaria/text_book/utils/inline_section_markers.dart';
 import 'package:otzaria/book_common/utils/link_anchor_variants.dart';
 import 'package:otzaria/text_book/utils/link_preview_utils.dart';
 import 'package:otzaria/theme/app_fonts.dart';
+import 'package:otzaria/theme/app_surfaces.dart';
 import 'package:otzaria/utils/file/markdown_to_otzaria.dart';
 import 'package:otzaria/utils/text/html_link_handler.dart';
 import 'package:otzaria/utils/text/text_manipulation.dart' as utils;
@@ -236,12 +237,13 @@ class SmartTextWidget extends StatelessWidget {
       }
     }
 
-    // סמן-מספר וטווח-ציטוט נשארים בשורה בצבע ה-primary; fwfh לא מכיר
+    // סמן-מספר וטווח-ציטוט נשארים בשורה בצבע הקישור; fwfh לא מכיר
     // inherit ולכן הערך מפורש. צבעי אותיות המפרשים המורמות נפתרים ב-wrap.
     final colorScheme = Theme.of(context).colorScheme;
     String toCssHex(Color color) =>
         '#${(color.toARGB32() & 0x00FFFFFF).toRadixString(16).padLeft(6, '0')}';
-    final anchorLinkColorCss = toCssHex(colorScheme.primary);
+    final linkColor = AppSurfaces.readerLink(colorScheme);
+    final anchorLinkColorCss = toCssHex(linkColor);
     final markdownSurfaceCss = toCssHex(colorScheme.surfaceContainerHighest);
     final markdownBorderCss = toCssHex(colorScheme.outlineVariant);
     final hasMarkdownBlock = processedHtml.contains(kMarkdownBlockClass);
@@ -272,7 +274,7 @@ class SmartTextWidget extends StatelessWidget {
             // העץ נשמר כל עוד ה-html וה-textStyle זהים; הצבעים אפויים ב-CSS,
             // והימצאות ה-callbacks קובעת את מבנה הספאנים.
             rebuildTriggers: [
-              colorScheme.primary,
+              linkColor,
               colorScheme.surfaceContainerHighest,
               colorScheme.outlineVariant,
               colorScheme.onSurfaceVariant,
@@ -349,7 +351,7 @@ class SmartTextWidget extends StatelessWidget {
                   ),
                 };
               }
-              // טווח-ציטוט (לינקר): צבע ה-primary בגופן הטקסט הסובב, בלי קו תחתון.
+              // טווח-ציטוט (לינקר): צבע הקישור בגופן הטקסט הסובב, בלי קו תחתון.
               // בלי וריאנט טיפוגרפי — הוא שייך לסמני-האות של המפרשים בלבד.
               if ((element.localName == 'span' || element.localName == 'a') &&
                   element.classes.contains('link-anchor-range')) {
@@ -366,6 +368,10 @@ class SmartTextWidget extends StatelessWidget {
                   // הכותרת צמודה לשורה שהיא פותחת, שמוצגת מיד מתחתיה.
                   'margin-bottom': '0',
                 };
+              }
+              if (element.localName == 'a' &&
+                  element.attributes.containsKey('href')) {
+                return {'color': anchorLinkColorCss};
               }
               if (!hasMarkdownBlock) {
                 return headingCss.isEmpty ? null : headingCss;
