@@ -269,5 +269,6 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     expect(closed, 1);
+    expect(focusNode.hasFocus, isFalse, reason: 'הקלדה לא תיכנס לשדה נסתר');
   });
 }
