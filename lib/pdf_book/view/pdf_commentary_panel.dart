@@ -590,7 +590,7 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
     if (!mounted) return;
     setState(() {
       _searchQuery = text;
-      _currentSearchIndex = 0;
+      _currentSearchIndex = -1;
       if (text.isEmpty) {
         _searchResultsPerLink.clear();
         _searchSnippetsPerLink.clear();
@@ -822,7 +822,7 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
     _orderedGroups = [];
     _cancelPendingItemPositionWait();
     _totalSearchResults = 0;
-    _currentSearchIndex = 0;
+    _currentSearchIndex = -1;
     _searchResultsPerLink.clear();
     _searchSnippetsPerLink.clear();
     _pendingCounts.clear();
