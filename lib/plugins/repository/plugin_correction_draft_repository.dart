@@ -51,7 +51,10 @@ class PluginCorrectionDraftRepository {
   }
 
   /// מחזיר את ה-token ואת תוכן הטיוטה הקיים, או זורק [PluginCorrectionDraftBusy].
-  Future<({String token, int? version, String changes, String conflicts})>
+  /// [epoch] מסמן את רגע הרכישה מול מחיקות מכוונות (ראו [rescue]).
+  Future<
+    ({String token, int epoch, int? version, String changes, String conflicts})
+  >
   acquire({
     required String pluginId,
     required String draftId,
@@ -71,6 +74,7 @@ class PluginCorrectionDraftRepository {
     if (result['acquired'] != true) throw const PluginCorrectionDraftBusy();
     return (
       token: result['token'] as String,
+      epoch: result['epoch'] as int,
       version: result['version'] as int?,
       changes: result['changes'] as String,
       conflicts: result['conflicts'] as String,
@@ -101,6 +105,34 @@ class PluginCorrectionDraftRepository {
       status: result['status'] as String,
       version: result['version'] as int?,
       conflicts: result['conflicts'] as String?,
+    );
+  }
+
+  /// שומר מצב של בעלים שאיבד את ה-lease כהתנגשויות בטיוטה, בלי לדרוס את
+  /// הבעלים החדש. `purged` — הטיוטה נמחקה באישור המשתמש אחרי [sinceEpoch].
+  Future<({String status, int? version})> rescue({
+    required String pluginId,
+    required String draftId,
+    required String bookUid,
+    required String bookId,
+    required String bookSource,
+    required String libraryVersion,
+    required String entriesJson,
+    required int sinceEpoch,
+  }) async {
+    final result = await _backend.call('rescue', {
+      'pluginId': pluginId,
+      'draftId': draftId,
+      'bookUid': bookUid,
+      'bookId': bookId,
+      'bookSource': bookSource,
+      'libraryVersion': libraryVersion,
+      'entriesJson': entriesJson,
+      'sinceEpoch': sinceEpoch,
+    });
+    return (
+      status: result['status'] as String,
+      version: result['version'] as int?,
     );
   }
 
@@ -240,6 +272,19 @@ class _Executor {
       case 'purge':
         PluginCorrectionDraftStore.purge(db, a['pluginId'] as String);
         return const {};
+      case 'rescue':
+        return PluginCorrectionDraftStore.rescue(
+          db,
+          pluginId: a['pluginId'] as String,
+          draftId: a['draftId'] as String,
+          bookUid: a['bookUid'] as String,
+          bookId: a['bookId'] as String,
+          bookSource: a['bookSource'] as String,
+          libraryVersion: a['libraryVersion'] as String,
+          entriesJson: a['entriesJson'] as String,
+          sinceEpoch: a['sinceEpoch'] as int,
+          nowMs: nowMs(),
+        );
       case 'heartbeat':
         PluginCorrectionDraftStore.heartbeat(db, heldTokens, nowMs());
         return const {};

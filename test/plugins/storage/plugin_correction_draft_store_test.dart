@@ -331,4 +331,121 @@ void main() {
       );
     },
   );
+
+  group('rescue', () {
+    Future<({String status, int? version})> rescue(
+      PluginCorrectionDraftRepository repo,
+      List<String> proposed, {
+      required int sinceEpoch,
+    }) => repo.rescue(
+      pluginId: 'p',
+      draftId: draftId,
+      bookUid: 'id:1',
+      bookId: 'בראשית',
+      bookSource: 'official',
+      libraryVersion: 'v1',
+      entriesJson: jsonEncode([
+        for (final change in jsonDecode(_changes(proposed)) as List)
+          {...change as Map, 'reason': 'displaced'},
+      ]),
+      sinceEpoch: sinceEpoch,
+    );
+
+    test('מוסיף התנגשויות בלבד, בלי לגעת ב-changes או ב-holder', () async {
+      final owner = context();
+      final lease = await owner.acquire(
+        pluginId: 'p',
+        draftId: draftId,
+        bookUid: 'id:1',
+        bookId: 'בראשית',
+        bookSource: 'official',
+        libraryVersion: 'v1',
+      );
+      final saved = await write(owner, lease.token, 1, ['של הבעלים']);
+      final rescued = await rescue(context(), [
+        'של הבעלים',
+        'שנדחק',
+      ], sinceEpoch: lease.epoch);
+      expect(rescued.status, 'ok');
+      expect(rescued.version, greaterThan(saved.version!));
+      final draft = (await owner.get('p', draftId))!;
+      expect((draft['changes'] as List).single['proposedText'], 'של הבעלים');
+      expect(
+        [
+          for (final conflict in draft['conflicts'] as List)
+            (conflict['sectionIndex'], conflict['proposedText']),
+        ],
+        [(1, 'שנדחק')],
+        reason: 'זהה ל-changes אינו משוכפל',
+      );
+      // הבעלים ממשיך לכתוב ושומר את ההתנגשות.
+      final next = await write(owner, lease.token, 2, ['של הבעלים 2']);
+      expect(jsonDecode(next.conflicts!) as List, hasLength(1));
+      // הצלה חוזרת של מצב שכבר קיים אינה משכפלת ואינה מעלה גרסה.
+      final again = await rescue(context(), [
+        'של הבעלים 2',
+        'שנדחק',
+      ], sinceEpoch: lease.epoch);
+      expect(again.version, next.version);
+      // הצעה ישנה שהבעלים כבר שינה נשמרת כהתנגשות, ואינה דורסת את changes.
+      final stale = await rescue(context(), [
+        'של הבעלים',
+      ], sinceEpoch: lease.epoch);
+      expect(stale.version, greaterThan(next.version!));
+      final draft2 = (await owner.get('p', draftId))!;
+      expect((draft2['changes'] as List).single['proposedText'], 'של הבעלים 2');
+      expect(draft2['conflicts'], hasLength(2));
+    });
+
+    test('יוצר טיוטה כשהבעלים החדש שחרר טיוטה שהתרוקנה', () async {
+      final repo = context();
+      final token = await acquire(repo);
+      final epoch = (await repo.acquire(
+        pluginId: 'p',
+        draftId: correctionDraftId('p', 'id:2'),
+        bookUid: 'id:2',
+        bookId: 'שמות',
+        bookSource: 'official',
+        libraryVersion: 'v1',
+      )).epoch;
+      await repo.release(pluginId: 'p', draftId: draftId, token: token);
+      expect(await repo.get('p', draftId), isNull);
+      expect((await rescue(repo, ['שנדחק'], sinceEpoch: epoch)).status, 'ok');
+      final draft = (await repo.get('p', draftId))!;
+      expect(draft['changes'], isEmpty);
+      expect((draft['conflicts'] as List).single['reason'], 'displaced');
+      expect(draft['active'], isFalse);
+    });
+
+    test('אינו מחיה טיוטה שנמחקה באישור המשתמש אחרי פתיחת הסשן', () async {
+      final repo = context();
+      final lease = await repo.acquire(
+        pluginId: 'p',
+        draftId: draftId,
+        bookUid: 'id:1',
+        bookId: 'בראשית',
+        bookSource: 'official',
+        libraryVersion: 'v1',
+      );
+      await repo.purge('p');
+      expect(
+        (await rescue(repo, ['שנדחק'], sinceEpoch: lease.epoch)).status,
+        'purged',
+      );
+      expect(await repo.list('p'), isEmpty);
+      // סשן שנפתח אחרי המחיקה רשאי להציל.
+      final later = await repo.acquire(
+        pluginId: 'p',
+        draftId: draftId,
+        bookUid: 'id:1',
+        bookId: 'בראשית',
+        bookSource: 'official',
+        libraryVersion: 'v1',
+      );
+      expect(
+        (await rescue(repo, ['אחרי'], sinceEpoch: later.epoch)).status,
+        'ok',
+      );
+    });
+  });
 }

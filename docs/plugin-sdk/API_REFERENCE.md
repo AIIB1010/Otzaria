@@ -2274,6 +2274,7 @@ const { data: session } = await Otzaria.call('reader.beginCorrectionSession', {
     "version": 42,
     "persisted": true,
     "pending": false,
+    "displaced": false,
     "error": null,
     "conflicts": [
       {
@@ -2316,7 +2317,8 @@ const { data: session } = await Otzaria.call('reader.beginCorrectionSession', {
 
 כל הפעולות מחזירות `CorrectionSessionSnapshot`: `sessionId`, `tabId`, `bookId`,
 `bookUid`, `libraryVersion`, `revision`, `changes`, `capabilities` ו־`draft`
-(`{ draftId, version, persisted, pending, error, conflicts }`, מצב השמירה העמידה).
+(`{ draftId, version, persisted, pending, displaced, error, conflicts }`, מצב השמירה
+העמידה; `version` אינו `null` רק כשאפשר לאשר אותו, ראו חוזה השמירה).
 כל שינוי כולל `sectionIndex` אפסי, `originalSourceText`, `originalText` ו־`proposedText`.
 `originalSourceText` שומר את המקור הגולמי כולל תגיות וישויות HTML;
 `originalText` הוא הטקסט הקנוני לאחר `TextRendererService.stripHtml`.
@@ -2358,10 +2360,10 @@ const { data: session } = await Otzaria.call('reader.beginCorrectionSession', {
 גם כשהשדה עדיין ממוקד או במהלך composition; אין צורך להוציא ממנו את המיקוד.
 
 לפני החזרה היא שולחת `correctionSessionChanged` ממתין, ומחכה עד 3 שניות לשמירת
-המצב הנוכחי, כך שכאשר `draft.persisted` הוא true, `draft.version` הוא בדיוק הגרסה
-של התוכן שב־snapshot ואפשר לאשר אותה. אם השמירה לא הסתיימה בזמן או נכשלה,
-`persisted` הוא false (ו־`pending` או `error` מסבירים למה), ואין לאשר את `version`
-כמייצגת את ה־snapshot.
+המצב הנוכחי. היא גם קוראת את הטיוטה העמידה, כך שהתנגשויות שנוספו מחלון אחר (הצלה)
+מופיעות בלי עריכה נוספת. כש־`draft.version` אינו `null` הוא בדיוק הגרסה של התוכן
+שב־snapshot, ואפשר לאשר אותה. אם השמירה לא הסתיימה בזמן או נכשלה, `persisted` הוא
+false (ו־`pending` או `error` מסבירים למה), ו־`version` הוא `null`.
 
 ### `reader.restoreCorrectionDraft`
 
@@ -2387,7 +2389,7 @@ const { data: session } = await Otzaria.call('reader.beginCorrectionSession', {
 
 **הרשאה:** `reader.local_edit`. מקבלת `{ sessionId, expectedRevision }`, מחזירה את
 ה־snapshot האחרון ומסירה את הסשן ושכבת התצוגה. היא ממתינה (עד 3 שניות) לשמירה
-האחרונה, כך שה־snapshot המוחזר כולל `draft.version` שאפשר לאשר כש־`persisted` true.
+האחרונה, כך שה־snapshot המוחזר כולל `draft.version` שאפשר לאשר כשהוא אינו `null`.
 סיום **אינו** מוחק את הטיוטה העמידה ואינו שולח דיווח; שליחה נעשית בנפרד באמצעות
 `feedback.submitBookCorrection` ובהרשאת `feedback.send_email`, ואחריה (או אחרי שמירה
 באחסון התוסף) מאשרים ב־`acknowledgeCorrectionDraft`.
@@ -2415,7 +2417,7 @@ const { data: session } = await Otzaria.call('reader.beginCorrectionSession', {
 | `plugin_unavailable` | התוסף הוסר, הושבת או שהרשאת `reader.local_edit` בוטלה |
 | `window_closed` | חלון משני שהסשן בו נסגר |
 | `app_exit` | אוצריא נסגרת כרגיל |
-| `ownership_lost` | ה־lease על הטיוטה אבד (ראו מגבלות עמידות); השינויים שאחרי האובדן לא נשמרו |
+| `ownership_lost` | ה־lease על הטיוטה אבד (ראו מגבלות עמידות); שינויים שלא נשמרו עברו להתנגשויות `displaced` בטיוטה, ו־`draft.displaced` הוא true |
 
 `snapshot` הוא המצב הסופי, כולל `draft`. אם השמירה האחרונה הסתיימה בתוך 3 שניות,
 האירוע נשלח אחריה ואחרי שחרור ה־lease, עם `draft.persisted: true`. אחרת הוא נשלח
@@ -2437,10 +2439,12 @@ const { data: session } = await Otzaria.call('reader.beginCorrectionSession', {
   כשל כתיבה מוצג למשתמש ומנוסה שוב אוטומטית (1, 2, 5, 10, 30 שניות).
 - **`draft.persisted`** הוא true רק כאשר ה־commit האחרון שמר בדיוק את `revision`
   הנוכחי. `pending` מציין כתיבה מתוזמנת או בביצוע, ו־`error` את כשל הכתיבה האחרון.
-- **`draft.version`** היא גרסה עמידה של ה־commit האחרון, ממונה גלובלי עולה
-  שאינו חוזר לעולם — גם לא אחרי מחיקת טיוטה ויצירתה מחדש. `null` עד ה־commit
-  הראשון. `getCorrectionSession` ו־`endCorrectionSession` ממתינות עד 3 שניות לשמירה,
-  כך שכאשר `persisted` true, `version` מתאימה בדיוק לתוכן ה־snapshot.
+- **`draft.version`** היא הגרסה העמידה שתוכנה הוא בדיוק ה־`changes` וה־`conflicts`
+  שב־snapshot, ממונה גלובלי עולה שאינו חוזר לעולם — גם לא אחרי מחיקת טיוטה ויצירתה
+  מחדש. היא `null` בכל מצב אחר: לפני ה־commit הראשון, כש־`persisted` false, וכש־
+  `displaced` true (הטיוטה המשותפת כוללת תוכן של הבעלים החדש שאינו ב־snapshot הזה).
+  לכן אין דרך לאשר גרסה מלאה באמצעות snapshot חלקי. `getCorrectionSession`
+  ו־`endCorrectionSession` ממתינות עד 3 שניות לשמירה וקוראות את הגרסה העמידה.
 - **סיום אינו מוחק.** סיום סשן מכל סיבה משאיר את הטיוטה. רק
   `acknowledgeCorrectionDraft` עם ה־`version` הנוכחית בדיוק מנקה אותה.
 - **אישור.** פירושו "התוסף שמר את המצב הזה" (באחסון שלו או בדיווח שבתור) — **לא**
@@ -2477,9 +2481,32 @@ const { data: session } = await Otzaria.call('reader.beginCorrectionSession', {
 - בקריסת תהליך עלולים לאבוד עד כ־250ms של ההקלדה האחרונה, ועוד זמן הכתיבה שבביצוע.
 - המסד פועל ב־WAL עם `synchronous=NORMAL`: בהפסקת חשמל או קריסת מערכת ההפעלה
   ה־commit האחרון עלול לאבוד (המסד נשאר תקין).
-- אם ה־lease אבד (למשל התהליך הושהה מעבר לתוקף וחלון אחר פתח את הספר), השמירה
-  נעצרת, המשתמש מקבל הודעה והסשן מסתיים ב־`ownership_lost`. השינויים שאחרי האובדן
-  נשארים רק ב־snapshot של אירוע הסיום.
+- אם ה־lease אבד (למשל התהליך הושהה מעבר לתוקף וחלון אחר פתח את הספר), הסשן
+  מסתיים ב־`ownership_lost` והמשתמש מקבל הודעה. ההפרש שטרם נשמר (כולל איפוס פסקה)
+  נוסף כהתנגשויות `reason: 'displaced'` לטיוטה של הבעלים החדש: ה־`changes` שלו
+  ו־ה־lease שלו אינם משתנים, והגרסה עולה. כתיבה שתשובתה אבדה נחשבת לא ודאית: פסקאות
+  שניסתה לשנות נכללות בהצלה גם אם חזרו אחר כך לנוסח שנשמר קודם, כך שגם ביטול נשמר.
+  עד שההצלה נשמרת, המצב נשאר `persisted: false` ונספר באזהרת הסגירה. אחריה ה־snapshot
+  של הסשן שנדחק הוא `persisted: true` עם `version: null`; ה־snapshot הבא של הבעלים
+  החדש (`getCorrectionSession`, סיום) כולל את ההתנגשויות ואת הגרסה לאישור.
+  אם הטיוטה נמחקה באישור המשתמש אחרי פתיחת הסשן, ההצלה מוותרת.
+- **הרשאות.** הסשן וכל ממשקי התיקון והטיוטות תלויים רק ב־`reader.local_edit`; ביטולה
+  מסיים את הסשנים (`plugin_unavailable`). `reader.open` עצמאית: היא נדרשת רק לממשקים
+  שלה (למשל `getCurrentState` לאיתור `tabId`), וביטולה אינו מסיים סשן פעיל.
+- אזהרת הסגירה של אוצריא (סגירת לשונית — גם ב־`reader.closeTab` — העברת לשונית
+  לחלון אחר בגרירה או בתפריט, סגירת חלון או התוכנה) מנסה קודם לשמור, וכוללת גם סשנים שהסתיימו
+  (סיום עריכה, השבתה, סגירת לשונית) וטרם נשמרו; בסגירת התוכנה גם כשהלשונית כבר
+  סגורה. אין אזהרה כשהמצב נשמר או כשהטיוטה נמחקה באישור המשתמש.
+
+#### אחריות התוסף אחרי acknowledge
+
+אישור מוחק את העותק של אוצריא (תוכן והתנגשויות), ומאותו רגע האחסון של התוסף הוא
+העותק היחיד. snapshot מאוחר יותר אינו הוראת מחיקה: `conflicts: []` אחרי האישור, או
+סשן חדש על אותו ספר עם `recovery: null` ו־`changes: []`, אינם אומרים שהנתונים
+הקודמים בוטלו. על התוסף למזג כל snapshot לרשומה שלו ולא להחליף אותה, ולשמור נתון
+שאושר עד שנשלח, נפתר או נמחק במפורש בידי המשתמש. התנגשות עשויה לשאת גם
+`reason: 'displaced'` — עריכות שלא נשמרו בסשן שאיבד את הבעלות לחלון אחר, ונשמרו
+כהתנגשות בטיוטה של הבעלים החדש. מתכון מלא: [COOKBOOK](COOKBOOK.md#תיקונים-מקומיים-שמירה-אישור-והתאוששות).
 
 ### `reader.acknowledgeCorrectionDraft`
 

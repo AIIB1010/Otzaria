@@ -634,7 +634,27 @@ async function commentariesForCurrentLine() {
 ב־`acknowledgeCorrectionDraft`. סיום סשן, סגירת לשונית או קריסה אינם מוחקים אותה,
 ו־`beginCorrectionSession` הבא על אותו ספר משחזר אותה ומחזיר `recovery`.
 התוסף שומר אצלו את ה־snapshot, ורק אחרי שהשמירה הצליחה מאשר את `draft.version`.
-יש לסדר את הפעולות בתור יחיד בתוסף.
+יש לסדר את כל הפעולות (כולל פתיחה, סיום ו־`recoverOrphans`) בתור יחיד בתוסף.
+
+**אחריות התוסף אחרי `acknowledge`.** האישור מוחק את העותק של אוצריא: מרגע זה
+האחסון של התוסף הוא העותק **היחיד** של השינויים וההתנגשויות שאושרו. snapshot מאוחר
+יותר אינו הוראת מחיקה — למשל `conflicts: []` מיד אחרי האישור, או סשן חדש וריק
+(`recovery: null`, `changes: []`) על אותו ספר. לכן אין להחליף רשומה שמורה ב־snapshot
+חדש; ממזגים לתוכה, ומוחקים נתון רק כשנשלח, כשהמשתמש פתר את ההתנגשות או כשביקש
+במפורש למחוק.
+
+במתכון כל ספר הוא רשומה אחת, `{ bookUid, bookId, nextSeq, sessions, conflicts }`:
+
+- `sessions[sessionId]` — `{ seq, changes, covered }` של סשן אחד. `changes` מוחלפת רק
+  ב־snapshot של **אותו** סשן, ו־`covered` צוברת כל פסקה שהופיעה בו (כולל תיקונים
+  ששוחזרו). טיוטה יתומה נשמרת במפתח `draft:<draftId>:<version>`.
+- `conflicts[key]` — התנגשויות מצטברות לפי המפתח המובנה
+  `JSON.stringify([sectionIndex, originalSourceText, proposedText])`, ונמחקות רק
+  בפעולה מפורשת (`dismissConflict`). שרשור עם מפריד אינו חד־משמעי: `"a|b"`+`"c"`
+  ו־`"a"`+`"b|c"` היו מקבלים אותו מפתח.
+- התיקונים הממתינים: לכל `sectionIndex` קובע הסשן המאוחר ביותר (`seq`) שה־`covered`
+  שלו כולל אותה. אם הפסקה חסרה ב־`changes` שלו, היא בוטלה (reset). סשן חדש שלא
+  הכיר את הפסקה אינו משפיע עליה.
 
 ```javascript
 async function rpc(method, payload) {
@@ -647,21 +667,67 @@ async function rpc(method, payload) {
   return response.data;
 }
 
-// שומר אצל התוסף ורק אז מאשר; אישור פירושו "שמרתי", לא "נשלח לאתר".
-async function keep(snapshot) {
-  await rpc('storage.set', {
-    key: `correction.${snapshot.bookUid}`,
-    value: snapshot,
-  });
-  const { draftId, version, persisted } = snapshot.draft;
-  if (!persisted || version == null) return snapshot;
+const recordKey = (bookUid) => `correction.${bookUid}`;
+const conflictKey = (c) =>
+  JSON.stringify([c.sectionIndex, c.originalSourceText, c.proposedText]);
+
+async function loadRecord(bookUid, bookId) {
+  return (await rpc('storage.get', { key: recordKey(bookUid) })) ??
+    { bookUid, bookId, nextSeq: 0, sessions: {}, conflicts: {} };
+}
+
+// ממזג ואינו מחליף: רק הרשימה של entryKey מתעדכנת, והתנגשויות רק מתווספות.
+async function store(source, entryKey, changes, conflicts) {
+  const record = await loadRecord(source.bookUid, source.bookId);
+  const previous = record.sessions[entryKey];
+  const seq = previous?.seq ?? record.nextSeq++;
+  const covered = new Set(previous?.covered ?? []);
+  for (const change of changes) covered.add(change.sectionIndex);
+  record.sessions[entryKey] = { seq, changes, covered: [...covered] };
+  for (const conflict of conflicts) {
+    record.conflicts[conflictKey(conflict)] = conflict;
+  }
+  await rpc('storage.set', { key: recordKey(source.bookUid), value: record });
+  return record;
+}
+
+async function acknowledge(draftId, version) {
   try {
     await rpc('reader.acknowledgeCorrectionDraft', { draftId, version });
   } catch (error) {
-    // revision_conflict: נוצרה גרסה חדשה יותר; היא תאושר בסבב הבא.
-    if (error.code !== 'error.revision_conflict') throw error;
+    // revision_conflict: יש גרסה חדשה יותר, היא תאושר בסבב הבא.
+    // not_found: הטיוטה התרוקנה ונמחקה, אין מה לאשר.
+    if (error.code !== 'error.revision_conflict' &&
+        error.code !== 'error.not_found') throw error;
   }
+}
+
+// שומר אצל התוסף ורק אז מאשר; אישור פירושו "שמרתי", לא "נשלח לאתר".
+async function keep(snapshot) {
+  const { draftId, version, persisted, conflicts } = snapshot.draft;
+  await store(snapshot, snapshot.sessionId, snapshot.changes, conflicts);
+  if (persisted && version != null) await acknowledge(draftId, version);
   return snapshot;
+}
+
+// בכל פסקה קובע הסשן המאוחר שהכיר אותה; היעדרה אצלו הוא ביטול, לא "אין מידע".
+function pendingCorrections(record) {
+  const bySection = new Map();
+  const entries = Object.values(record.sessions).sort((a, b) => a.seq - b.seq);
+  for (const { changes, covered } of entries) {
+    const byIndex = new Map(changes.map((c) => [c.sectionIndex, c]));
+    for (const index of covered) bySection.set(index, byIndex.get(index) ?? null);
+  }
+  return [...bySection.values()]
+    .filter(Boolean)
+    .sort((a, b) => a.sectionIndex - b.sectionIndex);
+}
+
+// החלטת משתמש מפורשת (או אחרי restoreCorrectionDraft מוצלח) — הדרך היחידה למחוק.
+async function dismissConflict(bookUid, key) {
+  const record = await loadRecord(bookUid);
+  delete record.conflicts[key];
+  await rpc('storage.set', { key: recordKey(bookUid), value: record });
 }
 
 async function beginCorrections() {
@@ -707,26 +773,37 @@ async function recoverOrphans() {
   for (const meta of drafts) {
     if (meta.active) continue; // סשן חי מטפל בה בעצמו
     const draft = await rpc('reader.getCorrectionDraft', { draftId: meta.draftId });
-    await rpc('storage.set', { key: `correction.${draft.bookUid}`, value: draft });
-    await rpc('reader.acknowledgeCorrectionDraft', {
-      draftId: draft.draftId,
-      version: draft.version,
-    });
+    await store(draft, `draft:${draft.draftId}:${draft.version}`,
+      draft.changes, draft.conflicts);
+    await acknowledge(draft.draftId, draft.version);
   }
 }
 ```
 
 אין לאשר גרסה לפני שהשמירה אצל התוסף הצליחה: אחרי האישור התוכן נמחק מצד אוצריא.
-אם `draft.persisted` false, הגרסה שב־snapshot אינה בהכרח התוכן שבו, ולכן מחכים
-לאירוע הבא או ל־`getCorrectionSession` נוסף. אישור חוזר מחזיר `duplicate: true`.
+`draft.version` מופיע רק כשה־snapshot הוא בדיוק התוכן העמיד של הגרסה; אחרת הוא
+`null` ואין מה לאשר: כש־`persisted` false (מחכים לאירוע הבא או ל־`getCorrectionSession`
+נוסף), וכש־`displaced` true — הסשן איבד את הבעלות, והעריכות שלו נשמרו בטיוטה המשותפת
+של הבעלים החדש, שה־snapshot שלו כולל אותן ומאשר אותן. אישור חוזר מחזיר `duplicate: true`.
 אישור בזמן סשן פעיל אינו עוצר את העריכה; עריכה נוספת יוצרת גרסה חדשה לאישור.
 `correctionSessionEnded` עם `persisted` false פירושו שהשמירה לא הסתיימה בתוך 3 שניות;
 אוצריא ממשיכה לנסות, והטיוטה תימצא ב־`recoverOrphans` בהפעלה הבאה.
+טיוטה יתומה אינה נושאת `sessionId`, ולכן היא נשמרת כרשומת סשן נוספת: פסקה שאופסה
+אחרי הסנכרון האחרון של התוסף עלולה לחזור כתיקון ממתין, אבל שום תיקון אינו אובד.
+אחרי שליחה מוצלחת מסירים את הפסקאות שנשלחו מכל `sessions` (או את הרשומה כולה
+ב־`storage.remove`).
 
-התנגשויות (`draft.conflicts`) הן תיקונים ששוחזרו אך המקור שלהם השתנה (`source_changed`),
-הפסקה אינה קיימת (`not_found`) או שהנתונים אינם תקינים (`invalid`). הן אינן מוצגות
-בספר ונשמרות עד האישור. אפשר להציג אותן למשתמש,
-ולהחזיר תיקון רצוי בעזרת `restoreCorrectionDraft` מול המקור העדכני.
+התנגשויות (`draft.conflicts`) הן תיקונים ששוחזרו אך אינם מוצגים בספר, לפי `reason`:
+
+- `source_changed` — המקור השתנה.
+- `not_found` — הפסקה אינה קיימת.
+- `invalid` — הנתונים אינם תקינים או שההצעה אינה נתמכת.
+- `displaced` — עריכות שלא נשמרו בסשן שאיבד את הבעלות לחלון אחר, ונשמרו כהתנגשות
+  בטיוטה של הבעלים החדש.
+
+אוצריא שומרת אותן רק עד האישור; אחריו הן קיימות רק ב־`record.conflicts`. אפשר להציג
+אותן למשתמש, להחזיר תיקון רצוי בעזרת `restoreCorrectionDraft` מול המקור העדכני,
+ואז לקרוא ל־`dismissConflict`.
 `beginCorrectionSession` שנכשל בשחזור ב־`error.storage_failed` (קריאת מקור נכשלה זמנית)
 או ב־`error.revision_conflict` (הטיוטה אושרה בזמן השחזור) אינו משנה את הטיוטה, ואפשר
 לנסות לפתוח שוב.

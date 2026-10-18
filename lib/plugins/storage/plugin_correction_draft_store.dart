@@ -15,6 +15,7 @@ String correctionDraftId(String pluginId, String bookUid) => base64Url
 abstract final class PluginCorrectionDraftStore {
   static const String table = 'plugin_correction_draft';
   static const String counterTable = 'plugin_correction_draft_counter';
+  static const String purgeTable = 'plugin_correction_draft_purge';
 
   static void createSchema(Database db) {
     db.execute('''
@@ -41,6 +42,12 @@ abstract final class PluginCorrectionDraftStore {
       CREATE TABLE IF NOT EXISTS $counterTable (
         id INTEGER PRIMARY KEY CHECK (id = 1),
         value INTEGER NOT NULL
+      )
+    ''');
+    db.execute('''
+      CREATE TABLE IF NOT EXISTS $purgeTable (
+        plugin_id TEXT PRIMARY KEY,
+        epoch INTEGER NOT NULL
       )
     ''');
   }
@@ -124,6 +131,7 @@ abstract final class PluginCorrectionDraftStore {
       );
       return {
         'acquired': true,
+        'epoch': _nextVersion(db),
         'version': null,
         'changes': '[]',
         'conflicts': '[]',
@@ -136,6 +144,7 @@ abstract final class PluginCorrectionDraftStore {
     );
     return {
       'acquired': true,
+      'epoch': _nextVersion(db),
       'version': _hasContent(row) ? row['version'] : null,
       'changes': row['changes_json'],
       'conflicts': row['conflicts_json'],
@@ -307,8 +316,88 @@ abstract final class PluginCorrectionDraftStore {
     return _public(row, nowMs, ttlMs, content: true);
   }
 
-  static void purge(Database db, String pluginId) => _transaction(
-    db,
-    () => db.execute('DELETE FROM $table WHERE plugin_id = ?', [pluginId]),
-  );
+  /// הסימון נשאר אחרי המחיקה, כדי שהצלה מסשן שנפתח לפני המחיקה לא תחזיר אותה.
+  static void purge(Database db, String pluginId) => _transaction(db, () {
+    db.execute('DELETE FROM $table WHERE plugin_id = ?', [pluginId]);
+    db.execute(
+      'INSERT INTO $purgeTable (plugin_id, epoch) VALUES (?, ?) '
+      'ON CONFLICT(plugin_id) DO UPDATE SET epoch = excluded.epoch',
+      [pluginId, _nextVersion(db)],
+    );
+  });
+
+  /// מצב שלא נשמר של בעלים שאיבד את ה-lease נוסף כהתנגשויות בלבד: אינו נוגע
+  /// ב-changes או ב-holder של הבעלים החדש, ואינו מחזיר טיוטה שנמחקה אחרי [sinceEpoch].
+  static Map<String, Object?> rescue(
+    Database db, {
+    required String pluginId,
+    required String draftId,
+    required String bookUid,
+    required String bookId,
+    required String bookSource,
+    required String libraryVersion,
+    required String entriesJson,
+    required int sinceEpoch,
+    required int nowMs,
+  }) => _transaction(db, () {
+    final purged = db.select(
+      'SELECT epoch FROM $purgeTable WHERE plugin_id = ?',
+      [pluginId],
+    );
+    if (purged.isNotEmpty && (purged.first['epoch'] as int) > sinceEpoch) {
+      return {'status': 'purged'};
+    }
+    final row = _row(db, pluginId, draftId);
+    final conflicts = [
+      for (final value
+          in jsonDecode(row?['conflicts_json'] as String? ?? '[]') as List)
+        Map<String, Object?>.from(value as Map),
+    ];
+    String key(Map<String, Object?> entry) => jsonEncode([
+      entry['sectionIndex'],
+      entry['originalSourceText'],
+      entry['proposedText'],
+    ]);
+    final known = {
+      for (final conflict in conflicts) key(conflict),
+      for (final value
+          in jsonDecode(row?['changes_json'] as String? ?? '[]') as List)
+        key(Map<String, Object?>.from(value as Map)),
+    };
+    var added = false;
+    for (final value in jsonDecode(entriesJson) as List) {
+      final entry = Map<String, Object?>.from(value as Map);
+      if (known.add(key(entry))) {
+        conflicts.add(entry);
+        added = true;
+      }
+    }
+    if (!added) return {'status': 'ok', 'version': row?['version']};
+    final version = _nextVersion(db);
+    if (row == null) {
+      db.execute(
+        'INSERT INTO $table (plugin_id, draft_id, book_uid, book_id, '
+        'book_source, library_version, version, changes_json, conflicts_json, '
+        "updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?, ?)",
+        [
+          pluginId,
+          draftId,
+          bookUid,
+          bookId,
+          bookSource,
+          libraryVersion,
+          version,
+          jsonEncode(conflicts),
+          nowMs,
+        ],
+      );
+    } else {
+      db.execute(
+        'UPDATE $table SET version = ?, conflicts_json = ?, updated_at = ? '
+        'WHERE plugin_id = ? AND draft_id = ?',
+        [version, jsonEncode(conflicts), nowMs, pluginId, draftId],
+      );
+    }
+    return {'status': 'ok', 'version': version};
+  });
 }

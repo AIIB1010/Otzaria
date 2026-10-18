@@ -21,6 +21,8 @@ class _ControlledRepository implements PluginCorrectionDraftRepository {
   Completer<void>? gate;
   Completer<void>? acquireGate;
   int failWrites = 0;
+  int failRescues = 0;
+  int rescues = 0;
 
   /// הכתיבה נשמרת ב-SQLite אבל התשובה אובדת (כמו worker שקרס אחרי commit).
   int loseReplies = 0;
@@ -78,7 +80,9 @@ class _ControlledRepository implements PluginCorrectionDraftRepository {
   }
 
   @override
-  Future<({String token, int? version, String changes, String conflicts})>
+  Future<
+    ({String token, int epoch, int? version, String changes, String conflicts})
+  >
   acquire({
     required String pluginId,
     required String draftId,
@@ -96,6 +100,34 @@ class _ControlledRepository implements PluginCorrectionDraftRepository {
       bookId: bookId,
       bookSource: bookSource,
       libraryVersion: libraryVersion,
+    );
+  }
+
+  @override
+  Future<({String status, int? version})> rescue({
+    required String pluginId,
+    required String draftId,
+    required String bookUid,
+    required String bookId,
+    required String bookSource,
+    required String libraryVersion,
+    required String entriesJson,
+    required int sinceEpoch,
+  }) async {
+    rescues++;
+    if (failRescues > 0) {
+      failRescues--;
+      throw StateError('disk full');
+    }
+    return inner.rescue(
+      pluginId: pluginId,
+      draftId: draftId,
+      bookUid: bookUid,
+      bookId: bookId,
+      bookSource: bookSource,
+      libraryVersion: libraryVersion,
+      entriesJson: entriesJson,
+      sinceEpoch: sinceEpoch,
     );
   }
 
@@ -242,6 +274,7 @@ void main() {
     for (final repository in controlled) {
       repository
         ..failWrites = 0
+        ..failRescues = 0
         ..open();
       final acquireGate = repository.acquireGate;
       if (acquireGate != null && !acquireGate.isCompleted) {
@@ -342,13 +375,21 @@ void main() {
           'נשמר',
         );
 
-        // הכתיבה התקועה מגיעה אחרי שהבעלים התחלף — ואינה דורסת אותו.
+        // הכתיבה התקועה מגיעה אחרי שהבעלים התחלף — ואינה דורסת אותו, אבל
+        // המצב שלה נשמר כהתנגשות displaced. בקריסה אמיתית אין כתיבה מאוחרת.
         repository.open();
         await _idle();
         expect(repository.committed.last, (revision: 2, status: 'lost'));
         expect(crashed.hasSessionForTab('tab'), isFalse);
         final draft = await restarted.getDraft('p', draftId);
         expect((draft['changes'] as List).single['proposedText'], 'נשמר');
+        expect(
+          [
+            for (final conflict in draft['conflicts'] as List)
+              (conflict['proposedText'], conflict['reason']),
+          ],
+          [('לא נשמר', 'displaced')],
+        );
       },
     );
 
@@ -679,7 +720,8 @@ void main() {
         expect(failed['draft']['persisted'], isFalse);
         expect(failed['draft']['pending'], isFalse);
         expect(failed['draft']['error'], contains('disk full'));
-        expect(failed['draft']['version'], goodVersion);
+        // התוכן כאן אינו התוכן העמיד, ולכן אין גרסה לאישור.
+        expect(failed['draft']['version'], isNull);
         expect(
           service.draftStatusForTab('tab'),
           PluginCorrectionDraftStatus.failed,
@@ -786,7 +828,9 @@ void main() {
           (event) => event.$1 == 'reader.correctionSessionEnded',
         );
         expect(ended.single.$2['reason'], 'ownership_lost');
-        expect(ended.single.$2['snapshot']['draft']['persisted'], isFalse);
+        // האירוע יוצא אחרי שהמצב שלא נשמר הוצל לטיוטה של C.
+        expect(ended.single.$2['snapshot']['draft']['displaced'], isTrue);
+        expect(ended.single.$2['snapshot']['draft']['persisted'], isTrue);
 
         final draft = await windowC.getDraft('p', draftId);
         expect(
@@ -795,6 +839,13 @@ void main() {
               change['proposedText'],
           ],
           ['מחלון א'],
+        );
+        expect(
+          [
+            for (final conflict in draft['conflicts'] as List)
+              (conflict['proposedText'], conflict['reason']),
+          ],
+          [('מחלון ב אחרי אובדן', 'displaced')],
         );
         expect(windowC.hasSessionForTab('window-c'), isTrue);
         edit(windowC, 2, 'מחלון ג', tabId: 'window-c');
@@ -1319,6 +1370,374 @@ void main() {
         throwsA(isA<StateError>()),
       );
       await repository.dispose().timeout(const Duration(seconds: 2));
+    });
+  });
+
+  group('סקירה 2: מצב שלא נשמר אינו נעלם', () {
+    test(
+      'סשן שהסתיים ולא נשמר נשאר גלוי לבדיקת הסגירה עד שנשמר',
+      () async {
+        PluginCorrectionSessionService.flushTimeout = const Duration(
+          milliseconds: 10,
+        );
+        final repository = controlledConnection();
+        final service = newService(repository);
+        await begin(service);
+        repository.failWrites = 100;
+        edit(service, 0, 'לא נשמר אחרי סיום');
+        await _idle();
+        service.endByUser('tab');
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+
+        expect(service.hasSessionForTab('tab'), isFalse);
+        expect(
+          await service.flushAll(timeout: const Duration(milliseconds: 10)),
+          isFalse,
+        );
+        expect(await service.unpersistedTabIds(['tab']), {'tab'});
+        expect(await service.unsavedStates(), [
+          (tabId: 'tab', ownerName: 'p', bookId: 'ספר'),
+        ]);
+
+        // ניסיון חוזר מצליח — ואז אין עוד אזהרה.
+        repository.failWrites = 0;
+        service.retryDraftWrites();
+        await _idle();
+        expect(await service.unsavedStates(), isEmpty);
+        expect(
+          ((await service.getDraft('p', draftId))['changes'] as List)
+              .single['proposedText'],
+          'לא נשמר אחרי סיום',
+        );
+      },
+    );
+
+    test('מחיקה באישור המשתמש אינה מוצגת כמצב שלא נשמר', () async {
+      PluginCorrectionSessionService.flushTimeout = const Duration(
+        milliseconds: 10,
+      );
+      final repository = controlledConnection();
+      final service = newService(repository);
+      await begin(service);
+      repository.failWrites = 100;
+      edit(service, 0, 'יימחק');
+      service.endByUser('tab');
+      await _idle();
+      expect(await service.unsavedStates(), isNotEmpty);
+      await service.purgeOwner('p');
+      expect(await service.unsavedStates(), isEmpty);
+      expect(await service.flushAll(), isTrue);
+    });
+
+    test(
+      'שני הקשרים, ללא צרכן לאירוע: השינוי האחרון של בעלים שנדחק נשמר '
+      'כהתנגשות, והבעלים החדש אינו נדרס',
+      () async {
+        // בלי flushTimeout קצר: get שחוזר לפני הכתיבה מאפשר לה לרוץ אחרי
+        // הזזת השעון ולרענן את ה-lease, ו-B נכשל ב-correction_busy.
+        PluginCorrectionSessionService.writeInterval = Duration.zero;
+        final repositoryA = controlledConnection();
+        final windowA = newService(repositoryA);
+        final a = await begin(windowA);
+        edit(windowA, 0, 'נשמר');
+        edit(windowA, 1, 'יאופס');
+        await get(windowA, a);
+
+        repositoryA.gate = Completer<void>();
+        edit(windowA, 0, 'האחרון שלא נשמר');
+        windowA.reset('p', a['sessionId'], 1, 3);
+        now += ttl + 1;
+        final windowB = newService(connection());
+        final b = await begin(windowB, tabId: 'tab-b');
+        expect(b['recovery']['restoredSectionIndices'], [0, 1]);
+        edit(windowB, 2, 'של B', tabId: 'tab-b');
+        await get(windowB, b);
+
+        // ההצלה נכשלת תחילה: המצב עדיין לא שמור ומדווח ככזה.
+        repositoryA.failRescues = 100;
+        repositoryA.open();
+        await _idle();
+        expect(windowA.hasSessionForTab('tab'), isFalse);
+        expect(
+          await windowA.flushAll(timeout: const Duration(milliseconds: 10)),
+          isFalse,
+        );
+        expect(await windowA.unpersistedTabIds(['tab']), {'tab'});
+
+        repositoryA.failRescues = 0;
+        windowA.retryDraftWrites();
+        await _idle();
+        expect(repositoryA.rescues, greaterThan(1));
+        expect(await windowA.flushAll(), isTrue);
+
+        final draft = await windowB.getDraft('p', draftId);
+        expect(
+          {
+            for (final change in draft['changes'] as List)
+              change['sectionIndex']: change['proposedText'],
+          },
+          {0: 'נשמר', 1: 'יאופס', 2: 'של B'},
+          reason: 'ה-changes של הבעלים החדש לא נדרסו',
+        );
+        expect(
+          [
+            for (final conflict in draft['conflicts'] as List)
+              (
+                conflict['sectionIndex'],
+                conflict['proposedText'],
+                conflict['reason'],
+              ),
+          ],
+          [
+            (0, 'האחרון שלא נשמר', 'displaced'),
+            // איפוס שלא נשמר: הצעה לחזור לנוסח המקור.
+            (1, 'מקור 1', 'displaced'),
+          ],
+        );
+
+        // הבעלים החדש ממשיך לכתוב בלי למחוק את ההתנגשויות, ורואה אותן.
+        edit(windowB, 3, 'עוד של B', tabId: 'tab-b');
+        final latest = await get(windowB, b);
+        expect(latest['draft']['conflicts'], hasLength(2));
+        expect(latest['draft']['persisted'], isTrue);
+      },
+    );
+
+    test('הצלה אחרי מחיקה מכוונת בהקשר אחר אינה מחיה את הטיוטה', () async {
+      PluginCorrectionSessionService.writeInterval = Duration.zero;
+      final repositoryA = controlledConnection();
+      final windowA = newService(repositoryA);
+      final a = await begin(windowA);
+      edit(windowA, 0, 'נשמר');
+      await get(windowA, a);
+      repositoryA.gate = Completer<void>();
+      edit(windowA, 0, 'ממתין');
+      now += ttl + 1;
+      final windowB = newService(connection());
+      await begin(windowB, tabId: 'tab-b');
+      await windowB.purgeOwner('p');
+
+      repositoryA.open();
+      await _idle();
+      expect(repositoryA.rescues, 1);
+      expect(await windowA.flushAll(), isTrue);
+      expect(await windowA.unsavedStates(), isEmpty);
+      expect(await windowB.listDrafts('p'), isEmpty);
+    });
+  });
+
+  group('סקירה 3: אישור, כתיבה לא ודאית ומכסה', () {
+    test(
+      'snapshot של סשן שהוצל אינו מאפשר אישור, ו-snapshot הסיום של הבעלים '
+      'החדש כולל את ההצלה',
+      () async {
+        PluginCorrectionSessionService.writeInterval = Duration.zero;
+        final repositoryA = controlledConnection();
+        final eventsA = <_Event>[];
+        final windowA = newService(repositoryA);
+        final a = await begin(windowA, events: eventsA);
+        edit(windowA, 0, 'נשמר אצל A');
+        final savedA = await get(windowA, a);
+        repositoryA.gate = Completer<void>();
+        edit(windowA, 0, 'האחרון של A');
+        now += ttl + 1;
+        final eventsB = <_Event>[];
+        final windowB = newService(connection());
+        final b = await begin(windowB, tabId: 'tab-b', events: eventsB);
+        edit(windowB, 1, 'ייחודי ל-B', tabId: 'tab-b');
+        await get(windowB, b);
+        repositoryA.open();
+        await _idle();
+        expect(await windowA.flushAll(), isTrue);
+        await _idle();
+
+        final ended = eventsA.lastWhere(
+          (e) => e.$1 == 'reader.correctionSessionEnded',
+        );
+        final snapshot = ended.$2['snapshot'] as Map;
+        expect(ended.$2['reason'], 'ownership_lost');
+        expect(snapshot['draft']['persisted'], isTrue);
+        expect(snapshot['draft']['displaced'], isTrue);
+        expect(
+          snapshot['draft']['version'],
+          isNull,
+          reason: 'התוכן ב-snapshot של A חלקי ביחס לטיוטה המשותפת',
+        );
+        // גם גרסה ש-A ראה קודם אינה מוחקת את התוכן של B.
+        await expectLater(
+          windowA.acknowledge('p', draftId, savedA['draft']['version'] as int),
+          _error('error.revision_conflict'),
+        );
+
+        final latestB = await get(windowB, b);
+        await windowB.end('p', b['sessionId'], latestB['revision'] as int);
+        final endedB =
+            eventsB
+                    .lastWhere((e) => e.$1 == 'reader.correctionSessionEnded')
+                    .$2['snapshot']
+                as Map;
+        final durable = await windowB.getDraft('p', draftId);
+        expect(endedB['draft']['version'], durable['version']);
+        expect(endedB['draft']['conflicts'], durable['conflicts']);
+        expect(
+          [for (final c in durable['conflicts'] as List) c['proposedText']],
+          ['האחרון של A'],
+        );
+        expect(
+          [for (final c in durable['changes'] as List) c['proposedText']],
+          ['נשמר אצל A', 'ייחודי ל-B'],
+        );
+        // רק snapshot שמכיל את כל התוכן העמיד מאשר אותו.
+        await windowB.acknowledge(
+          'p',
+          draftId,
+          endedB['draft']['version'] as int,
+        );
+        expect(await windowB.listDrafts('p'), isEmpty);
+      },
+    );
+
+    test(
+      'getCorrectionSession של הבעלים מחזיר את הגרסה וההתנגשויות העמידות '
+      'אחרי הצלה חיצונית, בלי הקלדה נוספת',
+      () async {
+        PluginCorrectionSessionService.writeInterval = Duration.zero;
+        final repositoryA = controlledConnection();
+        final windowA = newService(repositoryA);
+        final a = await begin(windowA);
+        edit(windowA, 0, 'נשמר אצל A');
+        await get(windowA, a);
+        repositoryA.gate = Completer<void>();
+        edit(windowA, 1, 'הוצל מ-A');
+        now += ttl + 1;
+        final windowB = newService(connection());
+        final b = await begin(windowB, tabId: 'tab-b');
+        final before = await get(windowB, b);
+        repositoryA.open();
+        await _idle();
+        expect(await windowA.flushAll(), isTrue);
+
+        final snapshot = await get(windowB, b);
+        final durable = await windowB.getDraft('p', draftId);
+        expect(snapshot['revision'], before['revision']);
+        expect(snapshot['draft']['version'], durable['version']);
+        expect(snapshot['draft']['version'], isNot(before['draft']['version']));
+        expect(snapshot['draft']['conflicts'], durable['conflicts']);
+        expect(
+          [
+            for (final c in snapshot['draft']['conflicts'] as List)
+              c['proposedText'],
+          ],
+          ['הוצל מ-A'],
+        );
+      },
+    );
+
+    test('snapshot שאינו שמור אינו נושא גרסה לאישור', () async {
+      PluginCorrectionSessionService.writeInterval = Duration.zero;
+      final repository = controlledConnection();
+      final service = newService(repository);
+      final session = await begin(service);
+      edit(service, 0, 'נשמר');
+      final saved = await get(service, session);
+      expect(saved['draft']['version'], isA<int>());
+      repository.failWrites = 100;
+      edit(service, 0, 'נכשל');
+      final failed = await get(service, session);
+      expect(failed['draft']['persisted'], isFalse);
+      expect(failed['draft']['version'], isNull);
+    });
+
+    // באיפוס אין commit קודם: המצב הנוכחי זהה ל-committed המקומי (ריק).
+    for (final (name, saveFirst, undo, expected) in [
+      ('החזרה לנוסח הקודם', true, 'ראשון', 'ראשון'),
+      ('איפוס לנוסח המקור', false, 'מקור 0', 'מקור 0'),
+    ]) {
+      test(
+        'תשובת commit שאבדה ואחריה $name: ההצלה שומרת את הביטול',
+        () async {
+          PluginCorrectionSessionService.writeInterval = Duration.zero;
+          final repositoryA = controlledConnection();
+          final windowA = newService(repositoryA);
+          final a = await begin(windowA);
+          if (saveFirst) {
+            edit(windowA, 0, 'ראשון');
+            await get(windowA, a);
+          }
+          repositoryA.loseReplies = 1;
+          edit(windowA, 0, 'שני');
+          await _idle();
+          expect(
+            windowA.draftStatusForTab('tab'),
+            PluginCorrectionDraftStatus.failed,
+          );
+          repositoryA.gate = Completer<void>();
+          edit(windowA, 0, undo);
+          now += ttl + 1;
+          final windowB = newService(connection());
+          final b = await begin(windowB, tabId: 'tab-b');
+          expect((b['changes'] as List).single['proposedText'], 'שני');
+          repositoryA.open();
+          expect(await windowA.flushAll(), isTrue);
+          await _idle();
+
+          final stored = await windowB.getDraft('p', draftId);
+          expect(
+            [
+              for (final c in stored['conflicts'] as List)
+                (c['sectionIndex'], c['proposedText'], c['reason']),
+            ],
+            [(0, expected, 'displaced')],
+            reason: 'הביטול שורד commit לא ודאי והעברת בעלות',
+          );
+          expect(
+            [for (final c in stored['changes'] as List) c['proposedText']],
+            ['שני'],
+            reason: 'הבעלים החדש אינו נדרס',
+          );
+        },
+      );
+    }
+
+    test('פתיחות מקבילות אינן עוקפות את maxSessions', () async {
+      final service = newService(connection());
+      final accepted = await Future.wait([
+        for (var i = 0; i <= PluginCorrectionSessionService.maxSessions; i++)
+          () async {
+            try {
+              await begin(service, tabId: 'quota-$i', bookUid: 'id:quota-$i');
+              return true;
+            } on PluginCorrectionException catch (e) {
+              if (e.code != 'error.limit_exceeded') rethrow;
+              return false;
+            }
+          }(),
+      ]);
+      expect(
+        accepted.where((v) => v),
+        hasLength(PluginCorrectionSessionService.maxSessions),
+      );
+    });
+
+    test('פתיחה שבוטלה משחררת את מקומה במכסה', () async {
+      final repository = controlledConnection();
+      final service = newService(repository);
+      for (var i = 0; i < PluginCorrectionSessionService.maxSessions - 1; i++) {
+        await begin(service, tabId: 'quota-$i', bookUid: 'id:quota-$i');
+      }
+      repository.acquireGate = Completer<void>();
+      final pending = begin(service, tabId: 'pending', bookUid: 'id:pending');
+      await _idle();
+      await expectLater(
+        begin(service, tabId: 'extra', bookUid: 'id:extra'),
+        _error('error.limit_exceeded'),
+      );
+      service.removeTab('pending');
+      repository.acquireGate!.complete();
+      repository.acquireGate = null;
+      await expectLater(pending, _error('error.not_found'));
+      await begin(service, tabId: 'extra', bookUid: 'id:extra');
+      expect(service.hasSessionForTab('extra'), isTrue);
     });
   });
 }

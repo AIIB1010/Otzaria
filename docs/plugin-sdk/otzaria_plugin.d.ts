@@ -865,17 +865,24 @@ export interface CorrectionSessionSnapshot {
 }
 /** A recovered change that could not be re-verified against the current raw source. */
 export interface CorrectionConflict extends CorrectionChange {
-  reason: 'source_changed' | 'not_found' | 'invalid';
+  /** `displaced`: unsaved edits of a session that lost ownership to another window. */
+  reason: 'source_changed' | 'not_found' | 'invalid' | 'displaced';
 }
 export interface CorrectionDraftState {
   /** Stable for plugin + bookUid across sessions, tabs, windows and restarts. */
   draftId: string;
-  /** Durable version of the last commit (global monotonic, never reused); null before the first commit. */
+  /**
+   * Durable version whose content is exactly this snapshot's `changes` and `conflicts`
+   * (global monotonic, never reused). Null when there is nothing to acknowledge: before the
+   * first commit, while `persisted` is false, and when `displaced` is true.
+   */
   version: number | null;
   /** True only when the exact current `revision` is committed under `version`. */
   persisted: boolean;
   /** A write is scheduled or in flight. */
   pending: boolean;
+  /** Ownership was lost; unsaved edits are rescued as `displaced` conflicts in the new owner's draft. */
+  displaced: boolean;
   /** Last write error; retried automatically with backoff. */
   error: string | null;
   /** Kept until acknowledged; returned in every snapshot. */
