@@ -434,6 +434,10 @@ jobs:
       - name: Install Rust for native source fallback
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Test splash timeline
+        shell: pwsh
+        run: native/splash/test/run_splash_timeline_test.ps1
+
       # זה הצעד שבגללו ה-job קיים: MSBuild, רישום התוספים הנייטיביים
       # וה-build hooks. debug ולא release — הוא מפעיל את אותה שרשרת נייטיבית
       # בשבריר מהזמן, ובניית ה-release כבר מכוסה ב-build-and-announce.
@@ -588,6 +592,9 @@ jobs:
 
       - name: Test fractional scaling policy
         run: linux/runner/test/run_fractional_scaling_test.sh
+
+      - name: Test splash timeline
+        run: native/splash/test/run_splash_timeline_test.sh
 
       - name: Build Linux (debug)
         run: flutter build linux --debug
