@@ -107,8 +107,6 @@ class PluginSystemBloc extends Bloc<PluginSystemEvent, PluginSystemState> {
     on<PluginOverwriteDeclined>(_onPluginOverwriteDeclined);
     on<UninstallPluginRequested>(_onUninstallPluginRequested);
     on<ResetPluginDataRequested>(_onResetPluginDataRequested);
-    on<PinPluginRequested>(_onPinPluginRequested);
-    on<UnpinPluginRequested>(_onUnpinPluginRequested);
     on<PinPluginToNavRailRequested>(_onPinPluginToNavRailRequested);
     on<UnpinPluginFromNavRailRequested>(_onUnpinPluginFromNavRailRequested);
     on<SetPluginShowInToolsRequested>(_onSetPluginShowInToolsRequested);
@@ -310,30 +308,6 @@ class PluginSystemBloc extends Bloc<PluginSystemEvent, PluginSystemState> {
       return;
     }
     unawaited(declarativeHost?.readerBookChanged(null, context: 'reader-text'));
-  }
-
-  Future<void> _onPinPluginRequested(
-    PinPluginRequested event,
-    Emitter<PluginSystemState> emit,
-  ) async {
-    try {
-      await repository.updatePinState(event.pluginId, true);
-      add(LoadPlugins());
-    } catch (e) {
-      UiSnack.showError(PluginMessages.pinPluginError(e));
-    }
-  }
-
-  Future<void> _onUnpinPluginRequested(
-    UnpinPluginRequested event,
-    Emitter<PluginSystemState> emit,
-  ) async {
-    try {
-      await repository.updatePinState(event.pluginId, false);
-      add(LoadPlugins());
-    } catch (e) {
-      UiSnack.showError(PluginMessages.unpinPluginError(e));
-    }
   }
 
   Future<void> _onPinPluginToNavRailRequested(

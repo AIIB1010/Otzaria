@@ -180,22 +180,6 @@ class SetPluginPermissionRequested extends PluginSystemEvent {
   List<Object?> get props => [pluginId, permission, granted];
 }
 
-class PinPluginRequested extends PluginSystemEvent {
-  final String pluginId;
-  const PinPluginRequested(this.pluginId);
-
-  @override
-  List<Object?> get props => [pluginId];
-}
-
-class UnpinPluginRequested extends PluginSystemEvent {
-  final String pluginId;
-  const UnpinPluginRequested(this.pluginId);
-
-  @override
-  List<Object?> get props => [pluginId];
-}
-
 class PinPluginToNavRailRequested extends PluginSystemEvent {
   final String pluginId;
   const PinPluginToNavRailRequested(this.pluginId);

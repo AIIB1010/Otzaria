@@ -59,8 +59,6 @@ class FakePluginRegistryRepository extends Mock
   Future<void> savePlugin(InstalledPlugin plugin) async {}
   @override
   Future<void> detachDevelopmentPlugin(String pluginId) async {}
-  @override
-  Future<void> updatePinState(String id, bool pinned) async {}
 }
 
 class _RealHttpOverrides extends HttpOverrides {}
