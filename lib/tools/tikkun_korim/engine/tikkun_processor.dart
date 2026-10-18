@@ -14,6 +14,7 @@ import 'package:otzaria/tools/tikkun_korim/engine/special_sections_marker.dart';
 import 'package:otzaria/tools/tikkun_korim/engine/stam_width_model.dart';
 import 'package:otzaria/tools/tikkun_korim/engine/tokenizer.dart';
 import 'package:otzaria/tools/tikkun_korim/engine/verse_range_slicer.dart';
+import 'package:otzaria/tools/tikkun_korim/engine/vav_ketia_marker.dart';
 import 'package:otzaria/tools/tikkun_korim/models/tikkun_models.dart';
 import 'package:otzaria/tools/tikkun_korim/repository/tikkun_contracts.dart';
 
@@ -27,7 +28,11 @@ List<TikkunToken> tokenizeBook(
 }) => markSpecialSections(
   applyDecalogueTaam(
     filterByTradition(
-      tokenizeText(cleanRawText(rawText, tradition: tradition)),
+      markVavKetiaWords(
+        tokenizeText(cleanRawText(rawText, tradition: tradition)),
+        hebrewBookName,
+        tradition,
+      ),
       tradition,
     ),
     hebrewBookName,

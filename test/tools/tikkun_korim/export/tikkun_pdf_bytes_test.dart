@@ -4,14 +4,15 @@ library;
 
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/painting.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/tools/tikkun_korim/export/tikkun_pdf_exporter.dart';
 import 'package:otzaria/tools/tikkun_korim/export/tikkun_pdf_writer.dart';
 import 'package:otzaria/tools/tikkun_korim/export/tikkun_vector_ops.dart';
 import 'package:otzaria/tools/tikkun_korim/settings/tikkun_settings.dart';
+import 'package:otzaria/tools/tikkun_korim/models/tikkun_vav_ketia.dart';
 import 'package:pdf/pdf.dart' show PdfPageFormat;
 
 /// גופן חופשי שמוטמע בתוכנה — גופני גוטמן קנייניים ואינם בשימוש כאן.
@@ -67,6 +68,48 @@ List<String> _inflatedStreams(Uint8List bytes) {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  for (final cff in [false, true]) {
+    for (final form in TikkunVavKetia.values.where(
+      (f) => f.codePoint != null,
+    )) {
+      test(
+        'PDF ${cff ? 'CFF' : 'TTF'}/${form.id} מעתיק וי״ו עברית ולא קוד פרטי',
+        () async {
+          final bytes = cff
+              ? (await rootBundle.load(
+                  'packages/otzaria_ashurit/OtzariaAshuritNikud-Regular.otf',
+                )).buffer.asUint8List()
+              : await File(_fontPath).readAsBytes();
+          final writer = TikkunVectorPdfWriter(
+            pageFormat: PdfPageFormat.a4,
+            loadFont: (_, {required bool bold}) async => bytes,
+            fallbackFamilies: const [],
+          );
+          final shown = 'שלום'.replaceFirst(
+            'ו',
+            String.fromCharCode(form.codePoint!),
+          );
+          final pdf = await writer.write([
+            TikkunVectorPage(
+              texts: [_text(shown)],
+              rects: const [],
+              width: 400,
+              height: 200,
+            ),
+          ], unifyScale: false);
+          final cmap = _inflatedStreams(
+            pdf,
+          ).where((s) => s.contains('beginbfchar')).join();
+          expect(cmap, contains('<05D5>'));
+          expect(
+            cmap,
+            isNot(contains(form.codePoint!.toRadixString(16).toUpperCase())),
+          );
+        },
+      );
+    }
+  }
   test('המסמך מטמיע גופן Type0 ומכיל דף לכל עמוד שנאסף', () async {
     final writer = TikkunVectorPdfWriter(
       pageFormat: PdfPageFormat.a4,

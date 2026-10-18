@@ -1176,11 +1176,11 @@ packages:
     dependency: "direct main"
     description:
       path: package
-      ref: HEAD
-      resolved-ref: a08a64b8ea337a409beac3bb0b7692f485d312af
+      ref: "v1.005"
+      resolved-ref: b43b67bb706be6bc87af14658d67e16cd347fc29
       url: "https://github.com/palmoni5/otzaria-ashurit.git"
     source: git
-    version: "1.0.4"
+    version: "1.0.5"
   otzaria_icons:
     dependency: "direct main"
     description:
