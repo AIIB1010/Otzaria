@@ -28,6 +28,7 @@ import 'package:otzaria/semantic_search/models/semantic_vectors_family.dart';
 import 'package:otzaria/semantic_search/models/semantic_vectors_release.dart';
 import 'package:otzaria/semantic_search/onnx_runtime_locator.dart';
 import 'package:otzaria/semantic_search/repository/semantic_data_ownership.dart';
+import 'package:otzaria/semantic_search/repository/semantic_download_client.dart';
 import 'package:otzaria/semantic_search/repository/semantic_platform_support.dart';
 import 'package:otzaria/semantic_search/repository/semantic_release_locator.dart';
 import 'package:otzaria/semantic_search/repository/semantic_settings_store.dart';
@@ -95,7 +96,11 @@ class SemanticSearchRepository {
            identityLoader ??
            ((family) => rootBundle.loadString(family.identityAsset)),
        _locator = locator ?? SemanticVectorsReleaseLocator(),
-       _download = download ?? CompanionAssetsService().downloadVerifiedFile,
+       _download =
+           download ??
+           CompanionAssetsService(
+             clientFactory: SemanticDownloadClient.new,
+           ).downloadVerifiedFile,
        _libraryVersion = libraryVersion ?? _defaultLibraryVersion,
        _onnxRuntimePath = onnxRuntimePath ?? bundledOnnxRuntimePath,
        _isPlatformSupported =
@@ -837,7 +842,7 @@ class SemanticSearchRepository {
       await _installRelease(paths, release, chain: chain);
       if (_jobCancel.isCancelled) return;
     }
-    _compactIfNeeded(version);
+    _compactIfNeeded();
   }
 
   /// מתקין את [base], או את [chain] — ה-deltas אליו — כשיש. delta שהמנוע
@@ -850,6 +855,7 @@ class SemanticSearchRepository {
   }) async {
     final plan = chain ?? [base];
     await _stopCompaction();
+    if (_jobCancel.isCancelled) return;
     await _ensureOwnedOrAbsent(paths.vectorsDirectory, allowEmpty: true);
     await _ensureOwnedOrAbsent(paths.vectorsDownloadDirectory);
     await markSemanticDirectory(paths.vectorsDownloadDirectory);
@@ -957,7 +963,7 @@ class SemanticSearchRepository {
   }
 
   /// מאחד ברקע סט שהמנוע מבקש לאחד (אחרי deltas); לעולם לא בעליית התוכנה.
-  void _compactIfNeeded(int liveLibraryVersion) {
+  void _compactIfNeeded() {
     if (_vectors?.needsCompaction != true ||
         _compaction != null ||
         _isSecondaryWindow() ||
@@ -965,24 +971,15 @@ class SemanticSearchRepository {
       return;
     }
     final cancel = _compactCancel = SemanticCancelHandle();
-    _compaction = _compact(
-      liveLibraryVersion,
-      cancel,
-    ).whenComplete(() => _compaction = null);
+    _compaction = _compact(cancel).whenComplete(() => _compaction = null);
   }
 
-  Future<void> _compact(
-    int liveLibraryVersion,
-    SemanticCancelHandle cancel,
-  ) async {
+  Future<void> _compact(SemanticCancelHandle cancel) async {
     try {
       final dir = (await _paths()).vectorsDirectory;
-      // session פתוח עובר בעצמו לדור המאוחד.
-      await _backend.compactVectors(
-        dir,
-        liveLibraryVersion: liveLibraryVersion,
-        cancel: cancel,
-      );
+      // גרסת המסד אינה מוכיחה שהאינדקס מלא ועדכני; בלי גרסת אינדקס מאומתת
+      // מאחדים בלי לנפות רשומות מול האינדקס, שעשוי להיות חלקי.
+      await _backend.compactVectors(dir, cancel: cancel);
       if (!cancel.isCancelled) _vectors = await _backend.vectorsInfo(dir);
     } on SemanticFailure catch (failure) {
       if (failure.kind == SemanticFailureKind.vectorsBusy) {

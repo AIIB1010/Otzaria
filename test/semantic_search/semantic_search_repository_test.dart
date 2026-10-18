@@ -16,6 +16,7 @@ import 'package:otzaria/semantic_search/models/semantic_paths.dart';
 import 'package:otzaria/semantic_search/models/semantic_vectors_family.dart';
 import 'package:otzaria/semantic_search/models/semantic_vectors_release.dart';
 import 'package:otzaria/semantic_search/repository/semantic_search_repository.dart';
+import 'package:otzaria/semantic_search/repository/semantic_download_client.dart';
 import 'package:path/path.dart' as p;
 import 'package:seforim_library_updater/seforim_library_updater.dart'
     show PatchDownloadException;
@@ -1302,6 +1303,55 @@ void main() {
       );
     });
 
+    for (final (status, headers) in [
+      (408, <String, String>{}),
+      (429, <String, String>{}),
+      (429, {'retry-after': '60'}),
+      (403, {'x-ratelimit-remaining': '0'}),
+      (502, <String, String>{}),
+      (503, <String, String>{}),
+    ]) {
+      test('HTTP $status $headers בהורדת delta אינו מוריד base', () async {
+        locator.chain = chainTo30();
+        final urls = <String>[];
+        var responseCancelled = false;
+        final responseBody = StreamController<List<int>>(
+          onCancel: () => responseCancelled = true,
+        );
+        repository = buildRepository(
+          root: root,
+          backend: backend,
+          settings: settings,
+          locator: locator,
+          download: CompanionAssetsService(
+            clientFactory: () => SemanticDownloadClient(
+              MockClient.streaming((request, _) async {
+                urls.add(request.url.toString());
+                return http.StreamedResponse(
+                  responseBody.stream,
+                  status,
+                  headers: headers,
+                );
+              }),
+            ),
+          ).downloadVerifiedFile,
+        );
+
+        await repository.enableAndDownload();
+
+        expect(urls, ['https://github.test/delta/28-29']);
+        expect(responseCancelled, isTrue);
+        await responseBody.close();
+        expect(backend.installRequests, isEmpty);
+        expect(
+          repository.availability.failure?.kind,
+          status == 429 || status == 403
+              ? SemanticFailureKind.rateLimited
+              : SemanticFailureKind.network,
+        );
+      });
+    }
+
     test('התקדמות השרשרת אינה חוזרת אחורה', () async {
       locator.chain = chainTo30();
       backend.installResults.addAll([delta(29), delta(30)]);
@@ -1356,7 +1406,7 @@ void main() {
       expect(downloads.urls, ['https://github.test/vectors/0']);
     });
 
-    test('אחרי השרשרת — איחוד ברקע בגרסת הספרייה החיה', () async {
+    test('איחוד אוטומטי שומר רשומות: גרסת המסד אינה גרסת האינדקס', () async {
       locator.chain = chainTo30();
       backend.installResults.addAll([
         delta(29),
@@ -1366,7 +1416,7 @@ void main() {
       await update();
       await waitFor(() => backend.vectors.needsCompaction == false);
 
-      expect(backend.compactVersions, [30]);
+      expect(backend.compactVersions, [null]);
       expect(repository.availability.phase, SemanticAvailabilityPhase.ready);
     });
 
@@ -1381,9 +1431,34 @@ void main() {
       await update();
       await waitFor(() => backend.compactVersions.length >= 2);
 
-      expect(backend.compactVersions, [30, 30]);
+      expect(backend.compactVersions, [null, null]);
       expect(backend.vectors.needsCompaction, isFalse);
       expect(repository.availability.failure, isNull);
+    });
+
+    test('ביטול בזמן המתנה לאיחוד אינו מחדש כתיבה בתיקיית ההורדות', () async {
+      final gate = Completer<void>();
+      locator.chain = chainTo30();
+      backend
+        ..installResults.addAll([delta(29), delta(30, needsCompaction: true)])
+        ..compactGate = gate;
+      await update();
+      await waitFor(() => backend.compactHandles.isNotEmpty);
+      backend.vectors = SemanticVectorsSummary(
+        present: true,
+        identityDigest: digest,
+        libraryVersion: 28,
+      );
+      downloads.urls.clear();
+
+      repository.scheduleVectorsUpdate();
+      await waitFor(() => backend.compactHandles.single.isCancelled);
+      await repository.cancelDownload();
+      gate.complete();
+      await repository.pendingJob;
+
+      expect(downloads.urls, isEmpty);
+      expect(Directory(paths().vectorsDownloadDirectory).existsSync(), isFalse);
     });
 
     test('מחיקת הנתונים מבטלת איחוד שרץ וממתינה לו', () async {
