@@ -21,6 +21,8 @@ Future<bool> printWithExclusivePdfium(
   @visibleForTesting bool? enabled,
 }) async {
   if (!(enabled ?? Platform.isWindows)) return print(onLayout);
+  // Only this isolate's worker is held: a print from a secondary window still
+  // races the main window's pdfrx, which shares the plugin's pdfium.dll.
   final suspendPdfium = suspend ?? _suspendPdfrxWorker;
   final release = Completer<void>();
   Future<void>? held;
