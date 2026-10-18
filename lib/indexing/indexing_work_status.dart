@@ -51,13 +51,15 @@ WorkStatusItem indexingWorkStatusItem(
         tooltip: state.isPaused ? null : 'ההשהיה נכנסת לתוקף בסיום הספר הנוכחי',
         onPressed: onTogglePause,
       ),
-      WorkStatusAction(
-        label: 'מצב חסכוני',
-        icon: FluentIcons.battery_saver_24_regular,
-        tooltip: 'מאט את האינדוקס ומפחית את העומס על המחשב',
-        emphasized: state.isEconomy,
-        onPressed: onToggleEconomy,
-      ),
+      // בשלב הבדיקה אין כתיבה למנוע, ולכן אין למצב החסכוני מה להאט.
+      if (!state.isScanning)
+        WorkStatusAction(
+          label: 'מצב חסכוני',
+          icon: FluentIcons.battery_saver_24_regular,
+          tooltip: 'מאט את האינדוקס ומפחית את העומס על המחשב',
+          emphasized: state.isEconomy,
+          onPressed: onToggleEconomy,
+        ),
     ],
   );
 }

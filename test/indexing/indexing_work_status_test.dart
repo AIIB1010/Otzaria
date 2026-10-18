@@ -89,7 +89,7 @@ void main() {
       expect(item.actions, isEmpty);
     });
 
-    test('שלב הבדיקה: הודעת בדיקה, התקדמות ולחצני השהיה/חיסכון', () {
+    test('שלב הבדיקה: הודעת בדיקה, התקדמות ולחצן השהיה בלבד', () {
       final item = indexingWorkStatusItem(
         const IndexingInProgress(
           booksProcessed: 40,
@@ -103,7 +103,7 @@ void main() {
       expect(item.message, 'בודק אילו ספרים דורשים עדכון באינדקס');
       expect(item.detail, 'התקדמות: 40/80');
       expect(item.progress, 0.5);
-      expect(item.actions.map((a) => a.label), ['השהה', 'מצב חסכוני']);
+      expect(item.actions.map((a) => a.label), ['השהה']);
     });
 
     test('שלב הבדיקה מושהה: הודעת השהיה ולחצן "המשך"', () {
