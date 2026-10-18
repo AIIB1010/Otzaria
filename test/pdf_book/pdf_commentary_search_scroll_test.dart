@@ -219,9 +219,25 @@ Future<void> main() async {
 
       expect(query.text, 'חדש');
       expect(total.value, 1);
-      expect(current.value, 0);
+      // שאילתה חדשה שעוד לא נווטה.
+      expect(current.value, -1);
       expect(snippets.value.single.path, '${_title(2)}.txt');
       expect(snippets.value.single.snippet, contains('חדש'));
+      expect(tester.takeException(), isNull);
+    }, skip: !engineReady);
+
+    testWidgets('שאילתה חדשה: התוצאה הבאה היא הראשונה (#2606)', (tester) async {
+      tab.links = [_SearchLink(2, 1, Future.value('אמר אמר'))];
+      await tester.pumpWidget(panel(1, 9));
+      await tester.pumpAndSettle();
+      query.text = 'אמר';
+      await finishSearch(tester);
+      expect(total.value, 2);
+      expect(current.value, -1);
+
+      key.currentState!.navigateSearchNext();
+      await tester.pumpAndSettle();
+      expect(current.value, 0);
       expect(tester.takeException(), isNull);
     }, skip: !engineReady);
 

@@ -645,7 +645,7 @@ class CommentaryListBaseState extends State<CommentaryListBase>
           }
         });
       }
-      _currentSearchIndexNotifier.value = 0;
+      _currentSearchIndexNotifier.value = -1;
       _totalSearchResultsNotifier.value = 0;
       _searchResultsPerLink.clear();
       _searchResultOffsets = null;
