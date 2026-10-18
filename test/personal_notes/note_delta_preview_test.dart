@@ -2,6 +2,10 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
+// Quill paints block borders in this render object, which is not exported.
+// ignore: implementation_imports
+import 'package:flutter_quill/src/editor/widgets/text/text_block.dart'
+    as quill_render;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/personal_notes/models/personal_note.dart';
 import 'package:otzaria/personal_notes/widgets/note_delta_preview.dart';
@@ -110,7 +114,8 @@ void main() {
         home: Directionality(
           textDirection: TextDirection.rtl,
           child: Scaffold(
-            body: Align(
+            body: UnconstrainedBox(
+              constrainedAxis: Axis.horizontal,
               alignment: Alignment.topCenter,
               child: SizedBox(
                 key: key,
@@ -176,6 +181,7 @@ void main() {
     WidgetTester tester,
     PersonalNote note, {
     int? maxPreviewChars,
+    bool expectLight = true,
   }) async {
     final quillSize = await pump(
       tester,
@@ -193,9 +199,15 @@ void main() {
       interactive: false,
       maxPreviewChars: maxPreviewChars,
     );
-    expect(find.byType(quill.QuillEditor), findsNothing);
+    expect(
+      find.byType(quill.QuillEditor),
+      expectLight ? findsNothing : findsOneWidget,
+    );
     expect(find.byType(EditableText), findsNothing);
-    expect(find.byType(NoteDeltaPreview), findsOneWidget);
+    expect(
+      find.byType(NoteDeltaPreview),
+      expectLight ? findsOneWidget : findsNothing,
+    );
     final lightRuns = renderedRuns(tester);
 
     expect(quillRuns.length, greaterThan(5));
@@ -207,14 +219,35 @@ void main() {
     expect(lightSize.height, moreOrLessEquals(quillSize.height, epsilon: 1));
   }
 
+  testWidgets('פסקאות ועיצוב inline משתמשים במסלול הקל ללא שינוי עיצוב', (
+    tester,
+  ) async {
+    await expectParity(
+      tester,
+      note([
+        ...richDelta.sublist(2, 17),
+        {
+          'insert': 'קישור',
+          'attributes': {'link': 'https://example.com'},
+        },
+        {'insert': '\n'},
+      ]),
+    );
+  });
+
   testWidgets('עיצוב, רשימות, ציטוט וקישורים זהים לעורך Quill', (
     tester,
   ) async {
-    await expectParity(tester, note(richDelta));
+    await expectParity(tester, note(richDelta), expectLight: false);
   });
 
   testWidgets('קיצור התצוגה המקדימה זהה לעורך Quill', (tester) async {
-    await expectParity(tester, note(richDelta), maxPreviewChars: 40);
+    await expectParity(
+      tester,
+      note(richDelta),
+      maxPreviewChars: 40,
+      expectLight: false,
+    );
     expect(find.textContaining('…', findRichText: true), findsOneWidget);
   });
 
@@ -243,6 +276,7 @@ void main() {
           'attributes': {'code-block': true},
         },
       ]),
+      expectLight: false,
     );
     expect(find.text('a.'), findsOneWidget);
     expect(find.text('2.'), findsOneWidget);
@@ -260,13 +294,15 @@ void main() {
       ]),
       interactive: false,
     );
-    final box = tester.widget<DecoratedBox>(
-      find.descendant(
-        of: find.byType(NoteDeltaPreview),
-        matching: find.byType(DecoratedBox),
-      ),
-    );
-    final border = (box.decoration as BoxDecoration).border! as Border;
+    final block = tester.allRenderObjects
+        .whereType<quill_render.RenderEditableTextBlock>()
+        .where(
+          (block) =>
+              block.container.style.containsKey(quill.Attribute.blockQuote.key),
+        )
+        .toSet()
+        .single;
+    final border = (block.decoration as BoxDecoration).border! as Border;
     expect(border.right.width, 4);
     expect(border.left, BorderSide.none);
   });

@@ -24,13 +24,7 @@ Future<bool?> showPersonalNotesDialog({
   confirmText: 'סגור',
 );
 
-/// מציגה את תוכן ההערה האישית — כולל עיצוב (Quill Delta) אם קיים.
-///
-/// ה-widget מנהל בעצמו את מחזור החיים של ה-[quill.QuillController],
-/// ה-[FocusNode] וה-[ScrollController]: הם נוצרים פעם אחת ב-[initState],
-/// נבנים מחדש רק כשתוכן ההערה משתנה, ומשוחררים ב-[dispose]. זה קריטי כאשר
-/// ה-widget מוצג ברשימה/רשת של הערות — אחרת כל בנייה הייתה יוצרת controllers
-/// חדשים ללא שחרור (דליפת משאבים ו-jank בגלילה).
+/// מציגה תוכן הערה, עם משאבי Quill רק כשנדרשת אינטראקציה או עיצוב מורכב.
 class PersonalNoteContentView extends StatefulWidget {
   final PersonalNote note;
   final TextStyle? textStyle;
@@ -42,8 +36,8 @@ class PersonalNoteContentView extends StatefulWidget {
   /// במצב לא-נגלל מחשב layout לכל הטקסט, כך שהקיצור הוא שמונע jank.
   final int? maxPreviewChars;
 
-  /// כש-false התוכן מוצג כטקסט עשיר קל, בלי QuillEditor: אין בחירה ואין
-  /// לחיצה על קישורים בגוף. לתצוגות מקדימות שאינן מקבלות קלט.
+  /// כש-false משתמש ברינדור קל לעיצובים נתמכים, וב-Quill לשאר העיצובים.
+  /// גוף התצוגה המקדימה אינו מקבל קלט.
   final bool interactive;
 
   const PersonalNoteContentView({
@@ -148,7 +142,7 @@ class _PersonalNoteContentViewState extends State<PersonalNoteContentView> {
         ? quill.Document.fromJson(effectiveDelta)
         : (quill.Document()..insert(0, note.content));
 
-    if (widget.interactive) {
+    if (widget.interactive || !NoteDeltaPreview.supports(document)) {
       _controller = quill.QuillController(
         document: document,
         selection: const TextSelection.collapsed(offset: 0),
@@ -188,7 +182,8 @@ class _PersonalNoteContentViewState extends State<PersonalNoteContentView> {
       final platform = Theme.of(context).platform;
       final useNativeTouchMenu =
           platform == TargetPlatform.android || platform == TargetPlatform.iOS;
-      final useOwnMenu = !hostHasOwnMenu && !useNativeTouchMenu;
+      final useOwnMenu =
+          widget.interactive && !hostHasOwnMenu && !useNativeTouchMenu;
       Widget editor = quill.QuillEditor(
         key: _editorKey,
         controller: controller,
@@ -202,6 +197,7 @@ class _PersonalNoteContentViewState extends State<PersonalNoteContentView> {
           expands: false,
           padding: EdgeInsets.zero,
           showCursor: false,
+          enableInteractiveSelection: widget.interactive,
           scrollable: false,
           // בלי הרישום, Quill מוסיף https:// לפני otzaria:// בעת לחיצה.
           customLinkPrefixes: const ['otzaria://', 'zayit://'],
@@ -229,6 +225,9 @@ class _PersonalNoteContentViewState extends State<PersonalNoteContentView> {
         );
       }
 
+      if (!widget.interactive) {
+        editor = ExcludeFocus(child: IgnorePointer(child: editor));
+      }
       return _withLinks(context, editor);
     }
 
