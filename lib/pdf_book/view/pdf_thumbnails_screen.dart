@@ -15,6 +15,7 @@ class ThumbnailsView extends StatefulWidget {
     required this.controller,
     this.onNavigateToPage,
     this.shownPagesFor,
+    this.thumbnailCache,
     super.key,
   });
 
@@ -28,6 +29,9 @@ class ThumbnailsView extends StatefulWidget {
   final ({int startPage, int endPageExclusive}) Function(int pageNumber)?
   shownPagesFor;
 
+  /// מטמון של הבעלים, שמרוקן אותו כשהטאב מוסתר; בלעדיו לתצוגה יש מטמון משלה.
+  final PdfThumbnailCache? thumbnailCache;
+
   @override
   State<ThumbnailsView> createState() => _ThumbnailsViewState();
 }
@@ -39,10 +43,11 @@ class _ThumbnailsViewState extends State<ThumbnailsView>
   int? _lastScrolledPage;
   int? _lastKnownPage;
 
+  PdfThumbnailCache? _ownCache;
+
   /// פריט שנגלל מחוץ למסך נבנה מחדש בחזרה; בלי המטמון העמוד היה מרונדר שוב.
-  final _thumbnailCache = BoundedImageCache<_ThumbnailKey>(
-    maxBytes: 32 * 1024 * 1024,
-  );
+  PdfThumbnailCache get _thumbnailCache =>
+      widget.thumbnailCache ?? (_ownCache ??= createPdfThumbnailCache());
 
   /// גובה הפריט (250) ועוד השוליים (8 מכל צד) — גם לגלילה אל העמוד הנוכחי.
   static const double _itemExtent = 266;
@@ -82,7 +87,7 @@ class _ThumbnailsViewState extends State<ThumbnailsView>
   void dispose() {
     widget.controller?.removeListener(_onControllerChanged);
     _scrollController.dispose();
-    _thumbnailCache.dispose();
+    _ownCache?.dispose();
     super.dispose();
   }
 
@@ -196,13 +201,19 @@ class _ThumbnailsViewState extends State<ThumbnailsView>
 }
 
 /// עמוד שנמדד מחדש הוא אובייקט [PdfPage] חדש, ולכן תמונה ישנה לא תוחזר עבורו.
+typedef PdfThumbnailCache =
+    BoundedImageCache<(PdfPage page, int width, int height)>;
+
+PdfThumbnailCache createPdfThumbnailCache() =>
+    PdfThumbnailCache(maxBytes: 32 * 1024 * 1024);
+
 typedef _ThumbnailKey = (PdfPage page, int width, int height);
 
 class _PageThumbnail extends StatefulWidget {
   const _PageThumbnail({required this.page, required this.cache});
 
   final PdfPage page;
-  final BoundedImageCache<_ThumbnailKey> cache;
+  final PdfThumbnailCache cache;
 
   @override
   State<_PageThumbnail> createState() => _PageThumbnailState();
@@ -282,6 +293,8 @@ class _PageThumbnailState extends State<_PageThumbnail> {
 
   Future<void> _render(_ThumbnailKey key) async {
     final (page, width, height) = key;
+    // אחרי clear() רינדור שהתחיל קודם שייך למסמך או לטאב שכבר שוחררו.
+    final generation = widget.cache.generation;
     final token = _cancellationToken = page.createCancellationToken();
     final pageImage = await page.render(
       fullWidth: width.toDouble(),
@@ -291,7 +304,7 @@ class _PageThumbnailState extends State<_PageThumbnail> {
     if (pageImage == null) return;
     try {
       final image = await pageImage.createImage();
-      widget.cache.put(key, image);
+      widget.cache.put(key, image, generation: generation);
       if (!mounted || key != _requestedKey) {
         image.dispose();
         return;

@@ -78,4 +78,18 @@ void main() {
     expect(cache.length, 0);
     expect(cache.bytes, 0);
   });
+
+  test('put עם דור שקדם ל-clear אינו נשמר', () async {
+    final cache = BoundedImageCache<int>(maxBytes: 1000);
+    final source = await image10();
+    final generation = cache.generation;
+    cache.clear();
+    cache.put(1, source, generation: generation);
+    cache.put(2, source, generation: cache.generation);
+    source.dispose();
+
+    expect(cache.lookup(1), isNull);
+    cache.lookup(2)!.dispose();
+    cache.dispose();
+  });
 }

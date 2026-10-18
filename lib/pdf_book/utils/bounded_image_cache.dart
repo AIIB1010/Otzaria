@@ -11,10 +11,14 @@ class BoundedImageCache<K> {
   final int maxBytes;
   final LinkedHashMap<K, ui.Image> _images = LinkedHashMap<K, ui.Image>();
   int _bytes = 0;
+  int _generation = 0;
   bool _disposed = false;
 
   int get length => _images.length;
   int get bytes => _bytes;
+
+  /// עולה בכל [clear]; [put] עם דור ישן מתעלם מהתמונה.
+  int get generation => _generation;
 
   /// עותק של התמונה ששמורה תחת [key], שהקורא אחראי לשחרר; null אם אין.
   ui.Image? lookup(K key) {
@@ -25,8 +29,9 @@ class BoundedImageCache<K> {
   }
 
   /// שומר עותק של [image] תחת [key]. התמונה עצמה נשארת באחריות הקורא.
-  void put(K key, ui.Image image) {
+  void put(K key, ui.Image image, {int? generation}) {
     if (_disposed) return;
+    if (generation != null && generation != _generation) return;
     _remove(key);
     _images[key] = image.clone();
     _bytes += _sizeOf(image);
@@ -42,6 +47,7 @@ class BoundedImageCache<K> {
   }
 
   void clear() {
+    _generation++;
     for (final image in _images.values) {
       image.dispose();
     }
