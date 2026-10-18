@@ -24,6 +24,44 @@ Widget _chip({required bool awaitingClose}) => MaterialApp(
 );
 
 void main() {
+  testWidgets('יומן השינויים שומר משימות שהושלמו וטרם הושלמו', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => hebrewDefaultDialog(
+                context: context,
+                latestVersion: '0.10.2',
+                appVersion: '0.10.1',
+                status: UpdatStatus.availableWithChangelog,
+                changelog: '- [x] תוקן\n- [ ] טרם תוקן\n',
+                checkForUpdate: () {},
+                openDialog: () {},
+                startUpdate: () {},
+                launchInstaller: () async {},
+                dismissUpdate: () {},
+              ),
+              child: const Text('פתח יומן שינויים'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('פתח יומן שינויים'));
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.check_box), findsOneWidget);
+    expect(find.byIcon(Icons.check_box_outline_blank), findsOneWidget);
+    final text = tester
+        .widgetList<RichText>(find.byType(RichText))
+        .map((widget) => widget.text.toPlainText())
+        .join('\n');
+    expect(text, contains('תוקן'));
+    expect(text, contains('טרם תוקן'));
+    expect(tester.takeException(), isNull);
+  });
+
   group('נוסח העדכון המצומצם לפני האישור', () {
     test('מצביע על הכפתור כמתחיל את ההתקנה', () {
       expect(
