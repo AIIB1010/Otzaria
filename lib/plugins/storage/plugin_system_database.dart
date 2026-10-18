@@ -281,14 +281,6 @@ class PluginSystemDatabase {
     ]);
   }
 
-  Future<void> updatePluginPinState(String pluginId, bool pinned) async {
-    final db = await database;
-    db.execute(
-      'UPDATE plugin_installation SET pinned = ?, updated_at = ? WHERE plugin_id = ?',
-      [pinned ? 1 : 0, DateTime.now().toIso8601String(), pluginId],
-    );
-  }
-
   Future<void> updatePluginShowInTools(
     String pluginId,
     bool showInTools,

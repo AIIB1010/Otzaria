@@ -143,10 +143,6 @@ class PluginRegistryRepository {
     await _db.deletePlugin(pluginId);
   }
 
-  Future<void> updatePinState(String pluginId, bool pinned) async {
-    await _db.updatePluginPinState(pluginId, pinned);
-  }
-
   Future<void> updateNavRailPinState(
     String pluginId,
     bool pinnedToNavRail,
