@@ -26,6 +26,7 @@ import 'package:otzaria/shortcuts/shortcut_validator.dart';
 import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/utils/reader_build_policy.dart';
+import 'package:otzaria/text_book/utils/reading_segment_navigation.dart';
 import 'package:otzaria/bookmarks/utils/section_bookmark.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/book_common/models/commentator_group.dart';
@@ -2715,6 +2716,8 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
                                             scrollOffsetController:
                                                 _offsetController,
                                             itemCount: itemCount,
+                                            cacheExtentScreens:
+                                                kReaderCacheExtentScreens,
                                             padding: const EdgeInsets.all(4),
                                             itemBuilder: (context, index) {
                                               final item = _buildLineItem(

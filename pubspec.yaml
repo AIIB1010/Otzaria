@@ -171,12 +171,13 @@ dependency_overrides:
       url: https://github.com/palmoni5/dart_pdf
       ref: f5efa21c2237002280f1ba056971ec1bf1e8cfd7
       path: printing
-  # החבילה המקורית בארכיון. בפורק: קפיצה אחרי שינוי רוחב נכשלה ב-layout
-  # cycles (issue #1542).
+  # TODO: google/flutter.widgets בארכיון ואין לאן להחזיר את התיקונים; הדרך לטווח
+  # ארוך היא מעבר ל-super_sliver_list. בפורק: קפיצה אחרי שינוי רוחב (#1542),
+  # cacheExtentScreens, דילוג על עדכוני מיקום זהים ו-jumpToDistantItems.
   scrollable_positioned_list:
     git:
       url: https://github.com/Otzaria/flutter.widgets
-      ref: master
+      ref: ec07cf91a1fd92c3c763c46483c1231e4aee1f53
       path: packages/scrollable_positioned_list
   matcher: ^0.12.20
   analyzer: ^14.5.0
