@@ -53,7 +53,6 @@ dependencies:
   fwfh_svg: ^0.16.1
   fwfh_url_launcher: ^0.16.1
   scrollable_positioned_list: ^0.3.8+1
-  fuzzywuzzy: ^1.2.0
   flutter_svg: ^2.3.0  
   fluentui_system_icons: ^1.1.273
   # אחרי עדכון ה-ref: הרץ את הפקודה שב-docs/plugin-sdk/ICONS.md כדי לרענן את
