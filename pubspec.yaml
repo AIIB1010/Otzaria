@@ -144,7 +144,8 @@ dependency_overrides:
       ref: 646af9c10801af4305684b9a110eac5e2d1d6ccf
       path: packages/pdfrx_engine
   # TODO: להחזיר ל-pub.dev כשיתמזג וישוחרר MaikuB/flutter_local_notifications#2826
-  # (קריאות WinRT ב-thread ייעודי). עד אז הפורק Otzaria, מוצמד לקומיט.
+  # (קריאות WinRT ב-thread ייעודי, כולל תיקון ה-deadlock ב-invoke). עד אז הפורק
+  # Otzaria, מוצמד לקומיט.
   # בהסרה: למחוק גם את core.longpaths מ-workflows של Windows - הוא נדרש
   # רק בגלל הנתיב העמוק במונורפו הזה.
   flutter_local_notifications_windows:
