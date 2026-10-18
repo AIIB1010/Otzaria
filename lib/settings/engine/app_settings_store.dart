@@ -1,3 +1,6 @@
+// Settings ו-CacheProvider מבוססים על flutter_settings_screens 0.3.4
+// (MIT, Copyright (c) 2019 Harshvardhan Joshi).
+
 /// ממשק האחסון שמתחת ל-[Settings].
 abstract class CacheProvider {
   CacheProvider();
