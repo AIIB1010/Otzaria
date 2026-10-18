@@ -1,3 +1,5 @@
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_settings_screens/flutter_settings_screens.dart';
@@ -12,6 +14,7 @@ import 'package:otzaria/settings/engine/settings_bloc.dart';
 import 'package:otzaria/settings/engine/settings_event.dart';
 import 'package:otzaria/settings/engine/settings_state.dart';
 import 'package:otzaria/widgets/misc/link_context_menu_entry.dart';
+import 'package:otzaria/widgets/misc/link_preview_overlay.dart';
 import 'package:otzaria/text_display/models/text_display_profile.dart';
 
 import '../test_helpers/memory_cache_provider.dart';
@@ -167,6 +170,85 @@ void main() {
     );
     await pumpFrames(tester);
   }
+
+  testWidgets(
+    'בחלונית שליד התפריט הכותרת נשארת במקומה בגלילת התוכן (issue #2698)',
+    (tester) async {
+      addTearDown(LinkPreviewOverlay.dismiss);
+      LibraryProviderManager.instance.seedMappingsForTesting(
+        mapping: const {},
+        providers: [
+          _FakeContentProvider(List.filled(600, 'מילה').join(' ')),
+        ],
+      );
+      var opened = 0;
+      final entry = buildLinkContextMenuEntry(
+        link: Link(
+          heRef: 'מפרש ח, א',
+          index1: 1,
+          path2: 'מפרש ח',
+          index2: 1,
+          connectionType: 'commentary',
+        ),
+        onTap: () => opened++,
+        displayProfile: TextDisplayProfile.defaults,
+      );
+      late BuildContext hostContext;
+      // החלונית יושבת ב-overlay של האפליקציה — הספק חייב להיות מעליה.
+      await tester.pumpWidget(
+        BlocProvider<SettingsBloc>.value(
+          value: _TestSettingsBloc(SettingsState.initial()),
+          child: MaterialApp(
+            home: Builder(
+              builder: (context) {
+                hostContext = context;
+                return const Scaffold();
+              },
+            ),
+          ),
+        ),
+      );
+      LinkPreviewOverlay.showBesideMenuItem(
+        hostContext,
+        contentBuilder: entry.hoverPreviewBuilder!,
+        itemGlobalRect: const Rect.fromLTWH(500, 50, 150, 30),
+        minWidth: 200,
+      );
+      await pumpFrames(tester);
+
+      final title = find.byIcon(FluentIcons.open_24_regular);
+      final titleTop = tester.getTopLeft(title).dy;
+      // גלילת גלגלת בתוך גוף המפרש, כמו בעכבר.
+      final pointer = TestPointer(1, PointerDeviceKind.mouse);
+      await tester.sendEventToBinding(
+        pointer.hover(
+          tester.getCenter(
+            find
+                .ancestor(
+                  of: find.byType(LinkHoverPreviewContent),
+                  matching: find.byType(Material),
+                )
+                .first,
+          ),
+        ),
+      );
+      await tester.sendEventToBinding(pointer.scroll(const Offset(0, 300)));
+      await pumpFrames(tester);
+
+      // גוף המפרש הארוך עדיין נגלל בתוך החלונית.
+      expect(
+        tester.state<ScrollableState>(find.byType(Scrollable)).position.pixels,
+        greaterThan(0),
+      );
+      expect(
+        tester.getTopLeft(title).dy,
+        titleTop,
+        reason: 'הכותרת (פתיחת הספר) נגללה יחד עם התוכן אל מחוץ לחלונית',
+      );
+      await tester.tap(title);
+      expect(opened, 1);
+    },
+  );
 
   testWidgets('תוכן קצר אינו מציג לחצן פרישה', (tester) async {
     await pumpPreviewWithContent(tester, 'שורה קצרה', path2: 'מפרש ב');
