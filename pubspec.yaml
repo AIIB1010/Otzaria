@@ -153,6 +153,13 @@ dependency_overrides:
       url: https://github.com/Otzaria/flutter_local_notifications
       ref: 8b615cdcd3611466ac385146f63f992ed77c827e
       path: flutter_local_notifications_windows
+  # TODO: להחזיר ל-pub.dev כשיתמזג וישוחרר getsentry/sentry-dart#PENDING (ענף
+  # feat/9.x-nonblocking-native-init: sentry_init ב-isolate עזר ב-Windows).
+  sentry_flutter:
+    git:
+      url: https://github.com/Otzaria/sentry-dart
+      ref: 5d16889e6f6b3c4efb1de5109f8185e36a7fdd29
+      path: packages/flutter
   # החבילה המקורית בארכיון. בפורק: קפיצה אחרי שינוי רוחב נכשלה ב-layout
   # cycles (issue #1542).
   scrollable_positioned_list:

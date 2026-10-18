@@ -1619,12 +1619,13 @@ packages:
     source: hosted
     version: "3.4.0"
   sentry_flutter:
-    dependency: "direct main"
+    dependency: "direct overridden"
     description:
-      name: sentry_flutter
-      sha256: bdd8897b38ce31185c42ed910628059c4eccbc0b0641213e8d1c63e2fda3f5a3
-      url: "https://pub.dev"
-    source: hosted
+      path: "packages/flutter"
+      ref: "5d16889e6f6b3c4efb1de5109f8185e36a7fdd29"
+      resolved-ref: "5d16889e6f6b3c4efb1de5109f8185e36a7fdd29"
+      url: "https://github.com/Otzaria/sentry-dart"
+    source: git
     version: "9.30.1"
   shared_preferences:
     dependency: transitive
