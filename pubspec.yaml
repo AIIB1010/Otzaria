@@ -131,8 +131,7 @@ dependencies:
 
 dependency_overrides:
   # TODO: לחזור ל-pub.dev אחרי שחרור espresso3389/pdfrx#724, #729–#733, #740, #741,
-  # #PENDING (ענף perf/sliced-full-page-measurement), #PENDING (ענף
-  # feat/background-worker-low-priority) ושילוב תיקון שימור הבחירה מ-palmoni5/pdfrx#1.
+  # #743, #744 ושילוב תיקון שימור הבחירה מ-palmoni5/pdfrx#1.
   # שתי החבילות מוצמדות לאותו קומיט.
   # pdfrx_engine נדרש עבור Pdfrx.normalizeHebrewText ו-Pdfrx.runAsBackgroundWork.
   pdfrx:
