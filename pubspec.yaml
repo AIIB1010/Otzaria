@@ -158,7 +158,7 @@ dependency_overrides:
   sentry_flutter:
     git:
       url: https://github.com/Otzaria/sentry-dart
-      ref: 5d16889e6f6b3c4efb1de5109f8185e36a7fdd29
+      ref: 0b819f1faaa883895c2825a9b4c96285e8c5253f
       path: packages/flutter
   # החבילה המקורית בארכיון. בפורק: קפיצה אחרי שינוי רוחב נכשלה ב-layout
   # cycles (issue #1542).
