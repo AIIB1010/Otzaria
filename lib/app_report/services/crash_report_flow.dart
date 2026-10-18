@@ -14,7 +14,7 @@ import 'package:otzaria_report_contract/otzaria_report_contract.dart';
 /// מה שקרה בפועל עם קריסה שזוהתה בעלייה.
 enum CrashReportOutcome { ignored, throttled, prompted, sentAutomatically }
 
-/// הטיפול בקריסה של ההפעלה הקודמת: לפי ההגדרה — התעלמות, שליחה אוטומטית
+/// הטיפול בקריסה או בתקיעה שזוהו: לפי ההגדרה — התעלמות, שליחה אוטומטית
 /// (בכפוף למגבלה) או הצגת ההצעה למשתמש.
 class CrashReportFlow {
   CrashReportFlow({
@@ -103,9 +103,10 @@ class CrashReportFlow {
     }
     final report = AppReport(
       reportId: AppReport.generateReportId(),
-      type: AppReportType.crash,
+      type: CrashReportDecision.reportTypeFor(candidate),
       trigger: AppReportTrigger.autoCrash,
       title: CrashReportDecision.titleFor(candidate),
+      description: candidate.details ?? '',
       // מייל שמור לא תקין היה נדחה ב-422 ומוחק את הדיווח — שולחים בלעדיו.
       reporterEmail: AppReport.isValidEmail(_savedEmail()) ? _savedEmail() : '',
       appVersion: version,

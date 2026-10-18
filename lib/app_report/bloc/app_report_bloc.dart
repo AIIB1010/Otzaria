@@ -24,6 +24,7 @@ class AppReportBloc extends Bloc<AppReportEvent, AppReportState> {
     String? initialEmail,
     this.signature,
     this.minidumpFile,
+    this.details = '',
     this.appVersion,
     DateTime Function()? clock,
   }) : _service = service ?? AppReportService(),
@@ -52,6 +53,9 @@ class AppReportBloc extends Bloc<AppReportEvent, AppReportState> {
 
   /// ה-dump של הקריסה, כשההצעה נפתחה אחרי קריסה נייטיבית.
   final File? minidumpFile;
+
+  /// טקסט שמצורף לתיאור שהמשתמש כתב, למשל מחסנית של ANR.
+  final String details;
   final String? appVersion;
 
   final AppReportService _service;
@@ -232,7 +236,12 @@ class AppReportBloc extends Bloc<AppReportEvent, AppReportState> {
       type: form.type,
       trigger: trigger,
       title: form.title,
-      description: form.description,
+      description: details.isEmpty
+          ? form.description
+          : [
+              form.description.trim(),
+              details,
+            ].where((text) => text.isNotEmpty).join('\n\n'),
       stepsToReproduce: form.steps,
       reporterEmail: form.email.trim(),
       appVersion: appVersion ?? ErrorLogFile.appVersion,

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:otzaria/plugins/services/startup_crash_counter.dart';
 import 'package:otzaria/app_report/services/app_crash_session.dart';
+import 'package:otzaria/app_report/services/app_hang_report.dart';
 import 'package:otzaria/core/http_client_registry.dart';
 import 'package:otzaria/core/pre_close_registry.dart';
 import 'package:otzaria/core/window_persistence.dart';
@@ -66,6 +67,12 @@ class AppWindowListener extends WindowListener {
         // חייבות להישטף בפעם הבאה.
         _sessionEndFlushStarted = false;
         unawaited(AppCrashSession.restoreSessionLockIfReleased());
+        return null;
+      case 'appHangRecovered':
+        // ה-UI isolate חזר להגיב; הדיווח לא יעכב את המשך הטיפול בהודעות.
+        if (!WindowRole.isSecondary) {
+          unawaited(AppHangReport.onRecovered(call.arguments));
+        }
         return null;
       default:
         return null;
