@@ -25,6 +25,9 @@ class GoogleCalendarRepository {
 
   static const String _primaryGoogleCalendarId = 'primary';
 
+  /// בלי חסם, חיבור תקוע ברשת מסוננת משאיר את הסנכרון "בתהליך" לעד.
+  static const Duration _apiTimeout = Duration(seconds: 20);
+
   Future<bool> isSignedIn() => _service.isSignedIn();
 
   Future<void> signOut() => _service.signOut();
@@ -43,7 +46,9 @@ class GoogleCalendarRepository {
     if (apiClient == null) return [];
 
     try {
-      final calendarList = await apiClient.api.calendarList.list();
+      final calendarList = await apiClient.api.calendarList.list().timeout(
+        _apiTimeout,
+      );
       final calendars = <GoogleCalendarInfo>[];
 
       for (final item in calendarList.items ?? []) {
@@ -93,15 +98,17 @@ class GoogleCalendarRepository {
         try {
           String? pageToken;
           do {
-            final result = await apiClient.api.events.list(
-              calendarId,
-              singleEvents: true,
-              orderBy: 'startTime',
-              timeMin: timeMin.toUtc(),
-              timeMax: timeMax.toUtc(),
-              maxResults: 2500, // Google's max per request
-              pageToken: pageToken,
-            );
+            final result = await apiClient.api.events
+                .list(
+                  calendarId,
+                  singleEvents: true,
+                  orderBy: 'startTime',
+                  timeMin: timeMin.toUtc(),
+                  timeMax: timeMax.toUtc(),
+                  maxResults: 2500, // Google's max per request
+                  pageToken: pageToken,
+                )
+                .timeout(_apiTimeout);
             merger.mergePage(
               result.items ?? const [],
               inheritedColorIndex: calendarColorIndices[calendarId],
@@ -131,17 +138,14 @@ class GoogleCalendarRepository {
       final googleEvent = toGoogleEvent(event, timeZoneId);
 
       if (event.googleEventId == null || event.googleEventId!.isEmpty) {
-        final created = await apiClient.api.events.insert(
-          googleEvent,
-          _primaryGoogleCalendarId,
-        );
+        final created = await apiClient.api.events
+            .insert(googleEvent, _primaryGoogleCalendarId)
+            .timeout(_apiTimeout);
         return created.id;
       } else {
-        final updated = await apiClient.api.events.update(
-          googleEvent,
-          _primaryGoogleCalendarId,
-          event.googleEventId!,
-        );
+        final updated = await apiClient.api.events
+            .update(googleEvent, _primaryGoogleCalendarId, event.googleEventId!)
+            .timeout(_apiTimeout);
         return updated.id ?? event.googleEventId;
       }
     } catch (e) {
@@ -160,10 +164,9 @@ class GoogleCalendarRepository {
     if (apiClient == null) return;
 
     try {
-      await apiClient.api.events.delete(
-        _primaryGoogleCalendarId,
-        event.googleEventId!,
-      );
+      await apiClient.api.events
+          .delete(_primaryGoogleCalendarId, event.googleEventId!)
+          .timeout(_apiTimeout);
     } catch (e) {
       debugPrint('Failed to delete Google event: $e');
       // Ignore delete failures to avoid blocking local delete
@@ -179,7 +182,9 @@ class GoogleCalendarRepository {
     try {
       String? pageToken;
       do {
-        final page = await api.calendarList.list(pageToken: pageToken);
+        final page = await api.calendarList
+            .list(pageToken: pageToken)
+            .timeout(_apiTimeout);
         for (final calendar in page.items ?? []) {
           final id = calendar.id;
           final color = CalendarEventColors.indexForGoogleColorHex(
@@ -212,10 +217,7 @@ class GoogleCalendarRepository {
   }
 
   @visibleForTesting
-  CustomEvent? fromGoogleEvent(
-    cal.Event gEvent, {
-    int? inheritedColorIndex,
-  }) {
+  CustomEvent? fromGoogleEvent(cal.Event gEvent, {int? inheritedColorIndex}) {
     final start = gEvent.start?.dateTime ?? gEvent.start?.date;
     if (start == null) return null;
 
@@ -465,7 +467,10 @@ class GoogleCalendarRepository {
 }
 
 typedef _GoogleEventMapper =
-    CustomEvent? Function(cal.Event event, {int? inheritedColorIndex});
+    CustomEvent? Function(
+      cal.Event event, {
+      int? inheritedColorIndex,
+    });
 
 class _GoogleEventsMerger {
   _GoogleEventsMerger({
@@ -487,10 +492,7 @@ class _GoogleEventsMerger {
   final Map<String, int> _byGoogleId = {};
   final Map<String, int> _byLocalId = {};
 
-  void mergePage(
-    List<cal.Event> googleEvents, {
-    int? inheritedColorIndex,
-  }) {
+  void mergePage(List<cal.Event> googleEvents, {int? inheritedColorIndex}) {
     for (final googleEvent in googleEvents) {
       if (googleEvent.status == 'cancelled') continue;
 
