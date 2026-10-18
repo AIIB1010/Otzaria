@@ -519,7 +519,7 @@ Future<void> _initializeSentry() async {
 }
 
 Future<void> _runAppBootstrap() async {
-  // Windows: ה-mutex ב-runner כבר אוכף מופע יחיד. בדיבאג מותרים כמה מופעים.
+  // Windows: ה-mutex ב-runner אוכף מופע יחיד. בלינוקס מדלגים בדיבאג כדי לאפשר כמה מופעים.
   if (Platform.isLinux && !kDebugMode) {
     final isFirstInstance = await StartupTimeline.instance.phase(
       'singleInstance',
