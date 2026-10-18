@@ -245,7 +245,29 @@ void main() {
     expect(PrintWorkStatus.hasActiveJobs, isFalse);
     expect(find.text(PdfMessages.printSent), findsOneWidget);
     await closeScreen(tester);
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('מחוץ ל-Windows המסך נשאר פתוח עד סוף ההדפסה', (tester) async {
+    final platform = await openScreen(tester);
+    platform.requestLayout = true;
+
+    await tester.tap(find.text('הדפסה'));
+    await tester.pump();
+    await pumpFrames(tester);
+
+    expect(find.byType(PrintingScreen), findsOneWidget);
+    expect(find.text(PdfMessages.printPreparing), findsOneWidget);
+    expect(PrintWorkStatus.hasActiveJobs, isFalse);
+    expect(workStatus.state.items, isEmpty);
+
+    platform.job!.complete(true);
+    await tester.pump();
+    await pumpFrames(tester);
+
+    expect(find.byType(PrintingScreen), findsNothing);
+    expect(find.text(PdfMessages.printSent), findsOneWidget);
+    await closeScreen(tester);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
   testWidgets('כשל אחרי המסירה מוצג בחיווי העבודה ובהודעה אחת', (
     tester,
@@ -269,7 +291,7 @@ void main() {
     await tester.pump(kPrintFailureAutoDismiss);
     expect(workStatus.state.items, isEmpty);
     await closeScreen(tester);
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('ביטול דיאלוג ההדפסה משאיר את המסך פתוח', (tester) async {
     final platform = await openScreen(tester);

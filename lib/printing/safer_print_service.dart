@@ -1,6 +1,6 @@
-import 'dart:io';
 import 'dart:isolate';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
@@ -32,7 +32,9 @@ Future<bool> printPdfWithSaferMode({
   OnPrintSpooling? onSpooling,
 }) async {
   LayoutCallback reportSpooling(String? printerName) {
-    if (onSpooling == null || !Platform.isWindows) return onLayout;
+    if (onSpooling == null || defaultTargetPlatform != TargetPlatform.windows) {
+      return onLayout;
+    }
     var reported = false;
     return (format) async {
       final bytes = await onLayout(format);
