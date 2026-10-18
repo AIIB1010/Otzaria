@@ -4547,6 +4547,7 @@ Future<void> main() async {
       int currentTabIndex = 0,
       SearchRepository? searchRepository,
       BookOpenCoordinator? readerCoordinator,
+      Future<BookProtection> Function(Book)? bookProtectionResolver,
     }) {
       tabsBloc = _StubTabsBloc();
       if (tabs.isNotEmpty) {
@@ -4582,6 +4583,7 @@ Future<void> main() async {
           ),
           workspaceBloc: _MockWorkspaceBloc(),
           searchRepository: searchRepository ?? _MockSearchRepository(),
+          bookProtectionResolver: bookProtectionResolver,
           personalNotesRepository: _MockPersonalNotesRepository(),
           bookOpenCoordinator: readerCoordinator ?? mockCoordinator,
           themePayloadBuilder: () => <String, dynamic>{},
@@ -5236,6 +5238,52 @@ Future<void> main() async {
         ['ok', 'stale', 'unavailable'],
       );
       expect((results.last as Map)['text'], '');
+    });
+
+    test('search.fullText שומר על הגנה וזהות מקור בכותרות זהות', () async {
+      final official = TextBook(id: 10, title: 'כותרת זהה');
+      final attached = TextBook(
+        id: 10,
+        title: official.title,
+        source: BookSource.attached('protected'),
+      );
+      SearchResult hit(String key) => SearchResult(
+        title: official.title,
+        reference: 'פרק',
+        text: 'קטע מהספר',
+        id: BigInt.one,
+        segment: BigInt.zero,
+        isPdf: false,
+        filePath: key,
+        mergedCount: 1,
+        merged: const [],
+        textStatus: TextStatus.ok,
+        continuesToNextLine: false,
+      );
+      final stub = _StubSearchRepository()
+        ..fullTextResults = [hit('id:10'), hit('db:protected:10')];
+      final checked = <Book>[];
+      final adapter = buildAdapter(
+        books: [official, attached],
+        searchRepository: stub,
+        bookProtectionResolver: (book) async {
+          checked.add(book);
+          return book.source == attached.source
+              ? const BookProtection(level: 2)
+              : BookProtection.none;
+        },
+      );
+      addTearDown(adapter.dispose);
+      final results =
+          await adapter.execute('search', 'fullText', {
+                'query': 'קטע',
+              })
+              as List;
+      expect(results[0]['text'], 'קטע מהספר');
+      expect(results[0].containsKey('error'), isFalse);
+      expect(results[1]['text'], '');
+      expect(results[1]['error'], 'forbidden');
+      expect(checked, [same(official), same(attached)]);
     });
 
     test('search.fullText אינו מחזיר id — type תלוי ב-isPdf', () {

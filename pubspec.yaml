@@ -35,7 +35,7 @@ dependencies:
   flutter_bloc: ^9.1.1
   bloc: ^9.2.1
   bloc_concurrency: ^0.3.0
-  equatable: ^2.1.0
+  equatable: ^3.0.0
   flutter_localizations:
     sdk: flutter
   flutter_settings_screens: ^0.3.4
@@ -100,14 +100,14 @@ dependencies:
   otzaria_search_engine:
     git:
       url: https://github.com/Otzaria/otzaria_search_engine.git
-      ref: 1b199a28a0f99eb1725a705809c3334ce95b6808
+      ref: ba390eabcaec8690a4e78aadd57d45120da72d82
   # חוזה הדיווחים מול השרת, משותף עם "עדכוני אוצריא" (Dart טהור).
   otzaria_report_contract:
     path: packages/otzaria_report_contract
   seforim_library_updater:
     git:
       url: https://github.com/Otzaria/otzaria_library_updater
-      ref: e19880621773a289424ac33d400d48cb879f436a
+      ref: 445744d354d40bde3c042f898c6f93c8f455ff40
   window_manager: ^0.5.2
   screen_retriever: ^0.2.2
   flutter_spinbox: ^0.13.1

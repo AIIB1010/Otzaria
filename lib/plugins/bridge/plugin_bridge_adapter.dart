@@ -2312,15 +2312,20 @@ class PluginBridgeAdapter {
         final results = await _dependencies.searchRepository.searchTexts(
           SearchEngineRequest(query: query, facets: [], limit: limit),
         );
-        final restricted = <String>{
-          for (final title in {
-            for (final r in results)
-              if (!r.isPdf) r.title,
-          })
-            if (await _isTextRestricted(TextBook(title: title))) title,
-        };
+        _ensureBookIndex(await DataRepository.instance.library);
+        final restrictedByPath = <String, bool>{};
+        for (final result in results) {
+          if (result.isPdf || restrictedByPath.containsKey(result.filePath)) {
+            continue;
+          }
+          restrictedByPath[result.filePath] = await _isTextRestricted(
+            _booksByIndexedPath[result.filePath] ??
+                TextBook(title: result.title),
+          );
+        }
         return results.map((r) {
-          final isRestricted = !r.isPdf && restricted.contains(r.title);
+          final isRestricted =
+              !r.isPdf && (restrictedByPath[r.filePath] ?? false);
           return {
             'type': r.isPdf ? 'pdf' : 'text',
             'book': r.title,

@@ -213,10 +213,17 @@ void main() {
 
       expect(const LocalDbVersionReader().read(dbPath).dbVersion, 2);
       expect(_readMarker(dbPath), 'full-download');
+      final leftovers = Directory(
+        p.join(tmp.path, 'library_update_cache'),
+      ).listSync();
       expect(
-        Directory(p.join(tmp.path, 'library_update_cache')).listSync(),
-        isEmpty,
+        leftovers.map((entry) => p.basename(entry.path)),
+        unorderedEquals([
+          '${DatabaseConstants.databaseFileName}.zst.part-000.lock',
+          '${DatabaseConstants.databaseFileName}.zst.part-001.lock',
+        ]),
       );
+      expect(leftovers, everyElement(isA<File>()));
     },
     timeout: const Timeout(Duration(seconds: 30)),
   );
@@ -1474,7 +1481,8 @@ void main() {
                   'assets': [
                     {
                       'name': 'seforim-schema$newer.db.zst',
-                      'browser_download_url': 'https://example.com/schema$newer',
+                      'browser_download_url':
+                          'https://example.com/schema$newer',
                       'size': 100,
                     },
                   ],
