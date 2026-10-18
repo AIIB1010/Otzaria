@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:otzaria/theme/theme_exports.dart';
 import 'package:otzaria/widgets/feedback/edge_scrollbar_behavior.dart';
 import 'package:otzaria/widgets/layout/floating_panel.dart';
@@ -92,6 +93,7 @@ class AdaptiveSidePane extends StatefulWidget {
 class _AdaptiveSidePaneState extends State<AdaptiveSidePane> {
   bool? _lastHadRoomForSideBySide;
   bool? _lastReportedLayoutMode;
+  bool _overlaysContent = false;
 
   // ── Drag state ──────────────────────────────────────────────────────────────
   // רוחב פנימי בזמן גרירה — מנוהל דרך ValueNotifier כדי לא לגרום ל-parent rebuild
@@ -301,8 +303,29 @@ class _AdaptiveSidePaneState extends State<AdaptiveSidePane> {
     return SafeArea(child: paneContent);
   }
 
+  // Esc מגיע לכאן רק אם אף צאצא ממוקד (שדה, הדגשה) לא טיפל בו קודם.
+  KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent ||
+        event.logicalKey != LogicalKeyboardKey.escape ||
+        !widget.isOpen ||
+        !_overlaysContent) {
+      return KeyEventResult.ignored;
+    }
+    widget.onClose();
+    return KeyEventResult.handled;
+  }
+
   @override
   Widget build(BuildContext context) {
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: _handleKey,
+      child: _buildLayout(context),
+    );
+  }
+
+  Widget _buildLayout(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final paneOnRight = _isPaneOnRight(context);
@@ -327,6 +350,7 @@ class _AdaptiveSidePaneState extends State<AdaptiveSidePane> {
         }
 
         final usesPushLayout = hasRoomForSideBySide && !widget.floatOverContent;
+        _overlaysContent = !usesPushLayout;
         if (widget.onLayoutModeChanged != null &&
             _lastReportedLayoutMode != usesPushLayout) {
           _lastReportedLayoutMode = usesPushLayout;
