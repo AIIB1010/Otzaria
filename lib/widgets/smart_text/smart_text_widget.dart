@@ -264,6 +264,9 @@ class SmartTextWidget extends StatelessWidget {
               justifyText: settings.justifyText,
             ),
             key: widgetKey,
+            // מעל 10K תווים fwfh בונה ב-isolate ומציג קודם גובה 0 — שורת רשימה
+            // קופצת אחרי פריים ו-jumpTo מחטיא.
+            buildAsync: false,
             renderMode: renderMode,
             textStyle: textStyle,
             // העץ נשמר כל עוד ה-html וה-textStyle זהים; הצבעים אפויים ב-CSS,
