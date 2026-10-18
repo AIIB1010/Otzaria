@@ -2520,10 +2520,12 @@ class _CombinedViewState extends State<CombinedView> {
         if (isRashiTitle(state.book.title))
           for (final lineIndex in itemLines)
             SelectionContainer.disabled(
-              child: LaazCommentarySubBlock.forLine(
-                rashiBookTitle: state.book.title,
-                rashiLineIndex: lineIndex + 1,
-                baseFontSize: widget.textSize,
+              child: _inTextColumn(
+                LaazCommentarySubBlock.forLine(
+                  rashiBookTitle: state.book.title,
+                  rashiLineIndex: lineIndex + 1,
+                  baseFontSize: widget.textSize,
+                ),
               ),
             ),
         // בפריט רב-שורתי הכרטיס מוצג בתוכו, מתחת לשורה שנלחצה (issue #875).
@@ -2607,6 +2609,26 @@ class _CombinedViewState extends State<CombinedView> {
       });
     });
   }
+
+  /// מציב את [child] ברוחב עמודת הטקסט, כמו שורות הספר.
+  Widget _inTextColumn(Widget child) => LayoutBuilder(
+    builder: (context, constraints) => BlocBuilder<SettingsBloc, SettingsState>(
+      builder: (context, settingsState) {
+        final width = widget.isPreviewMode
+            ? 0.0
+            : textColumnMaxWidthOf(
+                context,
+                setting: settingsState.textMaxWidth,
+                availableWidth: constraints.maxWidth,
+              );
+        return width > 0
+            ? Center(
+                child: SizedBox(width: width, child: child),
+              )
+            : child;
+      },
+    ),
+  );
 
   /// כותרות נושא/פרשה שמוזרקות מעל השורה, ברוחב עמודת הטקסט.
   Widget _buildSectionHeadings(TextBookLoaded state, List<String> headings) {
