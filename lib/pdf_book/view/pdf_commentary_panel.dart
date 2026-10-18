@@ -822,7 +822,7 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
     _orderedGroups = [];
     _cancelPendingItemPositionWait();
     _totalSearchResults = 0;
-    _currentSearchIndex = 0;
+    _currentSearchIndex = -1;
     _searchResultsPerLink.clear();
     _searchSnippetsPerLink.clear();
     _pendingCounts.clear();

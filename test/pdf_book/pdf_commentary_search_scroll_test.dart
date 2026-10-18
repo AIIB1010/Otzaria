@@ -139,7 +139,7 @@ Future<void> main() async {
 
       expect(query.text, 'אמר');
       expect(total.value, 0);
-      expect(current.value, 0);
+      expect(current.value, -1);
       expect(snippets.value, isEmpty);
       expect(tester.takeException(), isNull);
     }, skip: !engineReady);
@@ -166,7 +166,7 @@ Future<void> main() async {
 
       expect(query.text, 'אמר');
       expect(total.value, 2);
-      expect(current.value, 0);
+      expect(current.value, -1);
       expect(snippets.value.map((snippet) => snippet.path), [
         '${_title(1)}.txt',
       ]);
@@ -193,7 +193,7 @@ Future<void> main() async {
       await finishSearch(tester);
 
       expect(total.value, 2);
-      expect(current.value, 0);
+      expect(current.value, -1);
       expect(snippets.value.map((snippet) => snippet.path), [
         '${_title(1)}.txt',
       ]);
@@ -261,7 +261,8 @@ Future<void> main() async {
         await finishSearch(tester);
         expect(query.text, 'אמר');
         expect(total.value, scope.$3);
-        expect(current.value, 0);
+        // קטע חדש: עוד לא נווט לאף תוצאה בו.
+        expect(current.value, -1);
         expect(snippets.value.length, scope.$3 == 0 ? 0 : 1);
       }
       key.currentState!.navigateToGlobalIndex(0);
