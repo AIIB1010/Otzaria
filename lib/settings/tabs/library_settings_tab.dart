@@ -703,6 +703,11 @@ class _LibrarySettingsTabState extends State<LibrarySettingsTab> {
             subtitleText = context.settingsText(
               'מסיים ומאחד את קבצי האינדקס',
             );
+          } else if (isActive && indexingState.isScanning) {
+            subtitleText = context.settingsText(
+              'בודק אילו ספרים דורשים עדכון: {processed}/{total}',
+              args: {'processed': processed, 'total': total},
+            );
           } else if (isActive) {
             subtitleText = context.settingsText(
               'התקדמות האינדקס: {processed}/{total}',
