@@ -221,9 +221,6 @@ class BundledPluginSeedService {
       await _installerService.finalizeInstall(
         prepared.tempDirPath,
         prepared.manifest,
-        allowOrderBeforeBuiltInsGranted:
-            prepared.previousAllowOrderBeforeBuiltInsGranted ??
-            prepared.manifest.allowOrderBeforeBuiltIns,
         grantedPermissions: grantedPermissions,
         expectedPlugin: previousPlugin,
         expectedPermissions: previousGrants,

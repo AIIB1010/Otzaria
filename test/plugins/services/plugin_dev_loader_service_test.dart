@@ -131,14 +131,9 @@ void main() {
         tempDir.path,
         preValidatedManifest: manifest,
         grantedPermissions: const {'reader.open': false},
-        allowOrderBeforeBuiltInsGranted: false,
       );
 
       expect(fakeRepo.recordedGrants, {'reader.open': false});
-      expect(
-        fakeRepo.savedPlugin!.allowOrderBeforeBuiltInsGranted,
-        isFalse,
-      );
     });
 
     test(

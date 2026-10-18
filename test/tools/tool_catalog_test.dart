@@ -15,8 +15,6 @@ InstalledPlugin _plugin(
   bool enabled = true,
   bool showInTools = true,
   bool pinnedToNavRail = false,
-  bool allowOrderBeforeBuiltIns = false,
-  bool allowOrderGranted = true,
   bool networkEnabled = false,
   bool networkAccessGranted = false,
   bool headless = false,
@@ -31,7 +29,6 @@ InstalledPlugin _plugin(
     pinned: false,
     pinnedToNavRail: pinnedToNavRail,
     showInTools: showInTools,
-    allowOrderBeforeBuiltInsGranted: allowOrderGranted,
     networkAccessGranted: networkAccessGranted,
     manifest: PluginManifest(
       schemaVersion: 1,
@@ -50,7 +47,6 @@ InstalledPlugin _plugin(
       networkAllowlist: const [],
       toolTabTitle: title ?? id,
       toolTabOrder: order,
-      allowOrderBeforeBuiltIns: allowOrderBeforeBuiltIns,
       defaultPinned: false,
       publishedDataTypes: const [],
     ),
@@ -184,17 +180,6 @@ void main() {
       },
     );
 
-    test('תוסף שאושר להקדים כלים מובנים מופיע לפניהם', () {
-      final entries = buildToolCatalog(
-        hiddenBuiltInToolIds: const {},
-        isOfflineMode: false,
-        pluginState: PluginSystemLoaded([
-          _plugin('p.first', order: 1, allowOrderBeforeBuiltIns: true),
-        ]),
-      );
-      expect(entries.first.toolId, 'p.first');
-    });
-
     // המיון חייב להיות יציב: תוספים רבים חולקים את order 900 מברירת המחדל
     // של המניפסט, והסדר ביניהם נקבע כבר ב-repository.
     test('המיון יציב עבור רשומות עם אותו order', () {
@@ -252,19 +237,6 @@ void main() {
       final ids = entries.map((e) => e.toolId);
       expect(ids, isNot(contains('builtin.gematria')));
       expect(ids.first, 'builtin.calendar');
-    });
-
-    test('סדר מותאם אינו מקדם כלי מובנה לפני תוסף שהורשה להקדים', () {
-      final entries = buildToolCatalog(
-        hiddenBuiltInToolIds: const {},
-        isOfflineMode: false,
-        pluginState: PluginSystemLoaded([
-          _plugin('p.first', order: 1, allowOrderBeforeBuiltIns: true),
-        ]),
-        builtInToolsOrder: const ['builtin.gematria'],
-      );
-      expect(entries.first.toolId, 'p.first');
-      expect(entries[1].toolId, 'builtin.gematria');
     });
 
     test('סדר מותאם ריק משמר את סדר התצוגה המקורי', () {

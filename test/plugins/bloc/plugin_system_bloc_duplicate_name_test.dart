@@ -53,7 +53,6 @@ class _StubInstaller extends PluginInstallerService {
   Future<void> finalizeInstall(
     String tempDirPath,
     PluginManifest manifest, {
-    required bool allowOrderBeforeBuiltInsGranted,
     required Map<String, bool> grantedPermissions,
     InstalledPlugin? expectedPlugin,
     Map<String, bool> expectedPermissions = const {},
@@ -87,7 +86,7 @@ void main() {
         (s) => s is PluginSystemDuplicateNameDetected,
       );
       bloc.add(
-        ConfirmPluginInstall('/tmp/staged', newManifest, const {}, false),
+        ConfirmPluginInstall('/tmp/staged', newManifest, const {}),
       );
 
       final state = (await pending) as PluginSystemDuplicateNameDetected;
@@ -112,7 +111,7 @@ void main() {
     final emitted = <PluginSystemState>[];
     final sub = bloc.stream.listen(emitted.add);
     addTearDown(sub.cancel);
-    bloc.add(ConfirmPluginInstall('/tmp/staged', newManifest, const {}, false));
+    bloc.add(ConfirmPluginInstall('/tmp/staged', newManifest, const {}));
     await Future<void>.delayed(const Duration(milliseconds: 200));
 
     expect(emitted.whereType<PluginSystemDuplicateNameDetected>(), isEmpty);

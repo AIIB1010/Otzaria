@@ -57,14 +57,6 @@ class PluginSystemDatabase {
         'ALTER TABLE plugin_installation ADD COLUMN hidden_from_tools INTEGER NOT NULL DEFAULT 0',
       );
     }
-    final hasLeadingCol = cols.any(
-      (c) => c['name'] == 'allow_order_before_built_ins_granted',
-    );
-    if (!hasLeadingCol) {
-      db.execute(
-        'ALTER TABLE plugin_installation ADD COLUMN allow_order_before_built_ins_granted INTEGER',
-      );
-    }
   }
 
   void _createSchema(Database db) {
@@ -81,7 +73,6 @@ class PluginSystemDatabase {
         pinned INTEGER NOT NULL DEFAULT 1,
         pinned_to_nav_rail INTEGER NOT NULL DEFAULT 0,
         hidden_from_tools INTEGER NOT NULL DEFAULT 0,
-        allow_order_before_built_ins_granted INTEGER,
         manifest_json TEXT NOT NULL,
         installed_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
