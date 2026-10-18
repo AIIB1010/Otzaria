@@ -2093,11 +2093,15 @@ class IndexingRepository {
   /// Indexes a specific list of books (e.g. newly added personal books).
   ///
   /// מבצע אינדוקס ומחזיר תוצאה מפורטת, כולל ביטול וכשלים פר-ספר.
+  /// [compactAfterCommit] מאחד את קבצי האינדקס בסוף ריצה שהושלמה, ואז
+  /// [onFinalizing] נקרא לפני האיחוד.
   Future<IndexingRunResult> indexBooks(
     List<Book> books,
     Library library, {
     void Function()? onActualIndexingStarted,
     required void Function(int processed, int total) onProgress,
+    void Function()? onFinalizing,
+    bool compactAfterCommit = false,
   }) async {
     final hidden = hiddenStore.load();
     books = booksForIndexing(
@@ -2260,9 +2264,13 @@ class IndexingRepository {
           '✅ אינדוקס ספרים ספציפיים הושלם! (מאונדקסים: $actuallyIndexed, שגיאות: $errors)',
         );
         final commitStopwatch = Stopwatch()..start();
-        await _commitIndex();
+        final index = await _commitIndex();
         debugPrint('💾 commit: ${commitStopwatch.elapsedMilliseconds}ms');
         _stampCatalogueOrderAfterCommit();
+        if (compactAfterCommit) {
+          onFinalizing?.call();
+          await optimizeIndexBestEffort(index.optimize);
+        }
       } else if (shouldCommitCancelledRun(
         pendingBooks: actuallyIndexed,
         writeBufferDiscarded: writeBufferDiscarded,
@@ -2612,11 +2620,13 @@ class IndexingRepository {
   ///
   /// מחזיר תוצאה מפורטת; ביטול כולל מצב שבו נדרש אינדוקס ידני מלא או
   /// שמחיקת הרשומות הישנות נכשלה.
+  /// [onFinalizing] נקרא לפני איחוד קבצי האינדקס, כמו ב-[indexAllBooks].
   Future<IndexingRunResult> reindexChangedBooks(
     List<Book> changedBooks,
     Library library, {
     void Function()? onActualIndexingStarted,
     required void Function(int processed, int total) onProgress,
+    void Function()? onFinalizing,
   }) async {
     if (WindowRole.isSecondary) {
       return IndexingRunResult.cancelled(
@@ -2678,6 +2688,9 @@ class IndexingRepository {
       library,
       onActualIndexingStarted: onActualIndexingStarted,
       onProgress: onProgress,
+      onFinalizing: onFinalizing,
+      // מחיקה רק מסמנת את המסמכים הישנים; בלי איחוד הם נשארים בדיסק לצד החדשים.
+      compactAfterCommit: true,
     );
   }
 
@@ -2701,6 +2714,7 @@ class IndexingRepository {
     void Function(int processed, int total)? onScanProgress,
     void Function()? onActualIndexingStarted,
     required void Function(int processed, int total) onProgress,
+    void Function()? onFinalizing,
     @visibleForTesting Future<String?> Function(TextBook book)? loadText,
     @visibleForTesting
     Future<BigInt> Function(TextBook book, String text)? fingerprintOf,
@@ -2855,6 +2869,7 @@ class IndexingRepository {
       library,
       onActualIndexingStarted: onActualIndexingStarted,
       onProgress: onProgress,
+      onFinalizing: onFinalizing,
     );
   }
 
