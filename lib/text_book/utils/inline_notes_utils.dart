@@ -253,7 +253,7 @@ String rehydrateInlineNotes(
           ? markers[anchoredSeen]
           : null;
       at = marker != null && raw >= marker.start && raw < marker.end
-          ? marker.end
+          ? _afterInlineClosings(line, marker.end)
           : raw;
     } else if (note.marker != null && anchoredSeen < markers.length) {
       at = markers[anchoredSeen].end;
@@ -323,12 +323,17 @@ int _rawInsertionPoint(String html, int visible, List<Match> superscripts) {
       break;
     }
   }
-  while (i < len && _inlineCloseTag.matchAsPrefix(html, i) != null) {
-    final close = html.indexOf('>', i);
-    if (close < 0) break;
-    i = close + 1;
+  return _afterInlineClosings(html, i);
+}
+
+int _afterInlineClosings(String html, int from) {
+  var at = from;
+  while (at < html.length) {
+    final close = _inlineCloseTag.matchAsPrefix(html, at);
+    if (close == null) break;
+    at = close.end;
   }
-  return i;
+  return at;
 }
 
 /// [rehydrateInlineNotes] על תוכן ספר שלם — שורה לכל `lineIndex`.

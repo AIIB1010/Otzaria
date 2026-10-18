@@ -368,6 +368,30 @@ void main() {
     });
   }
 
+  testWidgets('שורה ללא FOOTNOTES אינה הופכת מספר רגיל לסמן בגלל שורה שכנה', (
+    tester,
+  ) async {
+    final lines = ['ראשון <small>(2)</small>', 'שני <small>(2)</small>'];
+    await _pumpPanel(
+      tester,
+      displayed: _RangeLink(
+        lines,
+        heRef: 'טווח',
+        index1: 1,
+        path2: 'רש״י',
+        index2: 3,
+        index2End: 4,
+        connectionType: LinkTypes.commentary,
+      ),
+      loaded: [_footnote(index1: 3)],
+      html: lines.join('<br>'),
+    );
+    final html = _renderedHtml(tester);
+    expect(html, contains('note-marker?line=2&num=2'));
+    expect(html, isNot(contains('note-marker?line=3&num=2')));
+    expect(stripHtmlIfNeeded(html).split('(2)'), hasLength(3));
+  });
+
   for (final type in [LinkTypes.commentary, LinkTypes.footnotes]) {
     testWidgets('מספר הערה חוזר בטווח אינו משויך לשורה הראשונה ($type)', (
       tester,

@@ -50,6 +50,18 @@ void main() {
     });
   }
 
+  test('סמן ריק מעוגן עובר סגירות inline ונשאר בתוך הפסקה', () {
+    const stored = '<p><b>א<sup class="footnote-marker"></sup></b></p>';
+    final notes = (BookNotesBuilder()..add(0, 0, '', 'הערה', charPos: 1))
+        .build();
+    final restored = rehydrateInlineNotes(stored, notes.notesAt(0));
+    expect(
+      restored,
+      '<p><b>א<sup class="footnote-marker"></sup></b><i class="footnote">הערה</i></p>',
+    );
+    expect(rehydrateInlineNotes(restored, notes.notesAt(0)), restored);
+  });
+
   test('שחזור בסוף פסקה נשאר לפניה ושומר על גבול המילה', () {
     const stored =
         '<p>ראשון<sup class="footnote-marker">א</sup></p><p>המשך</p>';

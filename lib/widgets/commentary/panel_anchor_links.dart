@@ -308,7 +308,8 @@ mixin PanelAnchorLinksMixin<T extends StatefulWidget> on State<T> {
             dbNotes: _targetNotes,
           );
     // סמן מודפס כמו (9) בלי <sup> — ההערה שלו נשמרה בלי אות-הפניה.
-    if (_noteLinks.isNotEmpty || lineNotes.any((n) => n.marker == null)) {
+    if (_noteLinks.any((link) => link.index1 == lineIndex + 1) ||
+        lineNotes.any((n) => n.marker == null)) {
       result = addNumberedNoteMarkerLinks(result, lineIndex: lineIndex);
     }
     return result;
