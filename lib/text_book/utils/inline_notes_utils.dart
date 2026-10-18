@@ -252,7 +252,11 @@ String rehydrateInlineNotes(
       final marker = note.marker != null && anchoredSeen < markers.length
           ? markers[anchoredSeen]
           : null;
-      at = marker != null && raw >= marker.start && raw < marker.end
+      // הסריקה הגלויה יכולה להיעצר לפני תגי פתיחה שמקדימים סמן ריק.
+      at =
+          marker != null &&
+              raw < marker.end &&
+              (raw >= marker.start || _onlyTagsBetween(line, raw, marker.start))
           ? _afterInlineClosings(line, marker.end)
           : raw;
     } else if (note.marker != null && anchoredSeen < markers.length) {
@@ -286,6 +290,17 @@ String rehydrateInlineNotes(
   }
   out.write(line.substring(last));
   return out.toString();
+}
+
+bool _onlyTagsBetween(String html, int from, int end) {
+  var at = from;
+  while (at < end) {
+    if (html.codeUnitAt(at) != 0x3C) return false;
+    final close = html.indexOf('>', at);
+    if (close < 0 || close >= end) return false;
+    at = close + 1;
+  }
+  return at == end;
 }
 
 /// האינדקס הגולמי אחרי התו הגלוי ה-[visible] (ישות = תו אחד, כמו

@@ -50,6 +50,46 @@ void main() {
     });
   }
 
+  for (final adjacent in [false, true]) {
+    test('סמן ריק אחרי תגי פתיחה בלבד: adjacent=$adjacent', () {
+      const stored = '<p><b><sup class="footnote-marker"></sup>המשך</b></p>';
+      final builder = BookNotesBuilder()..add(0, 0, '', 'גוף', charPos: 0);
+      if (adjacent) builder.add(0, 1, null, 'שנייה', charPos: 0);
+      final notes = builder.build().notesAt(0);
+      final restored = rehydrateInlineNotes(stored, notes);
+      final second = adjacent ? '<i class="footnote">שנייה</i>' : '';
+      expect(
+        restored,
+        '<p><b><sup class="footnote-marker"></sup><i class="footnote">גוף</i>$second'
+        'המשך</b></p>',
+      );
+      expect(rehydrateInlineNotes(restored, notes), restored);
+    });
+  }
+
+  test('הערה לא מעוגנת נשארת לפני sup שמוקדם לו רצף תגי פתיחה', () {
+    const stored = '<p><b><sup class="footnote-marker"></sup>המשך</b></p>';
+    final notes = (BookNotesBuilder()..add(0, 0, null, 'לפני', charPos: 0))
+        .build();
+    expect(
+      rehydrateInlineNotes(stored, notes.notesAt(0)),
+      '<i class="footnote">לפני</i>$stored',
+    );
+  });
+
+  for (final visiblePrefix in [' ', '\n', '&nbsp;']) {
+    test('קידומת שאינה tags-only אינה מתירה קפיצה לסמן: $visiblePrefix', () {
+      final stored =
+          '<p><b>$visiblePrefix<sup class="footnote-marker"></sup>המשך</b></p>';
+      final notes = (BookNotesBuilder()..add(0, 0, '', 'לפני', charPos: 0))
+          .build();
+      expect(
+        rehydrateInlineNotes(stored, notes.notesAt(0)),
+        '<i class="footnote">לפני</i>$stored',
+      );
+    });
+  }
+
   test('סמן ריק מעוגן עובר סגירות inline ונשאר בתוך הפסקה', () {
     const stored = '<p><b>א<sup class="footnote-marker"></sup></b></p>';
     final notes = (BookNotesBuilder()..add(0, 0, '', 'הערה', charPos: 1))
