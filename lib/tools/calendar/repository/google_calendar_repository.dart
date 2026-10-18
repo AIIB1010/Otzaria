@@ -138,9 +138,11 @@ class GoogleCalendarRepository {
       final googleEvent = toGoogleEvent(event, timeZoneId);
 
       if (event.googleEventId == null || event.googleEventId!.isEmpty) {
-        final created = await apiClient.api.events
-            .insert(googleEvent, _primaryGoogleCalendarId)
-            .timeout(_apiTimeout);
+        // timeout לא מבטל יצירה בשרת; איבוד המזהה גורם ליצירה כפולה בעריכה.
+        final created = await apiClient.api.events.insert(
+          googleEvent,
+          _primaryGoogleCalendarId,
+        );
         return created.id;
       } else {
         final updated = await apiClient.api.events
