@@ -9,7 +9,6 @@ import 'package:flutter_settings_screens/flutter_settings_screens.dart'
     hide SettingsGroup, SwitchSettingsTile;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:otzaria/core/app_paths.dart';
@@ -40,6 +39,7 @@ import 'package:otzaria/navigation/bloc/navigation_event.dart';
 import 'package:otzaria/services/data_collection_service.dart';
 import 'package:otzaria/data/repository/data_repository.dart';
 import 'package:otzaria/widgets/widgets_exports.dart';
+import 'package:otzaria/widgets/text/markdown_html_body.dart';
 import 'package:otzaria/settings/widgets/settings_widgets_exports.dart';
 import 'package:otzaria/widgets/misc/app_popup_menu.dart';
 import 'package:otzaria/widgets/misc/app_dropdown_field.dart';
@@ -50,7 +50,6 @@ import 'package:otzaria/utils/file/save_file_with_extension.dart';
 import 'package:otzaria/plugins/view/webview_environment_holder.dart';
 import 'package:otzaria/widgets/misc/restart_widget.dart';
 import 'package:otzaria/update/app_release_version.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:otzaria/settings/widgets/settings_tab_scroll_view.dart';
 
 /// טאב "אוצריא" — גרסאות, נתיב ספרייה, גיבוי, מצב סייפר, איפוס.
@@ -1700,16 +1699,9 @@ class _SystemSettingsTabState extends State<SystemSettingsTab> {
           content: SizedBox(
             width: 600,
             height: 400,
-            // Markdown הגלילתי אומד את היקף התוכן מהפריטים הבנויים בלבד
-            // והאגודל "רוקד" בגלילה; היקף מדויק דרך SingleChildScrollView.
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
-              child: MarkdownBody(
-                data: changelog,
-                onTapLink: (text, href, title) {
-                  if (href != null) launchUrl(Uri.parse(href));
-                },
-              ),
+              child: MarkdownHtmlBody(changelog),
             ),
           ),
           actions: [

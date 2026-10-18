@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/messages/library_messages.dart';
 import 'package:otzaria/update/hebrew_update_widgets.dart';
-import 'package:updat/updat.dart';
+import 'package:otzaria/update/updat_compat.dart';
 
 Widget _chip({required bool awaitingClose}) => MaterialApp(
   home: Builder(

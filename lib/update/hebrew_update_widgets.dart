@@ -3,11 +3,10 @@ import 'package:otzaria/theme/app_tokens.dart';
 
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:otzaria/core/messages/library_messages.dart';
-import 'package:updat/updat.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:otzaria/widgets/text/markdown_html_body.dart';
+import 'updat_compat.dart';
 
 /// עוטף את צ'יפ העדכון בצבע פעולה בולט, בלי לצאת מצבעי התמה.
 Widget _updateChipSurface(BuildContext context, Widget child) {
@@ -187,12 +186,7 @@ void hebrewDefaultDialog({
               padding: const EdgeInsets.all(8.0),
               child: changelogText.isEmpty
                   ? const Text('לא נמצאו פריטי יומן שינויים לעדכון זה.')
-                  : MarkdownBody(
-                      data: changelogText,
-                      onTapLink: (text, href, title) {
-                        if (href != null) launchUrl(Uri.parse(href));
-                      },
-                    ),
+                  : MarkdownHtmlBody(changelogText),
             ),
           ],
         ],
