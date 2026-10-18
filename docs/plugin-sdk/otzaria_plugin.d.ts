@@ -1219,6 +1219,10 @@ export interface ContextMenuItem {
   param?: unknown;
   /** Show the item only when the selected text matches. Available from 0.9.97. */
   showWhen?: ContextMenuShowWhen;
+  /** By default the host draws a divider between the items of different
+   * plugins. Set `false` on a plugin's first top-level item to opt out.
+   * Top-level items only. Available from 0.9.99. */
+  separatorBefore?: boolean;
 }
 
 /**
