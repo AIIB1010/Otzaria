@@ -9,6 +9,10 @@ import 'package:positioned_sliver_list/positioned_list.dart';
 class _RecordingScrollOffsetController extends ScrollOffsetController {
   final List<double> offsets = [];
 
+  // מדמה רשימה מחוברת כדי ש-ProgressiveScroll יסכים לגלול.
+  @override
+  bool get isAttached => true;
+
   @override
   Future<void> animateScroll({
     required double offset,
@@ -17,12 +21,6 @@ class _RecordingScrollOffsetController extends ScrollOffsetController {
   }) async {
     offsets.add(offset);
   }
-}
-
-/// מדמה רשימה מחוברת כדי ש-ProgressiveScroll יסכים לגלול.
-class _AttachedItemScrollController extends ItemScrollController {
-  @override
-  bool get isAttached => true;
 }
 
 void main() {
@@ -45,7 +43,6 @@ void main() {
           child: ProgressiveScroll(
             onKeyEvent: onKeyEvent,
             scrollController: offsetController,
-            itemScrollController: _AttachedItemScrollController(),
             focusNode: focusNode,
             child: const SizedBox.expand(),
           ),
@@ -209,7 +206,6 @@ void main() {
         home: Scaffold(
           body: ProgressiveScroll(
             scrollController: offsetController,
-            itemScrollController: _AttachedItemScrollController(),
             onKeyEvent: (_, _) => KeyEventResult.ignored,
             child: TextField(
               controller: controller,

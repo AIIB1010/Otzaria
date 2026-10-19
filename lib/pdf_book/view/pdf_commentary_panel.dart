@@ -1111,7 +1111,6 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
       maxSpeed: 10000.0,
       curve: 10.0,
       accelerationFactor: 5,
-      itemScrollController: _itemScrollController,
       onKeyEvent: (_, event) => ContextMenuUtils.reportCommentaryErrorShortcut(
         context,
         event,

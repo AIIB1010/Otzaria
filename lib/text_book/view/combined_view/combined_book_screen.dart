@@ -2077,8 +2077,6 @@ class _CombinedViewState extends State<CombinedView> {
                                   accelerationFactor: 5,
                                   scrollController:
                                       widget.tab.lines.offsetController,
-                                  itemScrollController:
-                                      widget.tab.lines.itemController,
                                   child:
                                       BlocBuilder<
                                         PersonalNotesBloc,

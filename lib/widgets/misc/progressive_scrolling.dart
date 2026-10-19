@@ -15,8 +15,6 @@ class ProgressiveScroll extends StatefulWidget {
   final bool autofocus;
   // קיצורי התוכן מקבלים קדימות על פני גלילת החיצים.
   final FocusOnKeyEventCallback? onKeyEvent;
-  // ItemScrollController חושף isAttached ומונע גלילה כשהרשימה אינה מחוברת.
-  final ItemScrollController? itemScrollController;
 
   const ProgressiveScroll({
     super.key,
@@ -27,7 +25,6 @@ class ProgressiveScroll extends StatefulWidget {
     this.curve = 2.0,
     this.focusNode,
     this.autofocus = false,
-    this.itemScrollController,
     this.onKeyEvent,
   });
 
@@ -44,8 +41,8 @@ class _ProgressiveScrollState extends State<ProgressiveScroll> {
   late final FocusNode _focusNode;
   bool _isLocalFocusNode = false;
 
-  // גלילה אפשרית רק כשה-ScrollablePositionedList מחובר; אחרת animateScroll זורק.
-  bool get _canScroll => widget.itemScrollController?.isAttached ?? false;
+  // גלילה אפשרית רק כשהרשימה מחוברת; אחרת animateScroll זורק.
+  bool get _canScroll => widget.scrollController.isAttached;
 
   @override
   void initState() {
