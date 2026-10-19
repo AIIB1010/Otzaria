@@ -278,6 +278,26 @@ void main() {
       });
     });
 
+    test('writeIfChanged כותב רק כשהתוכן שונה', () async {
+      final dir = Directory.systemTemp.createTempSync('otz_write_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final file = File('${dir.path}/otzaria-plugin.xml');
+
+      expect(
+        await PluginProtocolRegistrationService.writeIfChanged(file, 'a'),
+        isTrue,
+      );
+      expect(
+        await PluginProtocolRegistrationService.writeIfChanged(file, 'a'),
+        isFalse,
+      );
+      expect(
+        await PluginProtocolRegistrationService.writeIfChanged(file, 'b'),
+        isTrue,
+      );
+      expect(file.readAsStringSync(), 'b');
+    });
+
     test('buildLinuxMimeXml מייצר תיאור MIME עם glob תקין', () {
       final xml = PluginProtocolRegistrationService.buildLinuxMimeXml(
         mimeType: 'application/x-otzaria-plugin',

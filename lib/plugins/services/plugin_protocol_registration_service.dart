@@ -164,20 +164,23 @@ class PluginProtocolRegistrationService {
     // `application-x-otzaria-plugin` כשהוא מחפש אייקון.
     const mimeIconName = 'application-x-otzaria-plugin';
 
+    final mimeDir = p.join(home, '.local', 'share', 'mime');
     final mimeFile = File(p.join(mimePackagesDir.path, 'otzaria-plugin.xml'));
-    await mimeFile.writeAsString(
+    final mimeChanged = await writeIfChanged(
+      mimeFile,
       buildLinuxMimeXml(
         mimeType: pluginMimeType,
         extension: pluginFileExtension,
         iconName: mimeIconName,
       ),
-      flush: true,
     );
 
     // ===== רישום קריטי — חייב להצליח =====
-    await _runLinuxCommandIfAvailable('update-mime-database', [
-      p.join(home, '.local', 'share', 'mime'),
-    ]);
+    // הקובץ ש-update-mime-database מייצר מעיד שריצה קודמת לא נכשלה באמצע.
+    final mimeCompiled = File(p.join(mimeDir, '$pluginMimeType.xml'));
+    if (mimeChanged || !await mimeCompiled.exists()) {
+      await _runLinuxCommandIfAvailable('update-mime-database', [mimeDir]);
+    }
     if (writesDesktopFile || removesDesktopFile) {
       await _runLinuxCommandIfAvailable('update-desktop-database', [
         applicationsDir.path,
@@ -238,6 +241,13 @@ class PluginProtocolRegistrationService {
     await mimetypesDir.create(recursive: true);
 
     final destination = File(p.join(mimetypesDir.path, '$mimeIconName.png'));
+    if (await destination.exists() &&
+        listEquals(
+          await destination.readAsBytes(),
+          await sourceIcon.readAsBytes(),
+        )) {
+      return;
+    }
     await sourceIcon.copy(destination.path);
 
     // gtk-update-icon-cache דורש index.theme בתיקיית התמה כדי להצליח.
@@ -253,6 +263,19 @@ class PluginProtocolRegistrationService {
         iconsRoot,
       ]);
     }
+  }
+
+  /// כותב רק כשהתוכן שונה, כדי לא לגעת בכל הפעלה בקבצים שכבר מעודכנים.
+  /// מחזיר האם נכתב.
+  @visibleForTesting
+  static Future<bool> writeIfChanged(File file, String content) async {
+    if (await file.exists() &&
+        utf8.decode(await file.readAsBytes(), allowMalformed: true) ==
+            content) {
+      return false;
+    }
+    await file.writeAsString(content, flush: true);
+    return true;
   }
 
   Future<void> _runLinuxCommandIfAvailable(
