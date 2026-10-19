@@ -47,6 +47,17 @@ import 'package:otzaria/settings/services/backup/backup_import_merge.dart';
 import 'package:otzaria/settings/services/backup/backup_maintenance.dart';
 import 'package:otzaria/settings/services/backup/backup_store.dart';
 
+/// תוצאת [BackupService.restoreFromBackup].
+typedef BackupRestoreResult = ({
+  List<String> skippedSections,
+  List<String> missingCustomFolders,
+  bool hasLegacyPartialSettings,
+  int notesWithoutAnchor,
+  int restoredPlugins,
+  bool userBooksNotReplaced,
+  BackupImportCounts? added,
+});
+
 /// Status of the most recent backup and whether a new one is recommended.
 class BackupStatus {
   final DateTime? lastBackupDate;
@@ -847,18 +858,7 @@ class BackupService {
   /// [mode] — `replace` (ברירת מחדל) מחליף את הנתונים הקיימים; `merge` מייבא
   /// מגיבוי של מכשיר אחר בלי למחוק דבר: ההגדרות והטאבים הפתוחים אינם נוגעים,
   /// והפריטים מתווספים לקיימים (ראה [BackupImportMerge]).
-  static Future<
-    ({
-      List<String> skippedSections,
-      List<String> missingCustomFolders,
-      bool hasLegacyPartialSettings,
-      int notesWithoutAnchor,
-      int restoredPlugins,
-      bool userBooksNotReplaced,
-      BackupImportCounts? added,
-    })
-  >
-  restoreFromBackup(
+  static Future<BackupRestoreResult> restoreFromBackup(
     String backupPath, {
     BackupImportMode mode = BackupImportMode.replace,
   }) async {
@@ -1696,6 +1696,25 @@ class BackupService {
     final includePlugins =
         Settings.getValue<bool>('key-backup-plugins') ?? true;
 
+    // "שחזור מהגיבוי האחרון" בוחר בחדש ביותר, ולכן גיבוי של נתונים שנמחקו
+    // מבחוץ לא יסתיר גיבוי שיש בו נתונים (issue #2610).
+    final emptySections = await _emptyUserSections(
+      bookmarks: includeBookmarks,
+      history: includeHistory,
+      notes: includeNotes,
+    );
+    if (emptySections.isNotEmpty && await _latestBackupHasAny(emptySections)) {
+      _logger.warning(
+        'Auto-backup skipped: no bookmarks, history or notes, unlike the '
+        'latest backup',
+      );
+      await Settings.setValue(
+        'key-last-auto-backup',
+        DateTime.now().toIso8601String(),
+      );
+      return;
+    }
+
     final result = await createBackup(
       includeSettings: includeSettings,
       includeBookmarks: includeBookmarks,
@@ -1729,6 +1748,47 @@ class BackupService {
       await BackupMaintenance.runMaintenance();
     } catch (e) {
       _logger.warning('Backup maintenance failed: $e');
+    }
+  }
+
+  /// הסעיפים הנכללים מבין סימניות, היסטוריה והערות, כשכולם ריקים; אחרת
+  /// רשימה ריקה. אלה מתמלאים רק משימוש, בניגוד לתוספים מובנים וברירות מחדל.
+  static Future<List<String>> _emptyUserSections({
+    required bool bookmarks,
+    required bool history,
+    required bool notes,
+  }) async {
+    if (bookmarks && (await _backupBookmarks()).isNotEmpty) return const [];
+    if (history && (await _backupHistory()).isNotEmpty) return const [];
+    if (notes &&
+        (await PersonalNotesDatabase.instance.listBooksWithNotes())
+            .isNotEmpty) {
+      return const [];
+    }
+    return [
+      if (bookmarks) 'bookmarks',
+      if (history) 'history',
+      if (notes) 'notes',
+    ];
+  }
+
+  /// האם בגיבוי החדש ביותר יש סימניות, היסטוריה או הערות.
+  static Future<bool> latestBackupHasUserData() =>
+      _latestBackupHasAny(const ['bookmarks', 'history', 'notes']);
+
+  /// האם באחד מ-[sections] של הגיבוי החדש ביותר יש פריטים. קובץ פגום — לא.
+  static Future<bool> _latestBackupHasAny(List<String> sections) async {
+    final backups = await getAvailableBackups();
+    if (backups.isEmpty) return false;
+    final path = backups.first.path;
+    try {
+      return await Isolate.run(() {
+        final data = json.decode(File(path).readAsStringSync());
+        return data is Map &&
+            sections.any((s) => (data[s] as List?)?.isNotEmpty ?? false);
+      });
+    } catch (_) {
+      return false;
     }
   }
 

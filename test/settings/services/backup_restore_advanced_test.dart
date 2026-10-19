@@ -777,6 +777,33 @@ void main() {
       expect((manifest['includes'] as Map)['history'], isTrue);
     });
 
+    test(
+      'גיבוי אוטומטי של מצב ריק אינו נעשה "הגיבוי האחרון" על פני גיבוי עם נתונים (issue #2610)',
+      () async {
+        await BookmarkRepository().replaceBookmarks([buildBookmark('בראשית')]);
+        await BackupService.performAutoBackup();
+        final full = (await BackupService.getAvailableBackups()).single.path;
+
+        // המסדים וההגדרות נמחקו מבחוץ, והתוכנה עלתה ריקה.
+        await BookmarkRepository().replaceBookmarks([]);
+        await Settings.setValue<String?>('key-last-auto-backup', null);
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+        await BackupService.performAutoBackup();
+
+        final backups = await BackupService.getAvailableBackups();
+        expect(backups.map((b) => b.path), [full]);
+        // לא ינסה שוב בכל עלייה.
+        expect(await BackupService.shouldPerformAutoBackup(), isFalse);
+
+        // מי שכיבה את גיבוי הסעיפים האלה — אין ממה להשוות, והגיבוי נכתב.
+        for (final s in ['bookmarks', 'history', 'notes']) {
+          await Settings.setValue<bool>('key-backup-$s', false);
+        }
+        await BackupService.performAutoBackup();
+        expect(await BackupService.getAvailableBackups(), hasLength(2));
+      },
+    );
+
     test('גיבוי אוטומטי מוצלח מעדכן את מועד הגיבוי האחרון', () async {
       expect(Settings.getValue<String>('key-last-auto-backup'), isNull);
       await BackupService.performAutoBackup();
