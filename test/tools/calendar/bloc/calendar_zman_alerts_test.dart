@@ -58,7 +58,8 @@ class _RecordingNotifications implements NotificationService {
   Future<bool> checkPermissions() async => true;
 
   @override
-  Future<void> cancelNotification(int id) async => cancelled.add(id);
+  Future<void> cancelNotifications(Iterable<int> ids) async =>
+      cancelled.addAll(ids);
 
   @override
   Future<void> scheduleNotification({

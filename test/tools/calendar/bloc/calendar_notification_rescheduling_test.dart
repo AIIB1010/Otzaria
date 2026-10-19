@@ -98,7 +98,7 @@ class _Notifications implements NotificationService {
   Future<bool> checkPermissions() async => true;
 
   @override
-  Future<void> cancelNotification(int id) async {
+  Future<void> cancelNotifications(Iterable<int> ids) async {
     if (holdCancellation && ++cancellations == 1) {
       cancellationStarted.complete();
       await releaseCancellation.future;

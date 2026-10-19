@@ -86,8 +86,8 @@ class MockNotificationService implements NotificationService {
   }
 
   @override
-  Future<void> cancelNotification(int id) async {
-    scheduledNotifications.removeWhere((n) => n.id == id);
+  Future<void> cancelNotifications(Iterable<int> ids) async {
+    scheduledNotifications.removeWhere((n) => ids.contains(n.id));
   }
 
   // Stubs

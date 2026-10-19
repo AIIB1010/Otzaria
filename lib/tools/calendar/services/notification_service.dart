@@ -492,17 +492,6 @@ class NotificationService {
     windows: WindowsNotificationDetails(),
   );
 
-  /// ביטול שכשלונו אינו מדווח. מאתחל לפי הצורך.
-  Future<void> cancelNotification(int id) async {
-    try {
-      await cancelNotifications([id]);
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('Failed to cancel notification $id: $e');
-      }
-    }
-  }
-
   /// ביטול לפני מחיקת מזהים רשומים: הכשל חייב להגיע למי שמוחק אותם.
   Future<void> cancelNotifications(Iterable<int> ids) async {
     final notificationIds = ids.toList();
