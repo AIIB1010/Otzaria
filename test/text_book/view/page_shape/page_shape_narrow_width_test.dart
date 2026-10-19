@@ -197,6 +197,61 @@ void main() {
     final after = tester.getSize(find.byType(SimpleTextViewer)).width;
     expect(after - before, greaterThan(25));
   });
+  for (final hiddenColumn in ['left', 'right']) {
+    testWidgets('גרירה משמרת יחס טור $hiddenColumn מוסתר גם בהצגה מחדש', (
+      tester,
+    ) async {
+      final visibleColumn = hiddenColumn == 'left' ? 'right' : 'left';
+      await Settings.setValue<double>('page_shape_${hiddenColumn}_width', 0.17);
+      await Settings.setValue<double>(
+        'page_shape_${visibleColumn}_width',
+        0.25,
+      );
+      await Settings.setValue<bool>(
+        'page_shape_global_visibility_$hiddenColumn',
+        false,
+      );
+      await pumpScreen(tester, sidePanesWidth: 700, width: 1000);
+      expect(find.text('בחר מפרש'), findsOneWidget);
+
+      final handle = find.byType(ResizableDragHandle).first;
+      final rect = tester.getRect(handle);
+      final gesture = await tester.startGesture(
+        Offset(rect.left + 4, rect.center.dy),
+      );
+      for (var i = 0; i < 6; i++) {
+        await gesture.moveBy(Offset(hiddenColumn == 'right' ? -10 : 10, 0));
+        await tester.pump();
+      }
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(
+        Settings.getValue<double>('page_shape_${hiddenColumn}_width'),
+        0.17,
+      );
+      expect(
+        Settings.getValue<double>('page_shape_${visibleColumn}_width'),
+        isNot(0.25),
+      );
+
+      await Settings.setValue<bool>(
+        'page_shape_global_visibility_$hiddenColumn',
+        true,
+      );
+      tester.view.physicalSize = const Size(1700, 736);
+      await tester.pumpAndSettle();
+      expectColumnsFit(tester);
+      final pane = find
+          .ancestor(
+            of: find.text('בחר מפרש').at(hiddenColumn == 'left' ? 0 : 1),
+            matching: find.byWidgetPredicate(
+              (widget) => widget is SizedBox && widget.child is Container,
+            ),
+          )
+          .first;
+      expect(tester.getSize(pane).width, closeTo(0.17 * (1000 - 64), 0.001));
+    });
+  }
 }
 
 TextBookLoaded _loadedState(TextBook book) => TextBookLoaded(

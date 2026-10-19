@@ -1204,7 +1204,7 @@ class _PageShapeScreenState extends State<PageShapeScreen> {
                                 );
                                 final leftWidth = sideWidths.left;
                                 final rightWidth = sideWidths.right;
-                                // גרירה מקבעת את הטור השני לרוחבו המוצג וחוסמת את
+                                // גרירה מקבעת טור שני גלוי לרוחבו המוצג וחוסמת את
                                 // הנגרר, כדי שההקטנה המשותפת לא תזיז את הידית.
                                 final sidesMax =
                                     freeWidth * (1 - kPageShapeMainMinFraction);
@@ -1234,9 +1234,13 @@ class _PageShapeScreenState extends State<PageShapeScreen> {
                                   setState(() {
                                     _leftWidth = isLeft
                                         ? fraction
-                                        : otherFraction;
-                                    _rightWidth = isLeft
+                                        : hasOther
                                         ? otherFraction
+                                        : _leftWidth;
+                                    _rightWidth = isLeft
+                                        ? hasOther
+                                              ? otherFraction
+                                              : _rightWidth
                                         : fraction;
                                   });
                                 }
