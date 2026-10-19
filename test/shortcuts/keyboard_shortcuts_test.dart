@@ -25,6 +25,7 @@ import 'package:otzaria/navigation/bloc/navigation_bloc.dart';
 import 'package:otzaria/navigation/bloc/navigation_event.dart';
 import 'package:otzaria/navigation/bloc/navigation_state.dart';
 import 'package:otzaria/navigation/view/tab_search_menu.dart';
+import 'package:otzaria/personal_notes/widgets/personal_note_editor_dialog.dart';
 import 'package:otzaria/search/models/search_configuration.dart';
 import 'package:otzaria/search/view/search_dialog.dart';
 import 'package:otzaria/settings/engine/settings_bloc.dart';
@@ -1659,6 +1660,66 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(AppReportDialog), findsOneWidget);
+      expect(blocs.navigationBloc.events, isEmpty);
+    });
+
+    testWidgets('תווים מגיעים לשדה בדיאלוג שחוסם סגירה (#2323, #2599)', (
+      tester,
+    ) async {
+      final blocs = await pumpWithDialog(tester);
+      Navigator.of(tester.element(find.byType(AlertDialog))).pop();
+      showAppReportDialog(
+        tester.element(find.byType(SizedBox)),
+        createBloc: () => AppReportBloc(
+          trigger: AppReportTrigger.manual,
+          service: FakeAppReportService(),
+          collector: FakeAppReportCollector(),
+          redactor: AppReportRedactor(environment: const {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('app-report-description')),
+        'דיווח',
+      );
+      await tester.pump();
+
+      // handled חוסם ב-Windows את התו מלהיכנס לשדה.
+      for (final key in [
+        LogicalKeyboardKey.keyA,
+        LogicalKeyboardKey.space,
+        LogicalKeyboardKey.digit8,
+      ]) {
+        expect(await tester.sendKeyEvent(key), isFalse, reason: '$key');
+      }
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      expect(await tester.sendKeyEvent(LogicalKeyboardKey.keyB), isFalse);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+
+      await sendCtrl(tester, LogicalKeyboardKey.keyL);
+      await tester.pumpAndSettle();
+      expect(find.byType(AppReportDialog), findsOneWidget);
+      expect(blocs.navigationBloc.events, isEmpty);
+    });
+
+    testWidgets('תווים מגיעים לעורך ההערות, שחוסם סגירה תמיד', (tester) async {
+      final blocs = await pumpWithDialog(tester);
+      Navigator.of(tester.element(find.byType(AlertDialog))).pop();
+      showDialog<void>(
+        context: tester.element(find.byType(SizedBox)),
+        builder: (_) => const PersonalNoteEditorDialog(),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(quill.QuillEditor), findsOneWidget);
+      expect(ShortcutHelper.isEditingText, isTrue);
+
+      for (final key in [LogicalKeyboardKey.keyA, LogicalKeyboardKey.space]) {
+        expect(await tester.sendKeyEvent(key), isFalse, reason: '$key');
+      }
+
+      await sendCtrl(tester, LogicalKeyboardKey.keyL);
+      await tester.pumpAndSettle();
+      expect(find.byType(PersonalNoteEditorDialog), findsOneWidget);
       expect(blocs.navigationBloc.events, isEmpty);
     });
 

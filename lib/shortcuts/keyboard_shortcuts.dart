@@ -85,9 +85,11 @@ class _KeyboardShortcutsState extends State<KeyboardShortcuts> {
     if (!mounted) return KeyEventResult.ignored;
     final focusContext = FocusManager.instance.primaryFocus?.context;
     final route = focusContext == null ? null : ModalRoute.of(focusContext);
+    // תו שמסומן handled לא נכנס לשדה ב-Windows; חוסמים רק קיצורים.
     if (route != null &&
         !route.isFirst &&
-        route.popDisposition == RoutePopDisposition.doNotPop) {
+        route.popDisposition == RoutePopDisposition.doNotPop &&
+        !ShortcutHelper.shouldIgnoreWhileEditing(event)) {
       return KeyEventResult.handled;
     }
     return _handleKeyEvent(event, context.read<SettingsBloc>().state.shortcuts);
