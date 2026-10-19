@@ -1182,7 +1182,7 @@ class _PageShapeScreenState extends State<PageShapeScreen> {
                                   pageConstraints.maxHeight,
                                 );
                                 final sideMax = math.max(
-                                  80.0,
+                                  kPageShapeSideMinWidth,
                                   freeWidth * kPageShapeSideMaxFraction,
                                 );
                                 final hasLeftPane = _isCommentatorVisible(
@@ -1221,7 +1221,10 @@ class _PageShapeScreenState extends State<PageShapeScreen> {
                                     sidesMax - (hasOther ? other : 0),
                                   );
                                   final fraction = pageShapeFraction(
-                                    width.clamp(80.0, math.max(80.0, max)),
+                                    width.clamp(
+                                      kPageShapeSideMinWidth,
+                                      math.max(kPageShapeSideMinWidth, max),
+                                    ),
                                     freeWidth,
                                   );
                                   final otherFraction = pageShapeFraction(

@@ -57,5 +57,17 @@ void main() {
       );
       expect(widths.left, closeTo(400, 0.001));
     });
+
+    test('בדף צר כל טור נשאר ברוחב המזערי', () {
+      final widths = resolvePageShapeSideWidths(
+        freeWidth: 300,
+        leftFraction: 0.17,
+        rightFraction: 0.4,
+        hasLeft: true,
+        hasRight: true,
+      );
+      expect(widths.left, kPageShapeSideMinWidth);
+      expect(widths.right, greaterThanOrEqualTo(kPageShapeSideMinWidth));
+    });
   });
 }
