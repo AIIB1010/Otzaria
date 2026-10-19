@@ -68,11 +68,11 @@ String buildSelectedLinkInstanceKey(Link link) {
   return '${link.path2}_${link.index1}_${link.index2}_${link.index2End ?? ''}_${link.heRef}_${link.start}_${link.end}_${link.connectionType}_$target';
 }
 
-/// זהות פריט התצוגה — [buildSelectedLinkInstanceKey] בלי שורת המקור (index1).
+/// זהות קטע היעד, כולל המסד והספר, בלי שורת המקור (index1).
 @visibleForTesting
 String buildSelectedLinkTargetKey(Link link) {
   final target =
-      '${link.targetIsUserBook ? 'u' : 'o'}_${link.targetCategoryId ?? ''}';
+      '${link.targetSource.wireKey}_${link.targetCategoryId ?? ''}_${link.targetBookId ?? ''}';
   return '${link.path2}_${link.index2}_${link.index2End ?? ''}_${link.start}_${link.end}_${link.connectionType}_${link.targetFileType ?? ''}_$target';
 }
 
