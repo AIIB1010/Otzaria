@@ -1589,8 +1589,8 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/scrollable_positioned_list"
-      ref: master
-      resolved-ref: ebe2f4ef9f27cd5bbb095d01e524c5cd714f7aa5
+      ref: 19113e3925833d68d076ffd2c0c4f85b89a50c82
+      resolved-ref: 19113e3925833d68d076ffd2c0c4f85b89a50c82
       url: "https://github.com/Otzaria/flutter.widgets"
     source: git
     version: "0.3.8+1"

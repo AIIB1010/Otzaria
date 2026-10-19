@@ -2157,6 +2157,7 @@ class _CombinedViewState extends State<CombinedView> {
         child: widget.tab.lines.trackUserScroll(
           ScrollablePositionedList.builder(
             initialScrollIndex: clampedInitial,
+            cacheExtentScreens: kReaderCacheExtentScreens,
             itemScrollController: widget.tab.lines.itemController,
             itemPositionsListener: widget.tab.lines.positionsListener,
             scrollOffsetController: widget.tab.lines.offsetController,
@@ -2201,6 +2202,7 @@ class _CombinedViewState extends State<CombinedView> {
       ),
       initialScrollIndex: clampedInitial,
       initialAlignment: initialReadingAlignment(clampedInitial),
+      cacheExtentScreens: kReaderCacheExtentScreens,
       // מרווח ברוחב המסילה בקצה הנגדי ממרכז את הטקסט; הוא בתוך הרשימה ולא
       // סביבה, כדי שטעם שבולט אחרי המילה האחרונה בשורה לא ייחתך בגבול שלה.
       padding: const EdgeInsetsDirectional.only(
