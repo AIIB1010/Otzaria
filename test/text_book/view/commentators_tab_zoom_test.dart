@@ -7,6 +7,7 @@ import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
 import 'package:otzaria/models/books.dart';
+import 'package:otzaria/shortcuts/shortcut_helper.dart';
 import 'package:otzaria/personal_notes/bloc/personal_notes_bloc.dart';
 import 'package:otzaria/personal_notes/bloc/personal_notes_event.dart';
 import 'package:otzaria/personal_notes/bloc/personal_notes_state.dart';
@@ -195,12 +196,15 @@ void main() {
         tester.widget<NavSidePanel>(find.byType(NavSidePanel)).isOpen;
     // בלי מפרשים הרשימה פותחת את לשונית הבחירה, ולכן נבדק היפוך המצב.
     final initial = paneOpen();
+    final modifier = ShortcutHelper.usesMacModifiers
+        ? LogicalKeyboardKey.metaLeft
+        : LogicalKeyboardKey.controlLeft;
     for (final expected in [!initial, initial]) {
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyDownEvent(modifier);
       await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
       await tester.sendKeyEvent(LogicalKeyboardKey.keyL);
       await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyUpEvent(modifier);
       await tester.pump();
       expect(paneOpen(), expected);
     }

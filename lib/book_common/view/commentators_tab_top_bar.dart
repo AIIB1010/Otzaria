@@ -21,6 +21,9 @@ KeyEventResult handleCommentatorsTabShortcuts(
   required VoidCallback onSearch,
   required VoidCallback onToggleNavPane,
 }) {
+  if (ShortcutHelper.shouldIgnoreWhileEditing(event)) {
+    return KeyEventResult.ignored;
+  }
   for (final (key, action) in [
     (ShortcutValidator.printKey, onPrint),
     (ShortcutValidator.currentWindowSearchKey, onSearch),
