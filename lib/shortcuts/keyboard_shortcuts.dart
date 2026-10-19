@@ -85,15 +85,24 @@ class _KeyboardShortcutsState extends State<KeyboardShortcuts> {
     if (!mounted) return KeyEventResult.ignored;
     final focusContext = FocusManager.instance.primaryFocus?.context;
     final route = focusContext == null ? null : ModalRoute.of(focusContext);
-    // תו שמסומן handled לא נכנס לשדה ב-Windows; חוסמים רק קיצורים.
     if (route != null &&
         !route.isFirst &&
-        route.popDisposition == RoutePopDisposition.doNotPop &&
-        !ShortcutHelper.shouldIgnoreWhileEditing(event)) {
-      return KeyEventResult.handled;
+        route.popDisposition == RoutePopDisposition.doNotPop) {
+      // תו שמסומן handled לא נכנס לשדה ב-Windows; חוסמים רק קיצורים.
+      return ShortcutHelper.shouldIgnoreWhileEditing(event) ||
+              _typesCharacterWithModifiers(event)
+          ? KeyEventResult.ignored
+          : KeyEventResult.handled;
     }
     return _handleKeyEvent(event, context.read<SettingsBloc>().state.shortcuts);
   }
+
+  /// AltGr (Ctrl+Alt ב-Windows) או Option במק שמייצרים תו לשדה, כמו ₪ או ניקוד.
+  static bool _typesCharacterWithModifiers(KeyEvent event) =>
+      event.character != null &&
+      ShortcutHelper.isEditingText &&
+      !ShortcutHelper.isPlainCtrlOrCmdPressed &&
+      !HardwareKeyboard.instance.isMetaPressed;
 
   /// בעריכת טקסט השדה קודם, והקיצור הדינמי נבדק רק ב-late handler.
   KeyEventResult _handleEarlyKeyEvent(KeyEvent event) {

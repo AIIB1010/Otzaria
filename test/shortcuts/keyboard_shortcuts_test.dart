@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:bloc_test/bloc_test.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -1507,7 +1508,7 @@ void main() {
       await tester.pump();
 
       showDialog(
-        context: tester.element(find.byType(SizedBox)),
+        context: tester.element(find.byType(KeyboardShortcuts)),
         builder: (_) => blocked
             ? AppCustomContentDialog(
                 title: 'התקנה פעילה',
@@ -1663,13 +1664,11 @@ void main() {
       expect(blocs.navigationBloc.events, isEmpty);
     });
 
-    testWidgets('תווים מגיעים לשדה בדיאלוג שחוסם סגירה (#2323, #2599)', (
-      tester,
-    ) async {
+    Future<_StubNavigationBloc> pumpReportWithText(WidgetTester tester) async {
       final blocs = await pumpWithDialog(tester);
       Navigator.of(tester.element(find.byType(AlertDialog))).pop();
       showAppReportDialog(
-        tester.element(find.byType(SizedBox)),
+        tester.element(find.byType(KeyboardShortcuts)),
         createBloc: () => AppReportBloc(
           trigger: AppReportTrigger.manual,
           service: FakeAppReportService(),
@@ -1683,6 +1682,32 @@ void main() {
         'דיווח',
       );
       await tester.pump();
+      return blocs.navigationBloc;
+    }
+
+    /// שולח [key] כש-[modifiers] לחוצים ומחזיר אם האירוע סומן handled.
+    Future<bool> sendWith(
+      WidgetTester tester,
+      List<LogicalKeyboardKey> modifiers,
+      LogicalKeyboardKey key, {
+      String? character,
+    }) async {
+      for (final modifier in modifiers) {
+        await tester.sendKeyDownEvent(modifier);
+      }
+      final handled = await tester.sendKeyDownEvent(key, character: character);
+      await tester.sendKeyUpEvent(key);
+      for (final modifier in modifiers.reversed) {
+        await tester.sendKeyUpEvent(modifier);
+      }
+      await tester.pump();
+      return handled;
+    }
+
+    testWidgets('תווים מגיעים לשדה בדיאלוג שחוסם סגירה (#2323, #2599)', (
+      tester,
+    ) async {
+      final navigationBloc = await pumpReportWithText(tester);
 
       // handled חוסם ב-Windows את התו מלהיכנס לשדה.
       for (final key in [
@@ -1700,7 +1725,105 @@ void main() {
       await sendCtrl(tester, LogicalKeyboardKey.keyO);
       await tester.pumpAndSettle();
       expect(find.byType(AppReportDialog), findsOneWidget);
-      expect(blocs.navigationBloc.events, isEmpty);
+      expect(navigationBloc.events, isEmpty);
+    });
+
+    testWidgets('AltGr של Windows מקליד ₪ בדיאלוג שחוסם סגירה', (tester) async {
+      ShortcutHelper.isWindowsForTesting = true;
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        final navigationBloc = await pumpReportWithText(tester);
+        const altGr = [
+          LogicalKeyboardKey.controlLeft,
+          LogicalKeyboardKey.altRight,
+        ];
+        const ctrl = [LogicalKeyboardKey.controlLeft];
+
+        expect(
+          await sendWith(
+            tester,
+            altGr,
+            LogicalKeyboardKey.digit4,
+            character: '₪',
+          ),
+          isFalse,
+        );
+        // בלי תו זה קיצור, לא הקלדה.
+        expect(
+          await sendWith(tester, altGr, LogicalKeyboardKey.pageUp),
+          isTrue,
+        );
+        expect(
+          await sendWith(tester, const [
+            LogicalKeyboardKey.altLeft,
+          ], LogicalKeyboardKey.pageUp),
+          isTrue,
+        );
+        expect(
+          await sendWith(tester, ctrl, LogicalKeyboardKey.keyW, character: 'w'),
+          isTrue,
+        );
+        expect(
+          await sendWith(tester, ctrl, LogicalKeyboardKey.keyO, character: 'o'),
+          isTrue,
+        );
+        expect(
+          await sendWith(
+            tester,
+            const [],
+            LogicalKeyboardKey.escape,
+            character: '',
+          ),
+          isTrue,
+        );
+        await tester.pumpAndSettle();
+        expect(find.byType(AppReportDialog), findsOneWidget);
+        expect(navigationBloc.events, isEmpty);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    testWidgets('Option במק מקליד תו בדיאלוג שחוסם סגירה', (tester) async {
+      ShortcutHelper.isMacForTesting = true;
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      try {
+        final navigationBloc = await pumpReportWithText(tester);
+        const option = [LogicalKeyboardKey.altLeft];
+        const cmd = [LogicalKeyboardKey.metaLeft];
+
+        expect(
+          await sendWith(
+            tester,
+            option,
+            LogicalKeyboardKey.keyE,
+            character: '´',
+          ),
+          isFalse,
+        );
+        expect(
+          await sendWith(tester, cmd, LogicalKeyboardKey.keyW, character: 'w'),
+          isTrue,
+        );
+        expect(
+          await sendWith(tester, cmd, LogicalKeyboardKey.keyO, character: 'o'),
+          isTrue,
+        );
+        expect(
+          await sendWith(
+            tester,
+            [...cmd, ...option],
+            LogicalKeyboardKey.keyX,
+            character: '≈',
+          ),
+          isTrue,
+        );
+        await tester.pumpAndSettle();
+        expect(find.byType(AppReportDialog), findsOneWidget);
+        expect(navigationBloc.events, isEmpty);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
     });
 
     testWidgets('תווים מגיעים לעורך ההערות, שחוסם סגירה תמיד', (tester) async {
