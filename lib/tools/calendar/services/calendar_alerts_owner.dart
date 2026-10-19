@@ -19,11 +19,15 @@ class CalendarAlertsUpdate {
     required this.epoch,
     required this.revision,
     required this.values,
+    this.pluginEventsChanged = false,
   });
 
   final String epoch;
   final int revision;
   final Map<String, Object?> values;
+
+  /// אירועי התוספים במסד השתנו, ויש לטעון אותם מחדש.
+  final bool pluginEventsChanged;
 
   /// האם העדכון חדש מ-[epoch]/[revision] שכבר הוחלו.
   bool isNewerThan(String? epoch, int revision) =>
@@ -39,8 +43,16 @@ class CalendarAlertsUpdate {
       epoch: epoch,
       revision: revision,
       values: Map<String, Object?>.from(values),
+      pluginEventsChanged: json['pluginEventsChanged'] == true,
     );
   }
+
+  Map<String, Object?> toJson() => {
+    'epoch': epoch,
+    'revision': revision,
+    'values': values,
+    if (pluginEventsChanged) 'pluginEventsChanged': true,
+  };
 }
 
 /// תוצאת ריצת תזמון. נפרדת מאישור הפקודה, שחוזר לפני התזמון.
@@ -264,7 +276,7 @@ class CalendarAlertsOwner {
     'snapshot': (_, _, _) => null,
     'pluginEventsChanged': (owner, _, _) {
       // אירועי תוספים אינם במפתחות; החלונות טוענים אותם מחדש מהמסד.
-      owner._forcePublish = true;
+      owner._pluginEventsChanged = true;
       return null;
     },
     'upsertEvent': (_, current, args) =>
@@ -425,30 +437,33 @@ class CalendarAlertsOwner {
         _changed(current, CalendarAlertsKeys.city, _stringArg(args, 'city')),
   };
 
-  bool _forcePublish = false;
+  bool _pluginEventsChanged = false;
 
   Future<Map<String, Object?>> _applyState(
     Map<String, Object?>? Function(Map<String, Object?> current) mutate,
   ) => _inLane(() async {
     await _cleanupStoredPluginEvents();
     final current = await _store.readValues();
-    _forcePublish = false;
-    final changed = mutate(current);
-    if ((changed != null && changed.isNotEmpty) || _forcePublish) {
-      _forcePublish = false;
-      if (changed != null && changed.isNotEmpty) {
-        await _store.writeValues(changed);
-        current.addAll(changed);
-      }
-      _publish(current);
-      _requestReconcile();
+    _pluginEventsChanged = false;
+    final changed = mutate(current) ?? const {};
+    final pluginEventsChanged = _pluginEventsChanged;
+    if (changed.isEmpty && !pluginEventsChanged) {
+      return {
+        'ok': true,
+        ...CalendarAlertsUpdate(
+          epoch: epoch,
+          revision: _revision,
+          values: current,
+        ).toJson(),
+      };
     }
-    return {
-      'ok': true,
-      'epoch': epoch,
-      'revision': _revision,
-      'values': current,
-    };
+    if (changed.isNotEmpty) {
+      await _store.writeValues(changed);
+      current.addAll(changed);
+    }
+    final update = _publish(current, pluginEventsChanged: pluginEventsChanged);
+    _requestReconcile();
+    return {'ok': true, ...update.toJson()};
   });
 
   Future<T> _inLane<T>(Future<T> Function() body) {
@@ -457,20 +472,20 @@ class CalendarAlertsOwner {
     return result;
   }
 
-  void _publish(Map<String, Object?> values) {
+  CalendarAlertsUpdate _publish(
+    Map<String, Object?> values, {
+    bool pluginEventsChanged = false,
+  }) {
     _revision++;
     final update = CalendarAlertsUpdate(
       epoch: epoch,
       revision: _revision,
       values: Map.unmodifiable(values),
+      pluginEventsChanged: pluginEventsChanged,
     );
     _updates.add(update);
-    _broadcast({
-      'type': requestStateChanged,
-      'epoch': epoch,
-      'revision': _revision,
-      'values': values,
-    });
+    _broadcast({'type': requestStateChanged, ...update.toJson()});
+    return update;
   }
 
   /// אירועי תוספים נשמרו בעבר יחד עם אירועי המשתמש; הם נטענים מהמסד.
