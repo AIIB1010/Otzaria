@@ -3676,7 +3676,7 @@ class PluginBridgeAdapter {
   }
 
   /// ה-id נפתר לעיתים רק ב-state של ה-bloc, ולכן הספר נלקח משם ולא מהלשונית.
-  TextBook _requireCorrectionContext(TextBookTab tab) {
+  Future<TextBook> _requireCorrectionContext(TextBookTab tab) async {
     final state = tab.bloc.state;
     final reason = state is! TextBookLoaded
         ? 'הספר עדיין לא נטען. נסו שוב לאחר הטעינה.'
@@ -3694,7 +3694,9 @@ class PluginBridgeAdapter {
     if (reason != null) {
       throw PluginCorrectionException('error.unsupported_context', reason);
     }
-    return (state as TextBookLoaded).book;
+    final book = (state as TextBookLoaded).book;
+    await _ensureBookTextAvailable(book);
+    return book;
   }
 
   Future<void> _requireCorrectionPermission() async {
@@ -3725,7 +3727,7 @@ class PluginBridgeAdapter {
     final id = args['tabId'] as String;
     final tab = _correctionTab(id);
     final resolved = await BookDatabaseResolver.resolveBookById(
-      _requireCorrectionContext(tab).id!,
+      (await _requireCorrectionContext(tab)).id!,
     );
     if (resolved == null ||
         !resolved.source.isOfficial ||
@@ -3749,7 +3751,14 @@ class PluginBridgeAdapter {
         'לשונית הספר נסגרה.',
       );
     }
-    final book = _requireCorrectionContext(tab);
+    final book = await _requireCorrectionContext(tab);
+    await _requireCorrectionPermission();
+    if (!identical(_correctionTab(id), tab)) {
+      throw const PluginCorrectionException(
+        'error.not_found',
+        'לשונית הספר נסגרה.',
+      );
+    }
     final result = await PluginCorrectionSessionService.instance.begin(
       owner: plugin.pluginId,
       ownerName: plugin.name,
@@ -3769,10 +3778,10 @@ class PluginBridgeAdapter {
           );
         }
         await _requireCorrectionPermission();
-        _requireCorrectionContext(_correctionTab(id));
+        await _requireCorrectionContext(_correctionTab(id));
       },
       loadSource: (index) async {
-        _requireCorrectionContext(_correctionTab(id));
+        await _requireCorrectionContext(_correctionTab(id));
         final lines = await DbReadWorker.lines(
           SqliteDataProvider.instance.dbPath,
           resolved.book.id,
@@ -3785,6 +3794,8 @@ class PluginBridgeAdapter {
             'פסקת המקור אינה קיימת.',
           );
         }
+        await _requireCorrectionPermission();
+        await _requireCorrectionContext(_correctionTab(id));
         return lines.single.content;
       },
       onEvent: (topic, payload) {
@@ -3839,12 +3850,6 @@ class PluginBridgeAdapter {
     final service = PluginCorrectionSessionService.instance;
     final id = args['sessionId'] as String;
     final owner = plugin.pluginId;
-    if (action == 'endCorrectionSession') {
-      return service.end(owner, id, args['expectedRevision'] as int);
-    }
-    if (action == 'getCorrectionSession') return service.get(owner, id);
-    final revision = args['expectedRevision'] as int;
-    // לא דרך get: הוא ממתין לשמירה ושולח אירוע ממתין.
     final tab = _dependencies.tabsBloc.state.tabs
         .expand(leafPanes)
         .whereType<TextBookTab>()
@@ -3863,7 +3868,27 @@ class PluginBridgeAdapter {
         'סשן התיקון אינו זמין לתוסף.',
       );
     }
-    _requireCorrectionContext(tab);
+    if (action == 'endCorrectionSession') {
+      await _ensureBookTextAvailable(tab.book);
+      await _requireCorrectionPermission();
+      return service.end(owner, id, args['expectedRevision'] as int);
+    }
+    if (action == 'getCorrectionSession') {
+      await _ensureBookTextAvailable(tab.book);
+      await _requireCorrectionPermission();
+      return service.get(owner, id);
+    }
+    await _requireCorrectionContext(tab);
+    await _requireCorrectionPermission();
+    final tabId = PluginCorrectionSessionService.tabIdFor(tab);
+    if (!identical(_correctionTab(tabId), tab)) {
+      throw const PluginCorrectionException(
+        'error.not_found',
+        'לשונית הספר נסגרה.',
+      );
+    }
+    final revision = args['expectedRevision'] as int;
+    // לא דרך get: הוא ממתין לשמירה ושולח אירוע ממתין.
     if (action == 'resetCorrection') {
       if (args['sectionIndex'] is! int) {
         throw const PluginCorrectionException(

@@ -72,6 +72,9 @@ void main() {
     database.close();
     runner.uninstall();
     MultiWindowService.debugSupportedOverride = null;
+    MultiWindowService.correctionQuitRequestTimeout = const Duration(
+      seconds: 6,
+    );
     WindowRole.isSecondary = false;
     WindowBus.instance.onRequest = null;
     WindowBus.instance.unregister();
@@ -134,6 +137,32 @@ void main() {
 
     expect(launches, 0);
     expect(runner.closeSelfCalls, 0);
+  });
+
+  testWidgets('כיבוי macOS נכשל בבטחה כשחלון מוסתר לא עונה', (tester) async {
+    MultiWindowService.correctionQuitRequestTimeout = const Duration(
+      milliseconds: 10,
+    );
+    WindowBus.instance.register();
+    final peer = _FakeOwner(2, reply: false)..register();
+    addTearDown(peer.dispose);
+    final tab = ToolTab(toolId: 'p', title: 'תוסף', instanceId: 'i');
+    await tester.pumpWidget(
+      BlocProvider<TabsBloc>.value(
+        value: _GuardTabs(tab),
+        child: MaterialApp(
+          navigatorKey: navigatorKey,
+          home: const SizedBox(),
+        ),
+      ),
+    );
+
+    await tester.runAsync(
+      () => AppWindowListener().handleWindowClose(quit: true),
+    );
+
+    expect(runner.closeSelfCalls, 0);
+    expect(PluginCorrectionSessionService.instance.processQuitPending, isFalse);
   });
 
   test('כשל בהכנת העדכון אינו נועל את ניסיון הסגירה הבא', () async {
@@ -533,9 +562,10 @@ class _FakeRunner {
 
 /// החלון הראשון של התהליך — תופס משבצת ואת כינוי המארח, ועונה לכל בקשה.
 class _FakeOwner {
-  _FakeOwner(this.slot);
+  _FakeOwner(this.slot, {this.reply = true});
 
   final int slot;
+  final bool reply;
   late final ReceivePort _port;
 
   void register() {
@@ -550,7 +580,7 @@ class _FakeOwner {
     );
     _port.listen((message) {
       final map = message as Map;
-      (map['reply'] as SendPort).send({'ok': true, 'result': null});
+      if (reply) (map['reply'] as SendPort).send({'ok': true, 'result': null});
     });
   }
 

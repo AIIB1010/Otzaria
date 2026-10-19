@@ -6,6 +6,7 @@ import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
 import 'package:otzaria/core/app_paths.dart';
+import 'package:otzaria/book_protection/models/book_protection.dart';
 import 'package:otzaria/data/data_providers/sqlite_data_provider.dart';
 import 'package:otzaria/data/data_providers/user_books_database_holder.dart';
 import 'package:otzaria/history/bloc/history_bloc.dart';
@@ -170,6 +171,7 @@ void main() {
   final events = <String>[];
   final payloads = <Map<String, dynamic>>[];
   const permissions = ['reader.open', 'reader.local_edit'];
+  var protectedBook = false;
 
   final warnings = <String>[];
   var confirmClose = true;
@@ -178,6 +180,7 @@ void main() {
     String owner = 'owner',
     List<String> grants = permissions,
     PluginRegistryRepository? repository,
+    Future<BookProtection> Function(Book)? bookProtectionResolver,
   }) => PluginBridgeAdapter(
     _plugin(owner, grants),
     dependencies: PluginBridgeDependencies(
@@ -189,6 +192,7 @@ void main() {
       searchRepository: _Search(),
       personalNotesRepository: _Notes(),
       bookOpenCoordinator: _Coordinator(),
+      bookProtectionResolver: bookProtectionResolver,
       themePayloadBuilder: () => {},
       showConfirmDialog: ({required title, required content}) async => true,
       showWarningDialog:
@@ -596,6 +600,76 @@ void main() {
       }, target: foreign),
       _error('error.correction_busy'),
     );
+  });
+
+  test('ספר מוגן אינו פותח סשן ואינו מחזיר snapshot תיקון', () async {
+    final tabId = PluginCorrectionSessionService.tabIdFor(readers.first);
+    final protectedAdapter = buildAdapter(
+      bookProtectionResolver: (_) async =>
+          protectedBook ? const BookProtection(level: 2) : BookProtection.none,
+    );
+    protectedBook = true;
+    await expectLater(
+      call('beginCorrectionSession', {
+        'tabId': tabId,
+      }, target: protectedAdapter),
+      throwsA(
+        isA<Exception>().having(
+          (error) => error.toString(),
+          'message',
+          contains('error.forbidden'),
+        ),
+      ),
+    );
+    expect(service.hasSessionForTab(tabId), isFalse);
+
+    protectedBook = false;
+    final session = await begin();
+    protectedBook = true;
+    await expectLater(
+      call(
+        'getCorrectionSession',
+        {'sessionId': session['sessionId']},
+        target: protectedAdapter,
+      ),
+      throwsA(
+        isA<Exception>().having(
+          (error) => error.toString(),
+          'message',
+          contains('error.forbidden'),
+        ),
+      ),
+    );
+  });
+
+  test('סגירת טאב בזמן בדיקת הגנת הספר אינה משאירה סשן יתום', () async {
+    final tabId = PluginCorrectionSessionService.tabIdFor(readers.first);
+    final entered = Completer<void>();
+    final release = Completer<void>();
+    var protectionCalls = 0;
+    final closingAdapter = buildAdapter(
+      bookProtectionResolver: (_) async {
+        if (++protectionCalls == 2) {
+          entered.complete();
+          await release.future;
+        }
+        return BookProtection.none;
+      },
+    );
+    final pending = call(
+      'beginCorrectionSession',
+      {'tabId': tabId},
+      target: closingAdapter,
+    );
+    await entered.future;
+    tabs.current = TabsState(
+      tabs: readers.skip(1).toList(),
+      currentTabIndex: 0,
+    );
+    release.complete();
+
+    await expectLater(pending, _error('error.not_found'));
+    expect(service.hasSessionForTab(tabId), isFalse);
   });
 
   test('פרמטרים פגומים וטיוטה ממקור אחר אינם משנים סשן', () async {

@@ -147,6 +147,7 @@ void main() {
       settings: const RenderSettings(),
       original: Text('מקור $index'),
       service: service,
+      sessionActive: true,
     );
     await tester.pumpWidget(
       _app(Column(children: [paragraph(0), paragraph(1)])),

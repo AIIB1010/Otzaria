@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:otzaria/core/app_paths.dart';
 import 'package:otzaria/settings/l10n/settings_l10n_exports.dart';
 import 'package:otzaria/core/app_runtime_reset.dart';
+import 'package:otzaria/core/windowing/correction_storage_move.dart';
 import 'package:otzaria/core/messages/settings_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/data/constants/database_constants.dart';
@@ -410,6 +411,7 @@ Future<void> performLibraryMove({
   var finalDatabasesCreated = false;
   var finalVectorsCreated = false;
   var settingsUpdated = false;
+  CorrectionStorageMovePreparation? correctionMove;
 
   try {
     await _ensureMoveTargetAvailable(newLibrary);
@@ -418,6 +420,18 @@ Future<void> performLibraryMove({
     }
     if (databasesNeedsMove) {
       await _ensureMoveTargetAvailable(newDatabases);
+    }
+    correctionMove = await prepareCorrectionStorageMove();
+    if (correctionMove == null) {
+      throw StateError('תיקוני התוספים לא נשמרו בכל החלונות.');
+    }
+    if (!await synchronizeCorrectionStorageMoveDatabasePath(
+      correctionMove,
+      newDatabases,
+    )) {
+      throw StateError('נתיב מסד הטיוטות לא הסתנכרן בכל החלונות.');
+    }
+    if (databasesNeedsMove) {
       await _closeUserDatabasesForMove();
     }
     // עוצר הורדה/התקנה וחוסם חדשות עד סוף ההעברה; ה-session נפתח בחיפוש הבא.
@@ -499,7 +513,9 @@ Future<void> performLibraryMove({
       await context.read<TabsBloc>().remapBookPathsAwaitable(from, newLibrary);
     }
     // 5. סגירת חיבורי ה-DB (משחרר את נעילת seforim.db) והפניה למיקום החדש.
-    await resetRuntimeStateForAppRestart();
+    await resetRuntimeStateForAppRestart(
+      correctionStorageMoveRequestId: correctionMove.requestId,
+    );
     // 6. פתיחה מחדש של האינדקס בנתיב החדש — סוגר את האינדקס הישן ומשחרר אותו.
     try {
       await TantivyDataProvider.instance.reopenIndex();
@@ -551,6 +567,10 @@ Future<void> performLibraryMove({
     if (navigator.canPop()) navigator.pop();
     UiSnack.showError(SettingsMessages.libraryMoveError(e));
     return;
+  } finally {
+    if (correctionMove != null) {
+      await releaseCorrectionStorageMove(correctionMove);
+    }
   }
 
   if (!context.mounted) return;

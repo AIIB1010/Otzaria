@@ -37,6 +37,7 @@ void main() {
             settings: const RenderSettings(),
             original: const Text('קריאה'),
             service: service,
+            sessionActive: false,
           ),
         ),
       ),
@@ -53,15 +54,62 @@ void main() {
         loadSource: (_) async => source,
       ),
     ))!;
-    await tester.pump();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PluginCorrectionParagraph(
+            tabId: 'tab',
+            sectionIndex: 0,
+            sourceText: source,
+            settings: const RenderSettings(),
+            original: const Text('קריאה'),
+            service: service,
+            sessionActive: true,
+          ),
+        ),
+      ),
+    );
     expect(find.byType(RtlTextField), findsOneWidget);
     expect(
       tester.widget<RtlTextField>(find.byType(RtlTextField)).controller!.text,
       'מקור',
     );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PluginCorrectionParagraph(
+            tabId: 'tab',
+            sectionIndex: 1,
+            sourceText: '<b>אחר</b>',
+            settings: const RenderSettings(),
+            original: const Text('קריאה'),
+            service: service,
+            sessionActive: true,
+          ),
+        ),
+      ),
+    );
+    expect(
+      tester.widget<RtlTextField>(find.byType(RtlTextField)).controller!.text,
+      'אחר',
+    );
     final calls = service.editableTextCalls;
     await tester.runAsync(() => service.end('owner', session['sessionId'], 0));
-    await tester.pump();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PluginCorrectionParagraph(
+            tabId: 'tab',
+            sectionIndex: 0,
+            sourceText: source,
+            settings: const RenderSettings(),
+            original: const Text('קריאה'),
+            service: service,
+            sessionActive: false,
+          ),
+        ),
+      ),
+    );
     expect(service.editableTextCalls, calls);
     expect(find.text('קריאה'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());

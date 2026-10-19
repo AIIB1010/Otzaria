@@ -68,6 +68,31 @@ class PluginCorrectionSessionService extends ChangeNotifier {
   final Set<String> _pendingDrafts = {};
   final Set<String> _cancelledTabs = {};
   final Map<String, int> _ownerEpochs = {};
+  String? _processQuitRequestId;
+
+  bool get processQuitPending => _processQuitRequestId != null;
+
+  bool isProcessQuitPreparedFor(String requestId) =>
+      _processQuitRequestId == requestId;
+
+  bool beginProcessQuitPreparation(String requestId) {
+    if (_pendingTabs.isNotEmpty ||
+        _processQuitRequestId != null && _processQuitRequestId != requestId) {
+      return false;
+    }
+    _processQuitRequestId = requestId;
+    return true;
+  }
+
+  void cancelProcessQuitPreparation(String requestId) {
+    if (_processQuitRequestId == requestId) _processQuitRequestId = null;
+  }
+
+  void _rejectEditDuringProcessQuit() {
+    if (_processQuitRequestId != null) {
+      _fail('error.correction_busy', 'היציאה מהתוכנה בתהליך.');
+    }
+  }
 
   /// גדל בכל הסרת בעלים; מי שהתחיל לפני ההסרה לא יוצר אחריה סשן.
   int ownerEpoch(String owner) => _ownerEpochs[owner] ?? 0;
@@ -85,6 +110,7 @@ class PluginCorrectionSessionService extends ChangeNotifier {
     void Function(String topic, Map<String, dynamic> payload)? onEvent,
     int? ownerEpoch,
   }) async {
+    _rejectEditDuringProcessQuit();
     final epoch = ownerEpoch ?? this.ownerEpoch(owner);
     void checkEpoch() {
       if (epoch != this.ownerEpoch(owner)) {
@@ -124,6 +150,7 @@ class PluginCorrectionSessionService extends ChangeNotifier {
       );
       try {
         checkEpoch();
+        _rejectEditDuringProcessQuit();
         final session = _Session(
           owner: owner,
           ownerName: ownerName ?? owner,
@@ -143,6 +170,7 @@ class PluginCorrectionSessionService extends ChangeNotifier {
         if (lease.version != null) {
           recovery = await _recover(session, lease);
           checkEpoch();
+          _rejectEditDuringProcessQuit();
         }
         if (_cancelledTabs.contains(tabId)) {
           _fail('error.not_found', 'לשונית הספר נסגרה.');
@@ -371,6 +399,7 @@ class PluginCorrectionSessionService extends ChangeNotifier {
     required String libraryVersion,
     required List<dynamic> changes,
   }) async {
+    _rejectEditDuringProcessQuit();
     final session = _owned(owner, id);
     _revision(session, expectedRevision);
     if (session.bookUid != bookUid ||
@@ -414,6 +443,7 @@ class PluginCorrectionSessionService extends ChangeNotifier {
       prepared[index] = change;
     }
     await session.validateSource?.call();
+    _rejectEditDuringProcessQuit();
     for (final change in prepared.values) {
       final raw = await session.loadSource(change['sectionIndex'] as int);
       if (raw != change['originalSourceText']) {
@@ -424,6 +454,7 @@ class PluginCorrectionSessionService extends ChangeNotifier {
       }
     }
     await session.validateSource?.call();
+    _rejectEditDuringProcessQuit();
     // בדיקה חוזרת אחרי await מונעת מבקשה ישנה לדרוס תיקון חדש.
     if (!identical(_owned(owner, id), session)) {
       _fail('error.not_found', 'סשן התיקון הסתיים.');
@@ -454,6 +485,7 @@ class PluginCorrectionSessionService extends ChangeNotifier {
     int sectionIndex,
     int expectedRevision,
   ) {
+    _rejectEditDuringProcessQuit();
     final session = _owned(owner, id);
     _revision(session, expectedRevision);
     if (sectionIndex < 0) {
@@ -474,6 +506,7 @@ class PluginCorrectionSessionService extends ChangeNotifier {
     String id,
     int expectedRevision,
   ) async {
+    _rejectEditDuringProcessQuit();
     final session = _owned(owner, id);
     _revision(session, expectedRevision);
     final finished = _end(session, 'explicit');
@@ -483,6 +516,7 @@ class PluginCorrectionSessionService extends ChangeNotifier {
 
   /// סיום בידי המשתמש — פועל גם כשהתוסף אינו מגיב.
   void endByUser(String tabId) {
+    if (_processQuitRequestId != null) return;
     final session = _sessionForTab(tabId);
     if (session != null) unawaited(_end(session, 'user'));
   }
@@ -505,6 +539,7 @@ class PluginCorrectionSessionService extends ChangeNotifier {
   }
 
   void removeOwner(String owner) {
+    if (_processQuitRequestId != null) return;
     _ownerEpochs[owner] = ownerEpoch(owner) + 1;
     for (final session in _sessions.values.toList()) {
       if (session.owner == owner) {
@@ -514,6 +549,7 @@ class PluginCorrectionSessionService extends ChangeNotifier {
   }
 
   void removeTab(String tabId) {
+    if (_processQuitRequestId != null) return;
     final session = _sessionForTab(tabId);
     if (session != null) {
       unawaited(_end(session, 'tab_closed'));
@@ -525,6 +561,7 @@ class PluginCorrectionSessionService extends ChangeNotifier {
 
   /// מחיקה מכוונת שהמשתמש אישר (הסרת תוסף או איפוס נתוניו).
   Future<void> purgeOwner(String owner) async {
+    _rejectEditDuringProcessQuit();
     removeOwner(owner);
     for (final session in _finalizing.where((s) => s.owner == owner).toList()) {
       session.purged = true;
@@ -879,12 +916,59 @@ class PluginCorrectionSessionService extends ChangeNotifier {
     return sessions.every((s) => s.persisted || s.purged);
   }
 
+  /// סוגר את חיבור הטיוטות לפני החלפת נתיב המסדים או בניית runtime מחדש.
+  Future<void> prepareForRuntimeReset({String? requestId}) async {
+    final preparationId =
+        requestId ?? 'runtime-reset-${DateTime.now().microsecondsSinceEpoch}';
+    final alreadyPrepared = isProcessQuitPreparedFor(preparationId);
+    if (!alreadyPrepared && !beginProcessQuitPreparation(preparationId)) {
+      throw StateError('Correction sessions are already being prepared.');
+    }
+    try {
+      final repository = _drafts;
+      if (repository == null) return;
+      if (!await flushAll()) {
+        throw StateError('Correction drafts could not be saved before reset.');
+      }
+      await shutdown(timeout: flushTimeout);
+      await repository.dispose();
+      if (identical(_drafts, repository)) _drafts = null;
+    } finally {
+      if (!alreadyPrepared) cancelProcessQuitPreparation(preparationId);
+    }
+  }
+
+  Future<bool> prepareForStorageMove(String requestId) async {
+    if (!isProcessQuitPreparedFor(requestId)) return false;
+    if (_drafts == null) return true;
+    if (!await flushAll(timeout: const Duration(seconds: 8))) return false;
+    return true;
+  }
+
+  Future<bool> finishStorageMovePreparation(String requestId) async {
+    if (!isProcessQuitPreparedFor(requestId)) return false;
+    final repository = _drafts;
+    if (repository == null) return true;
+    if (!await flushAll(timeout: const Duration(seconds: 8))) return false;
+    endAll('storage_move');
+    final ending = [for (final session in _finalizing) session.finished.future];
+    try {
+      await Future.wait(ending).timeout(const Duration(seconds: 8));
+    } on TimeoutException {
+      return false;
+    }
+    await repository.dispose();
+    if (identical(_drafts, repository)) _drafts = null;
+    return true;
+  }
+
   /// התוסף מאשר ששמר את הגרסה המדויקת [version]; רק אז התוכן נמחק.
   Future<Map<String, dynamic>> acknowledge(
     String owner,
     String draftId,
     int version,
   ) async {
+    _rejectEditDuringProcessQuit();
     if (draftId.isEmpty || version < 0) {
       _fail('error.invalid_params', 'נדרשים draftId וגרסת טיוטה.');
     }
@@ -934,6 +1018,7 @@ class PluginCorrectionSessionService extends ChangeNotifier {
   }
 
   Future<List<Map<String, dynamic>>> listDrafts(String owner) async {
+    _rejectEditDuringProcessQuit();
     try {
       return [
         for (final draft in await _repository.list(owner))
@@ -945,6 +1030,7 @@ class PluginCorrectionSessionService extends ChangeNotifier {
   }
 
   Future<Map<String, dynamic>> getDraft(String owner, String draftId) async {
+    _rejectEditDuringProcessQuit();
     final Map<String, Object?>? draft;
     try {
       draft = await _repository.get(owner, draftId);
@@ -1010,6 +1096,7 @@ class PluginCorrectionSessionService extends ChangeNotifier {
     String source,
     String proposed,
   ) {
+    _rejectEditDuringProcessQuit();
     final session = _sessionForTab(tabId);
     if (session == null) _fail('error.not_found', 'סשן התיקון הסתיים.');
     final original = _sourceText(source);

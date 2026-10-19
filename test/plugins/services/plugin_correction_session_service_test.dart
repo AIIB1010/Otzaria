@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/data/sqlite/sqlite3_api.dart';
+import 'package:otzaria/migration/database/sqlite3_utils.dart';
 import 'package:otzaria/plugins/repository/plugin_correction_draft_repository.dart';
 import 'package:otzaria/plugins/services/plugin_correction_session_service.dart';
+import 'package:path/path.dart' as p;
 
 /// מריץ את תור האירועים: כתיבות המאגר הישיר, שחרור ה-lease ואירוע הסיום.
 Future<void> _idle() async {
@@ -101,6 +104,101 @@ void main() {
     (result['changes'] as List).clear();
     expect((await current())['changes'], hasLength(1));
   });
+
+  test('נעילת הכנה ליציאה עוצרת עריכה ומשתחררת בביטול', () async {
+    expect(service.beginProcessQuitPreparation('quit-1'), isTrue);
+    expect(
+      () => service.editParagraph('tab', 0, 'מקור 0', 'נוסח חדש'),
+      throwsA(
+        isA<PluginCorrectionException>().having(
+          (error) => error.code,
+          'code',
+          'error.correction_busy',
+        ),
+      ),
+    );
+    service.cancelProcessQuitPreparation('stale-quit');
+    expect(service.processQuitPending, isTrue);
+    service.cancelProcessQuitPreparation('quit-1');
+    service.editParagraph('tab', 0, 'מקור 0', 'נוסח חדש');
+    expect(service.displayText('tab', 0, 'מקור 0'), 'נוסח חדש');
+  });
+
+  test('restore שממתין למקור נדחה אם הכנת היציאה ננעלת לפני commit', () async {
+    service.removeTab('tab');
+    await _idle();
+    final entered = Completer<void>();
+    final release = Completer<void>();
+    session = await beginTab(
+      loadSource: (index) async {
+        if (index == 0) {
+          entered.complete();
+          await release.future;
+        }
+        return source[index]!;
+      },
+    );
+    final pending = restore([change(0, 'תיקון')]);
+    await entered.future;
+    expect(service.beginProcessQuitPreparation('quit-during-restore'), isTrue);
+    release.complete();
+    await expectLater(pending, error('error.correction_busy'));
+    expect((await current())['changes'], isEmpty);
+    service.cancelProcessQuitPreparation('quit-during-restore');
+  });
+
+  test('איפוס runtime סוגר את הסשן ומשאיר טיוטה לפתיחה מחדש', () async {
+    service.editParagraph('tab', 0, 'מקור 0', 'תיקון');
+    expect(await service.flushAll(), isTrue);
+    await service.prepareForRuntimeReset();
+    expect(service.hasSessionForTab('tab'), isFalse);
+
+    service.draftRepository = PluginCorrectionDraftRepository.direct(db);
+    session = await beginTab();
+    expect(service.displayText('tab', 0, 'מקור 0'), 'תיקון');
+  });
+
+  test(
+    'העברת מסדים ממתינה לכל ה-flush לפני סיום ושומרת את הנעילה ב-reset',
+    () async {
+      final temp = await Directory.systemTemp.createTemp(
+        'correction-storage-move-',
+      );
+      addTearDown(() => temp.delete(recursive: true));
+      service.endAll('test');
+      await service.flushAll();
+      await _idle();
+      await service.prepareForRuntimeReset();
+      db.close();
+
+      final oldDatabase = p.join(temp.path, 'old', 'plugins_host.db');
+      final newDatabase = p.join(temp.path, 'new', 'plugins_host.db');
+      await Directory(p.dirname(oldDatabase)).create(recursive: true);
+      await Directory(p.dirname(newDatabase)).create(recursive: true);
+      db = openWritableDatabase(oldDatabase, 'test');
+      service.draftRepository = PluginCorrectionDraftRepository.direct(db);
+      session = await beginTab();
+      service.editParagraph('tab', 0, 'מקור 0', 'תיקון להעברה');
+      const requestId = 'storage-move-test';
+      expect(service.beginProcessQuitPreparation(requestId), isTrue);
+
+      expect(await service.prepareForStorageMove(requestId), isTrue);
+      expect(service.hasSessionForTab('tab'), isTrue);
+
+      expect(await service.finishStorageMovePreparation(requestId), isTrue);
+      expect(service.hasSessionForTab('tab'), isFalse);
+      await service.prepareForRuntimeReset(requestId: requestId);
+      expect(service.isProcessQuitPreparedFor(requestId), isTrue);
+
+      service.cancelProcessQuitPreparation(requestId);
+      db.close();
+      await File(oldDatabase).copy(newDatabase);
+      db = openWritableDatabase(newDatabase, 'test');
+      service.draftRepository = PluginCorrectionDraftRepository.direct(db);
+      session = await beginTab();
+      expect(service.displayText('tab', 0, 'מקור 0'), 'תיקון להעברה');
+    },
+  );
 
   test('פסקת איגרא רמה עם HTML נערכת כטקסט ושומרת מקור גולמי לשחזור', () async {
     const raw = '<b>בגמרא</b> חנן התם וגג <big>לחלק</big> &amp; 😀';

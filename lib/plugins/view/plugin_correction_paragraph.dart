@@ -15,6 +15,7 @@ class PluginCorrectionParagraph extends StatefulWidget {
   final RenderSettings settings;
   final Widget original;
   final PluginCorrectionSessionService? service;
+  final bool sessionActive;
 
   const PluginCorrectionParagraph({
     super.key,
@@ -24,6 +25,7 @@ class PluginCorrectionParagraph extends StatefulWidget {
     required this.settings,
     required this.original,
     this.service,
+    this.sessionActive = false,
   });
 
   @override
@@ -34,8 +36,8 @@ class PluginCorrectionParagraph extends StatefulWidget {
 class _PluginCorrectionParagraphState extends State<PluginCorrectionParagraph> {
   bool _editable = false;
   bool _corrected = false;
-  final _controller = TextEditingController();
-  final _focus = FocusNode();
+  TextEditingController? _controller;
+  FocusNode? _focus;
   String? _lastRejection;
   DateTime _lastRejectionAt = DateTime.fromMillisecondsSinceEpoch(0);
   PluginCorrectionSessionService get _registry =>
@@ -44,31 +46,52 @@ class _PluginCorrectionParagraphState extends State<PluginCorrectionParagraph> {
   @override
   void initState() {
     super.initState();
-    _registry.addListener(_changed);
-    _syncText();
+    if (widget.sessionActive) _activate();
   }
 
   @override
   void didUpdateWidget(PluginCorrectionParagraph oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.service != widget.service) {
+    final serviceChanged = oldWidget.service != widget.service;
+    if (oldWidget.sessionActive && (!widget.sessionActive || serviceChanged)) {
       (oldWidget.service ?? PluginCorrectionSessionService.instance)
           .removeListener(_changed);
-      _registry.addListener(_changed);
+      if (!widget.sessionActive || serviceChanged) _disposeEditor();
     }
+    if (widget.sessionActive && (!oldWidget.sessionActive || serviceChanged)) {
+      _activate();
+    }
+    if (widget.sessionActive) _syncText();
+  }
+
+  void _activate() {
+    _controller = TextEditingController();
+    _focus = FocusNode();
+    _registry.addListener(_changed);
     _syncText();
+  }
+
+  void _disposeEditor() {
+    _controller?.dispose();
+    _focus?.dispose();
+    _controller = null;
+    _focus = null;
+    _editable = false;
+    _corrected = false;
   }
 
   bool _syncText() {
     if (!_registry.hasSessionForTab(widget.tabId)) return false;
+    final controller = _controller;
+    if (controller == null) return false;
     final text = _registry.editableText(
       widget.tabId,
       widget.sectionIndex,
       widget.sourceText,
     );
-    if (_controller.text == text) return false;
-    final selection = _controller.selection;
-    _controller.value = TextEditingValue(
+    if (controller.text == text) return false;
+    final selection = controller.selection;
+    controller.value = TextEditingValue(
       text: text,
       selection: TextSelection.collapsed(
         offset: selection.isValid
@@ -147,6 +170,7 @@ class _PluginCorrectionParagraphState extends State<PluginCorrectionParagraph> {
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.sessionActive) return widget.original;
     _editable = _registry.canEditParagraph(widget.tabId, widget.sourceText);
     if (!_editable) {
       return widget.original;
@@ -175,8 +199,8 @@ class _PluginCorrectionParagraphState extends State<PluginCorrectionParagraph> {
   Widget _buildEditor() {
     final settings = widget.settings;
     return RtlTextField(
-      controller: _controller,
-      focusNode: _focus,
+      controller: _controller!,
+      focusNode: _focus!,
       maxLines: null,
       minLines: 1,
       textInputAction: TextInputAction.done,
@@ -193,15 +217,15 @@ class _PluginCorrectionParagraphState extends State<PluginCorrectionParagraph> {
       ),
       inputFormatters: [TextInputFormatter.withFunction(_validate)],
       onChanged: _applyText,
-      onSubmitted: (_) => _focus.unfocus(),
+      onSubmitted: (_) => _focus!.unfocus(),
     );
   }
 
   @override
   void dispose() {
     _registry.removeListener(_changed);
-    _controller.dispose();
-    _focus.dispose();
+    _controller?.dispose();
+    _focus?.dispose();
     super.dispose();
   }
 }

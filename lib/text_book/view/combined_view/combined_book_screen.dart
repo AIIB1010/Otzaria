@@ -2806,6 +2806,7 @@ class _CombinedViewState extends State<CombinedView> {
       sourceText: spec.sourceText,
       settings: spec.settings,
       original: text,
+      sessionActive: _hasLocalCorrections,
     );
   }
 
