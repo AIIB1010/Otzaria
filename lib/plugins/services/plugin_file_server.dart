@@ -384,6 +384,7 @@ class PluginFileServer {
   /// ל-[finishCommit]. אחרי הפעלה מחדש של האפליקציה אין sessions בזיכרון,
   /// ולכן שאריות `.part` נמחקות כ-orphan (ראו [orphanMinAge]).
   Future<void> revokeAllForPlugin(String pluginId) async {
+    final remoteCleanup = _remoteFiles.deleteForPlugin(pluginId);
     _grants.removeWhere((_, grant) => grant.pluginId == pluginId);
     final tokens = _uploads.entries
         .where((e) => e.value.pluginId == pluginId)
@@ -393,7 +394,7 @@ class PluginFileServer {
       final session = _uploads.remove(token);
       if (session != null) await _deleteQuietly(session.tempFile);
     }
-    await _remoteFiles.deleteForPlugin(pluginId);
+    await remoteCleanup;
   }
 
   Future<Directory> _uploadDir() async {

@@ -18,6 +18,7 @@ class PluginRemoteFileCache {
   PluginRemoteFileCache({
     Directory? root,
     this.quotaBytes = defaultQuotaBytes,
+    this.maxFiles = defaultMaxFiles,
     this.staleAfter = defaultStaleAfter,
     this.emptyDirGrace = defaultEmptyDirGrace,
   }) : root =
@@ -30,6 +31,7 @@ class PluginRemoteFileCache {
 
   /// המכסה הכוללת לתוסף. מעליה נמחקים הקבצים הוותיקים ביותר שלו.
   static const int defaultQuotaBytes = 256 * 1024 * 1024;
+  static const int defaultMaxFiles = 128;
 
   /// תקרת קובץ בודד כשהתוסף לא ביקש אחרת, ותקרה שאי אפשר לעבור.
   static const int defaultMaxBytes = 50 * 1024 * 1024;
@@ -52,14 +54,17 @@ class PluginRemoteFileCache {
 
   final Directory root;
   final int quotaBytes;
+  final int maxFiles;
   final Duration staleAfter;
   final Duration emptyDirGrace;
   bool _sweptStale = false;
   final Random _random = Random.secure();
 
-  /// הורדות שרצות כעת, לפי נתיב תיקיית התוסף. נספרות עד שההורדה עצמה מסתיימת, גם אם ה-RPC
-  /// כבר נכשל ב-timeout.
-  final Map<String, int> _activeFetches = {};
+  final Map<String, Set<Completer<void>>> _activeFetches = {};
+  final Map<String, int> _revocations = {};
+
+  /// מזהה מחזור החיים; תוצאה שהחלה לפני ביטול אינה מקבלת grant חדש.
+  int generationForPlugin(String pluginId) => _revocations[pluginId] ?? 0;
 
   String? _canonicalRoot;
 
@@ -79,12 +84,16 @@ class PluginRemoteFileCache {
     return canonical != null && ownsCanonical(canonical);
   }
 
-  /// כמו [owns] לנתיב שכבר קנוני, בלי גישה לדיסק (אחרי הקריאה הראשונה):
-  /// בדיקה לקסיקלית מול השורש הקנוני.
-  bool ownsCanonical(String canonicalPath) {
+  /// בדיקה לקסיקלית לנתיב קנוני מול שורש המטמון; [pluginId] מגביל לתוסף מסוים.
+  bool ownsCanonical(String canonicalPath, {String? pluginId}) {
     final base = _canonicalRoot ??= canonicalizeNearestExisting(root.path);
     return base != null &&
-        p.equals(p.dirname(p.dirname(p.dirname(canonicalPath))), base);
+        p.equals(p.dirname(p.dirname(p.dirname(canonicalPath))), base) &&
+        (pluginId == null ||
+            p.equals(
+              p.dirname(p.dirname(canonicalPath)),
+              p.join(base, p.basename(_pluginDir(pluginId).path)),
+            ));
   }
 
   /// מוריד את [uri] למטמון של [pluginId]. [timeout] חל על ההורדה כולה; אחרי
@@ -102,13 +111,15 @@ class PluginRemoteFileCache {
   }) async {
     final pluginDir = _pluginDir(pluginId);
     final key = pluginDir.path;
-    if ((_activeFetches[key] ?? 0) >= maxConcurrentFetchesPerPlugin) {
+    if ((_activeFetches[key]?.length ?? 0) >= maxConcurrentFetchesPerPlugin) {
       throw Exception(
         'error.too_many_requests: too many concurrent file downloads',
       );
     }
     // נספר לפני ה-await הראשון, כדי שקריאות מקבילות לא יעקפו את התקרה.
-    _activeFetches[key] = (_activeFetches[key] ?? 0) + 1;
+    final abort = Completer<void>();
+    (_activeFetches[key] ??= {}).add(abort);
+    final generation = generationForPlugin(pluginId);
     final dir = Directory(p.join(pluginDir.path, _randomId()));
     var timedOut = false;
     Future<PluginRemoteFile> download() async {
@@ -120,41 +131,57 @@ class PluginRemoteFileCache {
           isAllowed: isAllowed,
           isRedirectAllowed: isRedirectAllowed,
           maxBytes: maxBytes,
-          expired: () => timedOut,
+          expired: () => abort.isCompleted,
+          abortTrigger: abort.future,
         );
-        // סיימה אחרי שה-RPC כבר נכשל: אף אחד לא יקבל token לקובץ הזה.
+        final size = await File(saved.path).length();
         if (timedOut) throw TimeoutException(null);
+        if (generation != generationForPlugin(pluginId)) {
+          throw Exception('error.unavailable: remote file download revoked');
+        }
         return (
           path: saved.path,
           name: saved.filename,
-          size: await File(saved.path).length(),
+          size: size,
         );
       } catch (_) {
         await _deleteDir(dir);
+        if (generation != generationForPlugin(pluginId)) {
+          throw Exception('error.unavailable: remote file download revoked');
+        }
+        if (timedOut) throw TimeoutException('Remote file download timed out');
         rethrow;
       } finally {
-        final remaining = (_activeFetches[key] ?? 1) - 1;
-        if (remaining > 0) {
-          _activeFetches[key] = remaining;
-        } else {
-          _activeFetches.remove(key);
-        }
+        _activeFetches[key]?.remove(abort);
+        if (_activeFetches[key]?.isEmpty ?? false) _activeFetches.remove(key);
       }
     }
 
     try {
-      final file = await download().timeout(
+      final pending = download().onError<Object>((error, stack) async {
+        await _removeIfIdle(pluginDir);
+        Error.throwWithStackTrace(error, stack);
+      });
+      // http אינו מבטל DNS/connect שכבר רץ; ה-RPC לא ממתין לו, וה-slot נשאר תפוס.
+      final file = await pending.timeout(
         timeout,
         onTimeout: () {
           timedOut = true;
+          if (!abort.isCompleted) abort.complete();
           throw TimeoutException('Remote file download timed out');
         },
       );
       await _evictOldest(pluginDir, keep: dir);
+      if (generation != generationForPlugin(pluginId)) {
+        await _deleteDir(dir);
+        throw Exception('error.unavailable: remote file download revoked');
+      }
       return file;
     } catch (_) {
       await _removeIfIdle(pluginDir);
       rethrow;
+    } finally {
+      if (!abort.isCompleted) abort.complete();
     }
   }
 
@@ -168,26 +195,30 @@ class PluginRemoteFileCache {
   }
 
   /// מוחק את כל הקבצים של [pluginId] — בהסרה, בכיבוי או באיפוס של התוסף.
-  Future<void> deleteForPlugin(String pluginId) =>
-      _deleteDir(_pluginDir(pluginId));
+  Future<void> deleteForPlugin(String pluginId) async {
+    _revocations[pluginId] = generationForPlugin(pluginId) + 1;
+    for (final abort in _activeFetches[_pluginDir(pluginId).path] ?? {}) {
+      if (!abort.isCompleted) abort.complete();
+    }
+    await _deleteDir(_pluginDir(pluginId));
+  }
 
   String _randomId() => List.generate(
     8,
     (_) => _random.nextInt(256).toRadixString(16).padLeft(2, '0'),
   ).join();
 
-  /// מוחק הורדות ישנות עד שהסך של [pluginDir] נכנס במכסה. ההורדה שזה עתה
-  /// הסתיימה ([keep]) אינה נמחקת, וגודלה מוגבל ל-[maxBytesLimit] < המכסה.
-  /// הורדה שעדיין רצה (יש בתיקייה שלה קובץ בשם
-  /// [PluginFileDownloadService.partialFileName], שקובץ שהתוסף קובע את שמו אינו
-  /// יכול לקבל) נספרת במכסה אך אינה נמחקת: הורדות במקביל של אותו תוסף היו
-  /// מוחקות זו את זו באמצע. הסדר הוא לפי זמן הכתיבה של הקבצים.
+  /// מפנה את הוותיקים לפי בייטים ומספר קבצים; חלקיים פעילים אינם נמחקים.
+  /// אם קבצים נעולים מונעים פינוי, ההורדה החדשה נדחית ונמחקת.
   Future<void> _evictOldest(
     Directory pluginDir, {
     required Directory keep,
   }) async {
     final entries = <({Directory dir, int size, DateTime modified})>[];
     var total = 0;
+    var count = 0;
+    var downloadingBytes = 0;
+    var downloadingCount = 0;
     try {
       await for (final entry in pluginDir.list(followLinks: false)) {
         if (entry is! Directory) continue;
@@ -208,6 +239,11 @@ class PluginRemoteFileCache {
           continue; // הורדה שהסתיימה או נמחקה בזמן הסריקה.
         }
         total += size;
+        count++;
+        if (downloading) {
+          downloadingBytes += size;
+          downloadingCount++;
+        }
         if (!downloading && !p.equals(entry.path, keep.path)) {
           entries.add((dir: entry, size: size, modified: modified));
         }
@@ -217,9 +253,18 @@ class PluginRemoteFileCache {
     }
     entries.sort((a, b) => a.modified.compareTo(b.modified));
     for (final entry in entries) {
-      if (total <= quotaBytes) break;
+      if (total <= quotaBytes && count <= maxFiles) break;
       // קובץ נעול (ווינדוס) נשאר, ולכן גודלו נשאר במכסה.
-      if (await _deleteDir(entry.dir)) total -= entry.size;
+      if (await _deleteDir(entry.dir)) {
+        total -= entry.size;
+        count--;
+      }
+    }
+    // הורדות פעילות מוגבלות בנפרד ומתפנות בסיום; קבצים נעולים אינם פטור מהמכסה.
+    if (total - downloadingBytes > quotaBytes ||
+        count - downloadingCount > maxFiles) {
+      await _deleteDir(keep);
+      throw Exception('error.too_many_requests: remote file cache is full');
     }
   }
 

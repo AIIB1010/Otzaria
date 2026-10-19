@@ -127,8 +127,8 @@ void main() {
 
   setUp(() async {
     tempDir = await Directory.systemTemp.createTemp('plugin_remote_file_');
-    fileServer = PluginFileServer();
     cache = PluginRemoteFileCache(root: Directory(p.join(tempDir.path, 'c')));
+    fileServer = PluginFileServer(remoteFileCache: cache);
     httpClient = HttpClient();
     printed = [];
     userActivated = true;
@@ -382,7 +382,7 @@ void main() {
       final registry = _Registry({'network.access'});
       final small = PluginRemoteFileCache(
         root: Directory(p.join(tempDir.path, 'small')),
-        quotaBytes: 6,
+        quotaBytes: _pdfBody.length,
       );
       final adapter = buildAdapter(registry: registry, remoteCache: small);
 
@@ -520,6 +520,167 @@ void main() {
     });
   });
 
+  test('שלילת קריאת קבצים אישיים חוסמת printFile דרך הגשר', () async {
+    final registry = _Registry({'fs.user_files.read'});
+    final pdf = File(p.join(tempDir.path, 'private.pdf'))
+      ..writeAsBytesSync(_pdfBody);
+    final adapter = buildAdapter(
+      registry: registry,
+      pickFile: ({allowedExtensions, title}) async => pdf.path,
+    );
+    final picked = await adapter.execute('fs', 'pickUserFile', {}) as Map;
+    registry.granted.remove('fs.user_files.read');
+    await fileServer.revokeAllForPlugin('test.plugin');
+    final handler = PluginBridgeHandler(
+      _plugin('test.plugin', const []),
+      adapter: adapter,
+      registry: registry,
+    );
+
+    final result =
+        await handler.handleRpcForTesting([
+              {
+                'method': 'ui.printFile',
+                'payload': {'token': picked['token']},
+              },
+            ])
+            as Map;
+
+    expect(result['success'], isFalse);
+    expect((result['error'] as Map)['code'], 'error.permission_denied');
+    expect(printed, isEmpty);
+  });
+
+  test('מטמון של תוסף אחר אינו פוטר קובץ אישי מהרשאת קריאה', () async {
+    final other = await cache.fetch(
+      'other.plugin',
+      Uri.parse('$remoteHost/other.pdf'),
+      downloader: serving(_pdfBody),
+      isAllowed: (_) async => true,
+    );
+    final registry = _Registry({'fs.user_files.read'});
+    final adapter = buildAdapter(
+      registry: registry,
+      pickFile: ({allowedExtensions, title}) async => other.path,
+    );
+    final picked = await adapter.execute('fs', 'pickUserFile', {}) as Map;
+    registry.granted.remove('fs.user_files.read');
+    await fileServer.revokeAllForPlugin('test.plugin');
+    expect(File(other.path).existsSync(), isTrue);
+    final handler = PluginBridgeHandler(
+      _plugin('test.plugin', const []),
+      adapter: adapter,
+      registry: registry,
+    );
+
+    final result =
+        await handler.handleRpcForTesting([
+              {
+                'method': 'ui.printFile',
+                'payload': {'token': picked['token']},
+              },
+            ])
+            as Map;
+
+    expect(result['success'], isFalse);
+    expect((result['error'] as Map)['code'], 'error.permission_denied');
+    expect(printed, isEmpty);
+    registry.granted.add('fs.user_files.read');
+    await adapter.execute('fs', 'revokeFile', {'token': picked['token']});
+    expect(File(other.path).existsSync(), isTrue);
+  });
+
+  test('printFile של מטמון מרוחק עובד דרך הגשר בהרשאת רשת בלבד', () async {
+    final registry = _Registry({'network.access'});
+    final adapter = buildAdapter(registry: registry);
+    final fetched = await fetchFile(adapter);
+    final handler = PluginBridgeHandler(
+      _plugin('test.plugin', const [remoteHost]),
+      adapter: adapter,
+      registry: registry,
+    );
+
+    final result =
+        await handler.handleRpcForTesting([
+              {
+                'method': 'ui.printFile',
+                'payload': {'token': fetched['token']},
+              },
+            ])
+            as Map;
+
+    expect(result['success'], isTrue);
+    expect(printed, hasLength(1));
+  });
+
+  test('גם grants של הורדות ריקות מוגבלים ומתפנים', () async {
+    final registry = _Registry({'network.access'});
+    final adapter = buildAdapter(registry: registry, downloader: serving([]));
+    for (var i = 0; i < 130; i++) {
+      await fetchFile(adapter, {'url': '$remoteHost/$i.pdf'});
+    }
+    final grants =
+        jsonDecode(
+              registry.kv['test.plugin/_internal/user_file_grants']!,
+            )
+            as Map;
+    expect(grants.length, lessThanOrEqualTo(128));
+    expect(
+      Directory(p.join(cache.root.path, 'test.plugin')).listSync().length,
+      lessThanOrEqualTo(128),
+    );
+  });
+
+  for (final phase in ['headers', 'body', 'grant']) {
+    test('revoke בזמן $phase אינו משאיר קובץ או grant חדש', () async {
+      final started = Completer<void>();
+      final release = Completer<void>();
+      final registry = _Registry({'network.access'});
+      final downloader = PluginFileDownloadService(
+        client: MockClient.streaming((_, _) async {
+          if (phase == 'headers') {
+            started.complete();
+            await release.future;
+          }
+          Stream<List<int>> body() async* {
+            if (phase == 'body') {
+              started.complete();
+              await release.future;
+            }
+            yield _pdfBody;
+          }
+
+          return http.StreamedResponse(body(), 200);
+        }),
+      );
+      if (phase == 'grant') {
+        registry.kvDelay = () async {
+          if (!started.isCompleted) {
+            started.complete();
+            await release.future;
+          }
+        };
+      }
+      final adapter = buildAdapter(registry: registry, downloader: downloader);
+      final running = fetchFile(adapter);
+      final failed = expectLater(running, _failsWith('error.unavailable'));
+      await started.future;
+      await fileServer.revokeAllForPlugin('test.plugin');
+      release.complete();
+      await failed;
+      expect(
+        Directory(p.join(cache.root.path, 'test.plugin')).existsSync(),
+        isFalse,
+      );
+      expect(
+        jsonDecode(
+          registry.kv['test.plugin/_internal/user_file_grants'] ?? '{}',
+        ),
+        isEmpty,
+      );
+    });
+  }
+
   group('ui.printFile', () {
     test('מדפיס PDF שהורד; שם העבודה ברירת מחדל הוא שם הקובץ', () async {
       final adapter = buildAdapter();
@@ -545,6 +706,7 @@ void main() {
       final pdf = File(p.join(tempDir.path, 'mine.pdf'))
         ..writeAsBytesSync(_pdfBody);
       final adapter = buildAdapter(
+        granted: const {'fs.user_files.read'},
         pickFile: ({allowedExtensions, title}) async => pdf.path,
       );
       final picked = await adapter.execute('fs', 'pickUserFile', {}) as Map;

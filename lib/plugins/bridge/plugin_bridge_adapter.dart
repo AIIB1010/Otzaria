@@ -4541,6 +4541,16 @@ class PluginBridgeAdapter {
       throw Exception('error.invalid_params: jobName must be a string');
     }
     final canonical = await _resolveGrantedFilePath(token);
+    if (!_remoteFiles.ownsCanonical(canonical, pluginId: plugin.pluginId) &&
+        await _pluginRepo.getPermission(
+              plugin.pluginId,
+              'fs.user_files.read',
+            ) !=
+            true) {
+      throw Exception(
+        'error.permission_denied: fs.user_files.read is required',
+      );
+    }
     // סיומת `.pdf` אינה מבטיחה PDF (דף שגיאה של שרת נשמר גם הוא בשם הזה), ומסך
     // ההדפסה על קובץ כזה נפתח בלי תצוגה אבל עם כפתור "הדפס" פעיל.
     if (p.extension(canonical).toLowerCase() != '.pdf' ||
@@ -5038,7 +5048,13 @@ class PluginBridgeAdapter {
         // קובץ שהורד ל-`network.fetchFile` נמחק עם ביטול ה-token שלו.
         final revoked = await _loadUserFileGrant(token);
         await _removeUserFileGrant(token);
-        if (revoked != null) await _remoteFiles.delete(revoked.path);
+        if (revoked != null &&
+            _remoteFiles.ownsCanonical(
+              revoked.path,
+              pluginId: plugin.pluginId,
+            )) {
+          await _remoteFiles.delete(revoked.path);
+        }
         return true;
       default:
         throw Exception('error.unknown_method: Unknown action in fs: $action');
@@ -7734,6 +7750,7 @@ class PluginBridgeAdapter {
   Future<Map<String, dynamic>> _fetchRemoteFile(
     Map<String, dynamic> args,
   ) async {
+    final generation = _remoteFiles.generationForPlugin(plugin.pluginId);
     final uri = await _requireAllowedNetworkUri(args);
     final timeoutMs = args['timeoutMs'];
     final maxTimeoutMs = PluginRemoteFileCache.maxTimeout.inMilliseconds;
@@ -7755,6 +7772,9 @@ class PluginBridgeAdapter {
       );
     }
 
+    if (generation != _remoteFiles.generationForPlugin(plugin.pluginId)) {
+      throw Exception('error.unavailable: remote file download revoked');
+    }
     final PluginRemoteFile file;
     try {
       file = await _remoteFiles.fetch(
@@ -7773,6 +7793,10 @@ class PluginBridgeAdapter {
       // מחזיר לתוסף את הודעת כל חריגה שאינה מקודדת.
       throw Exception('error.internal: failed to write the downloaded file');
     }
+    if (generation != _remoteFiles.generationForPlugin(plugin.pluginId)) {
+      await _remoteFiles.delete(file.path);
+      throw Exception('error.unavailable: remote file download revoked');
+    }
     final canonical = canonicalizeNearestExisting(file.path) ?? file.path;
     final registration = await _fileServer.register(
       pluginId: plugin.pluginId,
@@ -7780,6 +7804,12 @@ class PluginBridgeAdapter {
     );
     await _dropEvictedRemoteGrants();
     await _saveUserFileGrant(registration.token, canonical, writable: false);
+    if (generation != _remoteFiles.generationForPlugin(plugin.pluginId)) {
+      _fileServer.revoke(registration.token);
+      await _removeUserFileGrant(registration.token);
+      await _remoteFiles.delete(canonical);
+      throw Exception('error.unavailable: remote file download revoked');
+    }
     return {
       'token': registration.token,
       'url': registration.url,

@@ -311,11 +311,13 @@ class PluginFileDownloadService {
     bool Function(Uri previous, Uri target)? isRedirectAllowed,
     required int maxBytes,
     bool Function()? expired,
+    Future<void>? abortTrigger,
   }) async {
     final response = await _fetchFollowingAllowedRedirects(
       downloadUri,
       isAllowed,
       isRedirectAllowed,
+      abortTrigger: abortTrigger,
     );
     final tooLarge = Exception('error.too_large: file exceeds $maxBytes bytes');
     final declared = response.contentLength;
@@ -367,6 +369,7 @@ class PluginFileDownloadService {
     bool Function(Uri previous, Uri target)? isRedirectAllowed, {
     int rangeStart = 0,
     String? ifRange,
+    Future<void>? abortTrigger,
   }) async {
     var current = initialUri;
     Uri? previous;
@@ -383,7 +386,11 @@ class PluginFileDownloadService {
         );
       }
 
-      final request = http.Request('GET', current)..followRedirects = false;
+      final request = http.AbortableRequest(
+        'GET',
+        current,
+        abortTrigger: abortTrigger,
+      )..followRedirects = false;
       request.headers['Accept-Encoding'] = 'identity';
       if (rangeStart > 0) {
         request.headers['Range'] = 'bytes=$rangeStart-';

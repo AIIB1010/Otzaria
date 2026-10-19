@@ -8,6 +8,28 @@ import 'package:otzaria/plugins/services/plugin_file_download_service.dart';
 import 'package:otzaria/plugins/services/plugin_remote_file_cache.dart';
 import 'package:path/path.dart' as p;
 
+class _ObservedClient extends http.BaseClient {
+  _ObservedClient(this.onBody);
+  final void Function() onBody;
+  final http.Client _client = http.Client();
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    final response = await _client.send(request);
+    return http.StreamedResponse(
+      response.stream.map((chunk) {
+        onBody();
+        return chunk;
+      }),
+      response.statusCode,
+      headers: response.headers,
+    );
+  }
+
+  @override
+  void close() => _client.close();
+}
+
 void main() {
   late Directory tempDir;
   late PluginRemoteFileCache cache;
@@ -29,6 +51,15 @@ void main() {
   List<FileSystemEntity> leftovers(String pluginId) {
     final dir = Directory(p.join(cache.root.path, pluginId));
     return dir.existsSync() ? dir.listSync() : [];
+  }
+
+  Future<void> waitForCleanup(String pluginId) async {
+    final dir = Directory(p.join(cache.root.path, pluginId));
+    final deadline = DateTime.now().add(const Duration(seconds: 2));
+    while (await dir.exists() && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+    expect(await dir.exists(), isFalse);
   }
 
   PluginFileDownloadService serving(List<int> body) =>
@@ -207,11 +238,206 @@ void main() {
         ),
         throwsA(isA<TimeoutException>()),
       );
-      // ההורדה ממשיכה ברקע עד המקטע הראשון, ואז נקטעת ונמחקת.
-      await Future<void>.delayed(const Duration(milliseconds: 600));
+      await waitForCleanup('p1');
       expect(leftovers('p1'), isEmpty);
     },
   );
+
+  test(
+    'timeout מחזיר RPC גם כש-send אינו בר ביטול ושומר את חסם ההורדות',
+    () async {
+      final headers = Completer<void>();
+      final cancellations = <Future<void>>[];
+      final downloader = PluginFileDownloadService(
+        client: MockClient.streaming((_, _) async {
+          final cancelled = Completer<void>();
+          cancellations.add(cancelled.future);
+          late StreamController<List<int>> body;
+          body = StreamController<List<int>>(
+            onListen: () {
+              body.add([1]);
+              unawaited(body.close());
+            },
+            onCancel: () {
+              if (!cancelled.isCompleted) cancelled.complete();
+            },
+          );
+          await headers.future;
+          return http.StreamedResponse(body.stream, 200);
+        }),
+      );
+      try {
+        for (var i = 0; i < 3; i++) {
+          await expectLater(
+            fetch(
+              'pending.bin',
+              1,
+              downloader: downloader,
+              timeout: const Duration(milliseconds: 25),
+            ),
+            throwsA(isA<TimeoutException>()),
+          ).timeout(const Duration(milliseconds: 200));
+        }
+        await expectLater(
+          fetch('fourth.bin', 1),
+          throwsA(
+            isA<Exception>().having(
+              (e) => e.toString(),
+              'message',
+              contains('error.too_many_requests'),
+            ),
+          ),
+        );
+      } finally {
+        headers.complete();
+        await Future.wait(cancellations).timeout(const Duration(seconds: 2));
+        await waitForCleanup('p1');
+        downloader.dispose();
+      }
+      await fetch('after.bin', 1);
+    },
+  );
+
+  for (final phase in ['headers', 'redirect', 'error', 'body']) {
+    for (final revoke in [
+      false,
+      if (phase == 'headers' || phase == 'body') true,
+    ]) {
+      test(
+        '${revoke ? 'revoke' : 'timeout'} מבטל חיבור אמיתי בזמן $phase ומשחרר את המכסה',
+        () async {
+          final server = await ServerSocket.bind(
+            InternetAddress.loopbackIPv4,
+            0,
+          );
+          var receivedRequest = Completer<void>();
+          final downloader = PluginFileDownloadService(
+            client: _ObservedClient(() {
+              if (phase == 'body' && !receivedRequest.isCompleted) {
+                receivedRequest.complete();
+              }
+            }),
+          );
+          final sockets = <Socket>{};
+          final disconnected = <Future<void>>[];
+          var requests = 0;
+          server.listen((socket) {
+            sockets.add(socket);
+            final done = Completer<void>();
+            disconnected.add(done.future);
+            void disconnect() {
+              sockets.remove(socket);
+              socket.destroy();
+              if (!done.isCompleted) done.complete();
+            }
+
+            void onError(Object error) {
+              expect(error, isA<SocketException>());
+              disconnect();
+            }
+
+            unawaited(socket.done.then<void>((_) {}, onError: onError));
+            var received = false;
+            socket.listen(
+              (_) {
+                if (received) return;
+                received = true;
+                requests++;
+                if (phase != 'body' && !receivedRequest.isCompleted) {
+                  receivedRequest.complete();
+                }
+                if (phase == 'headers') return;
+                final status = switch (phase) {
+                  'redirect' => '302 Found',
+                  'error' => '404 Not Found',
+                  _ => '200 OK',
+                };
+                socket.write(
+                  'HTTP/1.1 $status\r\nTransfer-Encoding: chunked\r\n'
+                  '${phase == 'redirect' ? 'Location: /final.pdf\r\n' : ''}'
+                  '\r\n1\r\nx\r\n',
+                );
+              },
+              onDone: disconnect,
+              onError: onError,
+            );
+          });
+          addTearDown(() async {
+            downloader.dispose();
+            for (final socket in List.of(sockets)) {
+              socket.destroy();
+            }
+            await server.close();
+          });
+
+          for (var i = 0; i < 4; i++) {
+            receivedRequest = Completer<void>();
+            final running = cache.fetch(
+              'p1',
+              Uri.parse('http://127.0.0.1:${server.port}/slow.pdf'),
+              downloader: downloader,
+              isAllowed: allowAll,
+              timeout: revoke
+                  ? const Duration(seconds: 2)
+                  : const Duration(milliseconds: 60),
+            );
+            final failed = expectLater(
+              running,
+              revoke
+                  ? throwsA(
+                      isA<Exception>().having(
+                        (e) => e.toString(),
+                        'message',
+                        contains('error.unavailable'),
+                      ),
+                    )
+                  : throwsA(isA<TimeoutException>()),
+            );
+            if (revoke) {
+              await receivedRequest.future;
+              await cache.deleteForPlugin('p1');
+            }
+            await failed;
+          }
+          await Future.wait(disconnected).timeout(const Duration(seconds: 2));
+          expect(requests, 4);
+          expect(sockets, isEmpty);
+          await waitForCleanup('p1');
+          expect(leftovers('p1'), isEmpty);
+          await fetch('after.bin', 1);
+        },
+      );
+    }
+  }
+
+  for (final limit in ['bytes', 'files']) {
+    test('פינוי שנחסם אינו עוקף את מכסת $limit', () async {
+      cache = PluginRemoteFileCache(
+        root: cache.root,
+        quotaBytes: 100,
+        maxFiles: 1,
+      );
+      final first = await fetch('locked.bin', limit == 'bytes' ? 100 : 0);
+      final locked = await Process.run('chflags', ['uchg', first.path]);
+      expect(locked.exitCode, 0);
+      try {
+        await expectLater(
+          fetch('extra.bin', 1),
+          throwsA(
+            isA<Exception>().having(
+              (e) => e.toString(),
+              'message',
+              contains('error.too_many_requests'),
+            ),
+          ),
+        );
+        expect(File(first.path).existsSync(), isTrue);
+        expect(leftovers('p1'), hasLength(1));
+      } finally {
+        await Process.run('chflags', ['nouchg', first.path]);
+      }
+    }, skip: !Platform.isMacOS);
+  }
 
   test('delete מוחק רק קובץ שהמטמון הוריד', () async {
     final file = await fetch('a.pdf', 10);

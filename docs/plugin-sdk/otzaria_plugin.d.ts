@@ -2467,7 +2467,8 @@ export interface OtzariaGlobal {
    * Opens Otzaria's print screen (page range, preview, layout, then the system
    * print dialog) on a PDF the plugin was granted (a file token). Needs a user
    * gesture; waits for the screen to close without the generic 30-second RPC
-   * timeout. `printed` is true when the user printed or exported.
+   * timeout. Personal files require fs.user_files.read; network.fetchFile tokens
+   * do not. `printed` is true when the user printed or exported.
    */
   call(
     method: 'ui.printFile',
