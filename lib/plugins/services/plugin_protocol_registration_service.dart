@@ -61,7 +61,10 @@ class PluginProtocolRegistrationService {
         '${root}Software\\Classes\\${entry.subkey}',
       );
       try {
-        key.setValue(entry.name, entry.value);
+        // כותבים רק ערך שונה: אנטי-וירוס מאט כתיבות לכאן (issue #1549).
+        if (key.getValue(entry.name) != entry.value) {
+          key.setValue(entry.name, entry.value);
+        }
       } finally {
         key.close();
       }

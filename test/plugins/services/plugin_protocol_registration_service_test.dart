@@ -362,6 +362,28 @@ void main() {
               in PluginProtocolRegistrationService.buildOfficeTrustedProtocolKeys()) {
             CURRENT_USER.open('$root\\$subkey').close();
           }
+
+          // הפעלה שנייה אינה כותבת ערכים שכבר נכונים.
+          final command =
+              '$root\\Software\\Classes\\otzaria\\shell\\open\\command';
+          DateTime? lastWrite() {
+            final key = CURRENT_USER.open(command);
+            try {
+              return key.info.lastWriteTime;
+            } finally {
+              key.close();
+            }
+          }
+
+          final before = lastWrite();
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          await Isolate.run(
+            () => PluginProtocolRegistrationService.writeWindowsRegistration(
+              exePath,
+              root: '$root\\',
+            ),
+          );
+          expect(lastWrite(), before);
         } finally {
           CURRENT_USER.removeSubkey(root);
         }
