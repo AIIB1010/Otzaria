@@ -267,5 +267,15 @@ void main() {
       ),
       isFalse,
     );
+    // בחירה שכולה במקטע הראשון: לחיצה במקטע מאוחר היא מחוץ לבחירה.
+    expect(
+      clickIsOnRenderedSelection(
+        root: root,
+        globalPosition: global,
+        selectedSegment: lineText.substring(0, 20),
+        edge: SelectionSegmentEdge.prefix,
+      ),
+      isFalse,
+    );
   });
 }

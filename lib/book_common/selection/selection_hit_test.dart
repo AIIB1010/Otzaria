@@ -177,8 +177,11 @@ bool? clickIsOnRenderedSelection({
   }
   if (selStart >= selEnd) return null;
 
+  final selection = _selectionInParagraph(paragraphText, selStart, selEnd);
+  // במקטע של שורה ארוכה הבחירה יכולה להיות כולה במקטע אחר.
+  if (selection.isCollapsed) return false;
   final boxes = paragraph.getBoxesForSelection(
-    _selectionInParagraph(paragraphText, selStart, selEnd),
+    selection,
     boxHeightStyle: ui.BoxHeightStyle.includeLineSpacingMiddle,
   );
   if (boxes.isEmpty) return null;
