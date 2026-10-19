@@ -243,11 +243,15 @@ bool isMenuFocusNode(FocusNode? focusNode) {
   return hasMenuAncestor;
 }
 
-/// האם הפוקוס נמצא בתוך חלונית מפרש של צורת הדף.
-bool isCommentaryFocusNode(FocusNode? focusNode) {
-  final viewer = focusNode?.context
-      ?.findAncestorStateOfType<_SimpleTextViewerState>();
-  return viewer != null && !viewer.widget.isMainText;
+/// האם הפוקוס באזור בחירה שאינו הטקסט הראשי — חלונית מפרש, או חלונית צפה
+/// (שכבת-על מחוץ לכל מסך; פאנל צד באותו מסך אינו נחשב).
+bool isOtherSelectionFocusNode(FocusNode? focusNode) {
+  final context = focusNode?.context;
+  if (context == null) return false;
+  final viewer = context.findAncestorStateOfType<_SimpleTextViewerState>();
+  if (viewer != null) return !viewer.widget.isMainText;
+  return ModalRoute.of(context) == null &&
+      context.findAncestorStateOfType<SelectableRegionState>() != null;
 }
 
 /// היסט הגלילה של מקש בחלונית מפרש: שורה = 50px, עמוד = 80% מהחלונית
@@ -950,8 +954,8 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
       return;
     }
 
-    // המשתמש לחץ בחלונית מפרש — החיצים שייכים לה עד שילחץ שוב בטקסט הראשי.
-    if (isCommentaryFocusNode(FocusManager.instance.primaryFocus)) {
+    // לחיצה בחלונית מפרש או בחלונית צפה — המקשים (חיצים, Ctrl+C) שייכים לה.
+    if (isOtherSelectionFocusNode(FocusManager.instance.primaryFocus)) {
       return;
     }
 
