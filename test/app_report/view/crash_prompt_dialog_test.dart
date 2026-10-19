@@ -171,8 +171,28 @@ void main() {
       expect(report.trigger, AppReportTrigger.crashPrompt);
       expect(report.type, AppReportType.performance);
       expect(report.title, 'התוכנה נתקעה (7 שניות)');
-      expect(report.description, 'גללתי\n\nmain thread stack');
+      expect(report.description, 'גללתי');
+      expect(report.diagnostics?['hangDetails'], 'main thread stack');
       expect(report.signature, hangSignature);
+    });
+
+    testSnack('מחסנית ANR נראית בתצוגה המקדימה ונשלחת רק בהסכמה לאבחון', (
+      tester,
+    ) async {
+      await pumpDialog(tester, custom: hang);
+      await tapKey(tester, 'app-report-toggle-preview');
+      expect(find.textContaining('main thread stack'), findsOneWidget);
+      await tapKey(tester, 'app-report-include-diagnostics');
+      await tapKey(tester, 'app-report-include-error-log');
+      await tapKey(tester, 'crash-prompt-send');
+      final report = service.sent.single;
+      expect(report.description, isEmpty);
+      expect(report.diagnostics, isNull);
+      expect(report.errorLog, isNull);
+      expect(
+        report.toApiPayload().toString(),
+        isNot(contains('main thread stack')),
+      );
     });
 
     testSnack('ANR / תקיעה מההפעלה הקודמת: נוסח של הפעלה קודמת', (

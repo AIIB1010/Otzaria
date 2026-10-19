@@ -23,7 +23,7 @@ class AndroidAnr {
   final String? mainThreadTrace;
   final CrashSignature signature;
 
-  /// טקסט קריא לתיאור הדיווח, עד [AndroidAnrSource.maxDetailsLength] תווים.
+  /// מידע אבחון פרטי, עד [AndroidAnrSource.maxDetailsLength] תווים.
   final String details;
 }
 

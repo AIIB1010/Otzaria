@@ -54,7 +54,7 @@ class AppReportBloc extends Bloc<AppReportEvent, AppReportState> {
   /// ה-dump של הקריסה, כשההצעה נפתחה אחרי קריסה נייטיבית.
   final File? minidumpFile;
 
-  /// טקסט שמצורף לתיאור שהמשתמש כתב, למשל מחסנית של ANR.
+  /// מידע אבחון פרטי שמוצג בתצוגה המקדימה, למשל מחסנית של ANR.
   final String details;
   final String? appVersion;
 
@@ -102,7 +102,12 @@ class AppReportBloc extends Bloc<AppReportEvent, AppReportState> {
         description: draft?.description ?? '',
         steps: draft?.steps ?? '',
         email: draftEmail.isEmpty ? _initialEmail : draftEmail,
-        diagnostics: attachments?.diagnostics,
+        diagnostics: details.isEmpty
+            ? attachments?.diagnostics
+            : {
+                ...?attachments?.diagnostics,
+                'hangDetails': _redactor.redactText(details),
+              },
         errorLog: attachments?.errorLog,
         includeDiagnostics: draft?.includeDiagnostics ?? true,
         includeErrorLog: draft?.includeErrorLog ?? true,
@@ -236,12 +241,7 @@ class AppReportBloc extends Bloc<AppReportEvent, AppReportState> {
       type: form.type,
       trigger: trigger,
       title: form.title,
-      description: details.isEmpty
-          ? form.description
-          : [
-              form.description.trim(),
-              details,
-            ].where((text) => text.isNotEmpty).join('\n\n'),
+      description: form.description,
       stepsToReproduce: form.steps,
       reporterEmail: form.email.trim(),
       appVersion: appVersion ?? ErrorLogFile.appVersion,

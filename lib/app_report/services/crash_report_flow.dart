@@ -57,7 +57,20 @@ class CrashReportFlow {
     );
   }
 
-  Future<CrashReportOutcome> handle(CrashCandidate candidate) async {
+  static Future<void> _automaticReportTail = Future.value();
+
+  Future<CrashReportOutcome> handle(CrashCandidate candidate) {
+    if (_readMode() != AppCrashReportMode.always) return _handle(candidate);
+    // המכסה משותפת לכל המופעים; הבדיקה, השליחה והרישום חייבים לרוץ יחד.
+    final next = _automaticReportTail.then((_) => _handle(candidate));
+    _automaticReportTail = next.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return next;
+  }
+
+  Future<CrashReportOutcome> _handle(CrashCandidate candidate) async {
     final mode = _readMode();
     final version = appVersion ?? ErrorLogFile.appVersion;
     final throttleKey = CrashReportDecision.throttleKeyFor(candidate);
@@ -106,7 +119,6 @@ class CrashReportFlow {
       type: CrashReportDecision.reportTypeFor(candidate),
       trigger: AppReportTrigger.autoCrash,
       title: CrashReportDecision.titleFor(candidate),
-      description: candidate.details ?? '',
       // מייל שמור לא תקין היה נדחה ב-422 ומוחק את הדיווח — שולחים בלעדיו.
       reporterEmail: AppReport.isValidEmail(_savedEmail()) ? _savedEmail() : '',
       appVersion: version,
@@ -115,7 +127,9 @@ class CrashReportFlow {
       arch: AppReportCollector.detectArch(),
       signature: candidate.signature,
       createdAt: _clock(),
-      diagnostics: attachments?.diagnostics,
+      diagnostics: candidate.details == null
+          ? attachments?.diagnostics
+          : {...?attachments?.diagnostics, 'hangDetails': candidate.details},
       errorLog: attachments?.errorLog,
       // בלי minidump: הוא מכיל זיכרון של התהליך ונשלח רק בהסכמה בטופס.
     ).redactedWith(_redactor);

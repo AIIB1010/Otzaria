@@ -66,8 +66,8 @@ class CrashCandidate {
        details = null,
        occurredInPreviousRun = true;
 
-  /// תקיעה שזוהתה בזמן ריצה (או ANR של אנדרואיד). [details] נכנס לתיאור
-  /// הדיווח, למשל מחסנית שאינה ב-errors.txt.
+  /// תקיעה שזוהתה בזמן ריצה (או ANR של אנדרואיד). [details] נכנס לאבחון
+  /// הפרטי, למשל מחסנית שאינה ב-errors.txt.
   const CrashCandidate.hang({
     required this.signature,
     this.hangDuration,

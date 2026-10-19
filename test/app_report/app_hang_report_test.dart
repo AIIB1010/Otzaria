@@ -223,23 +223,27 @@ void main() {
       clock: () => DateTime.utc(2026, 10, 18, 10),
     );
 
-    test('always: נשלח כבעיית ביצועים, auto_crash, עם הפרטים בתיאור', () async {
-      final service = FakeAppReportService();
-      final outcome = await flow(service).handle(
-        const CrashCandidate.hang(
-          signature: signature,
-          hangDuration: Duration(seconds: 12),
-          details: 'ANR: main thread blocked',
-        ),
-      );
-      expect(outcome, CrashReportOutcome.sentAutomatically);
-      final report = service.sent.single;
-      expect(report.type, AppReportType.performance);
-      expect(report.trigger, AppReportTrigger.autoCrash);
-      expect(report.title, 'התוכנה נתקעה (12 שניות)');
-      expect(report.description, 'ANR: main thread blocked');
-      expect(report.signature, signature);
-    });
+    test(
+      'always: נשלח כבעיית ביצועים, auto_crash, עם הפרטים באבחון הפרטי',
+      () async {
+        final service = FakeAppReportService();
+        final outcome = await flow(service).handle(
+          const CrashCandidate.hang(
+            signature: signature,
+            hangDuration: Duration(seconds: 12),
+            details: 'ANR: main thread blocked',
+          ),
+        );
+        expect(outcome, CrashReportOutcome.sentAutomatically);
+        final report = service.sent.single;
+        expect(report.type, AppReportType.performance);
+        expect(report.trigger, AppReportTrigger.autoCrash);
+        expect(report.title, 'התוכנה נתקעה (12 שניות)');
+        expect(report.description, isEmpty);
+        expect(report.diagnostics?['hangDetails'], 'ANR: main thread blocked');
+        expect(report.signature, signature);
+      },
+    );
 
     test('ANR של אנדרואיד: בלי משך, מגבלה לפי hash החתימה', () async {
       final service = FakeAppReportService();
@@ -257,7 +261,8 @@ void main() {
       expect(report.type, AppReportType.performance);
       expect(report.title, CrashReportDecision.hangTitle);
       expect(report.signature!.exceptionType, 'ANR');
-      expect(report.description, contains('Android ANR'));
+      expect(report.description, isEmpty);
+      expect(report.diagnostics?['hangDetails'], contains('Android ANR'));
       expect(
         CrashReportDecision.throttleKeyFor(anr),
         anr.signature!.hash,
