@@ -249,6 +249,35 @@ void main() {
     });
   });
 
+  test('כל מפתחות הקישור מבחינים בין מסדים ובין ספרים באותו מסד', () {
+    final links = [
+      for (final source in [
+        BookSource.official,
+        BookSource.user,
+        BookSource.attached('library-a'),
+        BookSource.attached('library-b'),
+      ])
+        for (final id in [2, 3])
+          Link(
+            heRef: 'אותה הפניה',
+            index1: 1,
+            path2: 'ספר משותף',
+            index2: 1,
+            connectionType: LinkTypes.mesoratHashas,
+            targetSource: source,
+            targetBookId: id,
+            targetCategoryId: 2,
+          ),
+    ];
+    for (final keyOf in [
+      buildSelectedLinkContentKey,
+      buildSelectedLinkInstanceKey,
+      buildSelectedLinkTargetKey,
+    ]) {
+      expect(links.map(keyOf).toSet(), hasLength(links.length));
+    }
+  });
+
   group('dedupeLinksByTarget', () {
     Link linkTo({
       required String title,
