@@ -29,19 +29,6 @@ abstract final class CalendarAlertsKeys {
     city: 'ירושלים',
     icsSubscriptions: '[]',
   };
-
-  /// כל המפתחות שאינם עוברים בסנכרון ההגדרות הכללי.
-  static const Set<String> ownerAuthoritative = {...defaultKeys, ledger};
-
-  static const Set<String> defaultKeys = {
-    events,
-    enabled,
-    time,
-    sound,
-    zmanAlerts,
-    city,
-    icsSubscriptions,
-  };
 }
 
 /// המצב השמור של הבעלים: ערכי [CalendarAlertsKeys.defaults] ורישום המזהים.
