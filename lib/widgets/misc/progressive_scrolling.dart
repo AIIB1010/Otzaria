@@ -13,6 +13,8 @@ class ProgressiveScroll extends StatefulWidget {
   final double curve;
   final FocusNode? focusNode;
   final bool autofocus;
+  // מקשים שאינם חיצי גלילה — לקיצורים של התוכן שבתוך הגלילה.
+  final FocusOnKeyEventCallback? onKeyEvent;
   // ScrollOffsetController לא חושף isAttached, ו-animateScroll זורק אם הרשימה
   // אינה מחוברת (נטענת/לא ב-tree). ItemScrollController (שמתחבר יחד עם
   // ScrollOffsetController לאותו ScrollablePositionedList) כן חושף isAttached.
@@ -28,6 +30,7 @@ class ProgressiveScroll extends StatefulWidget {
     this.focusNode,
     this.autofocus = false,
     this.itemScrollController,
+    this.onKeyEvent,
   });
 
   @override
@@ -108,7 +111,9 @@ class _ProgressiveScrollState extends State<ProgressiveScroll> {
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     final isArrowDown = event.logicalKey == LogicalKeyboardKey.arrowDown;
     final isArrowUp = event.logicalKey == LogicalKeyboardKey.arrowUp;
-    if (!isArrowDown && !isArrowUp) return KeyEventResult.ignored;
+    if (!isArrowDown && !isArrowUp) {
+      return widget.onKeyEvent?.call(node, event) ?? KeyEventResult.ignored;
+    }
     // קיצורי העריכה יושבים בשורש האפליקציה, ולכן החץ מגיע לכאן לפני שדה טקסט מקונן.
     if (FocusManager.instance.primaryFocus?.context
             ?.findAncestorWidgetOfExactType<EditableText>() !=
