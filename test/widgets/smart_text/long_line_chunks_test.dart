@@ -107,6 +107,86 @@ void main() {
         }
       }
     });
+
+    List<String> texts(LongLineSplit split) => [
+      for (final chunk in split.chunks) chunk.toPlainText(),
+    ];
+
+    test('בלי סופי משפט החיתוך הוא אחרי הרווח, לא לפניו', () {
+      final span = TextSpan(text: 'מילה ' * 15000);
+      final parts = texts(splitLongLine(span)!);
+
+      expect(parts.length, greaterThan(2));
+      expect(parts.join(), span.toPlainText());
+      for (final part in parts.take(parts.length - 1)) {
+        expect(part, endsWith(' '));
+      }
+      for (final part in parts.skip(1)) {
+        expect(part, isNot(startsWith(' ')));
+      }
+    });
+
+    test('ספאן מעוצב ארוך אינו נחתך', () {
+      const styled = TextStyle(fontWeight: FontWeight.bold);
+      final bold = 'מודגש ' * 6000;
+      final span = TextSpan(
+        children: [
+          TextSpan(text: 'מילה ' * 4000),
+          TextSpan(text: bold, style: styled),
+          TextSpan(text: 'מילה ' * 4000),
+        ],
+      );
+      final split = splitLongLine(span)!;
+
+      expect(split.chunks.length, greaterThan(1));
+      final styledLeaves = [
+        for (final chunk in split.chunks)
+          for (final leaf in chunk.children!.cast<TextSpan>())
+            if (leaf.style != null) leaf,
+      ];
+      expect(styledLeaves, hasLength(1));
+      expect(styledLeaves.single.text, bold);
+    });
+
+    test('אין חיתוך בתוך בידוד או הטבעה כיווניים', () {
+      // LRI ו-RLO פתוחים לאורך יותר ממקטע שלם; רק אחרי PDI ו-PDF מותר לחתוך.
+      final isolated = '⁦${'abc ' * 6000}⁩';
+      final embedded = '‮${'abc ' * 6000}‬';
+      final span = TextSpan(
+        text:
+            '${'מילה ' * 3000}$isolated ${'מילה ' * 3000}$embedded '
+            '${'מילה ' * 3000}',
+      );
+      final split = splitLongLine(span)!;
+      final text = split.text;
+
+      expect(split.chunks.length, greaterThan(1));
+      for (final start in split.starts.skip(1)) {
+        var depth = 0;
+        for (final c in text.substring(0, start).codeUnits) {
+          if ((c >= 0x2066 && c <= 0x2068) ||
+              (c >= 0x202A && c <= 0x202E && c != 0x202C)) {
+            depth++;
+          } else if ((c == 0x2069 || c == 0x202C) && depth > 0) {
+            depth--;
+          }
+        }
+        expect(depth, 0, reason: 'cut at $start');
+      }
+    });
+
+    test('מקטע אינו מתחיל בסימן צירוף', () {
+      // כמעט כל רווח מוביל לניקוד "יתום"; החיתוך חייב לדלג עליו.
+      final span = TextSpan(text: '${'אב ָ' * 50}גד ' * 400);
+      final parts = texts(splitLongLine(span)!);
+      final mark = RegExp(r'^\p{M}', unicode: true);
+
+      expect(parts.length, greaterThan(1));
+      expect(parts.join(), span.toPlainText());
+      for (final part in parts.skip(1)) {
+        expect(mark.hasMatch(part), isFalse);
+      }
+    });
   });
 
   test('שורה ארוכה מאוד היא בלוק גם במצב רציף', () {

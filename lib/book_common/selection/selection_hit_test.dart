@@ -330,9 +330,8 @@ int _overlapLen(String a, String b, {required bool suffixOfFirst}) {
   return 0;
 }
 
-/// טקסט הפסקה, או רק השורה [lineRange] שבתוכה, עם אופסט תחילתה בפסקה.
-/// null כש-[lineRange] אינו תואם לטקסט — אופסטים מהפסקה כולה היו שגויים.
-/// במקטע של שורה ארוכה זה טקסט השורה כולה, ו-base שלילי (מינוס תחילת המקטע).
+/// טקסט הפסקה או השורה [lineRange] שבה (null כשאינו תואם), ואופסט תחילתו.
+/// במקטע של שורה ארוכה — השורה כולה, ו-base הוא מינוס תחילת המקטע.
 ({String text, int base, int length})? _paragraphText(
   RenderParagraph paragraph,
   TextRange? lineRange,

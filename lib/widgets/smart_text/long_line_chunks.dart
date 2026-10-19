@@ -3,6 +3,7 @@
 library;
 
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
@@ -64,63 +65,102 @@ LongLineSplit? _split(TextSpan span) {
       leaves.add(child);
     }
   }
-  var total = 0;
-  for (final leaf in leaves) {
-    total += leaf.text!.length;
-  }
-  if (total <= kLongLineMinChars) return null;
+  final text = leaves.map((leaf) => leaf.text!).join();
+  if (text.length <= kLongLineMinChars) return null;
+  final cuts = _cutPositions(text, leaves);
+  if (cuts.isEmpty) return null;
 
   final chunks = <TextSpan>[];
-  final starts = <int>[];
+  final starts = <int>[0, ...cuts];
   var current = <TextSpan>[];
-  var currentLength = 0;
-  var offset = 0;
-  void close() {
-    if (current.isEmpty) return;
-    starts.add(offset - currentLength);
-    chunks.add(TextSpan(children: current));
-    current = <TextSpan>[];
-    currentLength = 0;
-  }
-
+  var leafStart = 0;
+  var nextCut = 0;
   for (final leaf in leaves) {
-    var text = leaf.text!;
-    // רק ברווח של טקסט בלי עיצוב: לא באמצע מילה, הדגשה או סימון.
-    while (text.isNotEmpty &&
-        leaf.style == null &&
-        currentLength + text.length > kLongLineChunkChars) {
-      final cut = _cutAfter(
-        text,
-        math.max(0, kLongLineChunkChars - currentLength),
-      );
-      if (cut <= 0) break;
-      current.add(TextSpan(text: text.substring(0, cut)));
-      currentLength += cut;
-      offset += cut;
-      close();
-      text = text.substring(cut);
+    final leafText = leaf.text!;
+    final leafEnd = leafStart + leafText.length;
+    var from = leafStart;
+    // חיתוכים נבחרים רק בספאנים בלי עיצוב, ולכן ספאן מעוצב לא מתפצל.
+    while (nextCut < cuts.length && cuts[nextCut] <= leafEnd) {
+      final cut = cuts[nextCut++];
+      if (cut > from) {
+        current.add(
+          TextSpan(text: leafText.substring(from - leafStart, cut - leafStart)),
+        );
+      }
+      chunks.add(TextSpan(children: current));
+      current = <TextSpan>[];
+      from = cut;
     }
-    if (text.isEmpty) continue;
-    current.add(identical(text, leaf.text) ? leaf : TextSpan(text: text));
-    currentLength += text.length;
-    offset += text.length;
+    if (from == leafStart) {
+      current.add(leaf);
+    } else if (from < leafEnd) {
+      current.add(TextSpan(text: leafText.substring(from - leafStart)));
+    }
+    leafStart = leafEnd;
   }
-  close();
-  if (chunks.length < 2) return null;
-  return LongLineSplit._(span.toPlainText(), chunks, starts);
+  chunks.add(TextSpan(children: current));
+  return LongLineSplit._(text, chunks, starts);
 }
 
-/// אינדקס החיתוך (אחרי רווח) מ-[from] והלאה; עדיף סוף משפט קרוב.
-int _cutAfter(String text, int from) {
-  final sentence = _sentenceEnd.allMatches(text, from).firstOrNull;
-  if (sentence != null && sentence.start - from <= kLongLineChunkChars ~/ 4) {
-    return sentence.end;
+/// מקומות החיתוך בטקסט: אחרי רווח בספאן בלי עיצוב, מחוץ לבידוד או הטבעה
+/// כיווניים, ולא לפני סימן צירוף. עדיף סוף משפט קרוב.
+List<int> _cutPositions(String text, List<TextSpan> leaves) {
+  final cuttable = Uint8List(text.length + 1);
+  var depth = 0;
+  var offset = 0;
+  for (final leaf in leaves) {
+    final leafText = leaf.text!;
+    for (var i = 0; i < leafText.length; i++) {
+      final c = leafText.codeUnitAt(i);
+      if (_opensDirectional(c)) depth++;
+      if ((c == 0x2069 || c == 0x202C) && depth > 0) depth--;
+      final at = offset + i + 1;
+      if (leaf.style == null &&
+          c == 0x20 &&
+          depth == 0 &&
+          at < text.length &&
+          !_startsWithMark(text, at)) {
+        final sentence = i > 0 && '.:?!'.contains(leafText[i - 1]) ? 2 : 1;
+        cuttable[at] = sentence;
+      }
+    }
+    offset += leafText.length;
   }
-  final space = text.indexOf(' ', from);
-  return space < 0 ? -1 : space + 1;
+
+  final cuts = <int>[];
+  var target = kLongLineChunkChars;
+  while (target < text.length - kLongLineChunkChars ~/ 4) {
+    final window = math.min(text.length, target + kLongLineChunkChars ~/ 4);
+    var cut = -1;
+    for (var i = target; i < window; i++) {
+      if (cuttable[i] == 2) {
+        cut = i;
+        break;
+      }
+    }
+    if (cut < 0) {
+      for (var i = target; i < text.length; i++) {
+        if (cuttable[i] != 0) {
+          cut = i;
+          break;
+        }
+      }
+    }
+    if (cut < 0) break;
+    cuts.add(cut);
+    target = cut + kLongLineChunkChars;
+  }
+  return cuts;
 }
 
-final RegExp _sentenceEnd = RegExp(r'[.:?!] ');
+/// LRE RLE LRO RLO ו-LRI RLI FSI; נסגרים ב-PDF וב-PDI.
+bool _opensDirectional(int c) =>
+    (c >= 0x202A && c <= 0x202E && c != 0x202C) || (c >= 0x2066 && c <= 0x2068);
+
+bool _startsWithMark(String text, int at) =>
+    _mark.matchAsPrefix(text, at) != null;
+
+final RegExp _mark = RegExp(r'\p{M}', unicode: true);
 
 /// מקטע של שורה ארוכה ב-render tree: [start] הוא היסט המקטע בטקסט השורה.
 class RenderLongLineChunk extends RenderProxyBox {
@@ -168,6 +208,25 @@ class _LongLineChunk extends SingleChildRenderObjectWidget {
   }
 }
 
+/// מספר השורות הארוכות שבנייתן עוד לא הושלמה.
+final ValueNotifier<int> _building = ValueNotifier(0);
+
+/// ממתין לבניית השורות הארוכות, עד [maxFrames], ומחזיר האם הייתה בנייה פעילה.
+Future<bool> longLinesBuilt({
+  int maxFrames = 240,
+  bool Function()? isCurrent,
+}) async {
+  final wasBuilding = _building.value > 0;
+  for (
+    var i = 0;
+    i < maxFrames && _building.value > 0 && (isCurrent?.call() ?? true);
+    i++
+  ) {
+    await WidgetsBinding.instance.endOfFrame;
+  }
+  return wasBuilding;
+}
+
 /// מציג את מקטעי [split] בזה אחר זה. בכל פריים נבנים
 /// [kLongLineChunksPerFrame] מקטעים, כדי שהפריסה תתחלק בין כמה פריימים.
 class LongLineChunks extends StatefulWidget {
@@ -192,6 +251,20 @@ class _LongLineChunksState extends State<LongLineChunks> {
   /// מקטעים שכבר נבנו נשמרים כאותו מופע, כדי שהוספת מקטע לא תעדכן את כולם.
   final List<Widget> _built = [];
   bool _scheduled = false;
+  bool _counted = false;
+  int _generation = 0;
+
+  void _setBuilding(bool value) {
+    if (value == _counted) return;
+    _counted = value;
+    _building.value += value ? 1 : -1;
+  }
+
+  @override
+  void dispose() {
+    _setBuilding(false);
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -239,13 +312,31 @@ class _LongLineChunksState extends State<LongLineChunks> {
   }
 
   void _scheduleMore() {
-    if (_scheduled || _built.length >= widget.split.chunks.length) return;
+    if (_scheduled) return;
     _scheduled = true;
+    _setBuilding(true);
+    final generation = ++_generation;
     SchedulerBinding.instance.addPostFrameCallback((_) {
       _scheduled = false;
       if (!mounted) return;
-      setState(_addChunks);
+      _notifyScrollListeners();
+      if (_built.length < widget.split.chunks.length) {
+        setState(_addChunks);
+        return;
+      }
+      // הסיום מסומן פריים אחד אחרי ההודעה, כשהמיקומים כבר עודכנו.
+      SchedulerBinding.instance
+        ..addPostFrameCallback((_) {
+          if (generation == _generation) _setBuilding(false);
+        })
+        ..scheduleFrame();
     });
+  }
+
+  /// הפריט גדל בלי גלילה, ומי שמאזין לגלילה (מיקומי הפריטים ברשימה) לא יודע.
+  void _notifyScrollListeners() {
+    // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
+    Scrollable.maybeOf(context)?.position.notifyListeners();
   }
 
   @override
