@@ -59,6 +59,10 @@ class AppReportCollector {
 
   /// `false` בדיווח על קריסה מהפעלה קודמת: החלון הנוכחי אינו מה שהיה פתוח בה.
   final bool _includeCurrentContext;
+
+  @visibleForTesting
+  bool get includesCurrentContext => _includeCurrentContext;
+
   final String? _errorLogPath;
   final String? _shutdownLogPath;
   final DateTime Function() _clock;

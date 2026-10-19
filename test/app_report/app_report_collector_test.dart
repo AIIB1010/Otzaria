@@ -10,6 +10,8 @@ import 'package:otzaria/core/app_paths.dart';
 import 'package:otzaria/core/diagnostics/app_context_snapshot.dart';
 import 'package:otzaria/core/diagnostics/developer_diagnostics.dart';
 import 'package:otzaria/core/info/os_version.dart';
+import 'package:otzaria/models/book_source.dart';
+import 'package:otzaria/models/books.dart';
 import 'package:otzaria/navigation/bloc/navigation_state.dart';
 import 'package:otzaria/plugins/bloc/plugin_system_state.dart';
 import 'package:otzaria/plugins/models/installed_plugin.dart';
@@ -18,6 +20,10 @@ import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
 import 'package:otzaria/plugins/storage/plugin_system_database.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
 import 'package:otzaria/tabs/bloc/tabs_state.dart';
+import 'package:otzaria/tabs/models/combined_tab.dart';
+import 'package:otzaria/tabs/models/pdf_tab.dart';
+import 'package:otzaria/tabs/models/tab.dart';
+import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/tabs/models/searching_tab.dart';
 import 'package:otzaria/tabs/models/tool_tab.dart';
 import 'package:otzaria_report_contract/otzaria_report_contract.dart';
@@ -240,12 +246,14 @@ void main() {
         'tabsByType': {'ToolTab': 1},
         'currentTab': 'ToolTab',
         'currentTitle': r'%USERPROFILE%\Demo',
-        'plugin': {
-          'id': 'demo.plugin',
-          'version': '2.3.4',
-          'source': 'packaged',
-          'enabled': true,
-        },
+        'plugins': [
+          {
+            'id': 'demo.plugin',
+            'version': '2.3.4',
+            'source': 'packaged',
+            'enabled': true,
+          },
+        ],
       });
     });
 
@@ -272,6 +280,70 @@ void main() {
       );
       expect(context['currentTab'], 'SearchingTab');
       expect(context['currentTitle'], isNull);
+    });
+
+    Map<String, Object?> contextOf(OpenedTab tab) => describeAppContext(
+      screen: Screen.reading,
+      tabs: TabsState(tabs: [tab], currentTabIndex: 0),
+      pluginState: PluginSystemLoaded([plugin()]),
+    );
+
+    test('חלונית מפוצלת: התוסף שבחלונית מדווח', () {
+      final text = TextBookTab(book: TextBook(title: 'בראשית'), index: 0);
+      addTearDown(text.dispose);
+      final context = contextOf(
+        CombinedTab(
+          rightTab: text,
+          leftTab: ToolTab(toolId: 'demo.plugin', title: 'Demo'),
+        ),
+      );
+      expect(context['currentTab'], 'CombinedTab');
+      expect(context['currentTitle'], 'משולב: בראשית | Demo');
+      expect(context['plugins'], [
+        {
+          'id': 'demo.plugin',
+          'version': '2.3.4',
+          'source': 'packaged',
+          'enabled': true,
+        },
+      ]);
+    });
+
+    test('ספר אישי: הכותרת, שהיא לרוב שם הקובץ, לא נכנסת', () {
+      final pdf = PdfBookTab(
+        book: PdfBook(
+          title: 'מסמך פרטי',
+          path: 'private.pdf',
+          source: BookSource.user,
+        ),
+        pageNumber: 1,
+      );
+      final text = TextBookTab(
+        book: TextBook(title: 'סיכום פרטי', source: BookSource.user),
+        index: 0,
+      );
+      addTearDown(pdf.dispose);
+      addTearDown(text.dispose);
+      expect(contextOf(pdf)['currentTitle'], isNull);
+      expect(contextOf(text)['currentTitle'], isNull);
+      expect(
+        contextOf(
+          CombinedTab(
+            rightTab: text,
+            leftTab: ToolTab(toolId: 'demo.plugin', title: 'Demo'),
+          ),
+        )['currentTitle'],
+        isNull,
+      );
+    });
+
+    test('ספר רשמי: הכותרת נשמרת', () {
+      final pdf = PdfBookTab(
+        book: PdfBook(title: 'ספר רשמי', path: 'official.pdf'),
+        pageNumber: 1,
+      );
+      addTearDown(pdf.dispose);
+      expect(contextOf(pdf)['currentTitle'], 'ספר רשמי');
     });
   });
 }

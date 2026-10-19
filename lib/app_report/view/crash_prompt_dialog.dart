@@ -75,6 +75,13 @@ class CrashPromptDialog extends StatefulWidget {
   final AppReportBloc Function()? createBloc;
   final Future<void> Function(AppCrashReportMode mode)? saveMode;
 
+  /// בקריסה מהפעלה קודמת החלון הנוכחי אינו מה שהיה פתוח בה.
+  @visibleForTesting
+  static AppReportCollector collectorFor(CrashCandidate candidate) =>
+      AppReportCollector(
+        includeCurrentContext: !candidate.occurredInPreviousRun,
+      );
+
   static const String title = 'אוצריא נסגרה באופן לא צפוי';
   static const String hangTitle = 'אוצריא נתקעה';
 
@@ -95,10 +102,7 @@ class _CrashPromptDialogState extends State<CrashPromptDialog> {
         (widget.createBloc?.call() ??
               AppReportBloc(
                 trigger: AppReportTrigger.crashPrompt,
-                collector: AppReportCollector(
-                  includeCurrentContext:
-                      !widget.candidate.occurredInPreviousRun,
-                ),
+                collector: CrashPromptDialog.collectorFor(widget.candidate),
                 initialType: CrashReportDecision.reportTypeFor(
                   widget.candidate,
                 ),
