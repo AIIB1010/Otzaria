@@ -368,6 +368,9 @@ class MainWindowScreenState extends State<MainWindowScreen>
   bool _hasCheckedAutoIndex = false;
   // עדכון הספרייה של העלייה: האינדוקס ממתין לריענון שאחריו.
   final StartupRefreshWait _startupRefreshWait = StartupRefreshWait();
+  final StartupIndexingDeferral _indexingDeferral = StartupIndexingDeferral(
+    TantivyDataProvider.instance.isIndexingDeferred,
+  );
   // גרסת אינדקס השתנתה ⇒ אינדוקס מלא ממתין: אינדוקס חלקי אחרי העדכון מיותר,
   // וה-clearIndex של המלא היה רץ באמצעו.
   bool _startupFullReindexPending = false;
@@ -1009,7 +1012,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
         autoIndexingFollows &&
         await _indexingRepository.requiresManualReindex(library);
     // בלי הדגל החיפוש לא מזהיר שספרים חסרים עד שהאינדוקס יתחיל אחרי העדכון.
-    TantivyDataProvider.instance.isIndexingDeferred.value =
+    _indexingDeferral.flag.value =
         _startupFullReindexPending ||
         (autoIndexingFollows &&
             await _indexingRepository.hasUnindexedBooks(library));
@@ -1024,6 +1027,10 @@ class MainWindowScreenState extends State<MainWindowScreen>
           result.hasUpdate &&
           (result.status == LibraryUpdateStatus.completed ||
               result.status == LibraryUpdateStatus.error);
+      // ספרים שהעדכון הוסיף או שינה חסרים באינדקס עד שהאינדוקס יתחיל.
+      if (refreshRequested && autoIndexingFollows) {
+        _indexingDeferral.flag.value = true;
+      }
       if (refreshRequested) await refresh;
     } finally {
       _startupRefreshWait.cancel();
@@ -1070,9 +1077,16 @@ class MainWindowScreenState extends State<MainWindowScreen>
             debugPrint('Startup library update failed: $error\n$stackTrace');
           }
         },
+        onFinished: () {
+          if (!mounted) return _indexingDeferral.clear();
+          final indexingBloc = context.read<IndexingBloc>();
+          _indexingDeferral.releaseWhenStarted(
+            indexingBloc.state,
+            indexingBloc.stream,
+          );
+        },
       );
     } finally {
-      TantivyDataProvider.instance.isIndexingDeferred.value = false;
       if (tourActive) {
         _startupWorkGate.releaseDeferredWork();
         _tryStartDeferredStartupWork();
@@ -1857,6 +1871,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
   void dispose() {
     _startupWorkGate.markStartupIndexingSettled();
     _startupRefreshWait.cancel();
+    _indexingDeferral.clear();
     PluginPageLauncher.instance.navigator = null;
     ToolsLauncherController.instance.opener = null;
     // Clean up fullscreen callback
