@@ -14,6 +14,7 @@ import 'package:otzaria/models/links.dart';
 import 'package:otzaria/settings/engine/settings_bloc.dart';
 import 'package:otzaria/settings/engine/settings_event.dart';
 import 'package:otzaria/settings/engine/settings_state.dart';
+import 'package:otzaria/shortcuts/shortcut_helper.dart';
 import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
@@ -572,12 +573,53 @@ void main() {
       );
     });
   });
+
+  testWidgets('קיצור הדיווח על בחירה במפרש נשאר במפרש ולא מגיע לספר '
+      '(issue #2678)', (tester) async {
+    final bookKeys = <LogicalKeyboardKey>[];
+    await _pump(
+      tester,
+      textBookBloc: textBookBloc,
+      settingsBloc: settingsBloc,
+      onBookKey: (e) {
+        if (e is KeyDownEvent) bookKeys.add(e.logicalKey);
+      },
+    );
+    final modifier = ShortcutHelper.usesMacModifiers
+        ? LogicalKeyboardKey.metaLeft
+        : LogicalKeyboardKey.controlLeft;
+    Future<void> pressReport() async {
+      await tester.sendKeyDownEvent(modifier);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyR);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyUpEvent(modifier);
+      await tester.pump();
+    }
+
+    await tester.tap(find.textContaining('זהו פירוש'));
+    await tester.pump(kDoubleTapTimeout);
+    await pressReport();
+    expect(bookKeys, contains(LogicalKeyboardKey.keyR), reason: 'בלי בחירה');
+
+    bookKeys.clear();
+    tester
+        .state<SelectableRegionState>(find.byType(SelectableRegion))
+        .selectAll();
+    await pressReport();
+    expect(
+      bookKeys,
+      isNot(contains(LogicalKeyboardKey.keyR)),
+      reason: 'הדיווח נפתח על המפרש, ולא על הספר הראשי שמסביב',
+    );
+  });
 }
 
 Future<void> _pump(
   WidgetTester tester, {
   required TextBookBloc textBookBloc,
   required SettingsBloc settingsBloc,
+  ValueChanged<KeyEvent>? onBookKey,
 }) async {
   addTearDown(() async {
     await tester.pumpWidget(const SizedBox.shrink());
@@ -592,11 +634,16 @@ Future<void> _pump(
           BlocProvider<SettingsBloc>.value(value: settingsBloc),
         ],
         child: Scaffold(
-          body: CommentaryListBase(
-            openBookCallback: (_) {},
-            fontSize: 18,
-            showSearch: true,
-            shrinkWrap: false,
+          // כמו ה-KeyboardListener של מסך הספר שמעל חלונית המפרשים.
+          body: KeyboardListener(
+            focusNode: FocusNode(),
+            onKeyEvent: onBookKey ?? (_) {},
+            child: CommentaryListBase(
+              openBookCallback: (_) {},
+              fontSize: 18,
+              showSearch: true,
+              shrinkWrap: false,
+            ),
           ),
         ),
       ),

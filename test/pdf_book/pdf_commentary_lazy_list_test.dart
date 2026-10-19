@@ -26,6 +26,7 @@ import 'package:otzaria/services/commentary_service.dart';
 import 'package:otzaria/settings/engine/settings_bloc.dart';
 import 'package:otzaria/settings/engine/settings_event.dart';
 import 'package:otzaria/settings/engine/settings_state.dart';
+import 'package:otzaria/shortcuts/shortcut_helper.dart';
 import 'package:otzaria/tabs/models/pdf_tab.dart';
 
 import '../helpers/memory_settings_cache.dart';
@@ -303,6 +304,45 @@ void main() {
     await copy.copy();
     expect('טקסט נטען'.allMatches(copy.text!).length, 100);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('קיצור הדיווח על בחירה במפרש נשאר במפרש (issue #2678)', (
+    tester,
+  ) async {
+    final tab = _bigGroupTab(1, group: 9);
+    addTearDown(tab.dispose);
+    final outerKeys = <LogicalKeyboardKey>[];
+    final outerFocus = FocusNode();
+    addTearDown(outerFocus.dispose);
+    await tester.pumpWidget(
+      _wrap(
+        KeyboardListener(
+          focusNode: outerFocus,
+          onKeyEvent: (e) {
+            if (e is KeyDownEvent) outerKeys.add(e.logicalKey);
+          },
+          child: _panel(tab),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.textContaining('טָהוֹר'),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump(kDoubleTapTimeout);
+    _ClipboardCapture(tester).selectAll();
+    await tester.pump();
+    final modifier = ShortcutHelper.usesMacModifiers
+        ? LogicalKeyboardKey.metaLeft
+        : LogicalKeyboardKey.controlLeft;
+    await tester.sendKeyDownEvent(modifier);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyR);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyUpEvent(modifier);
+    await tester.pump();
+    expect(outerKeys, isNot(contains(LogicalKeyboardKey.keyR)));
   });
 
   group('רשימת המפרשים של PDF בונה רק את מה שעל המסך (#844)', () {
