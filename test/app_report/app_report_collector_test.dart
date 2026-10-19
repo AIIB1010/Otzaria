@@ -7,12 +7,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/app_report/repository/app_report_collector.dart';
 import 'package:otzaria/app_report/repository/error_log_blocks.dart';
 import 'package:otzaria/core/app_paths.dart';
+import 'package:otzaria/core/diagnostics/app_context_snapshot.dart';
+import 'package:otzaria/core/diagnostics/developer_diagnostics.dart';
 import 'package:otzaria/core/info/os_version.dart';
+import 'package:otzaria/navigation/bloc/navigation_state.dart';
+import 'package:otzaria/plugins/bloc/plugin_system_state.dart';
 import 'package:otzaria/plugins/models/installed_plugin.dart';
 import 'package:otzaria/plugins/models/plugin_manifest.dart';
 import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
 import 'package:otzaria/plugins/storage/plugin_system_database.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
+import 'package:otzaria/tabs/bloc/tabs_state.dart';
+import 'package:otzaria/tabs/models/searching_tab.dart';
+import 'package:otzaria/tabs/models/tool_tab.dart';
 import 'package:otzaria_report_contract/otzaria_report_contract.dart';
 import 'package:path/path.dart' as p;
 
@@ -37,7 +44,7 @@ void main() {
     final collector = AppReportCollector(
       redactor: redactor,
       appInfoLoader: () async => throw StateError('library not loaded'),
-      openTabCounts: () async => {'text': 2, 'pdf': 1},
+      currentContext: () => {'screen': 'reading', 'tabs': 3},
       errorLogPath: p.join(tmp.path, 'missing.txt'),
       clock: () => now,
     );
@@ -46,7 +53,7 @@ void main() {
       'error': 'Bad state: library not loaded',
     });
     expect(diagnostics['system'], containsPair('arch', isA<String>()));
-    expect(diagnostics['openTabs'], {'text': 2, 'pdf': 1});
+    expect(diagnostics['context'], {'screen': 'reading', 'tabs': 3});
     expect(diagnostics['startupTimeline'], contains('lines'));
     expect(() => jsonEncode(diagnostics), returnsNormally);
   });
@@ -188,5 +195,83 @@ void main() {
     final plugins = (diagnostics['appInfo'] as Map)['plugins'] as Map;
     expect(plugins['installedCount'], 1);
     expect((plugins['installed'] as List).single['id'], 'demo.plugin');
+  });
+
+  group('הקשר החלון', () {
+    InstalledPlugin plugin() => InstalledPlugin(
+      pluginId: 'demo.plugin',
+      name: 'Demo',
+      version: '2.3.4',
+      installPath: tmp.path,
+      entrypointPath: 'index.html',
+      enabled: true,
+      pinned: false,
+      manifest: PluginManifest.fromJson(const {
+        'id': 'demo.plugin',
+        'name': 'Demo',
+        'version': '2.3.4',
+        'entrypoint': 'index.html',
+      }),
+      installedAt: now,
+      updatedAt: now,
+    );
+
+    setUp(() {
+      DeveloperDiagnostics.instance.contextProvider = () => describeAppContext(
+        screen: Screen.reading,
+        tabs: TabsState(
+          tabs: [ToolTab(toolId: 'demo.plugin', title: r'C:\Users\Moshe\Demo')],
+          currentTabIndex: 0,
+        ),
+        pluginState: PluginSystemLoaded([plugin()]),
+      );
+    });
+    tearDown(() => DeveloperDiagnostics.instance.contextProvider = null);
+
+    test('נאסף מהחלון הנוכחי, כולל התוסף הפתוח, ומוסתר', () async {
+      final diagnostics = await AppReportCollector(
+        redactor: redactor,
+        appInfoLoader: () async => {},
+        clock: () => now,
+      ).collectDiagnostics();
+      expect(diagnostics['context'], {
+        'screen': 'reading',
+        'tabs': 1,
+        'tabsByType': {'ToolTab': 1},
+        'currentTab': 'ToolTab',
+        'currentTitle': r'%USERPROFILE%\Demo',
+        'plugin': {
+          'id': 'demo.plugin',
+          'version': '2.3.4',
+          'source': 'packaged',
+          'enabled': true,
+        },
+      });
+    });
+
+    test('קריסה מהפעלה קודמת: בלי הקשר החלון הנוכחי', () async {
+      final diagnostics = await AppReportCollector(
+        redactor: redactor,
+        appInfoLoader: () async => {},
+        includeCurrentContext: false,
+        clock: () => now,
+      ).collectDiagnostics();
+      expect(diagnostics.containsKey('context'), isFalse);
+    });
+
+    test('כרטיסיית חיפוש: השאילתה לא נכנסת לכותרת', () {
+      final tab = SearchingTab(
+        SearchingTab.titleForQuery('שאילתה פרטית'),
+        null,
+      );
+      addTearDown(tab.dispose);
+      final context = describeAppContext(
+        screen: Screen.search,
+        tabs: TabsState(tabs: [tab], currentTabIndex: 0),
+        pluginState: const PluginSystemLoaded([]),
+      );
+      expect(context['currentTab'], 'SearchingTab');
+      expect(context['currentTitle'], isNull);
+    });
   });
 }
