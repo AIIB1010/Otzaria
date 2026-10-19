@@ -171,14 +171,12 @@ dependency_overrides:
       url: https://github.com/palmoni5/dart_pdf
       ref: f5efa21c2237002280f1ba056971ec1bf1e8cfd7
       path: printing
-  # TODO: google/flutter.widgets בארכיון ואין לאן להחזיר את התיקונים; הדרך לטווח
-  # ארוך היא מעבר ל-super_sliver_list. בפורק: קפיצה אחרי שינוי רוחב (#1542),
-  # cacheExtentScreens, דילוג על עדכוני מיקום זהים ו-jumpToDistantItems
-  # (Otzaria/flutter.widgets#1).
+  # הפורק מתוחזק אצלנו; google/flutter.widgets לא פעיל מאז 12/2023. בפורק: קפיצה
+  # אחרי שינוי רוחב (#1542), cacheExtentScreens, דילוג על עדכוני מיקום זהים, jumpToDistantItems.
   scrollable_positioned_list:
     git:
       url: https://github.com/Otzaria/flutter.widgets
-      ref: a1ab0aff3c8c0d8f45b67186cfa51cc70ff97898
+      ref: 19113e3925833d68d076ffd2c0c4f85b89a50c82
       path: packages/scrollable_positioned_list
   matcher: ^0.12.20
   analyzer: ^14.5.0
