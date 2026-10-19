@@ -1002,10 +1002,17 @@ class MainWindowScreenState extends State<MainWindowScreen>
     await startupRecoveryVerified;
     if (!mounted) return;
     final bloc = context.read<LibraryUpdateBloc>();
-    _startupFullReindexPending =
+    final autoIndexingFollows =
         indexingFollowsUpdate &&
-        context.read<SettingsBloc>().state.indexUpdateMode.isAutomatic &&
+        context.read<SettingsBloc>().state.indexUpdateMode.isAutomatic;
+    _startupFullReindexPending =
+        autoIndexingFollows &&
         await _indexingRepository.requiresManualReindex(library);
+    // בלי הדגל החיפוש לא מזהיר שספרים חסרים עד שהאינדוקס יתחיל אחרי העדכון.
+    TantivyDataProvider.instance.isIndexingDeferred.value =
+        _startupFullReindexPending ||
+        (autoIndexingFollows &&
+            await _indexingRepository.hasUnindexedBooks(library));
     if (!mounted) return;
     final refresh = _startupRefreshWait.begin();
     try {
@@ -1065,6 +1072,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
         },
       );
     } finally {
+      TantivyDataProvider.instance.isIndexingDeferred.value = false;
       if (tourActive) {
         _startupWorkGate.releaseDeferredWork();
         _tryStartDeferredStartupWork();
