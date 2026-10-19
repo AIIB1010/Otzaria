@@ -299,7 +299,6 @@ class NotificationService {
 
   /// מועד ההצגה בפועל: זמן התזכורת, ואם חלון התזכורת כבר התחיל — זמן האירוע
   /// עצמו (דילוג שקט נתפס אצל משתמשים כ"התראות לא עובדות"). null = אין מה לתזמן.
-  @visibleForTesting
   static DateTime? resolveScheduleTime({
     required DateTime eventDate,
     required int reminderMinutes,
