@@ -858,6 +858,7 @@ class PluginExtendedValidator {
   };
   static const String _contextMenuActionMinVersion = '0.9.97';
   static const String _searchSubmitRoutingMinVersion = '0.9.97';
+  static const String _boundToolbarOpenPluginMinVersion = '0.9.99';
   static const String _externalEditionsMinVersion = '0.9.97';
   static const String _libraryBooksMinVersion = '0.9.98';
   static const String _storageReferenceMinVersion = '0.9.98';
@@ -1593,6 +1594,25 @@ class PluginExtendedValidator {
         .where(DeclarativeToolbarTemplateCompiler.isDeclarative)
         .toList();
     if (declarativeToolbarItems.isNotEmpty) {
+      if (declarativeToolbarItems.any(
+        (item) => item.containsKey('openPlugin'),
+      )) {
+        try {
+          if (PluginVersionUtils.compareCoreVersions(
+                _boundToolbarOpenPluginMinVersion,
+                manifest.minAppVersion,
+              ) >
+              0) {
+            errors.add(
+              'openPlugin בפקד קשור נתמך החל מגרסה '
+              '$_boundToolbarOpenPluginMinVersion, אך minAppVersion שהוצהר הוא '
+              '${manifest.minAppVersion}. עדכן את minAppVersion',
+            );
+          }
+        } on PluginVersionFormatException {
+          // minAppVersion נבדק ב-PluginManifestValidator.
+        }
+      }
       final usedActionTypes = <String>{
         for (final item in declarativeToolbarItems) ...[
           if (item['action'] case {'type': final String type}) type,
