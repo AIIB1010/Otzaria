@@ -14,6 +14,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/migration/database/daos/database.dart';
 import 'package:otzaria/migration/database/repository/seforim_repository.dart';
 import 'package:otzaria/migration/models/toc_entry.dart';
+import 'package:otzaria/migration/models/category.dart';
+import 'package:otzaria/models/books.dart' as reader;
+import 'package:otzaria/utils/file/toc_parser.dart';
 import 'package:otzaria/migration/sync/file_sync_service.dart';
 import 'package:otzaria/settings/services/custom_folders/custom_folder.dart';
 import 'package:otzaria/utils/file/document_converter.dart';
@@ -256,6 +259,166 @@ void main() {
       expect(await find('פרק א'), hasLength(1)); // הוחלף, לא שוכפל
     },
   );
+
+  Future<int> importExternalText(File file, String content) async {
+    final categoryId = await repository.insertCategory(
+      const Category(title: 'ספרים אישיים'),
+    );
+    final folderCategoryId = await repository.insertCategory(
+      Category(title: 'ספרים', parentId: categoryId, level: 1),
+    );
+    final sourceId = await repository.insertSource(
+      CustomFolderSource.nameForFolder(booksDir.path),
+      -1,
+    );
+    final headings = reader.flattenToc(
+      TocParser.parseEntriesFromContent(content),
+    );
+    final ids = {for (var i = 0; i < headings.length; i++) headings[i]: i + 1};
+    final stat = file.statSync();
+    return repository.insertExternalContentBook(
+      categoryId: folderCategoryId,
+      title: 'ספר אישי',
+      filePath: file.path,
+      fileType: 'txt',
+      fileSize: stat.size,
+      lastModified: stat.modified.millisecondsSinceEpoch,
+      isPersonal: true,
+      sourceId: sourceId,
+      tocEntries: [
+        for (final entry in headings)
+          TocEntry(
+            id: ids[entry]!,
+            bookId: 0,
+            parentId: ids[entry.parent],
+            text: entry.text,
+            level: entry.level,
+            lineIndex: entry.index,
+          ),
+      ],
+    );
+  }
+
+  test('רענון משמר את כל הכותרות שנקלטו בהוספת תיקייה', () async {
+    const content =
+        '<h1>ספר אישי</h1>\n  <h2>פרק עם רווח</h2>\nתוכן\n'
+        '## פרק מרקדאון\n### תת פרק\n<h2 data-toc="none">עיצוב</h2>';
+    final file = File(path.join(booksDir.path, 'ספר אישי.txt'))
+      ..writeAsStringSync(content);
+    final id = await importExternalText(file, content);
+    final before = await repository.getBookToc(id);
+    expect(before.map((e) => e.text), [
+      'ספר אישי',
+      'פרק עם רווח',
+      'פרק מרקדאון',
+      'תת פרק',
+    ]);
+    file.writeAsStringSync('$content\nעוד תוכן');
+    file.setLastModifiedSync(DateTime.now().add(const Duration(minutes: 5)));
+
+    expect((await sync()).errors, isEmpty);
+    final after = await repository.getBookToc(id);
+    expect(
+      after.map((e) => (e.text, e.level, e.lineIndex)),
+      before.map((e) => (e.text, e.level, e.lineIndex)),
+    );
+    final parents = {for (final e in after) e.id: e.text};
+    expect(after.map((e) => parents[e.parentId]), [
+      null,
+      'ספר אישי',
+      'ספר אישי',
+      'פרק מרקדאון',
+    ]);
+    expect((await repository.getAllBooksLean()).single.totalLines, 0);
+    expect(await repository.getLineContents(id), isEmpty);
+    expect(after.map((e) => (e.hasChildren, e.isLastChild)), [
+      (true, true),
+      (false, false),
+      (true, true),
+      (false, true),
+    ]);
+  });
+
+  test(
+    'כשל קריאה זמני מדווח ומשמר ספר חיצוני ותוכן עניינים לניסיון חוזר',
+    () async {
+      const content = '<h1>ספר אישי</h1>\n<h2>פרק א</h2>\nתוכן';
+      final file = File(path.join(booksDir.path, 'ספר אישי.txt'))
+        ..writeAsStringSync(content);
+      final id = await importExternalText(file, content);
+      final before = (await repository.getAllBooksLean()).single;
+      final tocBefore = await repository.getBookToc(id);
+      file.setLastModifiedSync(DateTime.now().add(const Duration(minutes: 5)));
+      try {
+        expect((await Process.run('chmod', ['000', file.path])).exitCode, 0);
+        await expectLater(
+          file.readAsBytes(),
+          throwsA(isA<FileSystemException>()),
+        );
+        final result = await sync();
+        expect(result.errors, hasLength(1));
+        final after = (await repository.getAllBooksLean()).single;
+        expect(after.id, id);
+        expect(after.lastModified, before.lastModified);
+        expect(
+          (await repository.getBookToc(id)).map((e) => (e.id, e.text)),
+          tocBefore.map((e) => (e.id, e.text)),
+        );
+      } finally {
+        await Process.run('chmod', ['600', file.path]);
+      }
+      file.writeAsStringSync('$content\n<h2>פרק ב</h2>');
+      expect((await sync()).errors, isEmpty);
+      expect((await repository.getAllBooksLean()).single.id, id);
+      expect((await repository.getBookToc(id)).map((e) => e.text), [
+        'ספר אישי',
+        'פרק א',
+        'פרק ב',
+      ]);
+    },
+    skip: Platform.isWindows,
+  );
+
+  test('מעבר בין קריאה מהקובץ לשמירה במסד משמר זהות ותוכן עניינים', () async {
+    final file = File(path.join(booksDir.path, 'ספר אישי.txt'))
+      ..writeAsStringSync('<h1>ספר אישי</h1>\n<h2>פרק א</h2>\nתוכן');
+    expect((await sync()).errors, isEmpty);
+    final id = (await repository.getAllBooksLean()).single.id;
+    for (final storeLines in [true, false, true]) {
+      folders = [
+        CustomFolder(
+          path: booksDir.path,
+          addToDatabase: storeLines,
+          addedAt: DateTime(2026),
+        ),
+      ];
+      final result = await sync();
+      expect(result.errors, isEmpty);
+      expect(result.updatedBooks, 1);
+      final book = (await repository.getAllBooksLean()).single;
+      expect(book.id, id);
+      expect(book.filePath, storeLines ? isNull : file.path);
+      expect(book.totalLines, storeLines ? 3 : 0);
+      expect(
+        await repository.getLineContents(id),
+        storeLines ? hasLength(3) : isEmpty,
+      );
+      expect((await repository.getBookToc(id)).map((e) => e.text), [
+        'ספר אישי',
+        'פרק א',
+      ]);
+      if (!storeLines) {
+        expect(
+          (await database.database).select('SELECT * FROM line_toc'),
+          isEmpty,
+        );
+        expect(
+          (await database.database).select('SELECT * FROM line_ref'),
+          isEmpty,
+        );
+      }
+    }
+  });
 
   test(
     'רענון אינו פותח PDF — תוכן העניינים שלו נשמר כשהקובץ השתנה (issue #2684)',

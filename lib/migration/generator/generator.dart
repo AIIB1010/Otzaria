@@ -6,6 +6,8 @@ import 'package:logging/logging.dart';
 import 'package:path/path.dart' as path;
 import 'package:pdfrx/pdfrx.dart';
 
+import 'package:otzaria/models/books.dart' show flattenToc;
+
 import '../models/book.dart';
 import '../models/category.dart';
 import '../models/line.dart';
@@ -18,7 +20,7 @@ import 'package:otzaria/utils/file/document_converter.dart';
 import 'package:otzaria/utils/file/document_format.dart';
 import 'package:otzaria/utils/file/text_encoding.dart';
 import 'package:otzaria/utils/file/toc_parser.dart'
-    show isTocExcludedHeadingLine;
+    show TocParser, isTocExcludedHeadingLine;
 
 /// DatabaseGenerator is responsible for generating the Otzaria database from source files.
 /// It processes directories, books, and links to create a structured database.
@@ -248,9 +250,8 @@ class DatabaseGenerator {
       // וחייב לשמור אותו כדי שאפשר יהיה להמיר בזמן קריאה.
       final storesLinesInDb = format?.canStoreLinesInDb ?? false;
       final targetFilePath = storesLinesInDb && insertContent ? null : bookPath;
-      // file-backed: רק ספר טקסטואלי עובר עיבוד (תוכן עניינים, issue #2684).
-      // PDF לא נפתח כאן — הסנכרון רץ ב-isolate נפרד, ו-PDFium גלובלי לתהליך
-      // (ראו `_isolatePdfiumForThisWindow`); ה-outline נקרא בהוספת התיקייה.
+      // PDFium גלובלי לתהליך: אין לפתוח PDF ב-isolate של הסנכרון.
+      // ה-outline שלו נקרא בהוספת התיקייה.
       final processContent = insertContent || (format?.isTextual ?? false);
 
       // Check for duplicates in the same category with the same file type (for performance measurement)
@@ -258,14 +259,15 @@ class DatabaseGenerator {
           .checkBookExistsInCategoryWithFileType(title, categoryId, fileType);
       if (existingBook != null) {
         if ((format?.isProductionSupported ?? false) && processContent) {
-          await repository.clearBookContent(existingBook.id);
-          // כשל כאן משאיר את הספר בלי תוכן, אך גם בלי לעדכן את חותמת הקובץ
-          // (`updateBookStorage` שלמטה) — ולכן הסריקה הבאה תנסה שוב במקום
-          // לדלג עליו כ"לא השתנה".
+          if (insertContent) {
+            await repository.clearBookContent(existingBook.id);
+          }
           try {
             await processBookContent(bookPath, existingBook.id, insertContent);
           } catch (_) {
-            await repository.clearBookContent(existingBook.id);
+            if (insertContent) {
+              await repository.clearBookContent(existingBook.id);
+            }
             rethrow;
           }
           // Keep file stats and storage location in sync. If insertContent is true and it's a txt file, filePath becomes null.
@@ -403,7 +405,7 @@ class DatabaseGenerator {
   ///
   /// [bookPath] The path to the book file
   /// [bookId] The ID of the book in the database
-  /// [storeLines] false: ספר file-backed — נשמר רק תוכן העניינים (issue #2684).
+  /// [storeLines] בספר חיצוני נשמר רק תוכן העניינים.
   Future<void> processBookContent(
     String bookPath,
     int bookId, [
@@ -434,11 +436,31 @@ class DatabaseGenerator {
         : _bookContentCache[_toLibraryRelativeKey(bookPath)] ??
               await readBookLines(bookPath);
 
-    await processLinesWithTocEntries(bookId, lines, storeLines: storeLines);
-    await repository.updateBookTotalLines(
-      bookId,
-      storeLines ? lines.length : 0,
-    );
+    if (!storeLines) {
+      final roots = TocParser.parseEntriesFromContent(lines.join('\n'));
+      final headings = flattenToc(roots);
+      final ids = {
+        for (var i = 0; i < headings.length; i++) headings[i]: i + 1,
+      };
+      await repository.clearBookContent(bookId);
+      await repository.replaceExternalBookToc(bookId, [
+        for (final entry in headings)
+          TocEntry(
+            id: ids[entry]!,
+            bookId: bookId,
+            parentId: ids[entry.parent],
+            text: entry.text,
+            level: entry.level,
+            lineIndex: entry.index,
+            hasChildren: entry.children.isNotEmpty,
+            isLastChild: (entry.parent?.children ?? roots).last == entry,
+          ),
+      ]);
+      return;
+    }
+
+    await processLinesWithTocEntries(bookId, lines);
+    await repository.updateBookTotalLines(bookId, lines.length);
   }
 
   /// Processes PDF outline and inserts TOC entries into the database.
@@ -534,9 +556,8 @@ class DatabaseGenerator {
 
   Future<void> processLinesWithTocEntries(
     int bookId,
-    List<String> lines, {
-    bool storeLines = true,
-  }) async {
+    List<String> lines,
+  ) async {
     // Collect all TOC entry metadata in a single pass.
     // We use the entry's position in allTocEntries as its local ID.
     final allTocEntries = <TocEntryData>[];
@@ -611,7 +632,6 @@ class DatabaseGenerator {
             : currentReference.join(', ').trim();
         if (cachedHeRef != null && cachedHeRef.isEmpty) cachedHeRef = null;
       }
-      if (!storeLines) continue;
 
       linesBatch.add(
         Line(
