@@ -173,6 +173,8 @@ class PluginInstallerService {
     PluginManifest manifest, {
     required bool allowOrderBeforeBuiltInsGranted,
     required Map<String, bool> grantedPermissions,
+    InstalledPlugin? expectedPlugin,
+    Map<String, bool> expectedPermissions = const {},
   }) async {
     final tempDir = Directory(tempDirPath);
     Directory? stagedInstallDir;
@@ -193,7 +195,8 @@ class PluginInstallerService {
           'Permission decisions must exactly match manifest permissions',
         );
       }
-      final existingPlugin = await _repository.getPlugin(manifest.id);
+      final existingPlugin =
+          expectedPlugin ?? await _repository.getPlugin(manifest.id);
 
       final canonicalPath = await AppPaths.getPluginInstallPath(manifest.id);
       final installParent = Directory(p.dirname(canonicalPath));
@@ -227,10 +230,19 @@ class PluginInstallerService {
         userOrder: newUserOrder,
       );
 
-      await _repository.savePluginWithPermissions(
-        plugin,
-        Map.unmodifiable(grantedPermissions),
-      );
+      if (expectedPlugin == null) {
+        await _repository.savePluginWithPermissions(
+          plugin,
+          Map.unmodifiable(grantedPermissions),
+        );
+      } else {
+        await _repository.upgradePluginWithPermissions(
+          plugin,
+          Map.unmodifiable(grantedPermissions),
+          expectedPlugin,
+          expectedPermissions,
+        );
+      }
       installCommitted = true;
 
       final pluginInstallRoot = p.dirname(canonicalPath);

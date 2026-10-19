@@ -217,6 +217,8 @@ class PluginSystemBloc extends Bloc<PluginSystemEvent, PluginSystemState> {
     SeedBundledPlugins event,
     Emitter<PluginSystemState> emit,
   ) async {
+    // פר-מחשב: חלון משני היה מתקין במקביל לראשי לאותה תיקייה ו-DB.
+    if (WindowRole.isSecondary) return;
     await PluginSafeMode.ready;
     if (PluginSafeMode.isActive) return;
     try {

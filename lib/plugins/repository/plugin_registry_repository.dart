@@ -96,6 +96,19 @@ class PluginRegistryRepository {
     );
   }
 
+  /// שדרוג אוטומטי מתחייב רק אם ההתקנה והחלטות המשתמש עדיין תואמות להכנה.
+  Future<void> upgradePluginWithPermissions(
+    InstalledPlugin plugin,
+    Map<String, bool> permissions,
+    InstalledPlugin expectedPlugin,
+    Map<String, bool> expectedPermissions,
+  ) => _db.insertOrUpdatePluginWithPermissions(
+    plugin,
+    permissions,
+    expectedPlugin: expectedPlugin,
+    expectedPermissions: expectedPermissions,
+  );
+
   Future<void> deletePlugin(String pluginId) async {
     final plugin = await getPlugin(pluginId);
     if (plugin != null && plugin.isDevelopment) {

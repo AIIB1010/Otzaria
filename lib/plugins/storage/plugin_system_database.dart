@@ -178,21 +178,54 @@ class PluginSystemDatabase {
 
   Future<void> insertOrUpdatePluginWithPermissions(
     InstalledPlugin plugin,
-    Map<String, bool> permissions,
-  ) async {
+    Map<String, bool> permissions, {
+    InstalledPlugin? expectedPlugin,
+    Map<String, bool> expectedPermissions = const {},
+  }) async {
     final db = await database;
-    applyPluginInstall(db, plugin, permissions);
+    applyPluginInstall(
+      db,
+      plugin,
+      permissions,
+      expectedPlugin: expectedPlugin,
+      expectedPermissions: expectedPermissions,
+    );
   }
 
   @visibleForTesting
   static void applyPluginInstall(
     Database db,
     InstalledPlugin plugin,
-    Map<String, bool> permissions,
-  ) {
+    Map<String, bool> permissions, {
+    InstalledPlugin? expectedPlugin,
+    Map<String, bool> expectedPermissions = const {},
+  }) {
     const savepoint = 'sp_plugin_install';
     db.execute('SAVEPOINT $savepoint');
     try {
+      // הבדיקה והכתיבה באותה טרנזקציה: הסרה או החלטת משתמש מבטלות שדרוג אוטומטי.
+      if (expectedPlugin != null) {
+        final rows = db.select(
+          'SELECT * FROM plugin_installation WHERE plugin_id = ?',
+          [plugin.pluginId],
+        );
+        final grants = {
+          for (final row in db.select(
+            'SELECT permission, granted FROM plugin_permission_grant WHERE plugin_id = ?',
+            [plugin.pluginId],
+          ))
+            if (expectedPlugin.manifest.permissions.contains(row['permission']))
+              row['permission'] as String: row['granted'] == 1,
+        };
+        if (rows.isEmpty ||
+            !mapEquals(
+              InstalledPlugin.fromDbMap(rows.single).toDbMap(),
+              expectedPlugin.toDbMap(),
+            ) ||
+            !mapEquals(grants, expectedPermissions)) {
+          throw StateError('Plugin changed during bundled upgrade');
+        }
+      }
       _insertOrUpdatePlugin(db, plugin);
       db.execute(
         'DELETE FROM plugin_permission_grant WHERE plugin_id = ? '

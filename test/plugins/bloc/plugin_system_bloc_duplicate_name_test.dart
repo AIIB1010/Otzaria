@@ -55,6 +55,8 @@ class _StubInstaller extends PluginInstallerService {
     PluginManifest manifest, {
     required bool allowOrderBeforeBuiltInsGranted,
     required Map<String, bool> grantedPermissions,
+    InstalledPlugin? expectedPlugin,
+    Map<String, bool> expectedPermissions = const {},
   }) async {}
 }
 

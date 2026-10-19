@@ -50,6 +50,8 @@ class _FakeInstallerService extends PluginInstallerService {
     dynamic manifest, {
     required bool allowOrderBeforeBuiltInsGranted,
     required Map<String, bool> grantedPermissions,
+    InstalledPlugin? expectedPlugin,
+    Map<String, bool> expectedPermissions = const {},
   }) async {}
 }
 
