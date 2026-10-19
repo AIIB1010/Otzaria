@@ -442,7 +442,6 @@ class DatabaseGenerator {
       final ids = {
         for (var i = 0; i < headings.length; i++) headings[i]: i + 1,
       };
-      await repository.clearBookContent(bookId);
       await repository.replaceExternalBookToc(bookId, [
         for (final entry in headings)
           TocEntry(
