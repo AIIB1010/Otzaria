@@ -36,7 +36,6 @@ import 'package:otzaria/divine_names/models/divine_name_spans.dart';
 import 'package:otzaria/divine_names/repository/divine_names_repository.dart';
 import 'package:otzaria/book_protection/repository/book_protection_repository.dart';
 import 'package:otzaria/printing/commentary_print_limit.dart';
-import 'package:otzaria/printing/print_work_status.dart';
 import 'package:otzaria/printing/safer_print_service.dart';
 import 'package:otzaria/printing/view/slow_preview_hint.dart';
 import 'package:otzaria/printing/word_export_service.dart';
@@ -56,8 +55,6 @@ import 'package:otzaria/data/data_providers/file_system_data_provider.dart';
 import 'package:otzaria/printing/view/widgets/printing_widgets.dart';
 import 'package:otzaria/data/repository/text_book_repository.dart';
 import 'package:otzaria/text_display/text_display_exports.dart';
-import 'package:otzaria/work_status/work_status_cubit.dart';
-import 'package:provider/provider.dart';
 
 enum _AnchorKind { header, altHeader, line }
 
@@ -226,7 +223,8 @@ class _PrintingScreenState extends State<PrintingScreen> {
   bool _isLoadingNotes = false;
 
   /// עבודת הדפסה בתהליך: ציור והעברה למדפסת יכולים לקחת דקות.
-  bool _isPrinting = false;
+  String? _printProgress;
+  bool get _isPrinting => _printProgress != null;
   Timer? _previewRefreshTimer;
 
   // נקודות הקצה של טווח ההדפסה — כל אחת עצמאית בסוגה (כותרת/כותרת משנה/שורה).
@@ -1696,13 +1694,7 @@ class _PrintingScreenState extends State<PrintingScreen> {
     switch (_destination) {
       case _PrintDestination.printer:
         if (_isPrinting) return;
-        setState(() => _isPrinting = true);
-        final workStatus = Provider.of<WorkStatusCubit?>(
-          context,
-          listen: false,
-        );
-        // מהמסירה ואילך המסך סגור: רק [job] והקריאות הסטטיות.
-        PrintWorkStatus? job;
+        setState(() => _printProgress = PdfMessages.printPreparing);
         var layoutFailed = false;
         final bool printed;
         try {
@@ -1719,21 +1711,14 @@ class _PrintingScreenState extends State<PrintingScreen> {
               }
             },
             format: format,
-            onSpooling: (printerName) {
-              job = PrintWorkStatus.start(
-                workStatus,
-                documentName: widget.bookId,
-                printerName: printerName,
-              );
-              if (context.mounted) Navigator.of(context).pop(true);
+            onSpooling: (_) {
+              if (mounted) {
+                setState(() => _printProgress = PdfMessages.printSending);
+              }
             },
           );
         } catch (e, stack) {
-          if (job != null) {
-            job!.fail(e, stack);
-            return;
-          }
-          if (mounted) setState(() => _isPrinting = false);
+          if (mounted) setState(() => _printProgress = null);
           UiSnack.showError(PdfMessages.printError);
           // כשל ב-onLayout כבר דווח על ידי printing, עם החריגה המקורית.
           if (!layoutFailed) {
@@ -1747,11 +1732,7 @@ class _PrintingScreenState extends State<PrintingScreen> {
           }
           return;
         }
-        if (job != null) {
-          job!.complete(printed);
-          return;
-        }
-        if (mounted) setState(() => _isPrinting = false);
+        if (mounted) setState(() => _printProgress = null);
         if (printed) UiSnack.show(PdfMessages.printSent);
         if (printed && context.mounted) {
           Navigator.of(context).pop(true);
@@ -2535,14 +2516,17 @@ class _PrintingScreenState extends State<PrintingScreen> {
     );
     // הקוראים פותחים עם barrierDismissible: false — לחיצה בחוץ לא סוגרת, ESC כן.
     // ה-Focus מחזיק פוקוס בדיאלוג כדי שה-DismissIntent הגלובלי יגיע לכאן.
-    return Actions(
-      actions: {
-        DismissIntent: CallbackAction<DismissIntent>(
-          onInvoke: (_) =>
-              _isPrinting ? null : Navigator.of(context).maybePop(),
-        ),
-      },
-      child: Focus(autofocus: true, skipTraversal: true, child: dialog),
+    return PopScope(
+      canPop: !_isPrinting,
+      child: Actions(
+        actions: {
+          DismissIntent: CallbackAction<DismissIntent>(
+            onInvoke: (_) =>
+                _isPrinting ? null : Navigator.of(context).maybePop(),
+          ),
+        },
+        child: Focus(autofocus: true, skipTraversal: true, child: dialog),
+      ),
     );
   }
 
@@ -2562,8 +2546,8 @@ class _PrintingScreenState extends State<PrintingScreen> {
           const SizedBox(width: 8),
           Expanded(
             child: _isPrinting
-                ? const ActionButton.recommended(
-                    text: PdfMessages.printPreparing,
+                ? ActionButton.recommended(
+                    text: _printProgress!,
                     iconWidget: SizedBox.square(
                       dimension: 16,
                       child: CircularProgressIndicator(strokeWidth: 2),

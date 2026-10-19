@@ -17,7 +17,6 @@ import 'package:otzaria/settings/engine/settings_event.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
 import 'package:otzaria/settings/engine/settings_state.dart';
 import 'package:otzaria/work_status/work_status_cubit.dart';
-import 'package:otzaria/work_status/work_status_item.dart';
 import 'package:pdf/pdf.dart' hide PdfDocument;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdfrx/pdfrx.dart';
@@ -38,6 +37,7 @@ class _FakeSettingsRepository extends Fake implements SettingsRepository {
 /// עבודת הדפסה שהבדיקה מסיימת בעצמה, כמו spooler איטי.
 class _PendingPrintingPlatform extends PrintingPlatform {
   Completer<bool>? job;
+  LayoutCallback? layout;
 
   /// כמו ה-plugin: מבקש את ה-PDF, וכשל ב-onLayout מסיים את העבודה בשגיאה.
   bool requestLayout = false;
@@ -54,6 +54,7 @@ class _PendingPrintingPlatform extends PrintingPlatform {
     bool forceCustomPrintPaper,
     bool windowsModernDialog,
   ) async {
+    layout = onLayout;
     final pending = job = Completer<bool>();
     if (requestLayout) {
       try {
@@ -84,6 +85,7 @@ void main() {
   late Directory tempDir;
   late WorkStatusCubit workStatus;
   var layoutFails = false;
+  bool? routeResult;
 
   setUpAll(() async {
     await Settings.init(cacheProvider: MemorySettingsCache());
@@ -109,8 +111,11 @@ void main() {
     addTearDown(tester.view.reset);
 
     layoutFails = false;
+    routeResult = null;
     workStatus = WorkStatusCubit();
-    addTearDown(workStatus.close);
+    addTearDown(() async {
+      if (!workStatus.isClosed) await workStatus.close();
+    });
     final platform = _PendingPrintingPlatform();
     PrintingPlatform.instance = platform;
     final settingsBloc = _MockSettingsBloc();
@@ -146,18 +151,20 @@ void main() {
       ),
     );
     unawaited(
-      navigatorKey.currentState!.push(
-        MaterialPageRoute<bool>(
-          builder: (_) => PrintingScreen(
-            data: Future.value(''),
-            bookId: 'test',
-            createPdfOverride: (_) async {
-              if (layoutFails) throw StateError('layout');
-              return source!;
-            },
-          ),
-        ),
-      ),
+      navigatorKey.currentState!
+          .push<bool>(
+            MaterialPageRoute<bool>(
+              builder: (_) => PrintingScreen(
+                data: Future.value(''),
+                bookId: 'test',
+                createPdfOverride: (_) async {
+                  if (layoutFails) throw StateError('layout');
+                  return source!;
+                },
+              ),
+            ),
+          )
+          .then((result) => routeResult = result),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
@@ -212,18 +219,22 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.byType(PrintingScreen), findsOneWidget);
+    await navigatorKey.currentState!.maybePop();
+    await tester.pump();
+    expect(find.byType(PrintingScreen), findsOneWidget);
 
     platform.job!.complete(true);
     await tester.pump();
     await pumpFrames(tester);
 
     expect(find.text(PdfMessages.printSent), findsOneWidget);
+    expect(routeResult, isTrue);
     expect(find.byType(PrintingScreen), findsNothing);
     expect(workStatus.state.items, isEmpty);
     await closeScreen(tester);
   });
 
-  testWidgets('אחרי מסירת ה-PDF המסך נסגר וההדפסה ממשיכה בחיווי העבודה', (
+  testWidgets('אחרי המסירה המסך ממתין לתוצאה האמיתית והממשק ממשיך להגיב', (
     tester,
   ) async {
     final platform = await openScreen(tester);
@@ -233,13 +244,16 @@ void main() {
     await tester.pump();
     await pumpFrames(tester);
 
-    expect(find.byType(PrintingScreen), findsNothing);
+    expect(find.byType(PrintingScreen), findsOneWidget);
     expect(PrintWorkStatus.hasActiveJobs, isTrue);
-    final item = workStatus.state.items.values.single;
-    expect(item.kind, WorkStatusKind.running);
-    expect(item.progress, isNull);
-    expect(item.message, PdfMessages.printSpooling);
+    expect(find.text(PdfMessages.printSending), findsOneWidget);
+    expect(routeResult, isNull);
+    expect(workStatus.state.items, isEmpty);
     expect(find.text(PdfMessages.printSent), findsNothing);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await navigatorKey.currentState!.maybePop();
+    await tester.pump();
+    expect(find.byType(PrintingScreen), findsOneWidget);
 
     platform.job!.complete(true);
     await tester.pump();
@@ -261,7 +275,7 @@ void main() {
 
     expect(find.byType(PrintingScreen), findsOneWidget);
     expect(find.text(PdfMessages.printPreparing), findsOneWidget);
-    expect(PrintWorkStatus.hasActiveJobs, isFalse);
+    expect(PrintWorkStatus.hasActiveJobs, isTrue);
     expect(workStatus.state.items, isEmpty);
 
     platform.job!.complete(true);
@@ -273,7 +287,7 @@ void main() {
     await closeScreen(tester);
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
-  testWidgets('כשל אחרי המסירה מוצג בחיווי העבודה ובהודעה אחת', (
+  testWidgets('כשל אחרי המסירה מחזיר את המסך לפעולה ומדווח פעם אחת', (
     tester,
   ) async {
     final platform = await openScreen(tester);
@@ -288,12 +302,11 @@ void main() {
 
     expect(tester.takeException(), isA<StateError>());
     expect(PrintWorkStatus.hasActiveJobs, isFalse);
-    final item = workStatus.state.items.values.single;
-    expect(item.kind, WorkStatusKind.failed);
-    expect(item.autoDismissAfter, kPrintFailureAutoDismiss);
-    expect(find.text(PdfMessages.printError), findsOneWidget);
-    await tester.pump(kPrintFailureAutoDismiss);
     expect(workStatus.state.items, isEmpty);
+    expect(find.byType(PrintingScreen), findsOneWidget);
+    expect(find.text('הדפסה'), findsOneWidget);
+    expect(routeResult, isNull);
+    expect(find.text(PdfMessages.printError), findsOneWidget);
     await closeScreen(tester);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
@@ -349,25 +362,73 @@ void main() {
     await closeScreen(tester);
   });
 
-  testWidgets('"מכין…" נכנס בשורה אחת בכפתור של פאנל ההגדרות', (tester) async {
-    await openScreen(tester);
-
+  testWidgets('ביטול שמירה בשם אחרי המסירה אינו מחזיר הצלחה לתוסף', (
+    tester,
+  ) async {
+    final platform = await openScreen(tester);
+    platform.requestLayout = true;
     await tester.tap(find.text('הדפסה'));
     await tester.pump();
-
-    final label = tester.renderObject<RenderParagraph>(
-      find.text(PdfMessages.printPreparing),
-    );
-    final lineTops = label
-        .getBoxesForSelection(
-          const TextSelection(
-            baseOffset: 0,
-            extentOffset: PdfMessages.printPreparing.length,
-          ),
-        )
-        .map((box) => box.top)
-        .toSet();
-    expect(lineTops, hasLength(1));
+    expect(routeResult, isNull);
+    platform.job!.complete(false);
+    await tester.pump();
+    await pumpFrames(tester);
+    expect(find.byType(PrintingScreen), findsOneWidget);
+    expect(routeResult, isNull);
+    expect(PrintWorkStatus.hasActiveJobs, isFalse);
+    expect(find.text(PdfMessages.printSent), findsNothing);
+    await tester.tap(find.text('ביטול'));
+    await tester.pumpAndSettle();
+    expect(routeResult ?? false, isFalse);
     await closeScreen(tester);
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  for (final fail in [false, true]) {
+    testWidgets('תוצאת הדפסה מגיעה גם אחרי פירוק המסך וה-cubit ($fail)', (
+      tester,
+    ) async {
+      final platform = await openScreen(tester);
+      await tester.tap(find.text('הדפסה'));
+      await tester.pump();
+      await tester.pumpWidget(const SizedBox());
+      await workStatus.close();
+      await platform.layout!(PdfPageFormat.a5);
+      expect(PrintWorkStatus.hasActiveJobs, isTrue);
+      if (fail) {
+        platform.job!.completeError(StateError('spooler'));
+      } else {
+        platform.job!.complete(true);
+      }
+      await tester.pump();
+      await tester.pump();
+      if (fail) expect(tester.takeException(), isA<StateError>());
+      expect(tester.takeException(), isNull);
+      expect(PrintWorkStatus.hasActiveJobs, isFalse);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+  }
+
+  for (final spooling in [false, true]) {
+    testWidgets('תווית ההדפסה נכנסת בשורה אחת (מסירה: $spooling)', (
+      tester,
+    ) async {
+      final platform = await openScreen(tester);
+      platform.requestLayout = spooling;
+      await tester.tap(find.text('הדפסה'));
+      await tester.pump();
+      final text = spooling
+          ? PdfMessages.printSending
+          : PdfMessages.printPreparing;
+      final label = tester.renderObject<RenderParagraph>(find.text(text));
+      final lineTops = label
+          .getBoxesForSelection(
+            TextSelection(baseOffset: 0, extentOffset: text.length),
+          )
+          .map((box) => box.top)
+          .toSet();
+      expect(lineTops, hasLength(1));
+      platform.job!.complete(false);
+      await tester.pump();
+      await closeScreen(tester);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+  }
 }

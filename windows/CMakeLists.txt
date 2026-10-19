@@ -57,8 +57,7 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 add_subdirectory("runner")
 
 
-# printing defaults to an old PDFium; keep it on the same current build as
-# pdfium_dart (pdfrx). A test checks they match.
+# Keep printing on a recent PDFium build; its private DLL is independent of pdfrx.
 set(PDFIUM_VERSION "7811" CACHE STRING "Version of pdfium used" FORCE)
 
 # Generated plugin build rules, which manage building the plugins and adding

@@ -1,67 +1,42 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/messages/pdf_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/printing/print_work_status.dart';
-import 'package:otzaria/work_status/work_status_cubit.dart';
-import 'package:otzaria/work_status/work_status_item.dart';
 
 void main() {
   group('PrintWorkStatus', () {
-    test('כל עבודה מקבלת פריט משלה, והספירה יורדת בסיום', () {
-      final cubit = WorkStatusCubit();
-      addTearDown(cubit.close);
-
-      final first = PrintWorkStatus.start(cubit, documentName: 'א');
-      final second = PrintWorkStatus.start(
-        cubit,
-        documentName: 'ב',
-        printerName: 'HP',
-      );
-
-      expect(first.id, isNot(second.id));
+    test('עבודות מקבילות נספרות עד שכל אחת מסתיימת', () async {
+      final first = Completer<bool>();
+      final second = Completer<bool>();
+      final printingFirst = PrintWorkStatus.track(() => first.future);
+      final printingSecond = PrintWorkStatus.track(() => second.future);
       expect(PrintWorkStatus.hasActiveJobs, isTrue);
-      expect(cubit.state.items[first.id]!.message, PdfMessages.printSpooling);
-      expect(
-        cubit.state.items[second.id]!.message,
-        PdfMessages.printSpoolingTo('HP'),
-      );
-
       first.complete(false);
-      expect(cubit.state.items.keys, [second.id]);
+      expect(await printingFirst, isFalse);
       expect(PrintWorkStatus.hasActiveJobs, isTrue);
-
-      second.complete(false);
-      second.complete(false);
-      expect(cubit.state.items, isEmpty);
+      second.complete(true);
+      expect(await printingSecond, isTrue);
       expect(PrintWorkStatus.hasActiveJobs, isFalse);
     });
 
-    test('בלי חיווי עבודה בעץ הספירה עדיין נשמרת', () {
-      final job = PrintWorkStatus.start(null, documentName: 'א');
-      expect(PrintWorkStatus.hasActiveJobs, isTrue);
-      job.complete(false);
-      expect(PrintWorkStatus.hasActiveJobs, isFalse);
-    });
-
-    testWidgets('כשל משאיר פריט כשל שיורד מעצמו', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(navigatorKey: navigatorKey, home: const SizedBox()),
+    test('כשל משחרר את המעקב ומעביר את החריגה המקורית', () async {
+      final error = StateError('spooler');
+      await expectLater(
+        PrintWorkStatus.track(() => Future.error(error)),
+        throwsA(same(error)),
       );
-      final cubit = WorkStatusCubit();
-      addTearDown(cubit.close);
-      final job = PrintWorkStatus.start(cubit, documentName: 'א');
-
-      job.fail(StateError('spooler'), StackTrace.current);
-      expect(tester.takeException(), isA<StateError>());
-
-      final item = cubit.state.items[job.id]!;
-      expect(item.kind, WorkStatusKind.failed);
       expect(PrintWorkStatus.hasActiveJobs, isFalse);
-      await tester.pump(kPrintFailureAutoDismiss);
-      expect(cubit.state.items, isEmpty);
-      // מעבר לזמן התצוגה של UiSnack.
-      await tester.pump(const Duration(seconds: 7));
+    });
+
+    test('גם כשל סינכרוני משחרר את המעקב', () async {
+      await expectLater(
+        PrintWorkStatus.track(() => throw StateError('driver')),
+        throwsStateError,
+      );
+      expect(PrintWorkStatus.hasActiveJobs, isFalse);
     });
   });
 
@@ -81,18 +56,23 @@ void main() {
         tester,
       ) async {
         await pumpApp(tester);
-        final job = PrintWorkStatus.start(null, documentName: 'א');
-        addTearDown(() => job.complete(false));
-
-        final result = confirmCloseWhilePrinting();
-        await tester.pumpAndSettle();
-        expect(find.text(PdfMessages.closeWhilePrinting), findsOneWidget);
-
-        await tester.tap(
-          find.text(confirm ? PdfMessages.closeWhilePrintingConfirm : 'ביטול'),
-        );
-        await tester.pumpAndSettle();
-        expect(await result, confirm);
+        final job = Completer<bool>();
+        final printing = PrintWorkStatus.track(() => job.future);
+        try {
+          final result = confirmCloseWhilePrinting();
+          await tester.pumpAndSettle();
+          expect(find.text(PdfMessages.closeWhilePrinting), findsOneWidget);
+          await tester.tap(
+            find.text(
+              confirm ? PdfMessages.closeWhilePrintingConfirm : 'ביטול',
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(await result, confirm);
+        } finally {
+          job.complete(false);
+          await printing;
+        }
       });
     }
   });

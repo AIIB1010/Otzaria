@@ -7,6 +7,7 @@ import 'package:printing/printing.dart';
 import 'package:otzaria/core/messages/pdf_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/printing/safer_printer_filter.dart';
+import 'package:otzaria/printing/print_work_status.dart';
 import 'package:otzaria/printing/windows_printer_ports.dart';
 import 'package:otzaria/settings/services/safer_mode_guard.dart';
 import 'package:otzaria/widgets/dialogs/dialogs_exports.dart';
@@ -49,12 +50,14 @@ Future<bool> printPdfWithSaferMode({
   final effectiveContext = context ?? navigatorKey.currentContext;
   if (effectiveContext == null ||
       !shouldRequireSaferModePassword(effectiveContext)) {
-    return Printing.layoutPdf(
-      onLayout: reportSpooling(null),
-      name: name,
-      format: format,
-      dynamicLayout: dynamicLayout,
-      usePrinterSettings: usePrinterSettings,
+    return PrintWorkStatus.track(
+      () => Printing.layoutPdf(
+        onLayout: reportSpooling(null),
+        name: name,
+        format: format,
+        dynamicLayout: dynamicLayout,
+        usePrinterSettings: usePrinterSettings,
+      ),
     );
   }
 
@@ -73,12 +76,14 @@ Future<bool> printPdfWithSaferMode({
     );
     if (useSystemDialog != true || !effectiveContext.mounted) return false;
     if (!await verifySaferModePassword(effectiveContext)) return false;
-    return Printing.layoutPdf(
-      onLayout: reportSpooling(null),
-      name: name,
-      format: format,
-      dynamicLayout: dynamicLayout,
-      usePrinterSettings: usePrinterSettings,
+    return PrintWorkStatus.track(
+      () => Printing.layoutPdf(
+        onLayout: reportSpooling(null),
+        name: name,
+        format: format,
+        dynamicLayout: dynamicLayout,
+        usePrinterSettings: usePrinterSettings,
+      ),
     );
   }
 
@@ -100,13 +105,15 @@ Future<bool> printPdfWithSaferMode({
   final selected = printer;
 
   UiSnack.show(PdfMessages.saferDirectPrint(selected.name));
-  final printed = await Printing.directPrintPdf(
-    printer: selected,
-    onLayout: reportSpooling(selected.name),
-    name: name,
-    format: format,
-    dynamicLayout: dynamicLayout,
-    usePrinterSettings: usePrinterSettings,
+  final printed = await PrintWorkStatus.track(
+    () => Printing.directPrintPdf(
+      printer: selected,
+      onLayout: reportSpooling(selected.name),
+      name: name,
+      format: format,
+      dynamicLayout: dynamicLayout,
+      usePrinterSettings: usePrinterSettings,
+    ),
   );
   if (!printed) UiSnack.showError(PdfMessages.printFailed(selected.name));
   return printed;
