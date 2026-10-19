@@ -425,12 +425,9 @@ Future<void> performLibraryMove({
     if (correctionMove == null) {
       throw StateError('תיקוני התוספים לא נשמרו בכל החלונות.');
     }
-    if (!await synchronizeCorrectionStorageMoveDatabasePath(
-      correctionMove,
-      newDatabases,
-    )) {
-      throw StateError('נתיב מסד הטיוטות לא הסתנכרן בכל החלונות.');
-    }
+    await PluginSystemDatabase.instance.lockForStorageMove(
+      correctionMove.requestId,
+    );
     if (databasesNeedsMove) {
       await _closeUserDatabasesForMove();
     }
@@ -478,6 +475,7 @@ Future<void> performLibraryMove({
     // 2. עדכון נתיבי ספרי קובץ שהועברו יחד עם הספרייה.
     await remapMovedFileBookPaths(scan.relocated, from, newLibrary);
     // 3. עדכון הגדרות המיקום בקבצי המשתמש.
+    settingsUpdated = true;
     await Settings.setValue<String>(
       SettingsRepository.keyLibraryPath,
       newLibrary,
@@ -498,13 +496,18 @@ Future<void> performLibraryMove({
       SettingsRepository.keyDatabasesPath,
       newDatabases,
     );
+    if (!await synchronizeCorrectionStorageMoveDatabasePath(
+      correctionMove,
+      newDatabases,
+    )) {
+      throw StateError('נתיב מסד הטיוטות לא הסתנכרן בכל החלונות.');
+    }
     if (Platform.isAndroid) {
       await Settings.setValue<String>(
         SettingsRepository.keyAndroidLibraryRoot,
         to,
       );
     }
-    settingsUpdated = true;
     await AppPaths.recordLibraryPathForUninstaller();
     // 4. מיפוי נתיבי הספרים הפתוחים *בזיכרון* (לא רק ב-Hive), אחרת שמירת
     //    הטאבים בעת הרענון תדרוס את המיפוי וה-PDF ייפתח מהנתיב הישן.

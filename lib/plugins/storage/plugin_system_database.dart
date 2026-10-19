@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:otzaria/data/sqlite/sqlite3_api.dart';
 import 'package:otzaria/core/app_paths.dart';
@@ -16,11 +18,35 @@ class PluginSystemDatabase {
   static const int maxKVBulkKeys = 200;
 
   Database? _database;
+  Future<Database>? _opening;
+  String? _storageMoveRequestId;
+  Completer<void>? _storageMoveReleased;
 
   Future<Database> get database async {
-    if (_database != null) return _database!;
-    _database = await _initDatabase();
-    return _database!;
+    while (true) {
+      final released = _storageMoveReleased;
+      if (released != null) await released.future;
+      if (_database != null) return _database!;
+
+      final opening = _opening ??= _initDatabase();
+      late final Database opened;
+      try {
+        opened = await opening;
+      } catch (_) {
+        if (identical(_opening, opening)) _opening = null;
+        rethrow;
+      }
+      if (_storageMoveRequestId != null) {
+        if (identical(_opening, opening)) {
+          _opening = null;
+          opened.close();
+        }
+        continue;
+      }
+      _database = opened;
+      if (identical(_opening, opening)) _opening = null;
+      return opened;
+    }
   }
 
   /// המסד, רק אם כבר נפתח.
@@ -896,10 +922,41 @@ class PluginSystemDatabase {
     _database = null;
   }
 
+  Future<void> lockForStorageMove(String requestId) async {
+    if (_storageMoveRequestId != null && _storageMoveRequestId != requestId) {
+      throw StateError('Plugin database is already locked for a storage move.');
+    }
+    _storageMoveRequestId = requestId;
+    _storageMoveReleased ??= Completer<void>();
+    final opening = _opening;
+    if (opening != null) {
+      try {
+        await opening;
+      } catch (error, stackTrace) {
+        debugPrint(
+          'Plugin database open failed during storage move: $error\n$stackTrace',
+        );
+      }
+    }
+    await Future<void>.delayed(Duration.zero);
+    await close();
+  }
+
+  void releaseStorageMove(String requestId) {
+    if (_storageMoveRequestId != requestId) return;
+    _storageMoveRequestId = null;
+    final released = _storageMoveReleased;
+    _storageMoveReleased = null;
+    if (released != null && !released.isCompleted) released.complete();
+  }
+
   /// מאפס סינכרונית את ה-singleton עבור בדיקות קיימות.
   @visibleForTesting
   void resetForTests() {
     _database?.close();
     _database = null;
+    _opening = null;
+    _storageMoveRequestId = null;
+    _storageMoveReleased = null;
   }
 }

@@ -124,6 +124,33 @@ void main() {
     expect(service.displayText('tab', 0, 'מקור 0'), 'נוסח חדש');
   });
 
+  test(
+    'ביטול הרשאת התוסף בזמן הכנה מסיים את הסשן גם אחרי ביטול היציאה',
+    () async {
+      expect(service.beginProcessQuitPreparation('quit-revoked-owner'), isTrue);
+
+      service.removeOwner('owner');
+
+      expect(service.hasSessionForTab('tab'), isFalse);
+      service.cancelProcessQuitPreparation('quit-revoked-owner');
+      expect(service.hasSessionForTab('tab'), isFalse);
+      await _idle();
+      expect(await service.flushAll(), isTrue);
+    },
+  );
+
+  test('הסרת לשונית בזמן הכנה מסיימת את הסשן גם אחרי ביטול היציאה', () async {
+    expect(service.beginProcessQuitPreparation('quit-removed-tab'), isTrue);
+
+    service.removeTab('tab');
+
+    expect(service.hasSessionForTab('tab'), isFalse);
+    service.cancelProcessQuitPreparation('quit-removed-tab');
+    expect(service.hasSessionForTab('tab'), isFalse);
+    await _idle();
+    expect(await service.flushAll(), isTrue);
+  });
+
   test('restore שממתין למקור נדחה אם הכנת היציאה ננעלת לפני commit', () async {
     service.removeTab('tab');
     await _idle();

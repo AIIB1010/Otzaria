@@ -5,6 +5,7 @@ import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
 import 'package:otzaria/core/windowing/window_bus.dart';
 import 'package:otzaria/core/windowing/settings_sync.dart';
+import 'package:otzaria/plugins/storage/plugin_system_database.dart';
 import 'package:otzaria/plugins/services/plugin_correction_session_service.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
 
@@ -101,6 +102,7 @@ Future<void> releaseCorrectionStorageMove(
     );
     return;
   }
+  PluginSystemDatabase.instance.releaseStorageMove(preparation.requestId);
   PluginCorrectionSessionService.instance.cancelProcessQuitPreparation(
     preparation.requestId,
   );

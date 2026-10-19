@@ -539,7 +539,6 @@ class PluginCorrectionSessionService extends ChangeNotifier {
   }
 
   void removeOwner(String owner) {
-    if (_processQuitRequestId != null) return;
     _ownerEpochs[owner] = ownerEpoch(owner) + 1;
     for (final session in _sessions.values.toList()) {
       if (session.owner == owner) {
@@ -549,7 +548,6 @@ class PluginCorrectionSessionService extends ChangeNotifier {
   }
 
   void removeTab(String tabId) {
-    if (_processQuitRequestId != null) return;
     final session = _sessionForTab(tabId);
     if (session != null) {
       unawaited(_end(session, 'tab_closed'));

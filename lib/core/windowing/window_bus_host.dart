@@ -284,7 +284,9 @@ class _WindowBusHostState extends State<WindowBusHost> {
           final finished = await corrections.finishStorageMovePreparation(
             requestId,
           );
-          if (finished) await PluginSystemDatabase.instance.close();
+          if (finished) {
+            await PluginSystemDatabase.instance.lockForStorageMove(requestId);
+          }
           return finished;
         } catch (_) {
           return false;
@@ -327,6 +329,7 @@ class _WindowBusHostState extends State<WindowBusHost> {
       case MultiWindowService.requestCancelCorrectionQuit:
         final requestId = request['requestId'];
         if (requestId is String) {
+          PluginSystemDatabase.instance.releaseStorageMove(requestId);
           PluginCorrectionSessionService.instance.cancelProcessQuitPreparation(
             requestId,
           );
