@@ -19,7 +19,7 @@ import 'package:otzaria_report_contract/otzaria_report_contract.dart';
 import 'package:path/path.dart' as p;
 import 'package:otzaria/plugins/plugin_constants.dart';
 import 'package:otzaria/theme/app_fonts.dart';
-import 'package:flutter_settings_screens/flutter_settings_screens.dart';
+import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:kosher_dart/kosher_dart.dart';
 import 'package:http/http.dart' as http;

@@ -1,4 +1,4 @@
-import 'package:flutter_settings_screens/flutter_settings_screens.dart';
+import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/app_runtime_reset.dart';
 import 'package:otzaria/plugins/services/plugin_correction_session_service.dart';
@@ -132,7 +132,7 @@ void main() {
       );
       FileSystemData.instance.libraryPath = oldLibraryPath;
 
-      Settings.clearCache();
+      await Settings.clearCache();
       await resetRuntimeStateForAppRestart();
 
       expect(providerManager.isInitialized, isFalse);
@@ -155,7 +155,7 @@ void main() {
 
     FileSystemData.instance.libraryPath = oldLibraryPath;
 
-    Settings.clearCache();
+    await Settings.clearCache();
     await resetRuntimeStateAfterSettingsReset();
 
     expect(FileSystemData.instance.libraryPath, isNot(oldLibraryPath));

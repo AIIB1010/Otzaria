@@ -58,7 +58,7 @@ import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/personal_notes/personal_notes_system.dart';
 import 'package:otzaria/personal_notes/utils/personal_note_source_selection.dart';
 import 'package:otzaria/personal_notes/storage/personal_notes_changes.dart';
-import 'package:flutter_settings_screens/flutter_settings_screens.dart';
+import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/text_book/view/widgets/book_source_banner.dart';
 import 'package:otzaria/text_book/view/sibling_commentaries_menu.dart';

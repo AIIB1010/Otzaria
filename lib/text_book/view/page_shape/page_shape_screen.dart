@@ -43,7 +43,7 @@ import 'package:otzaria/widgets/layout/resizable_drag_handle.dart';
 import 'package:otzaria/widgets/layout/adaptive_side_pane.dart';
 import 'package:otzaria/widgets/layout/context_overlay_panel.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
-import 'package:flutter_settings_screens/flutter_settings_screens.dart';
+import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:collection/collection.dart';
 import 'dart:async';
 import 'dart:isolate';

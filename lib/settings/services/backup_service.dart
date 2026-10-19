@@ -4,7 +4,7 @@ import 'dart:isolate';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:hive_ce/hive.dart';
 import 'package:path/path.dart' as p;
-import 'package:flutter_settings_screens/flutter_settings_screens.dart';
+import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:logging/logging.dart';
 import 'package:otzaria/bookmarks/models/bookmark_group.dart';
 import 'package:otzaria/app_report/services/app_report_service.dart';
