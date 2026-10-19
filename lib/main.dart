@@ -134,6 +134,7 @@ import 'package:otzaria/data/cache/generation_cache.dart';
 import 'package:otzaria/find_ref/repository/reference_books_cache.dart';
 import 'package:otzaria/tools/dictionary/repository/dictionary_lookup_repository.dart';
 import 'package:pdfrx/pdfrx.dart';
+import 'package:otzaria/tools/calendar/services/calendar_alerts_owner.dart';
 import 'package:otzaria/tools/calendar/services/notification_service.dart';
 import 'package:otzaria/plugins/database/plugin_database_bootstrap.dart';
 import 'package:logging/logging.dart';
@@ -358,6 +359,12 @@ void main(List<String> args) async {
   // SQLite סינכרוני יכול לחסום גם טיימרים: אין לעקוף את החשיפה עם timeout.
   AttachedLibraryRegistry.startupGate = () =>
       _mainWindowRevealedCompleter.future;
+  // הפורק מריץ את ה-COM ב-thread משלו, ולכן האתחול אינו חוסם ו-timeout מספיק.
+  final notificationGate = _mainWindowRevealedCompleter.future.timeout(
+    const Duration(seconds: 20),
+    onTimeout: () {},
+  );
+  NotificationService.startupGate = () => notificationGate;
   // אבחון שמריץ Process.start (סינכרוני) — רק אחרי החשיפה, בלי timeout.
   WebView2CreationDiagnostics.startupGate = () => _mainWindowRevealedCompleter
       .future
@@ -767,20 +774,12 @@ Future<void> _initializeProcessSingletons() async {
     unawaited(AppPaths.recordLibraryPathForUninstaller());
   }
 
-  // שירות ההתראות (לוח השנה) ושירות דיווחי השגיאות אינם חיוניים להצגת
-  // המסך הראשי, ודיווחי השגיאות הם רק Timer.periodic.
-  // ⚠️ פר-תהליך, לא פר-חלון. שירות ההתראות רושם התראות מערכת, ושטיפת
-  // דיווחי השגיאות שולחת את אותו תור — חלון משני שמריץ אותם שוב מייצר
-  // התראות כפולות ודיווחים כפולים.
+  // ⚠️ פר-תהליך: בחלון משני הם היו מתזמנים התראות ושולחים דיווחים פעם שנייה.
   if (!WindowRole.isSecondary) {
     unawaited(_runDeferredNotificationService());
     unawaited(_runDeferredErrorReportFlush());
   } else {
-    // ⚠️ אבל מסד אזורי הזמן **כן** נדרש, והוא פר-isolate.
-    //
-    // חסימת השירות כולו הפילה את לוח השנה בחלון משני עם "Tried to get
-    // location before initializing timezone database". מה שפר-תהליך הוא
-    // רישום ההתראות, לא בסיס הנתונים שמאחוריו.
+    // מסד אזורי הזמן פר-isolate, ובלעדיו לוח השנה נופל בחלון משני.
     unawaited(_initializeTimeZonesOnly());
   }
 
@@ -980,10 +979,7 @@ Future<void> _logJobObjectContainmentFailure() async {
   }
 }
 
-/// מאתחל את מסד אזורי הזמן בלבד, בלי לרשום התראות מערכת.
-///
-/// חלון משני צריך את `tz.local` (לוח השנה, זמני היום) אבל אסור לו לרשום
-/// התראות — הן היו נשלחות פעמיים.
+/// מאתחל את מסד אזורי הזמן בלבד, בלי לגעת בהתראות המערכת.
 Future<void> _initializeTimeZonesOnly() async {
   try {
     // מקור אחד עם [NotificationService.init] — כולל אזור הזמן.
@@ -1031,9 +1027,7 @@ bool _hasScheduledNotificationsToRestore() {
 Future<void> _runDeferredNotificationService() async {
   await _initializeTimeZonesOnly();
 
-  // ⚠️ `initialize` של flutter_local_notifications_windows עושה קריאת COM
-  // סינכרונית לשירות ההתראות של המערכת, ובמחשבים מסוימים היא נתקעת 30 שניות
-  // וחוסמת את ה-thread הראשי — שעליו רץ גם ה-UI isolate (issue #1192).
+  // ⚠️ אתחול התוסף נתקע במחשבים מסוימים 30 שניות (#1192): רק כשיש מה לשחזר.
   if (!_hasScheduledNotificationsToRestore()) return;
 
   try {
@@ -1045,7 +1039,8 @@ Future<void> _runDeferredNotificationService() async {
   }
 
   try {
-    await NotificationService().init();
+    // הבעלים מאתחל את התוסף רק אם יש מה לתזמן או לבטל, ומאריך את החלון.
+    await CalendarAlertsOwner.instance.restoreIfNeeded();
   } catch (error, stackTrace) {
     _logNonFatalInitializationError('Notification service', error, stackTrace);
   }
