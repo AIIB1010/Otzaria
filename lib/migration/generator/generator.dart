@@ -248,18 +248,22 @@ class DatabaseGenerator {
       // וחייב לשמור אותו כדי שאפשר יהיה להמיר בזמן קריאה.
       final storesLinesInDb = format?.canStoreLinesInDb ?? false;
       final targetFilePath = storesLinesInDb && insertContent ? null : bookPath;
+      // file-backed: רק ספר טקסטואלי עובר עיבוד (תוכן עניינים, issue #2684).
+      // PDF לא נפתח כאן — הסנכרון רץ ב-isolate נפרד, ו-PDFium גלובלי לתהליך
+      // (ראו `_isolatePdfiumForThisWindow`); ה-outline נקרא בהוספת התיקייה.
+      final processContent = insertContent || (format?.isTextual ?? false);
 
       // Check for duplicates in the same category with the same file type (for performance measurement)
       final existingBook = await repository
           .checkBookExistsInCategoryWithFileType(title, categoryId, fileType);
       if (existingBook != null) {
-        if ((format?.isProductionSupported ?? false) && insertContent) {
+        if ((format?.isProductionSupported ?? false) && processContent) {
           await repository.clearBookContent(existingBook.id);
           // כשל כאן משאיר את הספר בלי תוכן, אך גם בלי לעדכן את חותמת הקובץ
           // (`updateBookStorage` שלמטה) — ולכן הסריקה הבאה תנסה שוב במקום
           // לדלג עליו כ"לא השתנה".
           try {
-            await processBookContent(bookPath, existingBook.id);
+            await processBookContent(bookPath, existingBook.id, insertContent);
           } catch (_) {
             await repository.clearBookContent(existingBook.id);
             rethrow;
@@ -355,9 +359,9 @@ class DatabaseGenerator {
       final insertedBookId = await repository.insertBook(book);
 
       // Process content of the book
-      if (insertContent) {
+      if (processContent) {
         try {
-          await processBookContent(bookPath, insertedBookId);
+          await processBookContent(bookPath, insertedBookId, insertContent);
         } catch (_) {
           // כל כשל משאיר את הספר ניתן לניסיון חוזר בסריקה הבאה.
           await repository.deleteBookCompletely(insertedBookId);
@@ -399,7 +403,12 @@ class DatabaseGenerator {
   ///
   /// [bookPath] The path to the book file
   /// [bookId] The ID of the book in the database
-  Future<void> processBookContent(String bookPath, int bookId) async {
+  /// [storeLines] false: ספר file-backed — נשמר רק תוכן העניינים (issue #2684).
+  Future<void> processBookContent(
+    String bookPath,
+    int bookId, [
+    bool storeLines = true,
+  ]) async {
     final format = documentFormatFromExtension(bookPath);
     if (format == null) {
       throw UnsupportedDocumentFormatException(path: bookPath);
@@ -412,32 +421,24 @@ class DatabaseGenerator {
       return;
     }
 
-    if (format.requiresConversion) {
-      // הקריאה בתוך ה-isolate — נמנעת העתקת buffer גדול בין isolates.
-      // בלי תמונות: כאן נדרש רק מבנה השורות ותוכן העניינים.
-      final content = await Isolate.run(
-        () => convertDocumentFileSync(
-          bookPath,
-          format: format,
-          embedImages: false,
-        ),
-      );
-      final lines = content.split('\n');
+    // המרה בתוך ה-isolate — נמנעת העתקת buffer גדול בין isolates. בלי
+    // תמונות: כאן נדרש רק מבנה השורות ותוכן העניינים. אחרת — מטמון ה-RAM.
+    final lines = format.requiresConversion
+        ? (await Isolate.run(
+            () => convertDocumentFileSync(
+              bookPath,
+              format: format,
+              embedImages: false,
+            ),
+          )).split('\n')
+        : _bookContentCache[_toLibraryRelativeKey(bookPath)] ??
+              await readBookLines(bookPath);
 
-      await processLinesWithTocEntries(bookId, lines);
-      await repository.updateBookTotalLines(bookId, lines.length);
-      return;
-    }
-
-    // Prefer preloaded content from RAM if available
-    final key = _toLibraryRelativeKey(bookPath);
-    final lines = _bookContentCache[key] ?? await readBookLines(bookPath);
-
-    // Process each line one by one, handling TOC entries as we go
-    await processLinesWithTocEntries(bookId, lines);
-
-    // Update the total number of lines
-    await repository.updateBookTotalLines(bookId, lines.length);
+    await processLinesWithTocEntries(bookId, lines, storeLines: storeLines);
+    await repository.updateBookTotalLines(
+      bookId,
+      storeLines ? lines.length : 0,
+    );
   }
 
   /// Processes PDF outline and inserts TOC entries into the database.
@@ -533,8 +534,9 @@ class DatabaseGenerator {
 
   Future<void> processLinesWithTocEntries(
     int bookId,
-    List<String> lines,
-  ) async {
+    List<String> lines, {
+    bool storeLines = true,
+  }) async {
     // Collect all TOC entry metadata in a single pass.
     // We use the entry's position in allTocEntries as its local ID.
     final allTocEntries = <TocEntryData>[];
@@ -609,6 +611,7 @@ class DatabaseGenerator {
             : currentReference.join(', ').trim();
         if (cachedHeRef != null && cachedHeRef.isEmpty) cachedHeRef = null;
       }
+      if (!storeLines) continue;
 
       linesBatch.add(
         Line(
