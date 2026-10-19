@@ -80,8 +80,6 @@ class _ScrollablePositionedListScrollbarState
 
   // jumpTo בונה מחדש את החלון הנראה, ולכן קפיצות הגרירה מווסתות.
   static const Duration _dragJumpInterval = Duration(milliseconds: 50);
-  // animateTo טוען ש-duration חייב להיות חיובי, ולכן לא Duration.zero.
-  static const Duration _withinItemJump = Duration(milliseconds: 1);
   final Stopwatch _sinceLastDragJump = Stopwatch();
   double? _pendingDragTarget;
 
@@ -379,25 +377,15 @@ class _ScrollablePositionedListScrollbarState
       ..start();
 
     final int maxIndex = max(widget.itemCount - 1, 0);
-    final offsetController = widget.offsetController;
-    if (offsetController == null) {
+    if (widget.offsetController == null) {
       widget.scrollController.jumpTo(index: target.round().clamp(0, maxIndex));
       return;
     }
 
     final int index = target.floor().clamp(0, maxIndex);
-    widget.scrollController.jumpTo(index: index);
     final double withinItem =
         (target - index) * _itemHeight(index) * _viewportHeight;
-    if (withinItem <= 0) return;
-    // ה-jumpTo מזמין פריסה מחדש; גלילה בתוך הפריט לפניה נמדדת מול המיקום הישן.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !widget.scrollController.isAttached) return;
-      offsetController.animateScroll(
-        offset: withinItem,
-        duration: _withinItemJump,
-      );
-    });
+    widget.scrollController.jumpTo(index: index, offset: -withinItem);
   }
 
   void _onDragUpdate(

@@ -9,10 +9,12 @@ import 'package:positioned_sliver_list/positioned_list.dart';
 
 class _RecordingItemScrollController extends ItemScrollController {
   final List<int> jumps = <int>[];
+  final List<double> jumpOffsets = <double>[];
 
   @override
   void jumpTo({required int index, double alignment = 0, double offset = 0}) {
     jumps.add(index);
+    jumpOffsets.add(offset);
   }
 }
 
@@ -38,29 +40,6 @@ class _GrowingItemState extends State<_GrowingItem> {
 
   @override
   Widget build(BuildContext context) => SizedBox(height: _height);
-}
-
-/// כמו [_RecordingItemScrollController], אך מדווח שהוא מחובר: הגלילה בתוך
-/// פריט נדחית ל-postFrameCallback שיוצא מוקדם כשאין רשימה אמיתית מאחוריו.
-class _AttachedRecordingItemScrollController
-    extends _RecordingItemScrollController {
-  @override
-  bool get isAttached => true;
-}
-
-/// מתעד קריאות גלילה בתוך פריט. הסרגל משתמש ב-offsetController כדי לגלול
-/// *בתוך* קטע גבוה מהמסך; בלעדיו הגרירה מסוגלת רק לקפוץ בין אינדקסים.
-class _RecordingOffsetController extends ScrollOffsetController {
-  final List<double> offsets = <double>[];
-
-  @override
-  Future<void> animateScroll({
-    required double offset,
-    required Duration duration,
-    Curve curve = Curves.linear,
-  }) async {
-    offsets.add(offset);
-  }
 }
 
 /// ילד שמדווח [ScrollMetricsNotification] בלי Scrollable אמיתי. הסרגל נשען על
@@ -1805,8 +1784,8 @@ void main() {
     'ספר בקטע יחיד: גרירה גוללת בתוך הקטע דרך offsetController (issue #1169)',
     (tester) async {
       final listener = ItemPositionsListener.create();
-      final controller = _AttachedRecordingItemScrollController();
-      final offsets = _RecordingOffsetController();
+      final controller = _RecordingItemScrollController();
+      final offsets = ScrollOffsetController();
 
       await tester.pumpWidget(
         MaterialApp(
@@ -1845,8 +1824,9 @@ void main() {
       await gesture.up();
       await tester.pumpAndSettle();
 
+      // היסט שלילי מעלה את תחילת הפריט מעל המסך, כלומר גלילה בתוכו.
       expect(
-        offsets.offsets.where((offset) => offset > 0),
+        controller.jumpOffsets.where((offset) => offset < 0),
         isNotEmpty,
         reason: 'בלי גלילה בתוך הפריט הגרירה בספר בעל קטע אחד אינה מזיזה דבר',
       );
