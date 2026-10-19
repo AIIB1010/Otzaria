@@ -291,8 +291,8 @@ void main() {
     }
     expect(
       sawOverlap,
-      isTrue,
-      reason: 'הבדיקה מכסה פריט שבנוי בשני עותקי הרשימה יחד',
+      isFalse,
+      reason: 'גלילה רחוקה אינה בונה עותק שני של הרשימה',
     );
     expect(
       key.currentContext,
