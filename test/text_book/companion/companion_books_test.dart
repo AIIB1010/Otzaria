@@ -190,6 +190,20 @@ void main() {
       },
     );
 
+    test('the toggle opens the companion on a third of the width', () async {
+      final mb = textTab('משנה ברורה');
+      final bloc = await openWith(mb, (tab) async => tab);
+
+      bloc.add(
+        OpenTabInSidePane(textTab('ביאור הלכה'), splitRatio: kPrimaryPaneShare),
+      );
+      await bloc.stream.firstWhere((s) => s.tabs.single is CombinedTab);
+
+      expect((bloc.state.tabs.single as CombinedTab).splitRatio, 2 / 3);
+
+      await bloc.close();
+    });
+
     test('a book without a companion opens alone', () async {
       final other = textTab('שער הציון');
       final bloc = await openWith(other, withCompanionPane);

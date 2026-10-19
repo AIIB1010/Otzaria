@@ -2660,7 +2660,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
     final companion = await createCompanionTab(widget.tab);
     if (companion == null || !mounted) return;
     tabsBloc
-      ..add(OpenTabInSidePane(companion))
+      ..add(OpenTabInSidePane(companion, splitRatio: kPrimaryPaneShare))
       // Reading goes on in this book; the companion follows it.
       ..add(SetActivePane(widget.tab));
     await setShowCompanionBookByDefault(true);

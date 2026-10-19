@@ -1519,6 +1519,7 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
     final combinedTab = CombinedTab(
       rightTab: current,
       leftTab: event.tab,
+      splitRatio: event.splitRatio,
       isPinned: current.isPinned,
     );
     final newTabs = List<OpenedTab>.from(state.tabs)..[index] = combinedTab;

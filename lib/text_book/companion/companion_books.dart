@@ -19,6 +19,9 @@ const String kShowCompanionBookKey = 'key-show-companion-book';
 bool get showCompanionBookByDefault =>
     Settings.getValue<bool>(kShowCompanionBookKey) ?? true;
 
+/// The primary book's share of the split tab; the companion takes a third.
+const double kPrimaryPaneShare = 2 / 3;
+
 Future<void> setShowCompanionBookByDefault(bool value) =>
     Settings.setValue<bool>(kShowCompanionBookKey, value);
 
@@ -81,7 +84,11 @@ Future<OpenedTab> withCompanionPane(OpenedTab tab) async {
     if (!showCompanionBookByDefault) return tab;
     final companion = await createCompanionTab(tab);
     if (companion == null) return tab;
-    return CombinedTab(rightTab: tab, leftTab: companion);
+    return CombinedTab(
+      rightTab: tab,
+      leftTab: companion,
+      splitRatio: kPrimaryPaneShare,
+    );
   } catch (_) {
     // The library is not loaded (tests, early startup): open the book alone.
     return tab;
