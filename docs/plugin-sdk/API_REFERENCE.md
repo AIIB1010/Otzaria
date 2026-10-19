@@ -5277,6 +5277,12 @@ async function scheduleReminder(title, body, dateTime) {
   4096 תווים) ואינו `null`. מפתח שתנאי `when` קורא מתעדכן מיד — כך לחיצה
   יכולה להציג/להסתיר פקדים באופן מיידי (פלטי תכניות, לעומת זאת, מחושבים
   מחדש רק בהחלפת ספר).
+- כפתור יכול להצהיר `openPlugin: true` במקום `action`. הוא מוצג לפי `binding`,
+  כמו כל פקד קשור, ולחיצה עליו פותחת את דף התוסף ומוסרת לו
+  `reader.toolbar_item_clicked` עם המיקום הנוכחי (`currentBook`,
+  `currentIndex`) — כמו בכפתור רגיל עם `openPlugin`. כך, למשל, כפתור שמוצג רק
+  בספרים מסוימים ופותח את התוסף במקום שבו הלומד נמצא. `openPlugin` סותר את
+  `action`, ומותר רק ב־`"type": "button"`.
 - תפריט משתמש ב־`childrenBinding.itemsOutput` וב־`itemTemplate`; בתוך התבנית
   זמינה ההפניה `$item`.
 - לחצן מפוצל (`"type": "split"`) מצהיר על שניהם: `action` לפעולה הראשית
