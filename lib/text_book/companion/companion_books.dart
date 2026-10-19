@@ -2,7 +2,7 @@
 /// commentary on the primary, so it never joins its commentators (#2734).
 library;
 
-import 'package:flutter_settings_screens/flutter_settings_screens.dart';
+import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:otzaria/data/repository/data_repository.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/tabs/models/combined_tab.dart';
