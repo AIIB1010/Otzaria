@@ -950,6 +950,18 @@ class AppPaths {
     'user_books.db',
   ];
 
+  /// האם המסדים האישיים נמחקו מבחוץ: ספרייה כבר נטענה כאן, ואף מסד אישי
+  /// אינו קיים. נקרא רק כש-`user_state.db` נוצר עכשיו (issue #2610).
+  static Future<bool> personalDatabasesWiped() async {
+    final marker = p.join(await getDataRootPath(), 'library_loaded.marker');
+    if (!await File(marker).exists()) return false;
+    final dir = await _writableDatabasesDirectory();
+    for (final fileName in _personalDatabaseFileNames) {
+      if (await File(p.join(dir, fileName)).exists()) return false;
+    }
+    return true;
+  }
+
   /// Resolves the notes database path - for cross-platform compatibility.
   ///
   /// תיקיית המסדים יושבת ליד הספרייה, ובאנדרואיד היא עלולה לשבת על כרטיס

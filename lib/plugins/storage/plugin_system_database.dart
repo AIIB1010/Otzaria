@@ -776,6 +776,17 @@ class PluginSystemDatabase {
 
   // --- Backup / Restore ---
 
+  /// האם נשמרו KV או רשומות שפורסמו, בלי לטעון את התוכן.
+  Future<bool> hasPluginUserData(String pluginId) async {
+    final db = await database;
+    return db.select(
+          'SELECT EXISTS(SELECT 1 FROM plugin_kv_store WHERE plugin_id = ?) '
+          'OR EXISTS(SELECT 1 FROM plugin_published_record WHERE plugin_id = ?) AS has_data',
+          [pluginId, pluginId],
+        ).first['has_data'] ==
+        1;
+  }
+
   /// מייצא את הרשומות הנלוות של תוסף (הרשאות, KV, published records) לגיבוי.
   ///
   /// [pluginId] - מזהה התוסף.
