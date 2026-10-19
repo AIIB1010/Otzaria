@@ -31,6 +31,23 @@ class PluginCalendarAdapter {
     String? currentBookId,
     String? currentBookUid,
   }) async {
+    final pluginEvents = await _load(
+      (scope) => _isScopeVisible(
+        scope: scope,
+        currentWorkspaceId: currentWorkspaceId,
+        currentBookId: currentBookId,
+        currentBookUid: currentBookUid,
+      ),
+    );
+    return [...existingEvents, ...?pluginEvents];
+  }
+
+  /// כל אירועי התוספים, בלי תלות ב-scope: ההתראות אינן תלויות בחלון.
+  Future<List<CustomEvent>> loadAllPluginEvents() async =>
+      await _load((_) => true) ?? const [];
+
+  /// null = הטעינה נכשלה.
+  Future<List<CustomEvent>?> _load(bool Function(String scope) visible) async {
     try {
       final records = await PluginSystemDatabase.instance
           .getPublishedRecordsFull('calendar.event');
@@ -44,16 +61,7 @@ class PluginCalendarAdapter {
           final rawPayload = jsonDecode(record['payload_json'] as String);
 
           if (rawPayload is! Map<String, dynamic>) continue;
-
-          // סינון לפי scope
-          if (!_isScopeVisible(
-            scope: scope,
-            currentWorkspaceId: currentWorkspaceId,
-            currentBookId: currentBookId,
-            currentBookUid: currentBookUid,
-          )) {
-            continue;
-          }
+          if (!visible(scope)) continue;
 
           final event = _fromPluginPayload(pluginId, key, rawPayload);
           if (event != null) pluginEvents.add(event);
@@ -61,11 +69,10 @@ class PluginCalendarAdapter {
           debugPrint('PluginCalendarAdapter: failed to parse record: $e');
         }
       }
-
-      return [...existingEvents, ...pluginEvents];
+      return pluginEvents;
     } catch (e) {
       debugPrint('PluginCalendarAdapter: failed to load events: $e');
-      return existingEvents;
+      return null;
     }
   }
 
