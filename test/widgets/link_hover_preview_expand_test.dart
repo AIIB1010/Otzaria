@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -237,7 +241,10 @@ void main() {
 
       // גוף המפרש הארוך עדיין נגלל בתוך החלונית.
       expect(
-        tester.state<ScrollableState>(find.byType(Scrollable)).position.pixels,
+        tester
+            .state<ScrollableState>(find.byType(Scrollable).last)
+            .position
+            .pixels,
         greaterThan(0),
       );
       expect(
@@ -335,6 +342,137 @@ void main() {
       expect(previewFontSize(settings, null), 30);
     });
   });
+
+  group('כותרת ארוכה וגופן גדול בתצוגה המקדימה', () {
+    const longTitle =
+        'חידושים ומקורים מבעל מנחת חינוך על משנה תורה, '
+        'הלכות ביכורים ושאר מתנות כהונה שבגבולין';
+
+    setUpAll(() async {
+      final loader = FontLoader('NotoRashiHebrew')
+        ..addFont(
+          rootBundle.load('fonts/NotoRashiHebrew-VariableFont_wght.ttf'),
+        );
+      await loader.load();
+    });
+
+    for (final sample in [
+      (size: const Size(800, 600), scale: 1.0),
+      (size: const Size(800, 600), scale: 1.5),
+      (size: const Size(420, 400), scale: 1.5),
+      (size: const Size(320, 400), scale: 1.5),
+    ]) {
+      testWidgets('טעינה ותוכן נשארים נגישים: $sample', (tester) async {
+        tester.view.physicalSize = sample.size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(LinkPreviewOverlay.dismiss);
+        Link.clearContentCache();
+        final provider = _DeferredContentProvider();
+        LibraryProviderManager.instance.seedMappingsForTesting(
+          mapping: const {},
+          providers: [provider],
+        );
+        final settings = _TestSettingsBloc(
+          SettingsState.initial().copyWith(commentatorsFontSize: 40),
+        );
+        addTearDown(settings.close);
+        var opened = 0;
+        final entry = buildLinkContextMenuEntry(
+          link: Link(
+            heRef: '$longTitle, א, י, א',
+            index1: 1,
+            path2: longTitle,
+            index2: 4,
+            connectionType: 'commentary',
+          ),
+          onTap: () => opened++,
+          displayProfile: TextDisplayProfile.defaults,
+        );
+        late BuildContext host;
+        await tester.pumpWidget(
+          BlocProvider<SettingsBloc>.value(
+            value: settings,
+            child: MaterialApp(
+              locale: const Locale('he', 'IL'),
+              localizationsDelegates: GlobalMaterialLocalizations.delegates,
+              supportedLocales: const [Locale('he', 'IL')],
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(sample.scale),
+                ),
+                child: child!,
+              ),
+              home: Builder(
+                builder: (context) {
+                  host = context;
+                  return const Scaffold();
+                },
+              ),
+            ),
+          ),
+        );
+        LinkPreviewOverlay.showBesideMenuItem(
+          host,
+          contentBuilder: entry.hoverPreviewBuilder!,
+          itemGlobalRect: Rect.fromLTWH(sample.size.width - 180, 50, 150, 30),
+          minWidth: 200,
+          touchTriggered: sample.size.width < 420,
+        );
+        await pumpFrames(tester);
+        expect(tester.takeException(), isNull);
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        expect(
+          tester.getSize(find.byType(CircularProgressIndicator)).height,
+          greaterThan(0),
+        );
+
+        provider.pending.complete(
+          List.filled(100, 'והבכור מקריבין חלבו ודמו.').join(' '),
+        );
+        await pumpFrames(tester);
+        expect(tester.takeException(), isNull);
+        final scrollables = find.descendant(
+          of: find.byType(LinkHoverPreviewContent),
+          matching: find.byType(Scrollable),
+        );
+        expect(scrollables, findsNWidgets(2));
+        final header = tester
+            .state<ScrollableState>(scrollables.first)
+            .position;
+        final body = tester.state<ScrollableState>(scrollables.last).position;
+        expect(header.viewportDimension, greaterThan(0));
+        expect(body.viewportDimension, greaterThanOrEqualTo(140));
+        expect(body.maxScrollExtent, greaterThan(0));
+        final headerTop = tester.getTopLeft(scrollables.first);
+        await tester.drag(scrollables.last, const Offset(0, -100));
+        await pumpFrames(tester);
+        expect(body.pixels, greaterThan(0));
+        expect(header.pixels, 0);
+        expect(tester.getTopLeft(scrollables.first), headerTop);
+        expect(header.maxScrollExtent, greaterThan(0));
+        header.jumpTo(header.maxScrollExtent);
+        await pumpFrames(tester);
+        expect(tester.takeException(), isNull);
+        final title = find.descendant(
+          of: scrollables.first,
+          matching: find.byType(Text),
+        );
+        expect(title, findsOneWidget);
+        expect(tester.widget<Text>(title).data, contains(longTitle));
+        final headerBounds = tester.getRect(scrollables.first);
+        final textBounds = tester.getRect(title);
+        expect(
+          textBounds.bottom,
+          lessThanOrEqualTo(headerBounds.bottom + 0.01),
+        );
+        await tester.tapAt(headerBounds.center);
+        await tester.pump();
+        expect(opened, 1);
+      });
+    }
+  });
 }
 
 class _TestSettingsBloc extends Bloc<SettingsEvent, SettingsState>
@@ -402,4 +540,13 @@ class _FakeContentProvider implements LibraryProvider {
   Future<Map<String, List<Book>>> loadBooks(
     Map<String, Map<String, dynamic>> metadata,
   ) async => const {};
+}
+
+class _DeferredContentProvider extends _FakeContentProvider {
+  _DeferredContentProvider() : super('');
+
+  final pending = Completer<String>();
+
+  @override
+  Future<String> getLinkContent(Link link) => pending.future;
 }
