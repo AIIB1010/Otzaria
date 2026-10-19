@@ -1,5 +1,5 @@
 /// A companion book opens beside its primary book and follows it. It is not a
-/// commentary on the primary, so it never joins its commentators (#2734).
+/// commentary on the primary, so it never joins its commentators.
 library;
 
 import 'package:otzaria/settings/engine/app_settings_store.dart';
@@ -70,8 +70,14 @@ Future<TextBookTab?> createCompanionTab(TextBookTab primary) async {
   final title = companionTitleOf(primary.book);
   if (title == null) return null;
   final library = await DataRepository.instance.library;
-  final book = library.findBookByTitle(title, TextBook);
-  if (book is! TextBook) return null;
+  final book = library
+      .getAllBooks()
+      .whereType<TextBook>()
+      .where(
+        (book) => book.title == title && book.source.isOfficial,
+      )
+      .firstOrNull;
+  if (book == null) return null;
   // The companion starts at the top; the sync moves it to the primary's place.
   return TextBookTab(book: book, index: 0);
 }

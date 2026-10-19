@@ -24,19 +24,22 @@ class CompanionBookSync {
   }) {
     _resolve = resolveCompanionLine ?? _resolveFromLinks;
     primary.lines.position.addListener(_onPrimaryPosition);
-    // The links of the visible window arrive after the position, and a book
-    // that is still loading has none yet: retry until the companion moved.
     if (resolveCompanionLine != null) {
       _onPrimaryPosition();
       return;
     }
+    final initialState = primary.blocState;
+    var linksByLine = initialState is TextBookLoaded
+        ? initialState.linksByLine
+        : null;
     _stateSubscription = primary.bloc.stream.listen((state) {
-      final line = _lastPrimaryLine;
-      if (state is TextBookLoaded &&
-          _lastCompanionLine == null &&
-          line != null) {
-        _schedule(line);
+      if (state is! TextBookLoaded ||
+          identical(linksByLine, state.linksByLine)) {
+        return;
       }
+      linksByLine = state.linksByLine;
+      final line = _lastPrimaryLine;
+      if (line != null) _schedule(line);
     });
     _onPrimaryPosition();
   }
@@ -65,11 +68,11 @@ class CompanionBookSync {
 
   void _schedule(int line) {
     _timer?.cancel();
-    _timer = Timer(debounce, () => _syncTo(line));
+    final generation = ++_generation;
+    _timer = Timer(debounce, () => _syncTo(line, generation));
   }
 
-  Future<void> _syncTo(int primaryLine) async {
-    final generation = ++_generation;
+  Future<void> _syncTo(int primaryLine, int generation) async {
     int? target;
     try {
       target = await _resolve(primaryLine);
@@ -106,6 +109,7 @@ class CompanionBookSync {
       currentBookTitle: state.book.title,
       currentCategoryId: state.book.categoryId,
       currentBookSource: state.book.source,
+      requireExactLine: true,
     );
     int? line;
     for (final link in siblings) {
