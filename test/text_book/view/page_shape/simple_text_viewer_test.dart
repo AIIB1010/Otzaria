@@ -1501,7 +1501,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(
-        isCommentaryFocusNode(FocusManager.instance.primaryFocus),
+        isOtherSelectionFocusNode(FocusManager.instance.primaryFocus),
         isFalse,
       );
 
@@ -1515,7 +1515,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(
-        isCommentaryFocusNode(FocusManager.instance.primaryFocus),
+        isOtherSelectionFocusNode(FocusManager.instance.primaryFocus),
         isTrue,
         reason: 'הטקסט הראשי אסור לו לחטוף בחזרה את הפוקוס מהמפרש שנלחץ',
       );
@@ -1531,7 +1531,7 @@ void main() {
         'PageShapeContentFocus',
       );
       expect(
-        isCommentaryFocusNode(FocusManager.instance.primaryFocus),
+        isOtherSelectionFocusNode(FocusManager.instance.primaryFocus),
         isFalse,
       );
       // ממתינים לטיימר זיהוי הלחיצה הכפולה.
