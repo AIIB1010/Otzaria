@@ -182,6 +182,7 @@ class CalendarAlertsOwner {
 
   /// משחזר את התזמון אחרי עלייה. נקרא אחרי חשיפת החלון, ורק כשיש מה לשחזר.
   Future<void> restoreIfNeeded() async {
+    primeLedger();
     await _inLane(_cleanupStoredPluginEvents);
     _requestReconcile();
     await idle;
@@ -237,6 +238,7 @@ class CalendarAlertsOwner {
       }
       final mutate = _stateCommands[op];
       if (mutate == null) return _errorAck('error.unknown_method: $op');
+      primeLedger();
       return await _applyState((current) => mutate(this, current, args));
     } on _InvalidCommand catch (error) {
       return _errorAck('error.invalid_params: ${error.message}');

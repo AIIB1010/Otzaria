@@ -43,6 +43,8 @@ import 'package:otzaria/widgets/misc/restart_widget.dart';
 import 'package:otzaria/workspaces/bloc/workspace_bloc.dart';
 import 'package:otzaria/tabs/bloc/tabs_event.dart';
 import 'package:otzaria/tabs/models/tab.dart';
+import 'package:otzaria/tools/calendar/services/calendar_alerts_client.dart';
+import 'package:otzaria/tools/calendar/services/calendar_alerts_owner.dart';
 
 /// מחבר את [WindowBus] לחלון שהוא יושב בו.
 ///
@@ -112,6 +114,10 @@ class _WindowBusHostState extends State<WindowBusHost> {
     // שנגזר ממנה עוד לא. בלי הטעינה מחדש המשתמש היה מחליף ערכת נושא
     // בחלון אחד ורואה שני חלונות של אותה תוכנה נראים שונה.
     _settingsChanged = SettingsSync.instance.changes.listen((key) {
+      // איפוס מחלון אחר מחק גם את ההתראות; הבעלים מבטל מול מה שבזיכרון.
+      if (key.isEmpty && !WindowRole.isSecondary) {
+        unawaited(CalendarAlertsOwner.instance.handleSettingsReset());
+      }
       if (!mounted) return;
       context.read<SettingsBloc>().add(LoadSettings());
       if (key == HiddenLibraryStore.bookKeysSetting ||
@@ -230,8 +236,16 @@ class _WindowBusHostState extends State<WindowBusHost> {
         );
         return true;
       case SettingsSync.requestChanged:
+      case SettingsSync.requestReset:
         // הגדרה שונתה בחלון אחר — מוחלת על ה-box המקומי ומרעננת את ה-state.
         return SettingsSync.instance.handleRequest(request);
+      case CalendarAlertsOwner.requestCommand:
+        if (WindowRole.isSecondary) throw StateError('Not the main window');
+        return CalendarAlertsOwner.instance.handleBusRequest(request);
+      case CalendarAlertsOwner.requestStateChanged:
+      case CalendarAlertsOwner.requestScheduleStatus:
+        if (!WindowRole.isSecondary) return null;
+        return RemoteCalendarAlertsClient.instance.handleBusMessage(request);
       case MultiWindowService.requestRestart:
         return _restartSelf(
           pluginSafeMode: request['pluginSafeMode'] is bool
