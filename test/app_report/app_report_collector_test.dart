@@ -21,6 +21,8 @@ import 'package:otzaria/plugins/storage/plugin_system_database.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
 import 'package:otzaria/tabs/bloc/tabs_state.dart';
 import 'package:otzaria/tabs/models/combined_tab.dart';
+import 'package:otzaria/tabs/models/commentators_tab.dart';
+import 'package:otzaria/tabs/models/pdf_commentators_tab.dart';
 import 'package:otzaria/tabs/models/pdf_tab.dart';
 import 'package:otzaria/tabs/models/tab.dart';
 import 'package:otzaria/tabs/models/text_tab.dart';
@@ -345,5 +347,59 @@ void main() {
       addTearDown(pdf.dispose);
       expect(contextOf(pdf)['currentTitle'], 'ספר רשמי');
     });
+
+    for (final isPdf in [false, true]) {
+      for (final isPrivate in [false, true]) {
+        for (final isCombined in [false, true]) {
+          test(
+            'מפרשים ${isPdf ? 'PDF' : 'טקסט'} '
+            '${isPrivate ? 'אישי' : 'רשמי'} '
+            '${isCombined ? 'בפיצול' : 'עצמאי'}: פרטיות כותרת המקור בדוח',
+            () async {
+              await Settings.init(cacheProvider: MemorySettingsCache());
+              final source = isPrivate ? BookSource.user : BookSource.official;
+              final OpenedTab commentators = isPdf
+                  ? PdfCommentatorsTab(
+                      sourceTab: PdfBookTab(
+                        book: PdfBook(
+                          title: 'כותרת המקור',
+                          path: 'book.pdf',
+                          source: source,
+                        ),
+                        pageNumber: 1,
+                      ),
+                      disposeSourceTabOnDispose: true,
+                    )
+                  : CommentatorsTab(
+                      sourceTab: TextBookTab(
+                        book: TextBook(title: 'כותרת המקור', source: source),
+                        index: 0,
+                      ),
+                      disposeSourceTabOnDispose: true,
+                    );
+              final tab = isCombined
+                  ? CombinedTab(
+                      rightTab: ToolTab(toolId: 'demo.plugin', title: 'Demo'),
+                      leftTab: commentators,
+                    )
+                  : commentators;
+              addTearDown(tab.dispose);
+              final diagnostics = await AppReportCollector(
+                redactor: redactor,
+                appInfoLoader: () async => {},
+                currentContext: () => contextOf(tab),
+                clock: () => now,
+              ).collectDiagnostics();
+              final context = diagnostics['context'] as Map;
+              expect(context['currentTitle'], isPrivate ? isNull : tab.title);
+              expect(
+                jsonEncode(diagnostics).contains('כותרת המקור'),
+                !isPrivate,
+              );
+            },
+          );
+        }
+      }
+    }
   });
 }

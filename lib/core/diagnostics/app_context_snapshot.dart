@@ -3,6 +3,8 @@ import 'package:otzaria/plugins/bloc/plugin_system_state.dart';
 import 'package:otzaria/plugins/models/installed_plugin.dart';
 import 'package:otzaria/tabs/bloc/tabs_state.dart';
 import 'package:otzaria/tabs/models/combined_tab.dart';
+import 'package:otzaria/tabs/models/commentators_tab.dart';
+import 'package:otzaria/tabs/models/pdf_commentators_tab.dart';
 import 'package:otzaria/tabs/models/pdf_tab.dart';
 import 'package:otzaria/tabs/models/searching_tab.dart';
 import 'package:otzaria/tabs/models/tab.dart';
@@ -46,6 +48,8 @@ Map<String, Object?> describeAppContext({
 /// כותרת חיפוש היא השאילתה, וכותרת ספר אישי היא לרוב שם הקובץ.
 bool _isPrivateTitle(OpenedTab pane) =>
     pane is SearchingTab ||
+    (pane is CommentatorsTab && _isPrivateTitle(pane.sourceTab)) ||
+    (pane is PdfCommentatorsTab && _isPrivateTitle(pane.sourceTab)) ||
     (pane is PdfBookTab && pane.book.isUserBook) ||
     (pane is TextBookTab && pane.book.isUserBook);
 
