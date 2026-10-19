@@ -32,6 +32,7 @@ import 'package:otzaria/bookmarks/utils/section_bookmark.dart';
 import 'package:otzaria/core/focus_repository.dart';
 import 'package:otzaria/settings/settings_exports.dart' hide UpdateFontSize;
 import 'package:otzaria/tabs/models/text_tab.dart';
+import 'package:otzaria/text_book/companion/companion_books.dart';
 import 'package:otzaria/widgets/navigation/reader_nav_center.dart';
 import 'package:otzaria/tabs/models/commentators_tab.dart';
 import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
@@ -1727,6 +1728,10 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
       if (_parallelEditions.isNotEmpty)
         _buildParallelEditionsAction(context, state),
 
+      // 1b) The companion book beside this one (Biur Halacha for Mishnah
+      // Berurah). Hidden while this book shares its tab with another book.
+      ?_buildCompanionBookAction(context, state),
+
       // 2) View Mode Dropdown (מאחד את Split View ו-Page Shape View)
       ActionButtonData(
         widget: KeyedSubtree(
@@ -2609,6 +2614,58 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
 
   /// לחצן המהדורה המקבילה: הפעולה הראשית היא המהדורה הראשונה (המובנית
   /// כשקיימת), וחץ עם רשימת כל המהדורות מוצג רק כשיש יותר מאחת.
+  ActionButtonData? _buildCompanionBookAction(
+    BuildContext context,
+    TextBookLoaded state,
+  ) {
+    final title = companionTitleOf(state.book);
+    if (title == null) return null;
+    final open = context.select<TabsBloc, TextBookTab?>(
+      (bloc) => openCompanionPane(bloc.state.tabs, widget.tab),
+    );
+    final isOwnTab = context.select<TabsBloc, bool>(
+      (bloc) => bloc.state.tabs.any((tab) => identical(tab, widget.tab)),
+    );
+    if (open == null && !isOwnTab) return null;
+
+    final tooltip = open != null ? 'הסתר את $title' : 'הצג את $title לצד הספר';
+    void toggle() => unawaited(_toggleCompanionBook(open));
+    return ActionButtonData(
+      widget: BarButton.icon(
+        tooltip: tooltip,
+        icon: FluentIcons.split_vertical_24_regular,
+        label: title,
+        selected: open != null,
+        compact: context.read<SettingsBloc>().state.compactMenuMode,
+        onPressed: toggle,
+      ),
+      icon: FluentIcons.split_vertical_24_regular,
+      tooltip: tooltip,
+      actionId: ToolbarActionId.companionBook,
+      // The label makes it wider than an icon button.
+      toolbarWidth: 132,
+      onPressed: toggle,
+    );
+  }
+
+  /// Opens or closes the companion pane, and keeps the choice for the next
+  /// time the book is opened.
+  Future<void> _toggleCompanionBook(TextBookTab? open) async {
+    final tabsBloc = context.read<TabsBloc>();
+    if (open != null) {
+      tabsBloc.add(ClosePane(open));
+      await setShowCompanionBookByDefault(false);
+      return;
+    }
+    final companion = await createCompanionTab(widget.tab);
+    if (companion == null || !mounted) return;
+    tabsBloc
+      ..add(OpenTabInSidePane(companion, splitRatio: kPrimaryPaneShare))
+      // Reading goes on in this book; the companion follows it.
+      ..add(SetActivePane(widget.tab));
+    await setShowCompanionBookByDefault(true);
+  }
+
   ActionButtonData _buildParallelEditionsAction(
     BuildContext context,
     TextBookLoaded state,
