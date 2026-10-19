@@ -78,7 +78,6 @@ String buildSelectedLinkTargetKey(Link link) {
 
 /// מסיר קישורים כפולים לאותו קטע-יעד. הקטע המוצג פורש כמה שורות מקור, ואותו
 /// קטע-יעד מקושר לעיתים מכמה מהן — בלי המיזוג הוא מופיע ברשימה כמה פעמים.
-@visibleForTesting
 List<Link> dedupeLinksByTarget(List<Link> links) {
   final seen = <String>{};
   return links

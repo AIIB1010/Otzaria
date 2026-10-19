@@ -124,7 +124,7 @@ List<Link> pdfScopedCommentaryLinks({
       scoped.add(link);
     }
   }
-  return scoped;
+  return dedupeLinksByTarget(scoped);
 }
 
 /// מפתח הזהות של פריט מפרש. חייב להיות תלוי-קישור בלבד: מפתח שכולל את העמוד
