@@ -20,7 +20,6 @@ import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/view/combined_view/combined_book_screen.dart';
-import 'package:otzaria/widgets/lists/scroll_position_reanchor.dart';
 
 import '../../../test_helpers/memory_cache_provider.dart';
 
@@ -268,7 +267,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.pump(ScrollPositionReanchor.idleDelay * 2);
+      await tester.pump(_scrollRest * 2);
     }
 
     await selectThenMove(
@@ -334,3 +333,6 @@ void main() {
     expect(selectedText(tester), isEmpty);
   });
 }
+
+/// רגיעה אחרי גלילה, כמו בין פעולות של משתמש.
+const _scrollRest = Duration(milliseconds: 350);

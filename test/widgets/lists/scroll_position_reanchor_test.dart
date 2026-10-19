@@ -88,7 +88,7 @@ double? _edgeOf(ItemPositionsListener listener, int index) => listener
     ?.itemLeadingEdge;
 
 int _topIndex(ItemPositionsListener listener) =>
-    reanchorTargetPosition(listener.itemPositions.value)!.index;
+    _firstItemStartingInView(listener.itemPositions.value)!.index;
 
 Future<int> _scrollAndResize(
   WidgetTester tester, {
@@ -114,7 +114,7 @@ Future<int> _scrollAndResize(
   await tester.pumpAndSettle();
   // הטיימר שממתין לרגיעת הגלילה אינו מתזמן פריימים, ולכן pumpAndSettle לבדו
   // לא מקדם אליו את השעון.
-  await tester.pump(ScrollPositionReanchor.idleDelay);
+  await tester.pump(_scrollRest);
   await tester.pumpAndSettle();
 
   final before = _topIndex(listener);
@@ -167,7 +167,7 @@ Widget _buildNestedHost({
 }
 
 Future<void> _idle(WidgetTester tester) async {
-  await tester.pump(ScrollPositionReanchor.idleDelay);
+  await tester.pump(_scrollRest);
   await tester.pumpAndSettle();
 }
 
@@ -226,28 +226,17 @@ void main() {
       expect(await _scrollAndResize(tester, enabled: true), 0);
     });
 
-    testWidgets('בלי עיגון מחדש ההיסט בפיקסלים סוחף את המיקום', (tester) async {
-      expect(await _scrollAndResize(tester, enabled: false), isNot(0));
-    });
-
-    // עיגון בונה מחדש את כל טווח המטמון, ועל נקישת גלגלת בודדת זה היה פי 38
-    // בניות פריט. מתחת למסך שלם מהעוגן ההיסט עצמו קטן, ולכן גם הסחיפה.
-    testWidgets('גלילה קצרה ממסך אינה מעגנת, והסחיפה נשארת קטנה', (
-      tester,
-    ) async {
-      final anchored = await _scrollAndResize(
+    // הרשימה עצמה מעגנת את הפריט שבראש התצוגה, בכל מרחק גלילה.
+    for (final distance in [1500.0, 120.0]) {
+      testWidgets('גם בלי עיגון המיקום נשמר אחרי גלילה של $distance', (
         tester,
-        enabled: true,
-        distance: 120,
-      );
-      final bare = await _scrollAndResize(
-        tester,
-        enabled: false,
-        distance: 120,
-      );
-      expect(anchored.abs(), lessThan(bare.abs()));
-      expect(anchored.abs(), lessThanOrEqualTo(2));
-    });
+      ) async {
+        expect(
+          await _scrollAndResize(tester, enabled: false, distance: distance),
+          0,
+        );
+      });
+    }
 
     // כל עיגון בונה מחדש את טווח המטמון כולו. בלי הסף, נקישת גלגלת בודדת
     // שאחריה עצירה שילמה פי 38 בניות פריט על תזוזה של פריט או שניים.
@@ -285,7 +274,7 @@ void main() {
         const Offset(0, -60),
       );
       await tester.pumpAndSettle();
-      await tester.pump(ScrollPositionReanchor.idleDelay);
+      await tester.pump(_scrollRest);
       await tester.pumpAndSettle();
 
       expect(builds, lessThan(10), reason: 'העיגון בנה מחדש את טווח המטמון');
@@ -308,7 +297,7 @@ void main() {
         const Offset(0, -1500),
       );
       await tester.pumpAndSettle();
-      await tester.pump(ScrollPositionReanchor.idleDelay);
+      await tester.pump(_scrollRest);
       await tester.pumpAndSettle();
       await tester.pumpWidget(
         _buildList(
@@ -349,13 +338,13 @@ void main() {
         Offset(0, -distance),
       );
       await tester.pumpAndSettle();
-      await tester.pump(ScrollPositionReanchor.idleDelay);
+      await tester.pump(_scrollRest);
       await tester.pumpAndSettle();
 
       // פסקה בערך בשלושה רבעים מגובה המסך, כמו בחירה לפני פתיחת החלונית.
       final selected = _topIndex(listener) + 10;
       await tester.pumpWidget(list(600, selected));
-      await tester.pump(ScrollPositionReanchor.idleDelay);
+      await tester.pump(_scrollRest);
       await tester.pumpAndSettle();
       await tester.pumpWidget(list(300, selected));
       await tester.pumpAndSettle();
@@ -397,7 +386,7 @@ void main() {
         const Offset(0, -1500),
       );
       await tester.pumpAndSettle();
-      await tester.pump(ScrollPositionReanchor.idleDelay);
+      await tester.pump(_scrollRest);
       await tester.pumpAndSettle();
 
       final selected = _topIndex(listener) + 10;
@@ -461,7 +450,7 @@ void main() {
           const Offset(0, -1500),
         );
         await tester.pumpAndSettle();
-        await tester.pump(ScrollPositionReanchor.idleDelay);
+        await tester.pump(_scrollRest);
         await tester.pumpAndSettle();
 
         final selected = _topIndex(listener) + 10;
@@ -541,7 +530,7 @@ void main() {
         const Offset(0, -1500),
       );
       await tester.pumpAndSettle();
-      await tester.pump(ScrollPositionReanchor.idleDelay);
+      await tester.pump(_scrollRest);
       await tester.pumpAndSettle();
 
       await tester.pumpWidget(list(600, newListener));
@@ -562,7 +551,7 @@ void main() {
         const Offset(0, -90),
       );
       await tester.pumpAndSettle();
-      await tester.pump(ScrollPositionReanchor.idleDelay);
+      await tester.pump(_scrollRest);
       await tester.pumpAndSettle();
 
       final edgeBefore = newListener.itemPositions.value
@@ -612,7 +601,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
       await tester.pumpWidget(list(8));
       await tester.pumpAndSettle();
-      await tester.pump(ScrollPositionReanchor.idleDelay);
+      await tester.pump(_scrollRest);
       await tester.pumpAndSettle();
 
       expect(_topIndex(listener), 8);
@@ -1355,7 +1344,7 @@ void main() {
         await tester.pumpAndSettle();
       }
       await _idle(tester);
-      final top = reanchorTargetPosition(listener.itemPositions.value)!;
+      final top = _firstItemStartingInView(listener.itemPositions.value)!;
 
       await tester.pumpWidget(host(card: false));
       await tester.pumpAndSettle();
@@ -1485,4 +1474,19 @@ void main() {
       expect(drift, 0);
     });
   });
+}
+
+/// רגיעה אחרי גלילה, כמו בין פעולות של משתמש.
+const _scrollRest = Duration(milliseconds: 350);
+
+/// הפריט הראשון שתחילתו בתוך התצוגה.
+ItemPosition? _firstItemStartingInView(Iterable<ItemPosition> positions) {
+  ItemPosition? best;
+  for (final position in positions) {
+    if (position.itemLeadingEdge < 0 || position.itemLeadingEdge > 1) continue;
+    if (best == null || position.itemLeadingEdge < best.itemLeadingEdge) {
+      best = position;
+    }
+  }
+  return best;
 }

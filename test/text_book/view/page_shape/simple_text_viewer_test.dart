@@ -39,7 +39,6 @@ import 'package:otzaria/text_display/text_display_exports.dart';
 import 'package:otzaria/text_book/view/tabbed_commentary_panel.dart';
 import 'package:otzaria/widgets/misc/app_context_menu.dart';
 import 'package:otzaria/widgets/misc/link_context_menu_entry.dart';
-import 'package:otzaria/widgets/lists/scroll_position_reanchor.dart';
 import 'package:otzaria/widgets/misc/link_preview_overlay.dart';
 import 'package:otzaria/widgets/smart_text/smart_text_widget.dart';
 import 'package:otzaria/text_book/view/selection/selection_persistence.dart';
@@ -2410,7 +2409,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.pump(ScrollPositionReanchor.idleDelay * 2);
+      await tester.pump(_scrollRest * 2);
     }
 
     final line = tester.allRenderObjects
@@ -2777,3 +2776,6 @@ class _TestSettingsBloc extends Bloc<SettingsEvent, SettingsState>
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
+
+/// רגיעה אחרי גלילה, כמו בין פעולות של משתמש.
+const _scrollRest = Duration(milliseconds: 350);

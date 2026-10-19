@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:positioned_sliver_list/positioned_list.dart';
 import 'package:otzaria/data/data_providers/book_composite_key.dart';
 import 'package:otzaria/data/data_providers/library_provider.dart';
 import 'package:otzaria/data/data_providers/library_provider_manager.dart';
@@ -75,7 +76,7 @@ void main() {
     // הכרטיס ולא העוגן הנוכחי — כמו בקריאה רגילה.
     await tester.dragFrom(const Offset(400, 10), const Offset(0, -20));
     await _settle(tester);
-    await _settle(tester, ScrollPositionReanchor.idleDelay);
+    await _settle(tester, _scrollRest);
 
     final listState = tester.state<CommentaryListBaseState>(card);
     final scrollableBefore = innerScrollable();
@@ -97,7 +98,7 @@ void main() {
       reason: 'הגלילה בכרטיס קצרה מכדי להפעיל את העיגון',
     );
 
-    await _settle(tester, ScrollPositionReanchor.idleDelay);
+    await _settle(tester, _scrollRest);
 
     expect(
       tester.state<CommentaryListBaseState>(card),
@@ -140,14 +141,15 @@ void main() {
     expect(card, findsOneWidget);
     await tester.drag(card, const Offset(0, -150));
     await tester.pump();
-    await _settle(tester, ScrollPositionReanchor.idleDelay);
+    await _settle(tester, _scrollRest);
 
     tab.lines.itemController.jumpTo(index: 50);
     await _settle(tester);
     expect(find.byType(CommentaryListBase), findsNothing);
-    outerScrollable().position.jumpTo(450);
-    await _settle(tester, ScrollPositionReanchor.idleDelay);
-    final top = reanchorTargetPosition(
+    final navigated = outerScrollable().position;
+    navigated.jumpTo(navigated.pixels + 450);
+    await _settle(tester, _scrollRest);
+    final top = _firstItemStartingInView(
       tab.lines.positionsListener.itemPositions.value,
     )!;
     settings.changeLineHeight(3);
@@ -397,4 +399,19 @@ class _FakeLibraryProvider implements LibraryProvider {
   Future<Map<String, List<Book>>> loadBooks(
     Map<String, Map<String, dynamic>> metadata,
   ) async => const {};
+}
+
+/// רגיעה אחרי גלילה, כמו בין פעולות של משתמש.
+const _scrollRest = Duration(milliseconds: 350);
+
+/// הפריט הראשון שתחילתו בתוך התצוגה.
+ItemPosition? _firstItemStartingInView(Iterable<ItemPosition> positions) {
+  ItemPosition? best;
+  for (final position in positions) {
+    if (position.itemLeadingEdge < 0 || position.itemLeadingEdge > 1) continue;
+    if (best == null || position.itemLeadingEdge < best.itemLeadingEdge) {
+      best = position;
+    }
+  }
+  return best;
 }

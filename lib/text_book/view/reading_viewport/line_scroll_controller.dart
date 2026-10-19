@@ -268,16 +268,11 @@ class LineScrollController {
     );
   }
 
-  /// לפני שינוי רוחב: קובע את הרשימה על הפריט העליון, ואחרי הפריסה מחזיר את
-  /// השורה המדויקת לקו העוגן.
+  /// לפני שינוי רוחב: אחרי הפריסה מחזיר את השורה המדויקת לקו העוגן.
   void keepViewAcrossRelayout() {
     if (!_nativeReady) return;
     final anchor = captureAnchor();
     if (anchor == null) return;
-    final top = reanchorTargetPosition(positionsListener.itemPositions.value);
-    if (top != null) {
-      itemController.jumpTo(index: top.index, alignment: top.itemLeadingEdge);
-    }
     final token = ++_token;
     _navigating++;
     WidgetsBinding.instance.addPostFrameCallback((_) async {

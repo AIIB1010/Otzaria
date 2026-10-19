@@ -39,7 +39,6 @@ import 'package:otzaria/utils/text/text_manipulation.dart' as utils;
 import 'package:otzaria/services/target_line_links_service.dart';
 import 'package:otzaria/models/links.dart';
 import 'package:otzaria/models/books.dart';
-import 'package:otzaria/widgets/lists/scroll_position_reanchor.dart';
 import 'package:otzaria/widgets/feedback/scrollable_positioned_list_scrollbar.dart';
 import 'package:positioned_sliver_list/positioned_list.dart';
 import 'package:otzaria/tabs/models/tab.dart';
@@ -2759,44 +2758,38 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
                                     itemCount: itemCount,
                                     labelForIndex: widget.labelForIndex,
                                     child: SmoothWheelScroll(
-                                      child: ScrollPositionReanchor(
-                                        // עיגון הוא קפיצה, והיה מעביר את הבחירה לטקסט אחר.
-                                        enabled: _savedSelectedText == null,
-                                        scrollController: _scrollController,
-                                        positionsListener: _positionsListener,
-                                        child: _trackUserScroll(
-                                          ScrollablePositionedList.builder(
-                                            itemScrollController:
-                                                _scrollController,
-                                            itemPositionsListener:
-                                                _positionsListener,
-                                            scrollOffsetController:
-                                                _offsetController,
-                                            itemCount: itemCount,
-                                            cacheExtentScreens:
-                                                kReaderCacheExtentScreens,
-                                            padding: const EdgeInsets.all(4),
-                                            itemBuilder: (context, index) {
-                                              final item = _buildLineItem(
-                                                context,
-                                                index,
-                                                state,
-                                                noteMap,
-                                                segments,
-                                                continuous,
-                                              );
-                                              final lines = _lines;
-                                              return lines == null ||
-                                                      segments == null
-                                                  ? item
-                                                  : wrapReaderItem(
-                                                      item: index,
-                                                      layout: segments.layout,
-                                                      boxes: lines.itemBoxes,
-                                                      child: item,
-                                                    );
-                                            },
-                                          ),
+                                      child: _trackUserScroll(
+                                        ScrollablePositionedList.builder(
+                                          itemScrollController:
+                                              _scrollController,
+                                          itemPositionsListener:
+                                              _positionsListener,
+                                          scrollOffsetController:
+                                              _offsetController,
+                                          itemCount: itemCount,
+                                          cacheExtentScreens:
+                                              kReaderCacheExtentScreens,
+                                          padding: const EdgeInsets.all(4),
+                                          itemBuilder: (context, index) {
+                                            final item = _buildLineItem(
+                                              context,
+                                              index,
+                                              state,
+                                              noteMap,
+                                              segments,
+                                              continuous,
+                                            );
+                                            final lines = _lines;
+                                            return lines == null ||
+                                                    segments == null
+                                                ? item
+                                                : wrapReaderItem(
+                                                    item: index,
+                                                    layout: segments.layout,
+                                                    boxes: lines.itemBoxes,
+                                                    child: item,
+                                                  );
+                                          },
                                         ),
                                       ),
                                     ),
