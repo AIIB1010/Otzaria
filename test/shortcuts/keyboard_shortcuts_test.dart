@@ -1697,6 +1697,7 @@ void main() {
       await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
 
       await sendCtrl(tester, LogicalKeyboardKey.keyL);
+      await sendCtrl(tester, LogicalKeyboardKey.keyO);
       await tester.pumpAndSettle();
       expect(find.byType(AppReportDialog), findsOneWidget);
       expect(blocs.navigationBloc.events, isEmpty);
