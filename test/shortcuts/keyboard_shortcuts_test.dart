@@ -7,6 +7,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
+import 'package:otzaria/app_report/bloc/app_report_bloc.dart';
+import 'package:otzaria/app_report/bloc/app_report_event.dart';
+import 'package:otzaria/app_report/view/app_report_dialog.dart';
 import 'package:otzaria/core/focus_repository.dart';
 import 'package:otzaria/history/bloc/history_bloc.dart';
 import 'package:otzaria/history/bloc/history_event.dart';
@@ -47,7 +50,9 @@ import 'package:otzaria/widgets/text/rtl_text_field.dart';
 import 'package:otzaria/widgets/text/selection_copy_shortcuts.dart';
 import 'package:otzaria/widgets/dialogs/reusable_items_dialog.dart';
 import 'package:otzaria/widgets/widgets_exports.dart' show ActionButton;
+import 'package:otzaria_report_contract/otzaria_report_contract.dart';
 import 'package:provider/provider.dart';
+import '../app_report/app_report_test_fakes.dart';
 import '../helpers/memory_settings_cache.dart';
 
 class MockSettingsBloc extends MockBloc<SettingsEvent, SettingsState>
@@ -1604,6 +1609,58 @@ void main() {
         },
       );
     }
+
+    testWidgets('קיצור ניווט אינו סוגר טופס דיווח שהוקלד בו (issue #2323)', (
+      tester,
+    ) async {
+      whenListen(
+        settingsBlocLocal,
+        settingsControllerLocal.stream,
+        initialState: SettingsState.initial().copyWith(
+          shortcuts: const {'key-shortcut-open-reading-screen': 'ctrl+8'},
+        ),
+      );
+      final blocs = await pumpWithDialog(tester);
+      Navigator.of(tester.element(find.byType(AlertDialog))).pop();
+      final reportBloc = AppReportBloc(
+        trigger: AppReportTrigger.manual,
+        service: FakeAppReportService(),
+        collector: FakeAppReportCollector(),
+        redactor: AppReportRedactor(environment: const {}),
+      );
+      showAppReportDialog(
+        tester.element(find.byType(SizedBox)),
+        createBloc: () => reportBloc,
+      );
+      await tester.pumpAndSettle();
+      final description = find.byKey(const ValueKey('app-report-description'));
+      await tester.enterText(description, 'דיווח ארוך');
+      await tester.pump();
+
+      await sendCtrl(tester, LogicalKeyboardKey.digit8);
+      await tester.pumpAndSettle();
+
+      expect(find.text('דיווח ארוך'), findsOneWidget);
+
+      // גם צילום שצורף, בלי טקסט, הוא דיווח שאסור לאבד.
+      await tester.enterText(description, '');
+      reportBloc.add(
+        AppReportImagesChanged([
+          AppReportImage(
+            bytes: Uint8List(1),
+            fileName: 'a.png',
+            mimeType: 'image/png',
+          ),
+        ]),
+      );
+      await tester.pump();
+
+      await sendCtrl(tester, LogicalKeyboardKey.digit8);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AppReportDialog), findsOneWidget);
+      expect(blocs.navigationBloc.events, isEmpty);
+    });
 
     testWidgets('Ctrl+W כשדיאלוג פתוח אינו סוגר טאב שברקע', (tester) async {
       final blocs = await pumpWithDialog(tester);
