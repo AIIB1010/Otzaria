@@ -15,6 +15,7 @@ import 'package:otzaria/utils/text/html_link_handler.dart';
 import 'package:otzaria/utils/text/text_manipulation.dart' as utils;
 import 'package:otzaria/widgets/smart_text/exact_line_height.dart';
 import 'package:otzaria/widgets/misc/inline_link_targets.dart';
+import 'package:otzaria/widgets/smart_text/long_line_chunks.dart';
 import 'package:otzaria/widgets/smart_text/otzaria_widget_factory.dart';
 import 'package:otzaria/widgets/smart_text/raised_markers.dart';
 import 'package:otzaria/widgets/smart_text/render_settings.dart';
@@ -212,6 +213,11 @@ class SmartTextWidget extends StatelessWidget {
         if (simpleSpan.toPlainText().isEmpty) {
           return const SizedBox.shrink();
         }
+        final strutStyle = exactLineHeightStrut(lineStyle, simpleSpan);
+        final textAlign = settings.justifyText
+            ? TextAlign.justify
+            : TextAlign.right;
+        final longLine = heading == null ? splitLongLine(simpleSpan) : null;
         // רוחב מלא כמו <div> בלוק ב-HtmlWidget - אחרת מסכים שעוטפים שורה
         // ב-Center (הגבלת רוחב קריאה) ימרכזו שורות קצרות בטעות.
         return _withPluginFrames(
@@ -223,14 +229,19 @@ class SmartTextWidget extends StatelessWidget {
             SizedBox(
               key: widgetKey,
               width: double.infinity,
-              child: SelectionFillText.rich(
-                simpleSpan,
-                style: lineStyle,
-                strutStyle: exactLineHeightStrut(lineStyle, simpleSpan),
-                textAlign: settings.justifyText
-                    ? TextAlign.justify
-                    : TextAlign.right,
-              ),
+              child: longLine != null
+                  ? LongLineChunks(
+                      split: longLine,
+                      style: lineStyle,
+                      strutStyle: strutStyle,
+                      textAlign: textAlign,
+                    )
+                  : SelectionFillText.rich(
+                      simpleSpan,
+                      style: lineStyle,
+                      strutStyle: strutStyle,
+                      textAlign: textAlign,
+                    ),
             ),
           ),
         );
