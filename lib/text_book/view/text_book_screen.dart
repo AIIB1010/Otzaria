@@ -1510,7 +1510,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
           AppTopBarItem(widget: _buildPageShapeSettingsButton(context, state)),
       ],
       center: widget.isInCombinedView
-          ? _buildTitle(state)
+          ? _buildTitle(state, textAlign: TextAlign.center)
           : ReaderNavCenter(
               title: _buildTitle(state, textAlign: TextAlign.center),
               prevMajorTooltip: 'הדף/פרק הקודם',
