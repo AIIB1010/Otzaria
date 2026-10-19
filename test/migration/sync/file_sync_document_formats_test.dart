@@ -13,6 +13,7 @@ import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/migration/database/daos/database.dart';
 import 'package:otzaria/migration/database/repository/seforim_repository.dart';
+import 'package:otzaria/migration/models/toc_entry.dart';
 import 'package:otzaria/migration/sync/file_sync_service.dart';
 import 'package:otzaria/settings/services/custom_folders/custom_folder.dart';
 import 'package:otzaria/utils/file/document_converter.dart';
@@ -232,6 +233,51 @@ void main() {
     expect(text, contains('הגרסה השנייה'));
     expect(text, isNot(contains('הגרסה הראשונה')));
   });
+
+  test(
+    'ספר שנוסף או נערך ונקלט ברענון — כותרותיו נמצאות באיתור (issue #2684)',
+    () async {
+      final file = File(path.join(booksDir.path, 'ספר אישי.txt'))
+        ..writeAsStringSync('<h1>ספר אישי</h1>\n<h2>פרק א</h2>\nתוכן');
+      Future<List<Map<String, dynamic>>> find(String heading) async =>
+          repository.getTocEntriesForReference(
+            (await repository.getAllBooksLean()).single.id,
+            'ספר אישי',
+            queryTokens: heading.split(' '),
+          );
+
+      expect((await sync()).errors, isEmpty);
+      expect(await find('פרק א'), isNotEmpty);
+
+      file.writeAsStringSync('${file.readAsStringSync()}\n<h2>פרק ב</h2>\nעוד');
+      file.setLastModifiedSync(DateTime.now().add(const Duration(minutes: 5)));
+      expect((await sync()).errors, isEmpty);
+      expect(await find('פרק ב'), isNotEmpty);
+      expect(await find('פרק א'), hasLength(1)); // הוחלף, לא שוכפל
+    },
+  );
+
+  test(
+    'רענון אינו פותח PDF — תוכן העניינים שלו נשמר כשהקובץ השתנה (issue #2684)',
+    () async {
+      // ה-outline של PDF נקרא ב-isolate הראשי בהוספת התיקייה; הסנכרון רץ
+      // ב-isolate נפרד, ושם PDFium (גלובלי לתהליך) אסור לאתחול.
+      final pdf = File(path.join(booksDir.path, 'סרוק.pdf'))
+        ..writeAsStringSync('%PDF-1.4\n%%EOF');
+      expect((await sync()).errors, isEmpty);
+      final bookId = (await repository.getAllBooksLean()).single.id;
+      await repository.insertTocEntry(
+        TocEntry(bookId: bookId, text: 'שער', level: 1, lineIndex: 1),
+      );
+
+      pdf.setLastModifiedSync(DateTime.now().add(const Duration(minutes: 5)));
+      expect((await sync()).updatedBooks, 1);
+      expect(
+        (await repository.getBookToc(bookId)).map((e) => e.text),
+        ['שער'],
+      );
+    },
+  );
 
   test('סריקה חוזרת בלי שינוי אינה מוסיפה או מעדכנת (§91)', () async {
     writeDocx('מסמך.docx', 'תוכן');
