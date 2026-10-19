@@ -16,6 +16,21 @@ double initialReadingAlignment(int initialIndex) =>
 /// וברירת המחדל של החבילה (2) בונה כחמישה מסכים של פסקאות.
 const double kReaderCacheExtentScreens = 1.5;
 
+/// גובה משוער של פריט קריאה שטרם נפרס, לפי אורך הטקסט ורוחב הרשימה. גס
+/// בכוונה: הקפיצות מדויקות בכל מקרה, וההערכה רק מקרבת את טווח הגלילה.
+ItemExtentEstimator readingExtentEstimator(
+  ReadingSegments segments,
+  double fontSize,
+) {
+  final lineExtent = fontSize * 1.6;
+  final charWidth = fontSize * 0.45;
+  return (index, width) {
+    if (index >= segments.length || width <= charWidth) return lineExtent;
+    final lines = (segments[index].text.length * charWidth / width).ceil();
+    return (lines < 1 ? 1 : lines) * lineExtent + fontSize;
+  };
+}
+
 /// קו העוגן לניווט אל תוצאת חיפוש — ממקם את המילה שנמצאה סביב מרכז-עליון
 /// התצוגה (ולא בראש), כדי שיהיה הקשר גם מעל המילה. זהה לסרגל התוצאות בחלונית
 /// ולפתיחת ספר מהחיפוש הכללי.

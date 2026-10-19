@@ -2769,6 +2769,12 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
                                           itemCount: itemCount,
                                           cacheExtentScreens:
                                               kReaderCacheExtentScreens,
+                                          estimateExtent: segments == null
+                                              ? null
+                                              : readingExtentEstimator(
+                                                  segments,
+                                                  widget.fontSize,
+                                                ),
                                           padding: const EdgeInsets.all(4),
                                           itemBuilder: (context, index) {
                                             final item = _buildLineItem(
