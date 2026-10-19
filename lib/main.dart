@@ -23,9 +23,12 @@ import 'package:otzaria/attached_libraries/bloc/attached_libraries_bloc.dart';
 import 'package:otzaria/attached_libraries/repository/attached_library_registry.dart';
 import 'package:otzaria/attached_libraries/repository/attached_libraries_repository.dart';
 import 'package:otzaria/attached_libraries/repository/external_link_repository.dart';
+import 'package:otzaria/app_report/services/android_anr_source.dart';
 import 'package:otzaria/app_report/services/app_crash_session.dart';
 import 'package:otzaria/app_report/services/app_report_service.dart';
+import 'package:otzaria/app_report/services/crash_report_decision.dart';
 import 'package:otzaria/app_report/services/crash_report_flow.dart';
+import 'package:otzaria/app_report/services/unclean_exit_detector.dart';
 import 'package:otzaria/app_report/view/crash_prompt_dialog.dart';
 import 'package:otzaria/app.dart';
 import 'package:otzaria/bookmarks/bloc/bookmark_bloc.dart';
@@ -925,6 +928,7 @@ Future<void> _initializeRestartableRuntime() async {
   unawaited(_logJobObjectContainmentFailure());
   unawaited(_runDeferredDataRootWritabilityWarning());
   unawaited(_runDeferredCrashCheck());
+  unawaited(_runDeferredAnrCheck());
   unawaited(_runDeferredAttachedLibraries());
   unawaited(_runDeferredLibraryChangesNotes());
   unawaited(_runDeferredCapabilitiesWrite());
@@ -1117,15 +1121,38 @@ Future<void> _runDeferredCrashCheck() async {
     );
     if (candidate == null) return;
     await CrashReportFlow(
-      showPrompt: (candidate) async {
-        final context = navigatorKey.currentContext;
-        if (context == null || !context.mounted) return false;
-        await showCrashPromptDialog(context, candidate: candidate);
-        return true;
-      },
+      showPrompt: showCrashPromptOnNavigator,
     ).handle(candidate);
   } catch (error, stackTrace) {
     _logNonFatalInitializationError('Crash report check', error, stackTrace);
+  }
+}
+
+/// ANR של הפעלה קודמת באנדרואיד, מ-ApplicationExitInfo של המערכת.
+Future<void> _runDeferredAnrCheck() async {
+  if (kIsWeb || !Platform.isAndroid || WindowRole.isSecondary) return;
+  try {
+    await _mainWindowRevealedCompleter.future.timeout(
+      const Duration(seconds: 20),
+    );
+  } on TimeoutException {
+    // ממשיכים בכל זאת — אחרת ה-ANR לא ידווח כלל.
+  }
+  try {
+    if (CrashReportFlow.currentMode() == AppCrashReportMode.never) return;
+    final anr = await AndroidAnrSource().takeNewAnr();
+    if (anr == null) return;
+    await CrashReportFlow(
+      showPrompt: showCrashPromptOnNavigator,
+    ).handle(
+      CrashCandidate.hang(
+        signature: anr.signature,
+        details: anr.details,
+        occurredInPreviousRun: true,
+      ),
+    );
+  } catch (error, stackTrace) {
+    _logNonFatalInitializationError('ANR report check', error, stackTrace);
   }
 }
 
