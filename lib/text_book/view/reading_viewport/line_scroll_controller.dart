@@ -305,7 +305,6 @@ class LineScrollController {
     try {
       await scrollToSourceLine(
         scrollController: itemController,
-        scrollOffsetController: offsetController,
         positionsListener: positionsListener,
         segments: segments,
         latestSegments: () => _segments ?? segments,

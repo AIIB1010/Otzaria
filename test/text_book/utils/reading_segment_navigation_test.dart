@@ -32,7 +32,6 @@ void main() {
     'scrollToSourceLine: duration zero + סגמנט גלוי + fraction>0 לא קורס',
     (tester) async {
       final itemScrollController = ItemScrollController();
-      final scrollOffsetController = ScrollOffsetController();
       final positionsListener = ItemPositionsListener.create();
 
       final lines = List.generate(20, (i) => 'שורה מספר $i');
@@ -45,7 +44,6 @@ void main() {
               height: 400,
               child: ScrollablePositionedList.builder(
                 itemScrollController: itemScrollController,
-                scrollOffsetController: scrollOffsetController,
                 itemPositionsListener: positionsListener,
                 itemCount: lines.length,
                 // פריט גבוה מה-viewport כדי שדיוק תוך-סגמנטי אכן יגלול.
@@ -63,7 +61,6 @@ void main() {
       // הרצה במקביל ל-pump כדי שאנימציית הדיוק תושלם.
       final scrollFuture = scrollToSourceLine(
         scrollController: itemScrollController,
-        scrollOffsetController: scrollOffsetController,
         positionsListener: positionsListener,
         segments: segments,
         lineIndex: 0,
@@ -93,7 +90,6 @@ void main() {
     'scrollToSourceLine: יעד כותרת (ללא דיוק תוך-שורתי) מתוקן לעוגן גם כשהגלילה הופרעה',
     (tester) async {
       final itemScrollController = ItemScrollController();
-      final scrollOffsetController = ScrollOffsetController();
       final positionsListener = ItemPositionsListener.create();
 
       final lines = List.generate(30, (i) => 'שורה מספר $i');
@@ -106,7 +102,6 @@ void main() {
               height: 400,
               child: ScrollablePositionedList.builder(
                 itemScrollController: itemScrollController,
-                scrollOffsetController: scrollOffsetController,
                 itemPositionsListener: positionsListener,
                 itemCount: lines.length,
                 itemBuilder: (context, index) =>
@@ -120,7 +115,6 @@ void main() {
 
       final scrollFuture = scrollToSourceLine(
         scrollController: itemScrollController,
-        scrollOffsetController: scrollOffsetController,
         positionsListener: positionsListener,
         segments: segments,
         lineIndex: 7,
@@ -152,7 +146,6 @@ void main() {
     'scrollToSourceLine: רשימה שירדה מהעץ באמצע האנימציה לא זורקת',
     (tester) async {
       final itemScrollController = ItemScrollController();
-      final scrollOffsetController = ScrollOffsetController();
       final positionsListener = ItemPositionsListener.create();
 
       final lines = List.generate(20, (i) => 'שורה מספר $i');
@@ -165,7 +158,6 @@ void main() {
             child: withList
                 ? ScrollablePositionedList.builder(
                     itemScrollController: itemScrollController,
-                    scrollOffsetController: scrollOffsetController,
                     itemPositionsListener: positionsListener,
                     itemCount: lines.length,
                     // פריט גבוה מה-viewport: היעד גלוי, ולכן הגלילה עוברת
@@ -183,7 +175,6 @@ void main() {
 
       final scrollFuture = scrollToSourceLine(
         scrollController: itemScrollController,
-        scrollOffsetController: scrollOffsetController,
         positionsListener: positionsListener,
         segments: segments,
         lineIndex: 0,
@@ -217,7 +208,6 @@ void main() {
       // issue #1973: טעינת רקע ממלאת פסקאות לפני היעד תוך כדי הגלילה אליו;
       // מספור הפריטים יציב, והיעד נמדד מול התוכן העדכני.
       final itemScrollController = ItemScrollController();
-      final scrollOffsetController = ScrollOffsetController();
       final positionsListener = ItemPositionsListener.create();
 
       final lines = [
@@ -269,7 +259,6 @@ void main() {
                   setListState = setState;
                   return ScrollablePositionedList.builder(
                     itemScrollController: itemScrollController,
-                    scrollOffsetController: scrollOffsetController,
                     itemPositionsListener: positionsListener,
                     itemCount: segments.length,
                     // פריט גבוה מה-viewport כדי שדיוק תוך-סגמנטי אכן יגלול.
@@ -289,7 +278,6 @@ void main() {
       const targetLine = 6;
       final scrollFuture = scrollToSourceLine(
         scrollController: itemScrollController,
-        scrollOffsetController: scrollOffsetController,
         positionsListener: positionsListener,
         segments: partial,
         latestSegments: () => segments,
