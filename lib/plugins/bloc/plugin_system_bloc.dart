@@ -431,8 +431,6 @@ class PluginSystemBloc extends Bloc<PluginSystemEvent, PluginSystemState> {
           manifest: prepareInfo.manifest,
           tempDirPath: prepareInfo.tempDirPath,
           previousVersion: prepareInfo.previousVersion,
-          previousAllowOrderBeforeBuiltInsGranted:
-              prepareInfo.previousAllowOrderBeforeBuiltInsGranted,
           previousGrantedPermissions: prepareInfo.previousGrantedPermissions,
           isUserInitiated: event.isUserInitiated,
         ),
@@ -523,8 +521,6 @@ class PluginSystemBloc extends Bloc<PluginSystemEvent, PluginSystemState> {
           manifest: prepareInfo.manifest,
           tempDirPath: prepareInfo.tempDirPath,
           previousVersion: prepareInfo.previousVersion,
-          previousAllowOrderBeforeBuiltInsGranted:
-              prepareInfo.previousAllowOrderBeforeBuiltInsGranted,
           previousGrantedPermissions: prepareInfo.previousGrantedPermissions,
           reportContext: event.reportContext,
           isUserInitiated: event.isUserInitiated,
@@ -596,7 +592,6 @@ class PluginSystemBloc extends Bloc<PluginSystemEvent, PluginSystemState> {
       await _installerService.finalizeInstall(
         event.tempDirPath,
         event.manifest,
-        allowOrderBeforeBuiltInsGranted: event.allowOrderBeforeBuiltInsGranted,
         grantedPermissions: event.grantedPermissions,
       );
 
@@ -1094,16 +1089,12 @@ class PluginSystemBloc extends Bloc<PluginSystemEvent, PluginSystemState> {
           event.sourcePath,
           preValidatedManifest: event.manifest,
           grantedPermissions: event.grantedPermissions,
-          allowOrderBeforeBuiltInsGranted:
-              event.allowOrderBeforeBuiltInsGranted,
         );
       } else {
         await devLoader.loadDevelopmentPlugin(
           event.sourcePath,
           preValidatedManifest: event.manifest,
           grantedPermissions: event.grantedPermissions,
-          allowOrderBeforeBuiltInsGranted:
-              event.allowOrderBeforeBuiltInsGranted,
         );
       }
       add(LoadPlugins());

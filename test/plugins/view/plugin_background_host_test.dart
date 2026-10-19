@@ -49,7 +49,6 @@ class _FakeInstallerService extends PluginInstallerService {
   Future<void> finalizeInstall(
     String path,
     dynamic manifest, {
-    required bool allowOrderBeforeBuiltInsGranted,
     required Map<String, bool> grantedPermissions,
     InstalledPlugin? expectedPlugin,
     Map<String, bool> expectedPermissions = const {},
