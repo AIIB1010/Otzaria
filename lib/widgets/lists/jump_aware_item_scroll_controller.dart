@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+import 'package:positioned_sliver_list/positioned_list.dart';
 
 /// [ItemScrollController] שמודיע למאזינים לפני כל קפיצה לאינדקס.
 class JumpAwareItemScrollController extends ItemScrollController {
@@ -20,15 +20,16 @@ class JumpAwareItemScrollController extends ItemScrollController {
   }
 
   @override
-  void jumpTo({required int index, double alignment = 0}) {
+  void jumpTo({required int index, double alignment = 0, double offset = 0}) {
     notifyBeforeJump();
-    super.jumpTo(index: index, alignment: alignment);
+    super.jumpTo(index: index, alignment: alignment, offset: offset);
   }
 
   @override
   Future<void> scrollTo({
     required int index,
     double alignment = 0,
+    double offset = 0,
     required Duration duration,
     Curve curve = Curves.linear,
     List<double> opacityAnimationWeights = const [40, 20, 40],
@@ -37,9 +38,9 @@ class JumpAwareItemScrollController extends ItemScrollController {
     return super.scrollTo(
       index: index,
       alignment: alignment,
+      offset: offset,
       duration: duration,
       curve: curve,
-      opacityAnimationWeights: opacityAnimationWeights,
     );
   }
 }

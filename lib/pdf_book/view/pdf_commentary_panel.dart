@@ -76,7 +76,7 @@ import 'package:otzaria/printing/view/printing_screen.dart';
 
 import 'dart:async';
 
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+import 'package:positioned_sliver_list/positioned_list.dart';
 
 /// Type alias לתאימות - משתמש ב-LinkGroup מה-Service
 typedef CommentaryGroup = LinkGroup;
@@ -1678,6 +1678,7 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
                           widget.tab.activeCommentators,
                         ),
                       ),
+                      restorePosition: true,
                       itemCount: flatItems.length,
                       itemScrollController: _itemScrollController,
                       itemPositionsListener: _itemPositionsListener,

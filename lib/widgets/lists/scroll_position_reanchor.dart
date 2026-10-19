@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+import 'package:positioned_sliver_list/positioned_list.dart';
 
 /// הפריט הראשון שתחילתו בתוך התצוגה. רק הוא ניתן לביטוי כעוגן, כי
 /// `alignment` של `jumpTo` מגיע ל-`Viewport.anchor` שחייב להיות בתחום [0,1].

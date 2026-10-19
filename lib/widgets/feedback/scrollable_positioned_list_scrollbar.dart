@@ -5,7 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:otzaria/theme/app_surfaces.dart';
 import 'package:otzaria/widgets/feedback/scrollbar_target_label.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+import 'package:positioned_sliver_list/positioned_list.dart';
 
 class ScrollablePositionedListScrollbar extends StatefulWidget {
   /// המסילה (שטח המחווה) והאגודל. הרשימה עצמה היא ילד של הסרגל, ולכן חיפוש

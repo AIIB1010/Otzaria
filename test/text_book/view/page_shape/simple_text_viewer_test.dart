@@ -43,7 +43,7 @@ import 'package:otzaria/widgets/lists/scroll_position_reanchor.dart';
 import 'package:otzaria/widgets/misc/link_preview_overlay.dart';
 import 'package:otzaria/widgets/smart_text/smart_text_widget.dart';
 import 'package:otzaria/text_book/view/selection/selection_persistence.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+import 'package:positioned_sliver_list/positioned_list.dart';
 import '../../../test_helpers/memory_cache_provider.dart';
 import 'package:otzaria/text_book/view/reading_viewport/line_scroll_controller.dart';
 
@@ -2396,7 +2396,7 @@ void main() {
     );
     String selectedText() =>
         (SelectionContainer.maybeOf(
-                  tester.element(find.byType(SliverList).first),
+                  tester.element(find.byType(SuperSliverList).first),
                 )!
                 as MultiSelectableSelectionContainerDelegate)
             .selectables

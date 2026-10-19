@@ -16,7 +16,7 @@ import 'package:otzaria/widgets/commentary/panel_anchor_links.dart';
 import 'package:otzaria/text_display/models/text_display_profile.dart';
 import 'package:otzaria/widgets/feedback/scrollable_positioned_list_scrollbar.dart';
 import 'package:otzaria/widgets/lists/filter_chips_widget.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+import 'package:positioned_sliver_list/positioned_list.dart';
 
 import '../../helpers/memory_settings_cache.dart';
 
@@ -498,7 +498,7 @@ void main() {
       reason: 'קישור מורחב וגבוה מציג מסילה',
     );
     expect(
-      list.itemPositionsNotifier!.itemPositions.value.single.itemLeadingEdge,
+      list.itemPositionsListener!.itemPositions.value.single.itemLeadingEdge,
       closeTo(0, 0.01),
     );
 
@@ -509,7 +509,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      list.itemPositionsNotifier!.itemPositions.value.single.itemLeadingEdge,
+      list.itemPositionsListener!.itemPositions.value.single.itemLeadingEdge,
       lessThan(-0.1),
       reason: 'ה־offsetController מאפשר למסילה לגלול בתוך אותו קישור',
     );

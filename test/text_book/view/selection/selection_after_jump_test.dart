@@ -7,6 +7,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:positioned_sliver_list/positioned_list.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/personal_notes/bloc/personal_notes_bloc.dart';
 import 'package:otzaria/personal_notes/bloc/personal_notes_event.dart';
@@ -148,7 +149,7 @@ void main() {
   MultiSelectableSelectionContainerDelegate scrollableRegistrar(
     WidgetTester tester,
   ) {
-    final ctx = tester.element(find.byType(SliverList).first);
+    final ctx = tester.element(find.byType(SuperSliverList).first);
     return SelectionContainer.maybeOf(ctx)!
         as MultiSelectableSelectionContainerDelegate;
   }

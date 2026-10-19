@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/widgets/lists/scroll_position_reanchor.dart';
 import 'package:otzaria/widgets/misc/smooth_wheel_scroll.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+import 'package:positioned_sliver_list/positioned_list.dart';
 
 /// רשימה שגובה הפריטים בה תלוי ברוחב — מדמה שפיכה מחדש של טקסט שנשבר
 /// לשורות נוספות כשהעמודה מצטמצמת.

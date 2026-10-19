@@ -8,7 +8,7 @@ import 'package:otzaria/personal_notes/bloc/personal_notes_state.dart';
 import 'package:otzaria/personal_notes/models/personal_note.dart';
 import 'package:otzaria/personal_notes/widgets/personal_notes_sidebar.dart';
 import 'package:otzaria/widgets/feedback/scrollable_positioned_list_scrollbar.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+import 'package:positioned_sliver_list/positioned_list.dart';
 
 import '../../test_helpers/memory_cache_provider.dart';
 
@@ -126,7 +126,7 @@ void main() {
       reason: 'הערה גבוהה מציגה מסילה ותופסת לה מקום בפריסה',
     );
     expect(
-      list.itemPositionsNotifier!.itemPositions.value.single.itemLeadingEdge,
+      list.itemPositionsListener!.itemPositions.value.single.itemLeadingEdge,
       closeTo(0, 0.01),
     );
 
@@ -137,7 +137,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      list.itemPositionsNotifier!.itemPositions.value.single.itemLeadingEdge,
+      list.itemPositionsListener!.itemPositions.value.single.itemLeadingEdge,
       lessThan(-0.1),
       reason: 'ה־offsetController מאפשר למסילה לגלול בתוך אותו פריט',
     );

@@ -5,13 +5,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/widgets/feedback/scrollable_positioned_list_scrollbar.dart';
 import 'package:otzaria/widgets/layout/adaptive_side_pane.dart';
 import 'package:otzaria/widgets/layout/resizable_drag_handle.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+import 'package:positioned_sliver_list/positioned_list.dart';
 
 class _RecordingItemScrollController extends ItemScrollController {
   final List<int> jumps = <int>[];
 
   @override
-  void jumpTo({required int index, double alignment = 0}) {
+  void jumpTo({required int index, double alignment = 0, double offset = 0}) {
     jumps.add(index);
   }
 }

@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/widgets/misc/progressive_scrolling.dart';
 import 'package:otzaria/shortcuts/shortcut_helper.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+import 'package:positioned_sliver_list/positioned_list.dart';
 
 /// מקליט קריאות גלילה במקום להזיז רשימה אמיתית.
 class _RecordingScrollOffsetController extends ScrollOffsetController {

@@ -15,7 +15,7 @@ import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/view/toc_navigator_screen.dart';
 import 'package:otzaria_icons/otzaria_icons.dart';
 import 'package:otzaria/widgets/lists/nav_tree_tile.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+import 'package:positioned_sliver_list/positioned_list.dart';
 
 import '../../support/search_engine_test_init.dart';
 import 'package:otzaria/text_book/view/reading_viewport/line_scroll_controller.dart';
