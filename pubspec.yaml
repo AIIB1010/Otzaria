@@ -164,6 +164,13 @@ dependency_overrides:
       url: https://github.com/Otzaria/sentry-dart
       ref: e31f9068de53d0dd826d217e4dc7c8ccd7dd5261
       path: packages/flutter
+  # TODO: לחזור ל-pub.dev אחרי שחרור DavBfr/dart_pdf#1984, #1985, #1986, #1987, #1988
+  # (הדפסה ב-Windows ב-thread נפרד, PDFium עצל ופרטי, השלמת עבודה שנכשלה ב-Linux). קומיט שילוב.
+  printing:
+    git:
+      url: https://github.com/palmoni5/dart_pdf
+      ref: f5efa21c2237002280f1ba056971ec1bf1e8cfd7
+      path: printing
   # החבילה המקורית בארכיון. בפורק: קפיצה אחרי שינוי רוחב נכשלה ב-layout
   # cycles (issue #1542).
   scrollable_positioned_list:
