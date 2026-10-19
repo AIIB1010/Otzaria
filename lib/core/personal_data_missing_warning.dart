@@ -12,7 +12,7 @@ import 'package:otzaria/widgets/dialogs/app_dialogs.dart';
 class PersonalDataMissingWarning {
   static bool _pending = false;
 
-  static const title = 'הסימניות, ההערות וההיסטוריה לא נמצאו';
+  static const title = 'הנתונים האישיים לא נמצאו';
   static const restoreText = 'שחזר מהגיבוי האחרון';
 
   @visibleForTesting

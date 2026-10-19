@@ -203,16 +203,19 @@ void main() {
   );
 
   Future<({String installPath, String dataPath})> installTestPlugin(
-    String pluginId,
-  ) async {
+    String pluginId, {
+    bool withData = true,
+  }) async {
     final installPath = await AppPaths.getPluginInstallPath(pluginId);
     final indexFile = File(p.join(installPath, 'index.html'));
     await indexFile.create(recursive: true);
     await indexFile.writeAsString('original');
     final dataPath = await AppPaths.getPluginDataPath(pluginId);
-    final stateFile = File(p.join(dataPath, 'state.bin'));
-    await stateFile.create(recursive: true);
-    await stateFile.writeAsBytes([7, 7, 7]);
+    if (withData) {
+      final stateFile = File(p.join(dataPath, 'state.bin'));
+      await stateFile.create(recursive: true);
+      await stateFile.writeAsBytes([7, 7, 7]);
+    }
     await PluginSystemDatabase.instance.insertOrUpdatePlugin(
       buildPlugin(pluginId, installPath),
     );
@@ -803,6 +806,105 @@ void main() {
         expect(await BackupService.getAvailableBackups(), hasLength(2));
       },
     );
+
+    for (final section in ['kvStore', 'publishedRecords', 'data']) {
+      test('נתוני תוסף בלבד ($section) נשמרים לאחר מחיקת המסדים', () async {
+        const id = 'test.pluginonly';
+        await installTestPlugin(id, withData: section == 'data');
+        expect(
+          await PluginSystemDatabase.instance.hasPluginUserData(id),
+          isFalse,
+        );
+        if (section == 'kvStore') {
+          await PluginSystemDatabase.instance.setPluginKV(
+            id,
+            'notes',
+            'entry',
+            '"תוכן אישי חשוב"',
+          );
+        } else if (section == 'publishedRecords') {
+          await PluginSystemDatabase.instance.importPluginAuxData(id, {
+            'publishedRecords': [
+              {
+                'type': 'note',
+                'scope': 'user',
+                'record_key': 'entry',
+                'payload_json': '"תוכן אישי חשוב"',
+                'version': 1,
+                'created_at': '2026-01-01T00:00:00.000Z',
+                'updated_at': '2026-01-01T00:00:00.000Z',
+              },
+            ],
+          });
+        }
+        expect(
+          await PluginSystemDatabase.instance.hasPluginUserData(id),
+          section != 'data',
+        );
+        expect(
+          await PluginSystemDatabase.instance.hasPluginUserData('other.plugin'),
+          isFalse,
+        );
+        await BackupService.performAutoBackup();
+        final full = (await BackupService.getAvailableBackups()).single.path;
+        final manifest = await readManifest(full);
+        expect(manifest['bookmarks'], isEmpty);
+        expect(manifest['history'], isEmpty);
+        expect(manifest['notes'], isEmpty);
+        expect((manifest['plugins'] as List).single[section], isNotEmpty);
+        expect(await BackupService.latestBackupHasUserData(), isTrue);
+        await BackupService.performAutoBackup();
+        final preserved = (await BackupService.getAvailableBackups())
+            .map((b) => b.path)
+            .toList();
+        expect(preserved, hasLength(2));
+
+        UserStateDatabase.instance.close();
+        await PersonalNotesDatabase.instance.close();
+        PluginSystemDatabase.instance.resetForTests();
+        for (final f in Directory(
+          p.join(tempDir.path, 'databases'),
+        ).listSync()) {
+          f.deleteSync();
+        }
+        File(p.join(tempDir.path, 'user_state.db')).deleteSync();
+        await installTestPlugin('builtin.empty', withData: false);
+        await Settings.setValue<String?>('key-last-auto-backup', null);
+        await BackupService.performAutoBackup();
+        expect(
+          (await BackupService.getAvailableBackups()).map((b) => b.path),
+          preserved,
+        );
+        expect(await BackupService.shouldPerformAutoBackup(), isFalse);
+
+        await Settings.setValue<bool>('key-backup-plugins', false);
+        await BackupService.performAutoBackup();
+        expect(await BackupService.getAvailableBackups(), hasLength(3));
+      });
+    }
+
+    test('התקנת כלי והרשאות בלבד אינן חוסמות גיבוי ריק', () async {
+      const id = 'builtin.empty';
+      await installTestPlugin(id, withData: false);
+      await PluginSystemDatabase.instance.importPluginAuxData(id, {
+        'permissions': [
+          {
+            'permission': 'clipboard.read',
+            'granted': 1,
+            'granted_at': '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      });
+      expect(
+        await PluginSystemDatabase.instance.hasPluginUserData(id),
+        isFalse,
+      );
+      await BackupService.performAutoBackup();
+      expect(await BackupService.latestBackupHasUserData(), isFalse);
+      await PluginSystemDatabase.instance.deletePlugin(id);
+      await BackupService.performAutoBackup();
+      expect(await BackupService.getAvailableBackups(), hasLength(2));
+    });
 
     test('גיבוי אוטומטי מוצלח מעדכן את מועד הגיבוי האחרון', () async {
       expect(Settings.getValue<String>('key-last-auto-backup'), isNull);

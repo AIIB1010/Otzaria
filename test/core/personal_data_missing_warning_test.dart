@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_settings_screens/flutter_settings_screens.dart';
+import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:otzaria/core/app_paths.dart';
@@ -51,7 +51,11 @@ void main() {
     } catch (_) {}
   });
 
-  String writeBackup(DateTime at, {required bool withData}) {
+  String writeBackup(
+    DateTime at, {
+    required bool withData,
+    dynamic plugins,
+  }) {
     final stamp = at.toIso8601String().replaceAll(':', '-');
     final file = File(p.join(backups.path, 'otzaria_backup_$stamp.json'));
     file.writeAsStringSync(
@@ -62,6 +66,7 @@ void main() {
         ],
         'history': [],
         'notes': [],
+        'plugins': plugins,
       }),
     );
     return file.path;
@@ -137,6 +142,61 @@ void main() {
     writeBackup(DateTime(2026, 10, 1), withData: false);
     expect(await startup(tester), isFalse);
   });
+
+  testWidgets('גיבוי עם KV של תוסף בלבד מציע שחזור אחרי החשיפה', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    File(p.join(root.path, 'library_loaded.marker')).createSync();
+    writeBackup(
+      DateTime(2026, 10, 1),
+      withData: false,
+      plugins: [
+        {
+          'kvStore': [
+            {'namespace': 'notes', 'key': 'entry', 'value_json': '"תוכן אישי"'},
+          ],
+        },
+      ],
+    );
+    await tester.runAsync(() async {
+      await UserStateDatabase.instance.database;
+      await PersonalDataMissingWarning.detect();
+    });
+    expect(find.text(PersonalDataMissingWarning.title), findsNothing);
+    await tester.runAsync(() async {
+      unawaited(PersonalDataMissingWarning.showIfNeeded());
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    });
+    await tester.pumpAndSettle();
+    expect(find.text(PersonalDataMissingWarning.title), findsOneWidget);
+    await dismiss(tester);
+  });
+
+  for (final plugins in [
+    [
+      {
+        'installation': {'plugin_id': 'builtin.empty'},
+        'files': {'index.html': 'asset'},
+        'permissions': [
+          {'granted': 1},
+        ],
+      },
+    ],
+    {'invalid': 'old or corrupt plugin section'},
+    [
+      {'kvStore': 'invalid'},
+    ],
+  ]) {
+    testWidgets('התקנה בלבד או סעיף תוספים פגום אינם מציעים שחזור: $plugins', (
+      tester,
+    ) async {
+      await pumpApp(tester);
+      File(p.join(root.path, 'library_loaded.marker')).createSync();
+      writeBackup(DateTime(2026, 10, 1), withData: false, plugins: plugins);
+      expect(await startup(tester), isFalse);
+    });
+  }
 
   testWidgets(
     '"שחזר מהגיבוי האחרון" מאשר ומשחזר מהגיבוי החדש ביותר (issue #2610)',

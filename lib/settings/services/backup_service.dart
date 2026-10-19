@@ -1702,10 +1702,11 @@ class BackupService {
       bookmarks: includeBookmarks,
       history: includeHistory,
       notes: includeNotes,
+      plugins: includePlugins,
     );
     if (emptySections.isNotEmpty && await _latestBackupHasAny(emptySections)) {
       _logger.warning(
-        'Auto-backup skipped: no bookmarks, history or notes, unlike the '
+        'Auto-backup skipped: no personal data, unlike the '
         'latest backup',
       );
       await Settings.setValue(
@@ -1751,12 +1752,13 @@ class BackupService {
     }
   }
 
-  /// הסעיפים הנכללים מבין סימניות, היסטוריה והערות, כשכולם ריקים; אחרת
-  /// רשימה ריקה. אלה מתמלאים רק משימוש, בניגוד לתוספים מובנים וברירות מחדל.
+  /// הסעיפים האישיים הנכללים, כשכולם ריקים; אחרת רשימה ריקה.
+  /// התקנת תוסף והרשאותיו לבדן אינן נתוני משתמש.
   static Future<List<String>> _emptyUserSections({
     required bool bookmarks,
     required bool history,
     required bool notes,
+    required bool plugins,
   }) async {
     if (bookmarks && (await _backupBookmarks()).isNotEmpty) return const [];
     if (history && (await _backupHistory()).isNotEmpty) return const [];
@@ -1765,16 +1767,43 @@ class BackupService {
             .isNotEmpty) {
       return const [];
     }
+    if (plugins) {
+      final db = PluginSystemDatabase.instance;
+      for (final plugin in await db.getAllInstalledPlugins()) {
+        if (plugin.isDevelopment) continue;
+        if (await db.hasPluginUserData(plugin.pluginId)) {
+          return const [];
+        }
+        final data = Directory(
+          await AppPaths.getPluginDataPath(plugin.pluginId),
+        );
+        if (await data.exists() &&
+            await data
+                .list(recursive: true, followLinks: false)
+                .any((entity) => entity is File)) {
+          return const [];
+        }
+      }
+    }
     return [
       if (bookmarks) 'bookmarks',
       if (history) 'history',
       if (notes) 'notes',
+      if (plugins) 'plugins',
     ];
   }
 
-  /// האם בגיבוי החדש ביותר יש סימניות, היסטוריה או הערות.
+  static bool _pluginHasUserData(Object? plugin) =>
+      plugin is Map &&
+      ['kvStore', 'publishedRecords', 'data'].any((key) {
+        final value = plugin[key];
+        return value is List && value.isNotEmpty ||
+            value is Map && value.isNotEmpty;
+      });
+
+  /// האם בגיבוי החדש ביותר יש נתונים אישיים, לרבות תוכן תוספים.
   static Future<bool> latestBackupHasUserData() =>
-      _latestBackupHasAny(const ['bookmarks', 'history', 'notes']);
+      _latestBackupHasAny(const ['bookmarks', 'history', 'notes', 'plugins']);
 
   /// האם באחד מ-[sections] של הגיבוי החדש ביותר יש פריטים. קובץ פגום — לא.
   static Future<bool> _latestBackupHasAny(List<String> sections) async {
@@ -1785,7 +1814,13 @@ class BackupService {
       return await Isolate.run(() {
         final data = json.decode(File(path).readAsStringSync());
         return data is Map &&
-            sections.any((s) => (data[s] as List?)?.isNotEmpty ?? false);
+            sections.any((s) {
+              final value = data[s];
+              return value is List &&
+                  (s == 'plugins'
+                      ? value.any(_pluginHasUserData)
+                      : value.isNotEmpty);
+            });
       });
     } catch (_) {
       return false;
