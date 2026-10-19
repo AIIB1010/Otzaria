@@ -51,6 +51,22 @@ class FakeRepository extends Mock implements PluginRegistryRepository {
   }
 
   @override
+  Future<void> upgradePluginWithPermissions(
+    InstalledPlugin plugin,
+    Map<String, bool> permissions,
+    InstalledPlugin expectedPlugin,
+    Map<String, bool> expectedPermissions,
+  ) async {
+    if (!mapEquals(
+      plugins[plugin.pluginId]?.toDbMap(),
+      expectedPlugin.toDbMap(),
+    )) {
+      throw StateError('Plugin changed during bundled upgrade');
+    }
+    await savePluginWithPermissions(plugin, permissions);
+  }
+
+  @override
   Future<int?> getNextUserOrderForNewPlugin() async => null;
 }
 
@@ -93,13 +109,21 @@ List<int> pluginArchiveBytes(
   String pluginId, {
   String version = '1.0.0',
   List<String> permissions = const [],
+  String? minAppVersion,
 }) {
   final archive = Archive()
     ..addFile(
       ArchiveFile.string(
         'manifest.json',
         jsonEncode(
-          manifestJson(pluginId, version: version, permissions: permissions),
+          {
+            ...manifestJson(
+              pluginId,
+              version: version,
+              permissions: permissions,
+            ),
+            'minAppVersion': ?minAppVersion,
+          },
         ),
       ),
     )
@@ -112,9 +136,15 @@ void writePluginArchive(
   String pluginId, {
   String version = '1.0.0',
   List<String> permissions = const [],
+  String? minAppVersion,
 }) {
   File(path).writeAsBytesSync(
-    pluginArchiveBytes(pluginId, version: version, permissions: permissions),
+    pluginArchiveBytes(
+      pluginId,
+      version: version,
+      permissions: permissions,
+      minAppVersion: minAppVersion,
+    ),
   );
 }
 

@@ -6,6 +6,7 @@ import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:http/http.dart' as http;
 import 'package:otzaria/core/app_paths.dart';
 import 'package:otzaria/core/windowing/window_role.dart';
+import 'package:otzaria/plugins/models/installed_plugin.dart';
 import 'package:otzaria/plugins/models/plugin_permission_labels.dart';
 import 'package:otzaria/plugins/models/plugin_valid_permissions.dart';
 import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
@@ -134,7 +135,7 @@ class BundledPluginSeedService {
         if (await _install(
           pluginId,
           archivePath,
-          isUpgrade: installed != null,
+          previousPlugin: installed,
         )) {
           seeded.add(pluginId);
           registered = true;
@@ -184,8 +185,9 @@ class BundledPluginSeedService {
   Future<bool> _install(
     String pluginId,
     String archivePath, {
-    required bool isUpgrade,
+    required InstalledPlugin? previousPlugin,
   }) async {
+    final isUpgrade = previousPlugin != null;
     try {
       final prepared = await _installerService.prepareInstall(archivePath);
       // המזהה שברשימת ההיתר הוא מה שאושר, לא שם הקובץ: ארכיון שמצהיר על
@@ -223,6 +225,8 @@ class BundledPluginSeedService {
             prepared.previousAllowOrderBeforeBuiltInsGranted ??
             prepared.manifest.allowOrderBeforeBuiltIns,
         grantedPermissions: grantedPermissions,
+        expectedPlugin: previousPlugin,
+        expectedPermissions: previousGrants,
       );
       if (isUpgrade && grantedPermissions['navigation.write'] != true) {
         PluginNewTabPageRegistry.instance.remove(pluginId);
@@ -234,8 +238,7 @@ class BundledPluginSeedService {
     } on PluginNewerVersionInstalledException {
       return false;
     } catch (e) {
-      // כשל אינו מסומן כמטופל — ניסיון חוזר בעלייה הבאה. שקט בכוונה: המשתמש
-      // לא ביקש את ההתקנה הזו ואין לו מה לעשות עם השגיאה.
+      // שקט בכוונה: ההתקנה אוטומטית, ועדכון שנכשל עדיין זמין בחנות.
       debugPrint('Bundled plugin seed failed [$pluginId]: $e');
       return false;
     }
