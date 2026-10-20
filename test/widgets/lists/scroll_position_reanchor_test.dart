@@ -112,8 +112,6 @@ Future<int> _scrollAndResize(
     Offset(0, -distance),
   );
   await tester.pumpAndSettle();
-  // הטיימר שממתין לרגיעת הגלילה אינו מתזמן פריימים, ולכן pumpAndSettle לבדו
-  // לא מקדם אליו את השעון.
   await tester.pump(_scrollRest);
   await tester.pumpAndSettle();
 
@@ -510,6 +508,67 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('גרירה שמוציאה את הנבחרת מהמסך ומחזירה אותה שומרת את גובהה', (
+      tester,
+    ) async {
+      final controller = ItemScrollController();
+      final listener = ItemPositionsListener.create();
+      Widget list(double width, int? selected) => _buildList(
+        width: width,
+        controller: controller,
+        listener: listener,
+        enabled: true,
+        preferredIndex: selected,
+      );
+
+      await tester.pumpWidget(list(600, null));
+      await tester.pumpAndSettle();
+      await tester.drag(
+        find.byType(ScrollablePositionedList),
+        const Offset(0, -1500),
+      );
+      await tester.pumpAndSettle();
+      await tester.pump(_scrollRest);
+      await tester.pumpAndSettle();
+
+      final selected = _topIndex(listener) + 10;
+      await tester.pumpWidget(list(600, selected));
+      await tester.pump(_scrollRest);
+      await tester.pumpAndSettle();
+      final edgeBefore = _edgeOf(listener, selected)!;
+
+      // גרירה איטית אחת: הנבחרת יוצאת מתחתית המסך וחוזרת, בלי תנופה.
+      final gesture = await tester.startGesture(const Offset(400, 100));
+      for (var i = 0; i < 10; i++) {
+        await gesture.moveBy(const Offset(0, 50));
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(
+        _edgeOf(listener, selected) ?? 2,
+        greaterThan(1),
+        reason: 'הנבחרת לא יצאה מהמסך',
+      );
+      for (var i = 0; i < 10; i++) {
+        await gesture.moveBy(const Offset(0, -50));
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      await tester.pump(const Duration(milliseconds: 300));
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(
+        _edgeOf(listener, selected),
+        moreOrLessEquals(edgeBefore, epsilon: 0.01),
+      );
+
+      await tester.pumpWidget(list(300, selected));
+      await tester.pumpAndSettle();
+
+      expect(
+        _edgeOf(listener, selected),
+        moreOrLessEquals(edgeBefore, epsilon: 0.01),
+      );
     });
 
     testWidgets('מחליף את positionsListener יחד עם הווידג’ט', (tester) async {
@@ -1038,8 +1097,7 @@ void main() {
       },
     );
 
-    // שינוי רוחב בתוך זמן הרגיעה נדחה כדי לא לקפוץ באמצע גלילה. גלילה
-    // פנימית אסור שתפעיל את ההשהיה הזו, אחרת הפסקה הנבחרת נדחפת ממקומה.
+    // גלילה פנימית אינה גלילה של הרשימה, ואסור שתדחה את העיגון בשינוי הרוחב.
     testWidgets('צמצום מיד אחרי גלילה מקוננת מחזיר את הפסקה הנבחרת לגובהה', (
       tester,
     ) async {
@@ -1086,7 +1144,6 @@ void main() {
     });
 
     // פסקה ארוכה וכרטיס תחתיה: תחילת הפסקה מעל המסך, ואין לה גובה לשחזר.
-    // העיגון שהגלילה המקוננת ביטלה חייב להתבצע בשינוי הרוחב.
     testWidgets('צמצום אחרי גלילה מקוננת שביטלה עיגון אינו סוחף את הטקסט', (
       tester,
     ) async {
@@ -1170,9 +1227,8 @@ void main() {
       expect(innerController.offset, offset);
     });
 
-    // שינוי רוחב בזמן הרגיעה נדחה בלי לקפוץ, ולכן החוב נשאר והעיגון ברגיעה
-    // שאחריו עדיין אסור — הכרטיס במסך.
-    testWidgets('שינוי רוחב שנדחה אינו מבטל את החוב', (tester) async {
+    // שינוי רוחב בזמן גלילה נדחה; הכרטיס המקונן שבמסך אינו נבנה מחדש.
+    testWidgets('שינוי רוחב שנדחה אינו מאפס כרטיס מקונן', (tester) async {
       final innerController = ScrollController();
       addTearDown(innerController.dispose);
       const inner = Key('inner');
@@ -1215,7 +1271,7 @@ void main() {
       expect(innerController.offset, offset);
     });
 
-    testWidgets('קפיצת רוחב שבוטלה אינה מוחקת חוב של כרטיס מקונן', (
+    testWidgets('קפיצת רוחב שבוטלה אינה מאפסת כרטיס מקונן', (
       tester,
     ) async {
       final innerController = ScrollController();
@@ -1306,8 +1362,8 @@ void main() {
       expect(innerController.offset, offset);
     });
 
-    // סגירת כרטיס שמעל המסך: בלי עיגון ברגיעה הטקסט שבמסך קופץ בגובהו.
-    testWidgets('שני מסכים אחרי כרטיס שנגלל העיגון ברגיעה חוזר', (
+    // סגירת כרטיס שמעל המסך אינה מקפיצה את הטקסט שבמסך.
+    testWidgets('סגירת כרטיס שנגלל, שני מסכים מעל, שומרת את הטקסט במקומו', (
       tester,
     ) async {
       final innerController = ScrollController();
@@ -1360,7 +1416,7 @@ void main() {
       );
     });
 
-    // הגלילה המקוננת ביטלה את הטיימר, ולכן שינוי רוחב מיידי אינו נדחה.
+    // הגלילה המקוננת אינה גלילה של הרשימה, ולכן שינוי רוחב מיידי אינו נדחה.
     testWidgets(
       'גלילה חיצונית שלא נחה ואחריה מקוננת — הצמצום מחזיר את הנבחרת',
       (

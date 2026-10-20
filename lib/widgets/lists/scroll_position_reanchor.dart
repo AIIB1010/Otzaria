@@ -15,7 +15,7 @@ ItemPosition? _firstStartingInView(Iterable<ItemPosition> positions) {
 
 /// כשרוחב התצוגה משתנה, מחזיר את הפסקה הנבחרת לגובה שבו הייתה, כדי שפתיחת
 /// חלונית לא תדחוף אותה מהמסך כשהפסקאות שמעליה מתארכות. בלי פסקה נבחרת
-/// הרשימה עצמה שומרת את הפריט שבראש התצוגה.
+/// במסך קופץ לפריט הראשון שתחילתו במסך, לאותו גובה.
 class ScrollPositionReanchor extends StatefulWidget {
   const ScrollPositionReanchor({
     super.key,
@@ -84,6 +84,7 @@ class _ScrollPositionReanchorState extends State<ScrollPositionReanchor> {
     if (!_holdSelectedEdge && !_isScrolling) _trackSelected();
   }
 
+  // נשמר גם מחוץ למסך, כדי שגלילה החוצה וחזרה לא תאבד את הקצה.
   void _trackSelected() {
     final index = widget.preferredIndex;
     _selectedEdge = index == null
@@ -91,7 +92,6 @@ class _ScrollPositionReanchorState extends State<ScrollPositionReanchor> {
         : widget.positionsListener.itemPositions.value
               .where((p) => p.index == index)
               .map((p) => p.itemLeadingEdge)
-              .where((edge) => edge >= 0 && edge <= 1)
               .firstOrNull;
   }
 
@@ -105,7 +105,10 @@ class _ScrollPositionReanchorState extends State<ScrollPositionReanchor> {
     if (_isScrolling) return;
     // בלי פסקה נבחרת במסך: הפריט הראשון שתחילתו במסך. הרשימה לבדה שומרת את
     // החלק שנגלל מהפריט העליון, וכרטיס מקונן בו אינו נמתח עם הטקסט.
-    final selectedEdge = _selectedEdge;
+    final tracked = _selectedEdge;
+    final selectedEdge = tracked != null && tracked >= 0 && tracked <= 1
+        ? tracked
+        : null;
     final top = selectedEdge == null
         ? _firstStartingInView(widget.positionsListener.itemPositions.value)
         : null;
@@ -154,9 +157,8 @@ class _ScrollPositionReanchorState extends State<ScrollPositionReanchor> {
     }
     final edge = _selectedEdge;
     if (edge != null && notification is ScrollUpdateNotification) {
-      final moved =
+      _selectedEdge =
           edge - (notification.scrollDelta ?? 0) / metrics.viewportDimension;
-      _selectedEdge = moved >= 0 && moved <= 1 ? moved : null;
     }
     _pixels = metrics.pixels;
     return false;
