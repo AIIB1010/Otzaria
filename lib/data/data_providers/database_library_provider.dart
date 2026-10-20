@@ -3258,7 +3258,6 @@ class DatabaseLibraryProvider implements LibraryProvider, LinkLinesProvider {
     _attachCatalogBookVersions(library);
 
     // NOTE: Sorting is now done during build (like Kotlin), no need for post-sort
-    // _sortLibraryRecursive(library); // Removed - sorting happens in _buildCatalogCategoryRecursiveOptimized
 
     // Mark titles as cached
     _titlesCached = true;
