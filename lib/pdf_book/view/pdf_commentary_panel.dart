@@ -1107,7 +1107,7 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
     return ProgressiveScroll(
       focusNode: _commentaryFocusNode,
       autofocus: widget.isFullScreen,
-      scrollController: _scrollOffsetController,
+      scrollController: _itemScrollController,
       maxSpeed: 10000.0,
       curve: 10.0,
       accelerationFactor: 5,
@@ -1663,7 +1663,6 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
                 maintainSize: true,
                 child: ScrollablePositionedListScrollbar(
                   scrollController: _itemScrollController,
-                  itemPositionsListener: _itemPositionsListener,
                   itemCount: flatItems.length,
                   labelForIndex: (index) =>
                       index >= 0 && index < flatItems.length

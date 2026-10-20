@@ -63,6 +63,8 @@ void main() {
     final rebuilt = segments[0];
     expect(rebuilt, isNot(same(first)));
     expect(rebuilt.text, first.text);
+    expect(rebuilt.isHeader, first.isHeader);
+    expect(rebuilt.isLoaded, first.isLoaded);
     expect(rebuilt.sourceLineIndices, first.sourceLineIndices);
     expect(
       rebuilt.lineRanges.map(

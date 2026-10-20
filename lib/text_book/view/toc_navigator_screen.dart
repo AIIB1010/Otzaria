@@ -59,6 +59,7 @@ class _TocViewerState extends State<TocViewer>
   // השיטוח משתנה רק כשהתצוגה או מצב ההרחבה משתנים.
   _TocDisplayData? _flatDisplay;
   List<TocFlatItem>? _flatResult;
+  Map<TocEntry, int> _flatEntryIndices = Map<TocEntry, int>.identity();
   int _expandedRevision = 0;
   int _flatExpandedRevision = -1;
 
@@ -301,23 +302,6 @@ class _TocViewerState extends State<TocViewer>
     return true;
   }
 
-  /// העוגן של הרשימה הוירטואלית (למשל 0.85 מגלילה למטה) שורד שינוי הרחבה,
-  /// ואחרי כיווץ משאיר רווח ריק מעל הפריטים. מעגנים מחדש בשורה העליונה הגלויה.
-  void _anchorVirtualListAtTopRow() {
-    if (!_virtualScrollController.isAttached) return;
-    ItemPosition? top;
-    for (final p in _virtualPositionsListener.itemPositions.value) {
-      // הכותרת הראשית (0) מקבלת ריפוד עליון כשהיא העוגן, ולכן אינה מועמדת.
-      if (p.index == 0 || p.itemTrailingEdge <= 0) continue;
-      if (top == null || p.index < top.index) top = p;
-    }
-    if (top == null) return;
-    _virtualScrollController.jumpTo(
-      index: top.index,
-      alignment: top.itemLeadingEdge,
-    );
-  }
-
   _TocDisplayData _displayDataFor(TextBookLoaded state) {
     final tableOfContents = state.tableOfContents;
     final query = _appliedQuery;
@@ -332,6 +316,7 @@ class _TocViewerState extends State<TocViewer>
       _displayResult = _TocDisplayData(entries, isSearching);
       _flatDisplay = null;
       _flatResult = null;
+      _flatEntryIndices.clear();
       _flatExpandedRevision = -1;
     }
     return _displayResult!;
@@ -347,6 +332,11 @@ class _TocViewerState extends State<TocViewer>
         _expanded,
         expandByDefault: display.isSearching,
       );
+      _flatEntryIndices = Map<TocEntry, int>.identity();
+      final flat = _flatResult!;
+      for (var index = 0; index < flat.length; index++) {
+        _flatEntryIndices[flat[index].entry] = index + 1;
+      }
     }
     return _flatResult!;
   }
@@ -379,7 +369,6 @@ class _TocViewerState extends State<TocViewer>
       onTap: navigateToEntry,
       onToggleExpand: hasChildren
           ? () {
-              _anchorVirtualListAtTopRow();
               setState(() {
                 _expanded[entry.index] = !isExpanded;
                 _expandedRevision++;
@@ -459,18 +448,29 @@ class _TocViewerState extends State<TocViewer>
       itemPositionsListener: _virtualPositionsListener,
       // +1 עבור הכותרת הראשית, שנגללת עם הרשימה (פריט 0).
       itemCount: flat.length + 1,
+      findChildIndexCallback: (key) => key == const ValueKey('toc-tree-header')
+          ? 0
+          : key is ObjectKey
+          ? _flatEntryIndices[key.value]
+          : null,
       itemBuilder: (context, index) {
         if (index == 0) {
-          return _buildTreeHeader(title, display);
+          return KeyedSubtree(
+            key: const ValueKey('toc-tree-header'),
+            child: _buildTreeHeader(title, display),
+          );
         }
         final item = flat[index - 1];
-        return _buildTocRow(
-          item.entry,
-          showFullText: isSearching,
-          activeIndex: activeIndex,
-          isExpanded: item.isExpanded,
-          isGroupStart: index == 1,
-          isGroupEnd: index == flat.length,
+        return KeyedSubtree(
+          key: ObjectKey(item.entry),
+          child: _buildTocRow(
+            item.entry,
+            showFullText: isSearching,
+            activeIndex: activeIndex,
+            isExpanded: item.isExpanded,
+            isGroupStart: index == 1,
+            isGroupEnd: index == flat.length,
+          ),
         );
       },
       padding: kNavTreeListPadding,

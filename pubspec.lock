@@ -1388,10 +1388,10 @@ packages:
     dependency: "direct main"
     description:
       name: positioned_sliver_list
-      sha256: "81e557a4d5901e6bbb90b9ca1c5db44794ff87ec3c94bf8a5693fa6790a399c1"
+      sha256: "9856918dea6ce27df81dc515c614ea67e37030c68a564a213d725aafff8e550b"
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.0"
+    version: "0.2.1"
   posix:
     dependency: transitive
     description:

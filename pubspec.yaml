@@ -53,14 +53,11 @@ dependencies:
   flutter_widget_from_html_core: ^0.17.4
   fwfh_svg: ^0.16.1
   fwfh_url_launcher: ^0.16.1
-  positioned_sliver_list: ^0.1.0
+  positioned_sliver_list: ^0.2.1
   flutter_svg: ^2.3.0  
   fluentui_system_icons: ^1.1.273
-  # אחרי עדכון ה-ref: הרץ את הפקודה שב-docs/plugin-sdk/ICONS.md כדי לרענן את
-  # רשימת האייקונים לתוספים. הקוד עצמו אינו דורש שינוי — pluginIconFromName
-  # פותר מול OtzariaIcons.allIcons המגונררת בתוך הספרייה.
-  # ה-ref נשאר נעוץ בכוונה: pubspec.lock אינו במעקב, ובלעדיו שתי מכונות
-  # יבנו מול ספריות שונות.
+  # בעדכון ה-ref יש לרענן את רשימת האייקונים לתוספים
+  # לפי הפקודה שב-docs/plugin-sdk/ICONS.md.
   otzaria_icons:
     git:
       url: https://github.com/Otzaria/otzaria_icons

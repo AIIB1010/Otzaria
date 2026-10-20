@@ -26,6 +26,7 @@ class ScrollPositionReanchor extends StatefulWidget {
     this.preferredIndex,
     this.layoutKey,
     this.boxForIndex,
+    this.isNavigationActive,
   });
 
   final ItemScrollController scrollController;
@@ -36,6 +37,7 @@ class ScrollPositionReanchor extends StatefulWidget {
   /// שינוי שלו (למשל מרווח השורות) משנה את גובה הפריטים כמו שינוי רוחב.
   final Object? layoutKey;
   final RenderBox? Function(int index)? boxForIndex;
+  final bool Function()? isNavigationActive;
   final Widget child;
 
   @override
@@ -112,7 +114,7 @@ class _ScrollPositionReanchorState extends State<ScrollPositionReanchor> {
     final layout = (width, widget.layoutKey);
     _lastLayout = layout;
     if (previous == null || previous == layout || !widget.enabled) return;
-    if (_isScrolling) return;
+    if (_isScrolling || (widget.isNavigationActive?.call() ?? false)) return;
     // בלי פסקה נבחרת במסך: הפריט הראשון שתחילתו במסך. הרשימה לבדה שומרת את
     // החלק שנגלל מהפריט העליון, וכרטיס מקונן בו אינו נמתח עם הטקסט.
     final tracked = _selectedEdge;
@@ -138,10 +140,17 @@ class _ScrollPositionReanchorState extends State<ScrollPositionReanchor> {
     }
     // גם גלגלת שהסתיימה באותו פריים מבטלת את העיגון המתוזמן.
     final pixels = _pixels;
+    final controller = widget.scrollController;
+    final preferredIndex = widget.preferredIndex;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted ||
+          !widget.enabled ||
+          widget.scrollController != controller ||
+          widget.preferredIndex != preferredIndex ||
+          _lastLayout != layout ||
           !widget.scrollController.isAttached ||
           _isScrolling ||
+          (widget.isNavigationActive?.call() ?? false) ||
           _pixels != pixels) {
         return;
       }

@@ -1277,6 +1277,35 @@ Future<void> main() async {
     expect(find.text('siman 2'), findsOneWidget);
     expectFirstRowAtTop(tester);
   });
+
+  testWidgets('כיווץ ענף שומר את זהות השורות שמספרן השתנה', (tester) async {
+    final toc = _buildLargeToc(simanim: 3, seifim: 2);
+    final bloc = _TestTextBookBloc(_loadedState(toc: toc, visibleIndices: [0]));
+    final focus = FocusNode();
+    final lines = LineScrollController();
+    addTearDown(bloc.close);
+    addTearDown(focus.dispose);
+    addTearDown(lines.dispose);
+    await tester.pumpWidget(
+      _wrap(
+        TocViewer(
+          lines: lines,
+          closeLeftPaneCallback: () {},
+          focusNode: focus,
+        ),
+        bloc,
+      ),
+    );
+    await tester.pumpAndSettle();
+    final row = find.ancestor(
+      of: find.text('siman 1'),
+      matching: find.byType(NavTreeTile),
+    );
+    final before = tester.element(row);
+    await tester.tap(find.byType(ExpandingChevron).first);
+    await tester.pumpAndSettle();
+    expect(tester.element(row), same(before));
+  });
 }
 
 /// השדה בלשונית הניווט סגור עד הלחיצה על אייקון החיפוש שבכותרת.

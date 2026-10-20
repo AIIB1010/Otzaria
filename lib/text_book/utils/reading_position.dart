@@ -201,15 +201,13 @@ ReadingPosition? readingPositionFromItems(
   final item = itemPosition.index;
   final extent = itemPosition.itemTrailingEdge - itemPosition.itemLeadingEdge;
   final start = lineFractionInItem(segments, item, line, measure: measure);
-  final end = segments[item].sourceLineIndices.length <= 1
-      ? 1.0
-      : lineFractionInItem(
-          segments,
-          item,
-          line,
-          intraLineFraction: 1,
-          measure: measure,
-        );
+  final end = lineFractionInItem(
+    segments,
+    item,
+    line,
+    intraLineFraction: 1,
+    measure: measure,
+  );
   return (
     leading: itemPosition.itemLeadingEdge + extent * start,
     trailing: itemPosition.itemLeadingEdge + extent * end,

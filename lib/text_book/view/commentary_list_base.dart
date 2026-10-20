@@ -2090,7 +2090,7 @@ class CommentaryListBaseState extends State<CommentaryListBase>
                           return ProgressiveScroll(
                             focusNode: _focusNode,
                             autofocus: widget.autofocus,
-                            scrollController: scrollController,
+                            scrollController: _itemScrollController,
                             maxSpeed: 10000.0,
                             curve: 10.0,
                             accelerationFactor: 5,
@@ -2115,7 +2115,6 @@ class CommentaryListBaseState extends State<CommentaryListBase>
                                     ),
                                 child: ScrollablePositionedListScrollbar(
                                   scrollController: _itemScrollController,
-                                  itemPositionsListener: _itemPositionsListener,
                                   itemCount: flatItems.length,
                                   child: SmoothWheelScroll(
                                     child: constrainToContentWidth(

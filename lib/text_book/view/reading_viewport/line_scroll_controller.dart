@@ -147,6 +147,8 @@ class LineScrollController {
 
   bool get hasPendingTarget => _pending != null;
 
+  bool get isNavigating => _navigating > 0;
+
   ReadingSegments? get _segments => _binding?.segments();
 
   bool get _nativeReady =>
@@ -287,11 +289,20 @@ class LineScrollController {
   }
 
   /// לעטיפת רשימת הקורא: מבחין בין גלילת משתמש לבין ניווט ושינויי גובה.
-  Widget trackUserScroll(Widget list) =>
-      NotificationListener<ScrollNotification>(
-        onNotification: _onScrollNotification,
-        child: list,
-      );
+  Widget trackUserScroll(Widget list) => Listener(
+    onPointerDown: (_) => _cancelPendingForUserInput(),
+    onPointerSignal: (_) => _cancelPendingForUserInput(),
+    child: NotificationListener<ScrollNotification>(
+      onNotification: _onScrollNotification,
+      child: list,
+    ),
+  );
+
+  void _cancelPendingForUserInput() {
+    if (_navigating > 0 || _pending != null || _awaitingLoad != null) {
+      _cancelRun();
+    }
+  }
 
   bool _onScrollNotification(ScrollNotification notification) {
     if (notification.depth != 0) return false;
@@ -313,6 +324,10 @@ class LineScrollController {
     _pending = null;
     _awaitingLoad = null;
     _activeTarget = null;
+    itemController.listController?.cancelPositioning();
+    if (_navigating == 0 && !_disposed && _external == null && _nativeReady) {
+      _measure();
+    }
   }
 
   /// הנקודה שעל קו העוגן עכשיו.
@@ -336,6 +351,12 @@ class LineScrollController {
               intraLineFraction: current.intraLineFraction,
             );
     }
+    final measuredSegments = _measuredSegments;
+    if (_measuredAnchor != null &&
+        measuredSegments != null &&
+        !measuredSegments.layout.hasSameStructure(segments.layout)) {
+      return _measuredAnchor;
+    }
     return readingAnchorFromItems(
       segments,
       positionsListener.itemPositions.value,
@@ -345,17 +366,15 @@ class LineScrollController {
 
   /// לפני שינוי רוחב: אחרי הפריסה מחזיר את השורה המדויקת לקו העוגן.
   void keepViewAcrossRelayout() {
-    if (!_nativeReady) return;
+    if (!_nativeReady ||
+        _navigating > 0 ||
+        _pending != null ||
+        _awaitingLoad != null) {
+      return;
+    }
     final anchor = captureAnchor();
     if (anchor == null) return;
-    final token = ++_token;
-    _navigating++;
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await WidgetsBinding.instance.endOfFrame;
-      _navigating--;
-      if (token != _token || _disposed) return;
-      await _run(_Target.anchor(anchor));
-    });
+    unawaited(_run(_Target.anchor(anchor)));
   }
 
   void _publish(ReadingPosition position) {
@@ -407,6 +426,13 @@ class LineScrollController {
     final landed = _segments;
     if (landed != null && landed.isNotEmpty) {
       final item = landed.layout.itemForLine(target.line);
+      if (item != segments.layout.itemForLine(target.line)) {
+        if (!_nativeReady) {
+          _pending = target.instant;
+          return;
+        }
+        return _run(target.instant);
+      }
       if (!landed[item].isLoaded) {
         _awaitingLoad = target.instant;
         return;

@@ -355,12 +355,7 @@ typedef MeasuredLineExtent =
 int segmentIndexForLine(ReadingSegments segments, int lineIndex) =>
     segments.layout.itemForLine(lineIndex);
 
-/// השבר היחסי של שורת [lineIndex] בתוך הסגמנט [segment] (0..1).
-///
-/// משמש לדיוק עדין של גלילה: אחרי שגולשים לסגמנט, ה-`scrollOffsetController`
-/// מתקדם בשבר הזה בתוך הסגמנט כדי שהשורה הספציפית תהיה גלויה.
-/// [intraLineFraction] (0..1) מוסיף דיוק לתוך השורה עצמה — מיקום ההתאמה בתוך
-/// הפסקה — כדי שהגלילה תגיע למילה ולא לתחילת הפסקה.
+/// השבר היחסי של שורת מקור בתוך הפריט; [intraLineFraction] מוסיף מיקום בתוכה.
 double lineFractionWithinSegment(
   ReadingSegment segment,
   int lineIndex, {
@@ -417,8 +412,7 @@ double lineFractionInItem(
   int item,
   MeasuredLineExtent? measure,
 ) {
-  final lineCount = segment.sourceLineIndices.length;
-  if (measure == null || !segment.isLoaded || lineCount <= 1) return null;
+  if (measure == null || !segment.isLoaded) return null;
   if (measure(item, segment.startLineIndex) == null) return null;
   return (offset) =>
       measure(item, segment.sourceLineIndices[offset]) ??
@@ -459,10 +453,14 @@ List<int> sourceLineIndicesForSegmentViewports(
   MeasuredLineExtent? measure,
 }) {
   final sourceIndices = <int>{};
+  final measuredViewports = measure == null
+      ? null
+      : <int, ReadingSegmentViewport>{};
   for (final viewport in viewports) {
     if (viewport.segmentIndex < 0 || viewport.segmentIndex >= segments.length) {
       continue;
     }
+    measuredViewports?[viewport.segmentIndex] = viewport;
 
     final segment = segments[viewport.segmentIndex];
     final lineCount = segment.sourceLineIndices.length;
@@ -565,5 +563,23 @@ List<int> sourceLineIndicesForSegmentViewports(
       ),
     );
   }
-  return sourceIndices.toList()..sort();
+  var result = sourceIndices.toList();
+  if (measure != null) {
+    final visible = result.where((line) {
+      final item = segments.layout.itemForLine(line);
+      if (!segments[item].isLoaded) return true;
+      final bounds = measure(item, line);
+      if (bounds == null) return true;
+      final viewport = measuredViewports![item]!;
+      final extent = viewport.trailingEdge - viewport.leadingEdge;
+      if (!extent.isFinite || extent <= 0) return true;
+      final leading = viewport.leadingEdge + extent * bounds.top;
+      final trailing = viewport.leadingEdge + extent * bounds.bottom;
+      return trailing > 0 &&
+          leading < 1 &&
+          !(isLineRemnant?.call(leading, trailing) ?? false);
+    }).toList();
+    if (visible.isNotEmpty) result = visible;
+  }
+  return result..sort();
 }

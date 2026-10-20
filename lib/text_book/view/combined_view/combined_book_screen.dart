@@ -2061,8 +2061,6 @@ class _CombinedViewState extends State<CombinedView> {
                             : ScrollablePositionedListScrollbar(
                                 scrollController:
                                     widget.tab.lines.itemController,
-                                itemPositionsListener:
-                                    widget.tab.lines.positionsListener,
                                 itemCount: readingLayoutOf(state).itemCount,
                                 labelForIndex: state.tableOfContents.isEmpty
                                     ? null
@@ -2074,7 +2072,7 @@ class _CombinedViewState extends State<CombinedView> {
                                   curve: 10.0,
                                   accelerationFactor: 5,
                                   scrollController:
-                                      widget.tab.lines.offsetController,
+                                      widget.tab.lines.itemController,
                                   child:
                                       BlocBuilder<
                                         PersonalNotesBloc,
@@ -2160,7 +2158,6 @@ class _CombinedViewState extends State<CombinedView> {
 
     return ScrollablePositionedListScrollbar(
       scrollController: widget.tab.lines.itemController,
-      itemPositionsListener: widget.tab.lines.positionsListener,
       itemCount: itemCount,
       child: SmoothWheelScroll(
         child: widget.tab.lines.trackUserScroll(

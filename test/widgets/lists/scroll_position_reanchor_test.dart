@@ -17,6 +17,7 @@ Widget _buildList({
   required bool enabled,
   int? preferredIndex,
   Map<int, GlobalKey>? boxes,
+  bool Function()? isNavigationActive,
 }) {
   return MaterialApp(
     home: Directionality(
@@ -30,6 +31,7 @@ Widget _buildList({
             preferredIndex: preferredIndex,
             scrollController: controller,
             positionsListener: listener,
+            isNavigationActive: isNavigationActive,
             boxForIndex: (index) =>
                 boxes?[index]?.currentContext?.findRenderObject() as RenderBox?,
             child: ScrollablePositionedList.builder(
@@ -227,6 +229,33 @@ class _ToggleState extends State<_Toggle> {
 
 void main() {
   group('ScrollPositionReanchor', () {
+    testWidgets('ניווט שהתחיל אחרי הפריסה מבטל עיגון fallback ממתין', (
+      tester,
+    ) async {
+      final controller = ItemScrollController();
+      final listener = ItemPositionsListener.create();
+      var navigating = false;
+      Widget list(double width) => _buildList(
+        width: width,
+        controller: controller,
+        listener: listener,
+        enabled: true,
+        isNavigationActive: () => navigating,
+      );
+      await tester.pumpWidget(list(600));
+      controller.jumpTo(index: 50, alignment: 0.2);
+      await tester.pumpAndSettle();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        navigating = true;
+        unawaited(controller.jumpToAsync(index: 120, alignment: 0.2));
+      });
+      await tester.pumpWidget(list(300));
+      await tester.pumpAndSettle();
+      expect(_edgeOf(listener, 120), closeTo(0.2, 0.001));
+      expect(_edgeOf(listener, 50), isNull);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('עיגון native שומר את הגובה בפריים הראשון בלי הודעת ניווט', (
       tester,
     ) async {
