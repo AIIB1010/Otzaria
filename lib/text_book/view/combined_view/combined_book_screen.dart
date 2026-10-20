@@ -433,12 +433,14 @@ class _CombinedViewState extends State<CombinedView> {
 
   /// סמני עוגן-מילה, למשל (א), בנקודה המדויקת בשורה. מוזרקים על שורת המקור
   /// כפי שנשמרה — לפני הזרקות שמוסיפות תוכן גלוי (הערות אישיות וכד'), כי
-  /// anchorStart נמדד בתווים גלויים של התוכן השמור.
+  /// anchorStart נמדד בתווים גלויים של התוכן השמור. [note] — גוף ההערה
+  /// ה-[note] של השורה במקום השורה עצמה.
   String _injectAnchorMarkersForLine(
     String rawLine,
     int lineIndex0,
-    TextBookLoaded state,
-  ) {
+    TextBookLoaded state, {
+    int? note,
+  }) {
     if (!state.bodyDisplayProfile.showAnchorMarkers) return rawLine;
     // מהדורה חלופית: העוגנים ממופים לנוסח הראשי — במיקומים שגויים כאן.
     if (state.book.versionTitle != null) return rawLine;
@@ -454,6 +456,8 @@ class _CombinedViewState extends State<CombinedView> {
       styleIndexByCommentator: _anchorStyles(state),
       lineIndex: lineIndex0,
       activeIndex: lineIndex0 == _activeAnchorLine ? _activeAnchorIndex : null,
+      notes: state.bookNotes.notesAt(lineIndex0),
+      note: note,
     );
   }
 
@@ -674,6 +678,8 @@ class _CombinedViewState extends State<CombinedView> {
         state.content,
         url,
         dbNotes: state.bookNotes,
+        decorateBody: (line, note, body) =>
+            _injectAnchorMarkersForLine(body, line, state, note: note),
       );
       if (note == null) return;
       LinkPreviewOverlay.showContent(
@@ -685,6 +691,7 @@ class _CombinedViewState extends State<CombinedView> {
           removeNikud: state.removeNikud,
           removePunctuation: state.removePunctuation,
           maxFontSize: widget.textSize,
+          onAnchorTap: _handleAnchorTap,
         ),
       );
       return;

@@ -39,6 +39,7 @@ import 'package:otzaria/utils/text/text_manipulation.dart' as utils;
 import 'package:otzaria/services/target_line_links_service.dart';
 import 'package:otzaria/models/links.dart';
 import 'package:otzaria/models/books.dart';
+import 'package:otzaria/text_book/models/book_notes.dart';
 import 'package:otzaria/widgets/feedback/scrollable_positioned_list_scrollbar.dart';
 import 'package:positioned_sliver_list/positioned_list.dart';
 import 'package:otzaria/tabs/models/tab.dart';
@@ -437,6 +438,9 @@ class SimpleTextViewer extends StatefulWidget {
   /// בטקסט הראשי נשאר null: העוגנים שם נקראים מ-state.linksByLine.
   final Map<int, List<Link>>? anchorLinksByLine;
 
+  /// הערות השוליים (`line_note`) של ספר המפרש, שעליהן נמדדים [anchorLinksByLine].
+  final BookNotes anchorBookNotes;
+
   const SimpleTextViewer({
     super.key,
     required this.content,
@@ -467,6 +471,7 @@ class SimpleTextViewer extends StatefulWidget {
     this.onOpenCommentatorsPane,
     this.onOpenCommentatorsPaneWithFilter,
     this.anchorLinksByLine,
+    this.anchorBookNotes = BookNotes.empty,
   });
 
   /// האם חלונית מפרש זה עתה טיפלה בקיצור "הוסף הערה".
@@ -621,6 +626,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
       styleIndexByCommentator: _ownAnchorStyles(),
       lineIndex: lineIndex,
       activeIndex: lineIndex == _activeAnchorLine ? _activeAnchorIndex : null,
+      notes: widget.anchorBookNotes.notesAt(lineIndex),
     );
   }
 
@@ -643,11 +649,13 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     return _injectBodyAnchorMarkers(result, lineIndex, state);
   }
 
+  /// [note] — גוף ההערה ה-[note] של השורה במקום השורה עצמה.
   String _injectBodyAnchorMarkers(
     String rawLine,
     int lineIndex,
-    TextBookLoaded state,
-  ) {
+    TextBookLoaded state, {
+    int? note,
+  }) {
     if (!state.bodyDisplayProfile.showAnchorMarkers) return rawLine;
     // מהדורה חלופית: העוגנים ממופים לנוסח הראשי — במיקומים שגויים כאן.
     if (state.book.versionTitle != null) return rawLine;
@@ -661,6 +669,8 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
       styleIndexByCommentator: _anchorStyles(state),
       lineIndex: lineIndex,
       activeIndex: lineIndex == _activeAnchorLine ? _activeAnchorIndex : null,
+      notes: state.bookNotes.notesAt(lineIndex),
+      note: note,
     );
   }
 
@@ -787,6 +797,8 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
         state.content,
         url,
         dbNotes: state.bookNotes,
+        decorateBody: (line, note, body) =>
+            _injectBodyAnchorMarkers(body, line, state, note: note),
       );
       if (note == null) return;
       LinkPreviewOverlay.showContent(
@@ -798,6 +810,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
           removeNikud: state.removeNikud,
           removePunctuation: state.removePunctuation,
           maxFontSize: widget.fontSize,
+          onAnchorTap: _handlePreviewTap,
         ),
       );
       return;

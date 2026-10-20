@@ -516,7 +516,10 @@ export type GetCommentatorsResult =
   | { commentators: CommentatorInfo[] }
   | { groups: CommentatorGroup[] };
 
-/** עוגן-מילה של קישור בשורת המקור (אופסטים בתווים גלויים). */
+/**
+ * עוגן-מילה של קישור בשורת המקור (אופסטים בתווים גלויים). בספר שהערות השוליים
+ * שלו בטבלה נפרדת, נמדד על השורה המלאה — עם גוף כל הערה במקומה.
+ */
 export interface LinkAnchor {
   start: number;
   end: number | null;
