@@ -165,9 +165,7 @@ class _PinnedToolNavItem {
   /// מובנים כמו "שמור וזכור" שמשתמשים בלוגו ייחודי במקום באייקון Fluent.
   final String? imageAsset;
 
-  /// `true` עבור תוסף, `false` עבור כלי מובנה. שימושי כי בעת בחירה
-  /// תוספים פותחים דרך `openPluginTransiently` בעוד שכלים מובנים פותחים
-  /// דרך `requestOpenTool`.
+  /// `true` עבור תוסף, `false` עבור כלי מובנה.
   final bool isPlugin;
   final InstalledPlugin? plugin;
 
@@ -2054,12 +2052,6 @@ class MainWindowScreenState extends State<MainWindowScreen>
         : RtlIcon(icon);
   }
 
-  /// סדר העמודים במהלך slide חוצה: מחליף (swap) בין מסך היעד ([targetIndex])
-  /// למסך שיושב בעמוד-השכן ([slotIndex]), כך שמסך היעד מוצג בשכן לצורך ההחלקה.
-  ///
-  /// כל העמודים נשארים בעץ, וה-State של עמוד שמחליף מקום נשמר דרך reparenting.
-  ///
-  /// במנוחה ([targetIndex] או [slotIndex] הם null) — מוחזר הסדר הקנוני כמות שהוא.
   /// עמוד חי מחוץ למסך אסור שיקבל פוקוס: מעבר Tab שנחת בו גלל אליו את
   /// ה-PageView, והספרייה/ההגדרות הוצגו בתוך מסך העיון.
   @visibleForTesting
@@ -2083,6 +2075,12 @@ class MainWindowScreenState extends State<MainWindowScreen>
     await WidgetsBinding.instance.endOfFrame;
   }
 
+  /// סדר העמודים במהלך slide חוצה: מחליף (swap) בין מסך היעד ([targetIndex])
+  /// למסך שיושב בעמוד-השכן ([slotIndex]), כך שמסך היעד מוצג בשכן לצורך ההחלקה.
+  ///
+  /// כל העמודים נשארים בעץ, וה-State של עמוד שמחליף מקום נשמר דרך reparenting.
+  ///
+  /// במנוחה ([targetIndex] או [slotIndex] הם null) — מוחזר הסדר הקנוני כמות שהוא.
   @visibleForTesting
   static List<Widget> buildTransitionPages(
     List<Widget> canonical, {

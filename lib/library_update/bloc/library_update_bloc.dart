@@ -15,7 +15,7 @@ import '../repository/library_update_repository.dart';
 part 'library_update_event.dart';
 part 'library_update_state.dart';
 
-/// מנהל את תהליך עדכון ספריית הספרים החדש (מחליף את `FileSyncBloc`).
+/// מנהל את תהליך עדכון ספריית הספרים.
 ///
 /// בודק זמינות עדכון, מחיל מסלול דלתא אוטומטית, ומבקש אישור להורדה מלאה.
 /// אינו מפעיל אינדוקס/ריענון ספרייה ישירות — ה-UI מאזין ל-state ומפעיל
