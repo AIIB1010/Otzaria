@@ -41,6 +41,7 @@ import 'package:otzaria/tabs/bloc/tabs_state.dart';
 import 'package:otzaria/tabs/models/pdf_tab.dart';
 import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/tools/calendar/services/calendar_alerts_client.dart';
+import 'package:otzaria/tools/calendar/services/calendar_alerts_owner.dart';
 import 'package:otzaria/tools/calendar/services/calendar_alerts_store.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -773,16 +774,20 @@ class PluginSystemBloc extends Bloc<PluginSystemEvent, PluginSystemState> {
   }
 
   final CalendarAlertsClient? _alertsOverride;
-  CalendarAlertsClient get _alerts =>
-      _alertsOverride ?? CalendarAlertsClient.forCurrentWindow();
+
+  // האפליקציה מעבירה את הלקוח של החלון. בלעדיו (בדיקות) בעלים פרטי על
+  // ה-repository של ה-bloc, ולא הבעלים של התהליך.
+  late final CalendarAlertsClient _alerts =
+      _alertsOverride ??
+      LocalCalendarAlertsClient(
+        CalendarAlertsOwner(
+          pluginIds: RegistryPluginNotificationIdStore(repository),
+        ),
+      );
 
   /// מבטל אצל הבעלים את התראות המערכת שהתוסף תזמן. כשל זורק, כדי שהמזהים
   /// לא יימחקו עם שאר הנתונים לפני שההתראות בוטלו.
   Future<void> _cancelPluginNotifications(String pluginId) async {
-    final ids = await RegistryPluginNotificationIdStore(repository).read(
-      pluginId,
-    );
-    if (ids.isEmpty) return;
     final ack = await _alerts.send('pluginCancelAll', {'pluginId': pluginId});
     if (!ack.ok) {
       throw StateError(ack.error ?? 'Plugin notifications were not cancelled');

@@ -134,6 +134,7 @@ import 'package:otzaria/data/cache/generation_cache.dart';
 import 'package:otzaria/find_ref/repository/reference_books_cache.dart';
 import 'package:otzaria/tools/dictionary/repository/dictionary_lookup_repository.dart';
 import 'package:pdfrx/pdfrx.dart';
+import 'package:otzaria/tools/calendar/services/calendar_alerts_client.dart';
 import 'package:otzaria/tools/calendar/services/calendar_alerts_owner.dart';
 import 'package:otzaria/tools/calendar/services/notification_service.dart';
 import 'package:otzaria/plugins/database/plugin_database_bootstrap.dart';
@@ -1957,6 +1958,7 @@ PluginSystemBloc _createPluginSystemBloc(BuildContext context) {
   );
   return PluginSystemBloc(
       repository: repository,
+      alertsClient: CalendarAlertsClient.forCurrentWindow(),
       declarativeHost: host,
       readerStates: tabsBloc.stream,
       initialReaderState: tabsBloc.state,
