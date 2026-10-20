@@ -75,6 +75,7 @@ import 'package:otzaria/empty_library/bloc/empty_library_bloc.dart';
 import 'package:otzaria/library_update/bloc/library_update_bloc.dart';
 import 'package:otzaria/library_update/changes_notes/library_changes_notes.dart';
 import 'package:otzaria/library_update/services/library_access_gate.dart';
+import 'package:otzaria/library_update/services/library_update_window_link.dart';
 import 'package:otzaria/library_update/repository/library_update_repository.dart';
 import 'package:otzaria/library_update/services/streaming_patch_downloader.dart';
 import 'package:otzaria/library_update/services/companion_assets_service.dart';
@@ -1848,16 +1849,13 @@ class _AppBootstrapState extends State<AppBootstrap> {
               isOfflineMode: () =>
                   Settings.getValue<bool>(SettingsRepository.keyOfflineMode) ??
                   false,
-              // ⚠️ חלון משני לעולם אינו בודק עדכונים. עדכון ספרייה הוא
-              // פעולה פר-תהליך: שני חלונות ששאלו את GitHub במקביל קיבלו
-              // 403, והמשתמש ראה "שגיאה בקבלת רשימת ה-releases" בכל
-              // פתיחת חלון.
               areUpdatesEnabled: () =>
-                  !WindowRole.isSecondary &&
-                  (Settings.getValue<bool>(
-                        SettingsRepository.keySoftwareAndBookUpdatesEnabled,
-                      ) ??
-                      true),
+                  Settings.getValue<bool>(
+                    SettingsRepository.keySoftwareAndBookUpdatesEnabled,
+                  ) ??
+                  true,
+              // חלון משני מעביר את העדכון למארח ומציג את מצבו.
+              windowLink: const LibraryUpdateWindowLink(),
               // עדכוני ספרייה תמיד ליציב בלבד — מנותק מערוץ הפיתוח, שמשפיע רק
               // על עדכוני התוכנה.
               allowPrerelease: () => false,
