@@ -1,4 +1,4 @@
-import 'package:otzaria/indexing/repository/indexing_repository.dart';
+import 'package:otzaria/data/book_identity.dart';
 import 'package:otzaria/library/models/library.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/search/book_facet.dart';
@@ -7,13 +7,8 @@ import 'package:otzaria/search/book_facet.dart';
 class FacetHelper {
   FacetHelper._();
 
-  // --- Dimension facets (ממדי סינון) ---
-  //
-  // האינדקס מטביע לכל ספר, לצד נתיב הקטגוריה, ערכי facet ממדיים תחת
-  // שורשים שמורים באנגלית: `/author/<שם>`, `/era/<שם תקופה>`, `/base`.
-  // הם רוכבים על אותה רשימת facets שנשלחת למנוע — OR בתוך ממד, AND בין
-  // ממדים ומול קבוצת הקטגוריות. לוגיקת עץ הקטגוריות באפליקציה חייבת
-  // להתעלם מהם (הם אינם נתיבי קטגוריה) אך לשמר אותם בכל כתיבה של הרשימה.
+  // facets ממדיים חולקים רשימה עם נתיבי הקטגוריות, אך אינם חלק מהעץ.
+  // שינוי הרשימה חייב לשמר אותם; המנוע מחבר OR בתוך ממד ו-AND בין ממדים.
 
   /// facet של "ספרי יסוד בלבד".
   static const String baseDimensionFacet = '/base';
@@ -72,19 +67,13 @@ class FacetHelper {
     return null;
   }
 
-  /// Builds a book facet path from category path and book
-  /// Uses catalogueOrderKey for uniqueness instead of title
+  /// נתיב facet לספר, לפי מפתח זהות ולא לפי הכותרת לבדה.
   static String buildBookFacet(String? categoryPath, Book book) {
-    final bookKey = _buildBookKey(book);
+    final bookKey = BookIdentity.keyOf(book);
     if (categoryPath == null || categoryPath.isEmpty || categoryPath == '/') {
       return '/$bookKey';
     }
     return '$categoryPath/$bookKey';
-  }
-
-  /// Builds a unique key for a book (same logic as IndexingRepository.catalogueOrderKey)
-  static String _buildBookKey(Book book) {
-    return IndexingRepository.catalogueOrderKey(book);
   }
 
   /// Increments a facet count in the given map
