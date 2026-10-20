@@ -1249,8 +1249,9 @@ void main() {
       final offset = innerController.offset;
       expect(offset, greaterThan(100));
 
+      // הכרטיס בראש התצוגה (עד 200); הגלגלת על הרשימה החיצונית שמתחתיו.
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _wheel(tester, const Offset(400, 20), dy: 50);
+        _wheel(tester, const Offset(400, 300), dy: 50);
       });
       await tester.pumpWidget(host(300));
       await tester.pumpAndSettle();
