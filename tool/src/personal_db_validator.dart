@@ -53,6 +53,7 @@ const Set<String> kValidatorKnownTables = {
   'schema_meta',
   'db_meta',
   'external_link',
+  'banner',
   'book_banner',
   'book_protection',
   'line_divine_name',

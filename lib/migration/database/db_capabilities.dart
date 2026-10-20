@@ -45,6 +45,7 @@ const Set<String> kKnownSeforimTables = {
   'db_meta',
   'external_link',
   // מסכמה 7; מסד בסכמה 6, מצורף או אישי עשוי שלא להכיל אותן.
+  'banner',
   'book_banner',
   'book_protection',
   'line_divine_name',
@@ -185,9 +186,13 @@ class DbCapabilities {
   bool get hasDefaultTargums => hasBooks && has('default_targum');
   bool get hasCategoryClosure => hasCategories && has('category_closure');
 
-  /// באנר קרדיט לספר; טבלה דלילה.
+  /// באנר קרדיט לספר: `book_banner` דלילה מפנה לטקסט ב-`banner`.
   bool get hasBookBanners =>
-      hasColumn('book_banner', 'bookId') && hasColumn('book_banner', 'text');
+      hasColumn('book', 'title') &&
+      hasColumn('banner', 'id') &&
+      hasColumn('banner', 'text') &&
+      hasColumn('book_banner', 'bookId') &&
+      hasColumn('book_banner', 'bannerId');
 
   /// רמת הגבלת מו"ל לספר; טבלה דלילה.
   bool get hasBookProtection =>
