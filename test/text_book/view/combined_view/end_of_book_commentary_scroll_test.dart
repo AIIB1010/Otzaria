@@ -33,6 +33,12 @@ final _content = <String>[
 
 final _lastIndex = _content.length - 1;
 
+// פסקה 5 גבוהה מהמסך.
+final _tallContent = <String>[
+  for (var i = 0; i < 12; i++)
+    'פסקה$i ${List.filled(i == 5 ? 900 : 30, 'מילה$i').join(' ')}',
+];
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -48,7 +54,10 @@ void main() {
     int paragraph, {
     int? jumpIndex,
     double alignment = 0,
+    List<String>? content,
+    Offset Function(Rect paragraph)? tapPoint,
   }) async {
+    final lines = content ?? _content;
     tester.view.physicalSize = const Size(620, 880);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -57,7 +66,7 @@ void main() {
       TextBookLoaded(
         book: TextBook(title: _title),
         showLeftPane: false,
-        content: _content,
+        content: lines,
         fontSize: 25,
         showSplitView: false,
         showPageShapeView: false,
@@ -67,7 +76,7 @@ void main() {
         links: const [],
         visibleLinks: const [],
         linksByLine: {
-          for (var line = 1; line <= _content.length; line++)
+          for (var line = 1; line <= lines.length; line++)
             line: [
               Link(
                 heRef: 'רש"י $line',
@@ -80,7 +89,7 @@ void main() {
         },
         tableOfContents: const [],
         removeNikud: false,
-        visibleIndices: List.generate(_content.length, (i) => i),
+        visibleIndices: List.generate(lines.length, (i) => i),
         selectedIndex: null,
         pinLeftPane: false,
         searchText: '',
@@ -107,7 +116,7 @@ void main() {
           ],
           child: Scaffold(
             body: CombinedView(
-              data: _content,
+              data: lines,
               openBookCallback: (_) {},
               openLeftPaneTab: (_, {searchText}) {},
               textSize: 25,
@@ -148,8 +157,9 @@ void main() {
     }
 
     final target = find.byKey(ValueKey('html_${_title}_$paragraph'));
+    final rect = tester.getRect(target);
     await tester.tapAt(
-      tester.getRect(target).bottomCenter - const Offset(0, 10),
+      tapPoint?.call(rect) ?? rect.bottomCenter - const Offset(0, 10),
       kind: PointerDeviceKind.mouse,
     );
     // פריימים לאורך הזמן: הגלילה האוטומטית מתוזמנת אחרי פריים, לא מיד.
@@ -197,6 +207,25 @@ void main() {
       expect(
         result.after[5]!.itemLeadingEdge,
         moreOrLessEquals(0.9, epsilon: 1e-3),
+      );
+    });
+
+    // חשיפת הכרטיס מתחת לפסקה גבוהה מהמסך אינה מעלה את תחילתה מעל המסך.
+    testWidgets('פסקה גבוהה מהמסך — תחילתה נשארת במסך', (tester) async {
+      const paragraph = 5;
+      final result = await tapParagraph(
+        tester,
+        paragraph,
+        jumpIndex: paragraph,
+        alignment: 0.3,
+        content: _tallContent,
+        tapPoint: (rect) => rect.topCenter + const Offset(0, 40),
+      );
+      final before = result.before[paragraph]!;
+      expect(before.itemTrailingEdge - before.itemLeadingEdge, greaterThan(1));
+      expect(
+        result.after[paragraph]!.itemLeadingEdge,
+        inInclusiveRange(0, before.itemLeadingEdge + 1e-3),
       );
     });
   });

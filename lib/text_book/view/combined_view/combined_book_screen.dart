@@ -2624,11 +2624,11 @@ class _CombinedViewState extends State<CombinedView> {
         .where((p) => p.index == index && p.itemLeadingEdge >= 0)
         .firstOrNull;
     final lastIndex = readingLayoutOf(state).itemCount - 1;
-    final bookEnd = positions
-        .where(
-          (p) => p.index == lastIndex && (p.itemTrailingEdge - 1).abs() < 1e-3,
-        )
-        .firstOrNull;
+    final scroll = lines.itemController.scrollController;
+    final atBookEnd =
+        scroll != null &&
+        scroll.hasClients &&
+        scroll.position.pixels >= scroll.position.maxScrollExtent - 0.5;
     // עיגון על הפסקה בגובה הנוכחי (התצוגה לא זזה): הכרטיס נפתח
     // כלפי מטה גם כשעוגן הרשימה מתחתיה, ולא דוחף אותה מהמסך.
     if (tapped != null) {
@@ -2642,7 +2642,7 @@ class _CombinedViewState extends State<CombinedView> {
       Future.delayed(const Duration(milliseconds: 300), () {
         if (!mounted || !lines.itemController.isAttached) return;
         // הטקסט הבא ב-90% מגובה המסך, כך שהכרטיס (עד 75%) נראה כולו.
-        final hasNext = index + 1 < readingLayoutOf(state).itemCount;
+        final hasNext = index < lastIndex;
         final next = lines.positionsListener.itemPositions.value
             .where((p) => p.index == index + 1)
             .firstOrNull;
@@ -2650,20 +2650,24 @@ class _CombinedViewState extends State<CombinedView> {
         // (בסוף הספר) היה נגרר אליו למטה, והרשימה קופצת אחורה.
         if (tapped != null && next != null && next.itemLeadingEdge <= 0.9) {
           // הכרטיס דחף את סוף הספר מתחת למסך; מחזירים אותו לתחתית.
-          if (bookEnd != null) {
-            lines.itemController.scrollTo(
-              index: lastIndex,
-              alignment: bookEnd.itemLeadingEdge,
+          if (atBookEnd && scroll.hasClients) {
+            scroll.position.animateTo(
+              scroll.position.maxScrollExtent,
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeInOut,
             );
           }
           return;
         }
+        // פסקה שלבדה אינה נכנסת מעל קו ה-90%: חשיפת הכרטיס הייתה מעלה את
+        // תחילתה מעל המסך, ולכן תחילתה בראש המסך.
+        final tooTall =
+            tapped != null &&
+            tapped.itemTrailingEdge - tapped.itemLeadingEdge > 0.9;
         lines.itemController.scrollTo(
           // לפסקה האחרונה אין טקסט הבא — מעלים אותה ככל שסוף הספר מאפשר.
-          index: hasNext ? index + 1 : index,
-          alignment: hasNext ? 0.9 : 0,
+          index: hasNext && !tooTall ? index + 1 : index,
+          alignment: hasNext && !tooTall ? 0.9 : 0,
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
         );
