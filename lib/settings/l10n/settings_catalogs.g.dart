@@ -572,7 +572,7 @@ const Map<String, Map<String, String>> kSettingsCatalogs = {
     'הקטע הקודם': 'Previous Section',
     'הקישורים החיצוניים לא נטענו — יותר מדי שורות': 'External links not loaded — too many rows',
     'הקלד כאן שם ספר, מחבר או נושא — הספרייה תסונן מיידית.': 'Type a sefer, a mechaber or a topic here — the library filters as you type.',
-    'הקלד מילות חיפוש': 'Type search words',
+    'הקלד מילות חיפוש · לצמצום: מצה@רשי/פסחים': 'Type search words · to narrow: מצה@רשי/פסחים',
     'הקלד מילות חיפוש ולחץ Enter או על סמל החיפוש כדי לבצע חיפוש.': 'Type search words and press Enter or the search icon to run the search.',
     'הקלד מקור מדויק והספר ייפתח במקומו': 'Type an exact reference and the book opens right there',
     'הקלד שם ספר ומיקום בתוכו. ראשי תיבות נתמכים, וגם קישור ישיר שהודבק לשדה ייפתח מכאן.': 'Type a book name and a location in it. Acronyms are supported, and a pasted direct link opens from here too.',
