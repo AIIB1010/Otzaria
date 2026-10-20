@@ -1,11 +1,16 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/data/data_providers/database_library_provider.dart';
 import 'package:otzaria/migration/database/db_capabilities.dart';
+import 'package:otzaria/migration/database/line_content_codec.dart';
 import 'package:otzaria/text_book/models/book_notes.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqlite3/sqlite3.dart' as sqlite3;
+
+import '../support/zstd_test_lib.dart';
 
 /// טעינת הערות השוליים (`line_note`, סכמה 7). מסד בסכמה 6 — בלי הטבלה —
 /// ממשיך להיפתח, ואין הערות מהטבלה.
@@ -115,6 +120,57 @@ void main() {
     expect(notes.bodyDivineNames(1, 0), isEmpty);
     expect(notes.notesAt(2), isEmpty);
     expect(load('ספר שאינו קיים').isEmpty, isTrue);
+  });
+
+  group('גוף דחוס (מסגרת zstd, כמו line_content)', () {
+    final zstd = openZstdForTests();
+    final skip = zstd == null ? 'libzstd אינו זמין' : null;
+    final dictionary = File(
+      'test/fixtures/line_content_codec/dict.zdict',
+    ).readAsBytesSync();
+    Uint8List frame(String text) => compressWithDictionary(
+      zstd!,
+      Uint8List.fromList(utf8.encode(text)),
+      dictionary,
+    );
+
+    setUpAll(() {
+      if (zstd != null) LineContentCodec.openLibrary = () => zstd;
+    });
+
+    test('מפוענח לטקסט המדויק, לצד גוף TEXT', () {
+      createTable();
+      db.execute('CREATE TABLE zstd_dict (id INTEGER PRIMARY KEY, dict BLOB)');
+      db.execute('INSERT INTO zstd_dict VALUES (1, ?)', [dictionary]);
+      final insert = db.prepare('INSERT INTO line_note VALUES (?, ?, ?, ?, ?)');
+      insert
+        ..execute([10, 0, 4, '*', frame('<b>גוף</b> "דחוס"\nשורה')])
+        ..execute([11, 0, 3, null, frame('')])
+        ..execute([11, 1, 9, 'א', 'גוף רגיל']);
+      insert.close();
+
+      final notes = load();
+      expect(notes.notesAt(0), [
+        (
+          noteIndex: 0,
+          charPos: 4,
+          marker: '*',
+          body: '<b>גוף</b> "דחוס"\nשורה',
+        ),
+      ]);
+      expect(notes.notesAt(1), [
+        (noteIndex: 0, charPos: 3, marker: null, body: ''),
+        (noteIndex: 1, charPos: 9, marker: 'א', body: 'גוף רגיל'),
+      ]);
+    }, skip: skip);
+
+    test('גוף BLOB במסד בלי zstd_dict — שגיאה, לא הערה שנעלמת', () {
+      createTable();
+      db.execute('INSERT INTO line_note VALUES (10, 0, 4, NULL, ?)', [
+        frame('גוף'),
+      ]);
+      expect(load, throwsFormatException);
+    }, skip: skip);
   });
 
   test('מופעי השמות בגוף ההערה לפי (lineIndex, noteIndex)', () {

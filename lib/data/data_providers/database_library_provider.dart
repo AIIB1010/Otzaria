@@ -1305,7 +1305,8 @@ DivineNameSpans _loadDivineNamesInIsolate({
 }
 
 /// הערות השוליים של ספר (`line_note`) לפי `lineIndex`, בשאילתה אחת. מסד בלי
-/// הטבלה (סכמה 6, מצורף, אישי) נותן [BookNotes.empty].
+/// הטבלה (סכמה 6, מצורף, אישי) נותן [BookNotes.empty]. גוף ההערה מפוענח כמו
+/// טקסט שורה ([LineContentCodec]).
 BookNotes _loadBookNotesInIsolate({
   required ReadOnlyDbTarget target,
   required String bookTitle,
@@ -1326,6 +1327,7 @@ BookNotes _loadBookNotesInIsolate({
     if (bookId == null) return BookNotes.empty;
 
     final builder = BookNotesBuilder();
+    final codec = LineContentCodec.of(db);
     final rows = db.select(
       'SELECT l.lineIndex AS lineIndex, n.noteIndex AS noteIndex, '
       'n.charPos AS charPos, n.marker AS marker, n.body AS body '
@@ -1338,7 +1340,7 @@ BookNotes _loadBookNotesInIsolate({
       final noteIndex = row['noteIndex'];
       final charPos = row['charPos'];
       final marker = row['marker'];
-      final body = row['body'];
+      final body = codec.text(row['body']);
       if (lineIndex is int && noteIndex is int && body is String) {
         builder.add(
           lineIndex,
