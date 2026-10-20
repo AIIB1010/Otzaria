@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:otzaria_icons/otzaria_icons.dart';
 import 'package:otzaria/app_report/view/app_report_dialog.dart';
+import 'package:otzaria/app_scope/process_duties.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
 import 'package:otzaria/core/startup_timeline.dart';
@@ -720,7 +721,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
 
       // ⚠️ המארח בלבד: הניקוז הוא rename אטומי, וכשכל החלונות מנטרים
       // הזוכה שרירותי — לפעמים חלון שהמשתמש סגר קפץ בחזרה למסך.
-      if (!WindowRole.isSecondary) {
+      if (ProcessDuties.current.isProcessOwner) {
         unawaited(_initializeExternalActivationMonitoring());
       }
 
@@ -728,7 +729,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
 
       // ⚠️ פר-תהליך: מונה ההפעלות שמכתיב מתי הפופאפ מוצג עולה פר-חלון,
       // והפופאפ עצמו הופיע בכל חלון שנפתח.
-      if (!WindowRole.isSecondary) {
+      if (ProcessDuties.current.isProcessOwner) {
         AdPopupDialog.showIfNeeded(
           context,
           shouldSkip: () => _tourStartedAutomaticallyThisLaunch,
@@ -946,7 +947,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
   /// This avoids DB lock contention that caused 17s delays.
   void _initializeBackgroundSync() {
     // ⚠️ פר-תהליך: הסנכרון כותב ל-`seforim.db` ול-`user_books.db` המשותפים.
-    if (WindowRole.isSecondary) return;
+    if (!ProcessDuties.current.isProcessOwner) return;
     BackgroundSyncInitializer.initializeAfterDelay(
       delaySeconds: 2, // Small delay to let UI settle after library load
       onComplete: (result) {
@@ -997,7 +998,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
         (Settings.getValue<bool>(SettingsRepository.keyAutoSync) ?? true) &&
         context.read<SettingsBloc>().state.canUseSoftwareAndBookUpdates &&
         // ⚠️ פר-תהליך: שני חלונות היו מורידים לאותו נתיב ונלחמים על seforim.db.
-        !WindowRole.isSecondary &&
+        ProcessDuties.current.isProcessOwner &&
         isAutoUpdateCheckDue(SettingsRepository.keyLastLibraryUpdateCheck);
   }
 
@@ -1206,7 +1207,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
   ) async {
     // ⚠️ החלטה פר-תהליך: הענף `autoReindexThenStart` מוחק את האינדקס שכל
     // החלונות חולקים. החלון המשני רק מדווח על מצב האינדקס ופותח את השער.
-    if (WindowRole.isSecondary) {
+    if (!ProcessDuties.current.isProcessOwner) {
       _startupWorkGate.markIndexingDecisionResolved(expectIndexing: false);
       _tryStartDeferredStartupWork();
       context.read<IndexingBloc>().add(CheckIndexStatus(library));
