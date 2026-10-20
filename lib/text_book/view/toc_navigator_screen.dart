@@ -79,8 +79,7 @@ class _TocViewerState extends State<TocViewer>
   // בשדה החיפוש, כמו ב"איתור". מתאפס בכל שינוי שאילתה.
   int? _highlightedEntryIndex;
 
-  // משמשים במסלול הוירטואלי בלבד. ScrollablePositionedList מאפשר גלילה
-  // לפי אינדקס פריט גם אם הפריט עוד לא נבנה בעץ.
+  // משמשים במסלול הוירטואלי בלבד: גלילה לפי אינדקס גם לשורה שטרם נבנתה.
   final ItemScrollController _virtualScrollController = ItemScrollController();
   final ItemPositionsListener _virtualPositionsListener =
       ItemPositionsListener.create();
@@ -459,8 +458,8 @@ class _TocViewerState extends State<TocViewer>
     return NavTreeGroupCard(
       isGroupStart: isGroupStart,
       isGroupEnd: isGroupEnd,
-      // ScrollablePositionedList בונה אותה שורה פעמיים במעבר גלילה - GlobalKey
-      // אסור שם, והגלילה שם לפי אינדקס ממילא.
+      // ברשימה הוירטואלית הגלילה לפי אינדקס; GlobalKey לכל שורה שנבנית רק
+      // היה ממלא את המפה בלי שימוש.
       child: keyed
           ? KeyedSubtree(
               key: _tocItemKeys.putIfAbsent(entry.index, () => GlobalKey()),

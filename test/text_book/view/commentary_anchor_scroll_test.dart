@@ -32,11 +32,7 @@ import 'package:positioned_sliver_list/positioned_list.dart';
 
 import '../../test_helpers/memory_cache_provider.dart';
 
-/// די מפרשים כדי שהיעד יהיה מחוץ למסך — זה בדיוק התנאי של הבאג — אך עדיין
-/// בתוך ה-cacheExtent של הרשימה. הגבול מכוון: מעבר לו
-/// `ScrollablePositionedList` עובר למסלול שתי-הרשימות, שנופל בסביבת בדיקה
-/// headless מתוך `getOffsetToReveal`. המסלול שבו הבאג חי הוא ממילא הישיר —
-/// `animateTo` לאופסט פיקסלים שחושב מהפריסה שברגע ההתחלה.
+/// די מפרשים כדי שהיעד יהיה מחוץ למסך — זה התנאי של הבאג.
 const int _commentatorCount = 6;
 
 /// כמה קטעים לכל מפרש על אותה שורת מקור. שניים ומעלה הם התנאי לבאג הראשון.
@@ -276,9 +272,7 @@ void main() {
     // כאילו נפתח הקטע הראשון של המפרש — שהוא גם הקטע שהעוגן הראשון (א)
     // מצביע אליו, ומכאן הרושם ש"רק א עובד".
     //
-    // הכלל נבדק כפונקציה טהורה ולא דרך הווידג'ט: גלילה בזמן שהרשימה מחליפה
-    // קטע מפילה את ScrollablePositionedList בפריסה בלתי-חסומה בסביבת בדיקה
-    // headless, כך שבדיקת ווידג'ט כאן מודדת את הקריסה ולא את הכלל.
+    // הכלל נבדק כפונקציה טהורה, בלי תלות בתזמון הגלילה בזמן החלפת הקטע.
     test('בקשת עוגן ממתינה מבטלת את איפוס הקטע', () {
       expect(
         shouldResetScrollForSectionChange(hasPendingAnchorScroll: true),
@@ -318,7 +312,7 @@ void main() {
     //
     // הראיה לתקיעה היא לוג מהאפליקציה: 17 בקשות רצופות בלי אף שורת ניסיון
     // גלילה, אחרי שבקשה #2 נכנסה ל-await. התיקון מסיר את ההמתנה החיצונית
-    // לגמרי, כך שהלולאה אינה יכולה להיתלות ב-SPL ללא קשר לפנימיותו.
+    // לגמרי, כך שהלולאה אינה יכולה להיתלות ב-Future של הגלילה.
     testWidgets('לחיצות רצופות ממשיכות להיענות', (tester) async {
       final key = await _pump(tester);
       await _settleAnchorScroll(tester);
@@ -358,7 +352,7 @@ void main() {
         promoted,
         linkKey: commentaryLinkKey(target),
       );
-      // באמצע המעבר: המפרש שנלחץ עולה לראש, ה-key של SPL מתחלף, והרשימה
+      // באמצע המעבר: המפרש שנלחץ עולה לראש, ה-key של הרשימה מתחלף, והרשימה
       // נבנית מחדש — המצב שבו ה-Future של scrollTo אינו מושלם לעולם.
       await tester.pump(const Duration(milliseconds: 60));
       _lastBloc!.emitState(

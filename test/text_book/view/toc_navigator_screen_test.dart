@@ -1145,8 +1145,7 @@ Future<void> main() async {
     'קפיצה לערך רחוק בספר גדול אינה בונה שורות כפולות (מיקרופדיה תלמודית)',
     (tester) async {
       final toc = _loadMikropediaToc();
-      // כמאה שורות מתחת לראש: רחוק מהתצוגה, אך בטווח ש-ScrollablePositionedList
-      // בונה בשתי הרשימות של מעבר הגלילה.
+      // כמאה שורות מתחת לראש: רחוק מהתצוגה, כך שהגלילה בונה שורות חדשות.
       final target = toc.single.children[80];
       final initial = _loadedState(toc: toc, visibleIndices: const [0]);
       final bloc = _TestTextBookBloc(initial);

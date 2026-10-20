@@ -1145,12 +1145,8 @@ class CommentaryListBaseState extends State<CommentaryListBase>
 
   /// גולל אל היעד הממתין, מודד, וחוזר עד שהוא באמת שם.
   ///
-  /// ניסיון יחיד אינו מספיק: `ScrollablePositionedList` גולל לפריט שכבר בנוי
-  /// דרך `animateTo` לאופסט **פיקסלים** שחושב מהפריסה שברגע ההתחלה, וגובהו
-  /// של כל קטע מפרש נקבע רק אחרי ש-`link.content` נפתר ו-`CommentaryContent`
-  /// מחליף את שלד הטעינה בטקסט. ככל שיש יותר מפרשים על הקטע כך גדל הפער
-  /// שנפתח מעל היעד תוך כדי האנימציה — ולכן הגלילה נעצרה *לפני* המפרש
-  /// המקושר. כאן מודדים את המיקום שהתקבל וגוללים שוב עד שהוא מתייצב.
+  /// ניסיון יחיד אינו מספיק: הקבוצות נבנות אסינכרונית והסדר משתנה אחרי
+  /// הלחיצה, ולכן מודדים את המיקום שהתקבל וקופצים שוב עד שהוא מתייצב.
   Future<void> _runPendingCommentatorScroll() async {
     // רץ יחיד. הרשימה מתזמנת בנייה מחדש גם באמצע ריצה (הקבוצות נבנות
     // אסינכרונית), ושתי לולאות במקביל היו מריצות שתי אנימציות גלילה זו
@@ -1179,9 +1175,8 @@ class CommentaryListBaseState extends State<CommentaryListBase>
       if (!mounted || generation != _commentatorScrollGeneration) return;
       final target = _pendingScrollTarget;
       if (target == null) return;
-      // הבקר מתנתק לרגע כשהרשימה נבנית מחדש — למשל כששינוי סדר המפרשים
-      // מחליף את ה-key של SPL. יציאה כאן הייתה מאבדת את הבקשה בשקט, כי
-      // הסבב הנוכחי מסתיים ואיש אינו מתזמן מחדש.
+      // הבקר מתנתק לרגע כששינוי סדר המפרשים מחליף את ה-key של הרשימה;
+      // יציאה כאן הייתה מאבדת את הבקשה, כי איש אינו מתזמן אותה מחדש.
       if (!_itemScrollController.isAttached) {
         await Future<void>.delayed(_commentatorScrollSettle);
         continue;
@@ -1195,19 +1190,14 @@ class CommentaryListBaseState extends State<CommentaryListBase>
         return;
       }
 
-      // הרשימה טרם נמדדה — הפריים הראשון שלה. גלילה לפני שיש פריסה אינה
-      // יכולה להצליח, ו-ScrollablePositionedList אף נופל עליה בפריסה
-      // בלתי-חסומה. קורה כשהפאנל נפתח באותה לחיצה שיצרה את הבקשה.
+      // הרשימה טרם נפרסה (הפאנל נפתח באותה לחיצה), ואין מה למדוד אחרי קפיצה.
       if (_itemPositionsListener.itemPositions.value.isEmpty) {
         await Future<void>.delayed(_commentatorScrollSettle);
         continue;
       }
 
-      // מפתח הקטע טרם מופיע במיפוי: הרשימה עדיין מציגה את הקטע הקודם
-      // ומיפויי האינדקסים שלה מיושנים. גלילה עכשיו הייתה קופצת לאינדקס של
-      // הקטע הקודם — ובנוסף מפילה את SPL, שנדרש לפרוס פריט בזמן שהתוכן
-      // מתחלף. ממתינים לפריים הבא במקום. נפילה-אחורה לכותרת נשמרת לניסיון
-      // האחרון, שאז זה כבר באמת מפרש שאינו ברשימה.
+      // מפתח שאינו במיפוי = הרשימה עדיין מציגה את הקטע הקודם; ממתינים.
+      // הנפילה לכותרת רק בניסיון האחרון, כשהמפרש באמת אינו ברשימה.
       final isLastAttempt = attempt == _maxCommentatorScrollAttempts - 1;
       final index = _resolveCommentatorScrollIndex(
         target,
@@ -1238,20 +1228,8 @@ class CommentaryListBaseState extends State<CommentaryListBase>
         continue;
       }
 
-      // `jumpTo` ולא `scrollTo` מונפש, משלוש סיבות שכולן נצפו בשדה:
-      //
-      // 1. כשהיעד אינו בנוי, `scrollTo` בונה **רשימה שנייה** למעבר
-      //    המונפש. הרשימה מקצה GlobalKey לכל קטע (`_itemKeys`), ואותו
-      //    פריט שנבנה בשתי הרשימות בו-זמנית מייצר `Duplicate GlobalKey`
-      //    ואחריו מפל שגיאות פריסה.
-      // 2. ה-Future של אותו מעבר אינו מושלם לעולם אם הרשימה נבנית מחדש
-      //    באמצעו — וזה בדיוק מה שקורה כשהמפרש שנלחץ עולה לראש.
-      // 3. המעבר המונפש נעשה ב-`animateTo` לאופסט **פיקסלים** שחושב מראש,
-      //    ולכן גדילת קטעים מעל היעד (תוכן שנטען) משאירה אותו קצר.
-      //    `jumpTo` עוגן-לפי-אינדקס חסין לכל אלה.
-      //
-      // גם `scrollToTop` כאן כבר משתמש ב-`jumpTo` מאותו טעם — אנימציה על
-      // תוכן שמתחלף נראית כתקלה.
+      // קפיצה ולא גלילה מונפשת: אנימציה על תוכן שמתחלף נראית כתקלה, והרשימה
+      // נבנית מחדש באמצעה כשהמפרש שנלחץ עולה לראש.
       _itemScrollController.jumpTo(
         index: index,
         alignment: _commentatorScrollAlignment,
@@ -1307,8 +1285,8 @@ class CommentaryListBaseState extends State<CommentaryListBase>
     return null;
   }
 
-  /// עיגון מחדש על [groupTitle] אחרי כיווץ: כשהרשימה מתקצרת SPL מקצץ את
-  /// פריט-העוגן בלי לתקן את ההיסט, ונותר רווח ריק (issue #1174).
+  /// מחזיר את כותרת [groupTitle] לקצה שלה אחרי כיווץ: פריטי הקבוצה שהרשימה
+  /// עוגנה בהם נעלמים, והיא הייתה נעצרת במפרש אחר (#1174).
   void _reanchorAfterCollapse(String? groupTitle, double alignment) {
     if (groupTitle == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {

@@ -132,7 +132,6 @@ void main() {
     return positions..sort((a, b) => a.index.compareTo(b.index));
   }
 
-  // רשימה שנייה מעל הראשונה הייתה מעבר-הדהייה בין שני מיקומים.
   final innerLists = find.byType(SuperSliverList);
 
   /// מוודא שבמשך זמן אנימציית הגלילה התצוגה נשארת במקומה, בלי רשימה שנייה.

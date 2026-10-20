@@ -2,7 +2,7 @@
 ///
 /// **כלל מפתח:** כל ה-state ב-`TextBookBloc` (visibleIndices, selectedIndex,
 /// highlightedLine, חיפוש, קישורים, פסיקות וכו') משתמש ב-**שורות מקור**
-/// כאינדקסים. הסגמנטים נחשבים רק כפריט-תצוגה ב-`ScrollablePositionedList`.
+/// כאינדקסים. הסגמנטים נחשבים רק כפריטי-תצוגה ברשימת הקריאה.
 ///
 /// התרגום בין שורות לפריטים נעשה רק ב-`LineScrollController`.
 /// **אסור** להזליג segmentIndex אל ה-state של ה-bloc. הוא מקומי לרינדור.

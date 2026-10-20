@@ -466,7 +466,7 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(800, 600));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
-      // שלב 1: עליית ה-SPL לבדה.
+      // שלב 1: עליית הרשימה לבדה.
       await tester.pumpWidget(
         buildTree(wrapperKey: wrapperKey, showPageView: false),
       );
@@ -499,7 +499,7 @@ void main() {
           exception,
           isNull,
           reason:
-              'ValueKey לא משתתפת בנתיב PageStorage, לכן ה-SPL '
+              'ValueKey לא משתתפת בנתיב PageStorage, לכן הרשימה '
               'וה-PageView הפנימי לא חולקים תא ולא מתרחשת התנגשות',
         );
       },
