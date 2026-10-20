@@ -76,10 +76,10 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
   /// מתמזגות לכתיבה אחת שאחריה.
   /// הסשן שה-bloc הזה נבנה עליו. ייבוא מגיבוי מקדם את הדור, ומאותו רגע
   /// ה-bloc הישן — שעומד להיזרק ב-`RestartWidget` — אינו שומר יותר.
-  final int _sessionGeneration = TabsRepository.sessionGeneration;
+  final WindowTabsSession _session;
+  final int _sessionGeneration;
 
-  bool get _sessionReplaced =>
-      TabsRepository.sessionGeneration != _sessionGeneration;
+  bool get _sessionReplaced => _session.generation != _sessionGeneration;
 
   /// משדר את [newTabs] עם בחירה מנורמלת ושומר אותם; [currentTabIndex] null
   /// משאיר את הטאב הנוכחי.
@@ -205,11 +205,15 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
   }
 
   /// [disposeDelay] - השהיית השחרור של טאב שיצא מהרשימה; טסטים מעבירים אפס.
+  /// [session] - סשן החלון שהדור שלו נבדק; חייב להיות זה של המאגר.
   TabsBloc({
     required this._repository,
     this._disposeDelay = const Duration(milliseconds: 350),
     this._withCompanion = withCompanionPane,
-  }) : super(TabsState.initial()) {
+    WindowTabsSession? session,
+  }) : _session = session ?? WindowTabsSession.current,
+       _sessionGeneration = (session ?? WindowTabsSession.current).generation,
+       super(TabsState.initial()) {
     on<LoadTabs>(_onLoadTabs, transformer: sequential());
     on<RemapBookPaths>(_onRemapBookPaths, transformer: sequential());
     on<ReplaceAllTabs>(_onReplaceAllTabs, transformer: sequential());
