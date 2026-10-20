@@ -74,7 +74,10 @@ class ReadingSegments {
     required this.layout,
     required this.content,
     this.loadedLineFlags,
-  });
+    this.maxCachedSegments = kMaxBuiltReadingSegments,
+    this.maxCachedCharacters = 512 * 1024,
+  }) : assert(maxCachedSegments > 0),
+       assert(maxCachedCharacters >= 0);
 
   final ReadingLayout layout;
   final List<String> content;
@@ -82,10 +85,18 @@ class ReadingSegments {
   /// null = כל השורות טעונות.
   final List<bool>? loadedLineFlags;
 
+  final int maxCachedSegments;
+  final int maxCachedCharacters;
+
   final Map<int, ReadingSegment> _built = {};
+  final Set<int> _visibleItems = {};
+  int _cachedCharacters = 0;
 
   @visibleForTesting
   int get debugBuiltCount => _built.length;
+
+  @visibleForTesting
+  int get debugCachedCharacters => _cachedCharacters;
 
   int get length => layout.itemCount;
 
@@ -95,12 +106,40 @@ class ReadingSegments {
 
   ReadingSegment operator [](int item) {
     RangeError.checkValidIndex(item, this, 'item', length);
-    // LRU: הסרה והכנסה מחדש מעבירה לסוף, ו-keys.first הוא הישן ביותר.
-    final segment = _built.remove(item) ?? _buildSegment(item);
-    if (_built.length >= kMaxBuiltReadingSegments) {
-      _built.remove(_built.keys.first);
+    final cached = _built.remove(item);
+    final segment = cached ?? _buildSegment(item);
+    _built[item] = segment;
+    if (cached == null) _cachedCharacters += segment.text.length;
+    _trimCache(keep: item);
+    return segment;
+  }
+
+  /// שומר את פריטי המסך גם כשהטקסט שלהם חורג מתקציב המטמון.
+  void retainVisibleItems(Iterable<int> items) {
+    _visibleItems
+      ..clear()
+      ..addAll(items);
+    _trimCache();
+  }
+
+  void _trimCache({int? keep}) {
+    var count = _built.length;
+    var characters = _cachedCharacters;
+    if (count <= maxCachedSegments && characters <= maxCachedCharacters) return;
+    final evicted = <int>[];
+    for (final entry in _built.entries) {
+      if (entry.key == keep || _visibleItems.contains(entry.key)) continue;
+      evicted.add(entry.key);
+      characters -= entry.value.text.length;
+      count--;
+      if (count <= maxCachedSegments && characters <= maxCachedCharacters) {
+        break;
+      }
     }
-    return _built[item] = segment;
+    for (final item in evicted) {
+      _built.remove(item);
+    }
+    _cachedCharacters = characters;
   }
 
   ReadingSegment get first => this[0];
@@ -176,6 +215,7 @@ ReadingSegments readingSegmentsOf(TextBookLoaded state) {
   if (cached != null &&
       identical(cached.layout, layout) &&
       identical(cached.loadedLineFlags, state.loadedLineFlags)) {
+    cached.retainVisibleItems(state.visibleIndices.map(layout.itemForLine));
     return cached;
   }
   final segments = ReadingSegments(
@@ -184,6 +224,7 @@ ReadingSegments readingSegmentsOf(TextBookLoaded state) {
     loadedLineFlags: state.loadedLineFlags,
   );
   _segmentsByContent[state.content] = segments;
+  segments.retainVisibleItems(state.visibleIndices.map(layout.itemForLine));
   return segments;
 }
 
