@@ -53,3 +53,8 @@ class _LibraryUpdateProgressed extends LibraryUpdateEvent {
     opId,
   ];
 }
+
+/// אירוע פנימי: המערכת עצרה את שירות החזית (מכסת dataSync באנדרואיד 15).
+class _ForegroundWorkTimedOut extends LibraryUpdateEvent {
+  const _ForegroundWorkTimedOut();
+}

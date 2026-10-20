@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:otzaria/core/foreground_work.dart';
 import 'package:otzaria/core/messages/library_messages.dart';
 import 'package:otzaria/library_update/bloc/library_update_bloc.dart';
 import 'package:otzaria/library_update/repository/library_update_repository.dart';
@@ -62,6 +63,12 @@ class _FakeService implements LibraryUpdateService {
     fullCalled = true;
     if (throwOnApply) throw Exception('full failed');
   }
+
+  /// מה שהמוריד ימצא לאחר כשל: קובץ חלקי להמשך או לא.
+  bool resumable = false;
+
+  @override
+  Future<bool> hasResumableDownload(LibraryUpdatePlan plan) async => resumable;
 }
 
 /// הורדה מלאה שנעצרת על חוסר מקום — לבדיקת מיפוי השגיאה ב-BLoC.
@@ -255,6 +262,9 @@ class _GatedAtApplyService implements LibraryUpdateService {
     FullDbReplacedCallback? onDbReplaced,
     bool Function()? isCancelled,
   }) async {}
+
+  @override
+  Future<bool> hasResumableDownload(LibraryUpdatePlan plan) async => false;
 }
 
 /// שירות שמדמה רצף apply אמיתי: מדידת אימות ואז תת-שלב בלי מדידה — לבדיקת
@@ -299,6 +309,9 @@ class _VerifyThenCommitService implements LibraryUpdateService {
     FullDbReplacedCallback? onDbReplaced,
     bool Function()? isCancelled,
   }) async {}
+
+  @override
+  Future<bool> hasResumableDownload(LibraryUpdatePlan plan) async => false;
 }
 
 /// מדווח התקדמות שורות בתוך שלב ה-upserts — מד ההחלה של issue #1211.
@@ -360,6 +373,9 @@ class _GatedService implements LibraryUpdateService {
     FullDbReplacedCallback? onDbReplaced,
     bool Function()? isCancelled,
   }) async {}
+
+  @override
+  Future<bool> hasResumableDownload(LibraryUpdatePlan plan) async => false;
 }
 
 /// שירות נלווים מזויף — רושם קריאות, ואופציונלית זורק או מדווח על שינוי.
@@ -447,6 +463,7 @@ LibraryUpdateBloc _bloc(
   bool? sourceReachable,
   DateTime Function()? now,
   void Function()? onCheckSucceeded,
+  ForegroundWork? foregroundWork,
 }) => LibraryUpdateBloc(
   repository: service,
   isOfflineMode: () => offline,
@@ -457,6 +474,7 @@ LibraryUpdateBloc _bloc(
   isSourceReachable: () async => sourceReachable ?? hasInternet,
   onCheckSucceeded: onCheckSucceeded,
   now: now,
+  foregroundWork: foregroundWork,
 );
 
 int _checkSucceededCalls = 0;
@@ -2178,4 +2196,226 @@ void main() {
       );
     });
   });
+
+  group('שירות חזית בזמן הורדה', () {
+    late _FakeForegroundPlatform platform;
+    late ForegroundWork foregroundWork;
+
+    setUp(() {
+      platform = _FakeForegroundPlatform();
+      foregroundWork = ForegroundWork(
+        platform: platform,
+        isAndroid: true,
+        logFailure: (_, _, _) {},
+      );
+    });
+
+    LibraryUpdateBloc build(LibraryUpdateService service) => _bloc(
+      service,
+      foregroundWork: foregroundWork,
+    );
+
+    LibraryUpdateBloc awaitingFull(LibraryUpdateService service) =>
+        build(service)..emit(
+          LibraryUpdateState(
+            status: LibraryUpdateStatus.needsFullConfirmation,
+            plan: fullPlan,
+          ),
+        );
+
+    Future<void> until(LibraryUpdateBloc bloc, LibraryUpdateStatus status) =>
+        bloc.stream.firstWhere((s) => s.status == status);
+
+    test('הורדה מלאה שהצליחה: עולה בתחילתה ונעצר בסופה', () async {
+      final bloc = awaitingFull(_FakeService(fullPlan));
+      addTearDown(bloc.close);
+      bloc.add(const ConfirmFullDownload());
+      await until(bloc, LibraryUpdateStatus.completed);
+      await foregroundWork.settled;
+      expect(platform.calls, ['start', 'stop']);
+    });
+
+    test('הורדה מלאה שנכשלה: נעצר בכשל', () async {
+      final bloc = awaitingFull(_FakeService(fullPlan, throwOnApply: true));
+      addTearDown(bloc.close);
+      bloc.add(const ConfirmFullDownload());
+      await until(bloc, LibraryUpdateStatus.error);
+      await foregroundWork.settled;
+      expect(platform.calls, ['start', 'stop']);
+    });
+
+    test('ביטול הורדה: נעצר', () async {
+      final gate = Completer<void>();
+      final bloc = awaitingFull(_CancellableFullService(fullPlan, gate));
+      addTearDown(bloc.close);
+      bloc.add(const ConfirmFullDownload());
+      await until(bloc, LibraryUpdateStatus.downloading);
+      await foregroundWork.settled;
+      expect(platform.calls, ['start']);
+      bloc.add(const CancelLibraryUpdate());
+      await until(bloc, LibraryUpdateStatus.idle);
+      gate.complete();
+      await foregroundWork.settled;
+      expect(platform.calls, ['start', 'stop']);
+    });
+
+    test('סגירת ה-bloc באמצע הורדה: נעצר', () async {
+      final gate = Completer<void>();
+      final bloc = awaitingFull(_CancellableFullService(fullPlan, gate));
+      bloc.add(const ConfirmFullDownload());
+      await until(bloc, LibraryUpdateStatus.downloading);
+      final closed = bloc.close();
+      gate.complete();
+      await closed;
+      await foregroundWork.settled;
+      expect(platform.calls, ['start', 'stop']);
+    });
+
+    test('עדכון דלתא: עולה ונעצר', () async {
+      final bloc = build(_ChunkFloodService(deltaPlan));
+      addTearDown(bloc.close);
+      bloc.add(const StartLibraryUpdate());
+      await until(bloc, LibraryUpdateStatus.completed);
+      await foregroundWork.settled;
+      expect(platform.calls, ['start', 'stop']);
+    });
+
+    test('בדיקה שאין בה עדכון אינה מפעילה את השירות', () async {
+      final bloc = build(_FakeService(nonePlan));
+      addTearDown(bloc.close);
+      bloc.add(const StartLibraryUpdate());
+      await until(bloc, LibraryUpdateStatus.completed);
+      await foregroundWork.settled;
+      expect(platform.calls, isEmpty);
+    });
+
+    test('שירות שלא עלה אינו עוצר את ההורדה', () async {
+      platform.failStart = true;
+      final bloc = awaitingFull(_FakeService(fullPlan));
+      addTearDown(bloc.close);
+      bloc.add(const ConfirmFullDownload());
+      await until(bloc, LibraryUpdateStatus.completed);
+    });
+
+    test(
+      'מכסת הזמן של המערכת: ההורדה נעצרת עם הצעה להמשיך מהקובץ החלקי',
+      () async {
+        final gate = Completer<void>();
+        final service = _CancellableFullService(fullPlan, gate)
+          ..resumable = true;
+        final bloc = awaitingFull(service);
+        addTearDown(bloc.close);
+        bloc.add(const ConfirmFullDownload());
+        await until(bloc, LibraryUpdateStatus.downloading);
+        await foregroundWork.settled;
+
+        platform.timeout();
+        final state = await bloc.stream.firstWhere(
+          (s) => s.status == LibraryUpdateStatus.error,
+        );
+        gate.complete();
+        expect(state.message, LibraryMessages.downloadPausedResumable);
+        expect(state.errorMessage, LibraryMessages.backgroundTimeLimitReached);
+        expect(state.canResumeDownload, isTrue);
+        await Future<void>.delayed(Duration.zero);
+        expect(bloc.state.status, LibraryUpdateStatus.error);
+        await foregroundWork.settled;
+        expect(platform.calls, ['start'], reason: 'המערכת כבר עצרה אותו');
+      },
+    );
+  });
+
+  group('הודעת "לחץ להמשך" אחרי קטיעת רשת', () {
+    const networkError = PatchNetworkException(
+      SocketException('Failed host lookup'),
+    );
+
+    Future<LibraryUpdateState> failFull(_FakeService service) async {
+      final bloc = _bloc(service)
+        ..emit(
+          LibraryUpdateState(
+            status: LibraryUpdateStatus.needsFullConfirmation,
+            plan: fullPlan,
+          ),
+        );
+      addTearDown(bloc.close);
+      bloc.add(const ConfirmFullDownload());
+      return bloc.stream.firstWhere(
+        (s) => s.status == LibraryUpdateStatus.error,
+      );
+    }
+
+    test('הורדה מלאה עם קובץ חלקי → ההורדה נעצרה וניתן להמשיך', () async {
+      final state = await failFull(
+        _NetworkFailingFullDownloadService(fullPlan, networkError)
+          ..resumable = true,
+      );
+      expect(state.message, LibraryMessages.downloadPausedResumable);
+      expect(state.canResumeDownload, isTrue);
+      expect(state.errorMessage, LibraryMessages.updateNetworkInterrupted);
+    });
+
+    test('הורדה מלאה בלי קובץ חלקי → שגיאה רגילה, בלי הבטחת המשך', () async {
+      final state = await failFull(
+        _NetworkFailingFullDownloadService(fullPlan, networkError),
+      );
+      expect(state.message, 'שגיאה בהורדה המלאה');
+      expect(state.canResumeDownload, isFalse);
+    });
+
+    test('כשל שאינו רשת אינו מבטיח המשך גם כשיש קובץ חלקי', () async {
+      final state = await failFull(
+        _FakeService(fullPlan, throwOnApply: true)..resumable = true,
+      );
+      expect(state.message, 'שגיאה בהורדה המלאה');
+      expect(state.canResumeDownload, isFalse);
+    });
+
+    test('דלתא עם קובץ חלקי → ההורדה נעצרה וניתן להמשיך', () async {
+      final bloc = _bloc(
+        _FakeService(deltaPlan, applyError: networkError)..resumable = true,
+      );
+      addTearDown(bloc.close);
+      bloc.add(const StartLibraryUpdate());
+      final state = await bloc.stream.firstWhere(
+        (s) => s.status == LibraryUpdateStatus.error,
+      );
+      expect(state.message, LibraryMessages.downloadPausedResumable);
+      expect(state.canResumeDownload, isTrue);
+    });
+
+    test('דלתא בלי קובץ חלקי → שגיאת החלה רגילה', () async {
+      final bloc = _bloc(_FakeService(deltaPlan, applyError: networkError));
+      addTearDown(bloc.close);
+      bloc.add(const StartLibraryUpdate());
+      final state = await bloc.stream.firstWhere(
+        (s) => s.status == LibraryUpdateStatus.error,
+      );
+      expect(state.message, 'שגיאה בהחלת העדכון');
+      expect(state.canResumeDownload, isFalse);
+    });
+  });
+}
+
+class _FakeForegroundPlatform implements ForegroundWorkPlatform {
+  final calls = <String>[];
+  bool failStart = false;
+  void Function()? _onTimeout;
+
+  void timeout() => _onTimeout!();
+
+  @override
+  void setHandlers({
+    required void Function() onTimeout,
+    required void Function(String reason) onStartFailed,
+  }) => _onTimeout = onTimeout;
+
+  @override
+  Future<void> start(ForegroundWorkNotice notice) async {
+    if (failStart) throw Exception('not allowed from background');
+    calls.add('start');
+  }
+
+  @override
+  Future<void> stop() async => calls.add('stop');
 }

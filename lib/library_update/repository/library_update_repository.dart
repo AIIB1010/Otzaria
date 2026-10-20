@@ -172,6 +172,9 @@ abstract interface class LibraryUpdateService {
     FullDbReplacedCallback? onDbReplaced,
     bool Function()? isCancelled,
   });
+
+  /// האם נשמר קובץ חלקי שהורדה חוזרת של [plan] תמשיך ממנו.
+  Future<bool> hasResumableDownload(LibraryUpdatePlan plan);
 }
 
 /// מתזמר את כל תהליך עדכון הספרייה: התאוששות, בדיקת עדכון, הורדה, החלת
@@ -791,6 +794,30 @@ class LibraryUpdateRepository implements LibraryUpdateService {
       _deleteDbWithSidecarsQuietly(newDbPath);
       rethrow;
     }
+  }
+
+  // זהה ל-resumeToken שב-applyFullDownload; בדיקת הקטיעה ברשת מאמתת את ההתאמה.
+  static String _fullDbResumeToken(ReleaseAsset asset) =>
+      '${asset.downloadUrl}|${asset.size}|${asset.id ?? ''}|${asset.updatedAt ?? ''}';
+
+  @override
+  Future<bool> hasResumableDownload(LibraryUpdatePlan plan) async {
+    final cacheDir = p.join(await dataRootProvider(), 'library_update_cache');
+    final asset = plan.fullDbAsset;
+    if (plan.kind == LibraryUpdatePlanKind.fullDownload && asset != null) {
+      return hasReusableDownload(
+        destPath: p.join(cacheDir, 'seforim.db.zst'),
+        identity: _fullDbResumeToken(asset),
+        size: asset.size,
+        split: asset.split,
+      );
+    }
+    for (final step in plan.deltaSteps) {
+      final patchFile = step.manifest.patchFiles.first;
+      final partial = File(p.join(cacheDir, patchFile.file));
+      if (_resumablePatchBytes(partial, patchFile) > 0) return true;
+    }
+    return false;
   }
 
   /// מוחק קובץ DB יחד עם קובצי ה-wal/-shm שלו — בלעדיהם בדיקת ה-DB שהורד
