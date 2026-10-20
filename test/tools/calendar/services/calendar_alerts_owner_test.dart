@@ -1,4 +1,3 @@
-import 'dart:collection';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -28,6 +27,8 @@ void main() {
   late WindowsLikeNotifications notifications;
   late List<CustomEvent> pluginEvents;
   late List<CalendarScheduleStatus> statuses;
+  late MemoryPluginIds pluginIds;
+  late List<Map<String, Object?>> broadcasts;
 
   CalendarAlertsOwner owner({
     WindowsLikeNotifications? using,
@@ -37,10 +38,12 @@ void main() {
     final created = CalendarAlertsOwner(
       store: store,
       notifications: using ?? notifications,
+      pluginIds: pluginIds,
       pluginEvents: () async => pluginEvents,
       now: () => now,
-      broadcast: (_) {},
+      broadcast: broadcasts.add,
       dedupeDuplicates: dedupe,
+      pluginEventsDelay: const Duration(milliseconds: 200),
     );
     created.scheduleStatuses.listen(statuses.add);
     addTearDown(() async {
@@ -82,34 +85,38 @@ void main() {
     notifications = WindowsLikeNotifications();
     pluginEvents = [];
     statuses = [];
+    pluginIds = MemoryPluginIds();
+    broadcasts = [];
   });
 
   test('השידור והאישור נשלחים בין isolate groups', () async {
-    // כל חלון הוא isolate group נפרד, ו-SendPort ביניהם דוחה UnmodifiableMapView.
-    bool sendable(Object? value) => switch (value) {
-      null || bool() || num() || String() => true,
-      UnmodifiableMapView() || UnmodifiableListView() => false,
-      Map() => value.entries.every((e) => sendable(e.key) && sendable(e.value)),
-      List() => value.every(sendable),
-      _ => false,
-    };
-    final broadcasts = <Map<String, Object?>>[];
-    final o = CalendarAlertsOwner(
-      store: store,
-      notifications: notifications,
-      pluginEvents: () async => pluginEvents,
-      now: () => now,
-      broadcast: broadcasts.add,
-      dedupeDuplicates: false,
-    );
-    addTearDown(o.dispose);
-
-    final ack = await o.execute('upsertEvent', eventArgs(futureEvent('a')));
+    final o = owner();
+    final acks = [
+      await o.execute('upsertEvent', eventArgs(futureEvent('a'))),
+      await o.execute('snapshot', const {}),
+      await o.execute('pluginEventsChanged', const {}),
+      await o.execute('pluginSchedule', {
+        'pluginId': 'p',
+        'id': 3,
+        'title': 't',
+        'body': 'b',
+        'at': now.add(const Duration(hours: 1)).toIso8601String(),
+      }),
+      await o.execute('deleteEvent', const {}),
+    ];
+    await o.handleSettingsReset();
     await o.idle;
-    expect(ack['ok'], isTrue);
-    expect(sendable(ack), isTrue);
-    expect(broadcasts, isNotEmpty);
-    expect(broadcasts.every(sendable), isTrue);
+
+    expect(acks.map((a) => a['ok']), [true, true, true, true, false]);
+    expect(acks.where((a) => !isCrossGroupSendable(a)), isEmpty);
+    expect(
+      broadcasts.map((b) => b['type']).toSet(),
+      {
+        CalendarAlertsOwner.requestStateChanged,
+        CalendarAlertsOwner.requestScheduleStatus,
+      },
+    );
+    expect(broadcasts.where((b) => !isCrossGroupSendable(b)), isEmpty);
   });
 
   test('תזכורת לאירוע חדש מתוזמנת, ומחיקה מבטלת אותה', () async {
@@ -356,11 +363,178 @@ void main() {
         }
         await o.idle;
         notifications.onSchedule = null;
+        // פקודות שנוספו בריצת התזמון האחרונה.
+        while (pending.isNotEmpty) {
+          await pending.removeLast();
+        }
+        await o.idle;
 
         expect(notifications.everyIdAtMostOnce, isTrue, reason: 'seed $seed');
         expect(notifications.present, expectedPlan(), reason: 'seed $seed');
         expect(store.ledger.toSet(), expectedPlan(), reason: 'seed $seed');
       }
+    },
+  );
+
+  group('התראות של תוספים', () {
+    Map<String, Object?> scheduleArgs(String pluginId, int id) => {
+      'pluginId': pluginId,
+      'id': id,
+      'title': 't',
+      'body': 'b',
+      'at': now.add(const Duration(hours: 2)).toIso8601String(),
+    };
+
+    test('שני תזמונים מקבילים של אותו מזהה משאירים מופע אחד', () async {
+      final o = owner();
+
+      final acks = await Future.wait([
+        o.execute('pluginSchedule', scheduleArgs('p', 5)),
+        o.execute('pluginSchedule', scheduleArgs('p', 5)),
+      ]);
+
+      expect(acks.map((a) => a['ok']), [true, true]);
+      expect(notifications.counts[5], 1);
+      expect(pluginIds.ids['p'], [5]);
+    });
+
+    test('בכל שזירה כל מזהה קיים פעם אחת ושווה לרישום', () async {
+      for (var seed = 0; seed < 25; seed++) {
+        notifications = WindowsLikeNotifications();
+        pluginIds = MemoryPluginIds();
+        final random = Random(seed);
+        final o = owner();
+
+        Future<Object?> randomCommand() {
+          final plugin = ['p', 'q'][random.nextInt(2)];
+          // לכל תוסף מזהים משלו; מזהה משותף לשני תוספים הוא התנגשות אחרת.
+          final id = (plugin == 'p' ? 1 : 11) + random.nextInt(3);
+          return switch (random.nextInt(4)) {
+            0 => o.execute('pluginCancel', {'pluginId': plugin, 'id': id}),
+            1 => o.execute('pluginCancelAll', {'pluginId': plugin}),
+            _ => o.execute('pluginSchedule', scheduleArgs(plugin, id)),
+          };
+        }
+
+        final pending = [for (var i = 0; i < 8; i++) randomCommand()];
+        notifications.onSchedule = (_) {
+          if (random.nextInt(3) == 0) pending.add(randomCommand());
+        };
+        while (pending.isNotEmpty) {
+          await pending.removeLast();
+        }
+        notifications.onSchedule = null;
+
+        expect(notifications.everyIdAtMostOnce, isTrue, reason: 'seed $seed');
+        expect(notifications.present, {
+          for (final ids in pluginIds.ids.values) ...ids,
+        }, reason: 'seed $seed');
+      }
+    });
+
+    test('ביטול של מזהה שאינו ברישום התוסף אינו נוגע בו', () async {
+      store.values[CalendarAlertsKeys.events] = jsonEncode([
+        futureEvent('a').toJson(),
+      ]);
+      final o = owner();
+      await o.restoreIfNeeded();
+      await o.execute('pluginSchedule', scheduleArgs('q', 9));
+
+      final acks = [
+        await o.execute('pluginCancel', {
+          'pluginId': 'p',
+          'id': reminderId('a'),
+        }),
+        await o.execute('pluginCancel', {'pluginId': 'p', 'id': 9}),
+        await o.execute('pluginCancelAll', {'pluginId': 'p'}),
+      ];
+
+      expect(acks.map((a) => a['ok']), [true, true, true]);
+      expect(notifications.present, {reminderId('a'), 9});
+      expect(pluginIds.ids['q'], [9]);
+    });
+
+    test('ביטול של מזהה שברישום מבטל אותו ומסיר אותו', () async {
+      final o = owner();
+      await o.execute('pluginSchedule', scheduleArgs('p', 4));
+      await o.execute('pluginSchedule', scheduleArgs('p', 6));
+
+      await o.execute('pluginCancel', {'pluginId': 'p', 'id': 4});
+
+      expect(notifications.present, {6});
+      expect(pluginIds.ids['p'], [6]);
+    });
+  });
+
+  test('לולאת פרסום של אירועי תוספים מייצרת שידור אחד', () async {
+    final o = owner();
+    await o.restoreIfNeeded();
+    broadcasts.clear();
+    final updates = <CalendarAlertsUpdate>[];
+    o.updates.listen(updates.add);
+
+    for (var i = 0; i < 20; i++) {
+      pluginEvents = [...pluginEvents, futureEvent('p:$i')];
+      await o.execute('pluginEventsChanged', const {});
+      await Future<void>.delayed(Duration.zero);
+    }
+    await o.idle;
+
+    expect(updates, hasLength(1));
+    expect(updates.single.pluginEventsChanged, isTrue);
+    expect(
+      broadcasts.where(
+        (b) => b['type'] == CalendarAlertsOwner.requestStateChanged,
+      ),
+      hasLength(1),
+    );
+    expect(notifications.present, {
+      for (var i = 0; i < 20; i++) reminderId('p:$i'),
+    });
+  });
+
+  test('שינוי באירועי תוספים אחרי השידור משודר שוב', () async {
+    final o = owner();
+    final updates = <CalendarAlertsUpdate>[];
+    o.updates.listen(updates.add);
+
+    await o.execute('pluginEventsChanged', const {});
+    await o.idle;
+    await o.execute('pluginEventsChanged', const {});
+    await o.idle;
+
+    expect(updates.where((u) => u.pluginEventsChanged), hasLength(2));
+  });
+
+  test(
+    'איפוס הגדרות: הבעלים משדר את הערכים השמורים ומבטל מול הרישום',
+    () async {
+      store.values[CalendarAlertsKeys.events] = jsonEncode([
+        futureEvent('a').toJson(),
+      ]);
+      final o = owner();
+      await o.restoreIfNeeded();
+      expect(notifications.present, {reminderId('a')});
+      broadcasts.clear();
+      final revision = o.revision;
+
+      // האיפוס מוחק גם את הרישום השמור; הבעלים מבטל לפי מה שבזיכרון.
+      store.values
+        ..clear()
+        ..addAll(CalendarAlertsKeys.defaults);
+      store.ledger = [];
+      await o.handleSettingsReset();
+      await o.idle;
+
+      final changed = broadcasts.singleWhere(
+        (b) => b['type'] == CalendarAlertsOwner.requestStateChanged,
+      );
+      expect(changed['revision'], revision + 1);
+      expect(
+        (changed['values'] as Map)[CalendarAlertsKeys.events],
+        CalendarAlertsKeys.defaults[CalendarAlertsKeys.events],
+      );
+      expect(notifications.present, isEmpty);
     },
   );
 
@@ -385,6 +559,17 @@ void main() {
       );
       expect(seen, [5]);
       expect(client.appliedRevision, 5);
+    });
+
+    test('אחרי forgetAppliedRevision אותו revision מוחל שוב', () async {
+      final client = LocalCalendarAlertsClient(owner());
+      const update = CalendarAlertsUpdate(epoch: 'e', revision: 5, values: {});
+      expect(await client.accept(update), isTrue);
+      expect(await client.accept(update), isFalse);
+
+      client.forgetAppliedRevision();
+
+      expect(await client.accept(update), isTrue);
     });
   });
 

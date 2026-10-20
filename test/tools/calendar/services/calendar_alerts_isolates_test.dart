@@ -84,6 +84,8 @@ void main() {
   late WindowsLikeNotifications notifications;
   late _SlowPluginIds pluginIds;
   late CalendarAlertsOwner owner;
+  // החלונות כאן הם isolates באותה group; בין חלונות אמיתיים SendPort מחמיר.
+  final unsendable = <Object?>[];
 
   Future<int> spawnWindow() async {
     final ready = ReceivePort();
@@ -139,13 +141,20 @@ void main() {
       pluginIds: pluginIds,
       pluginEvents: () async => const [],
       now: () => now,
+      broadcast: (message) {
+        if (!isCrossGroupSendable(message)) unsendable.add(message);
+        WindowBus.instance.broadcast(message);
+      },
       dedupeDuplicates: false,
     );
     expect(WindowBus.instance.register(asOwner: true), isNotNull);
     WindowBus.instance.onRequest = (request) async {
       switch (request['type']) {
         case CalendarAlertsOwner.requestCommand:
-          return owner.handleBusRequest(request);
+          if (!isCrossGroupSendable(request)) unsendable.add(request);
+          final ack = await owner.handleBusRequest(request);
+          if (!isCrossGroupSendable(ack)) unsendable.add(ack);
+          return ack;
         case SettingsSync.requestChanged:
           return SettingsSync.instance.handleRequest(request);
       }
@@ -155,6 +164,8 @@ void main() {
 
   tearDown(() async {
     await owner.idle;
+    expect(unsendable, isEmpty);
+    unsendable.clear();
     for (final isolate in isolates) {
       isolate.kill(priority: Isolate.immediate);
     }

@@ -107,9 +107,8 @@ class SettingsSync {
   /// הכותרת בחלונות האחרים בלי ששום מעבר נייטיב קרה, ובלי דרך לצאת.
   static const Set<String> _windowScopedKeys = {'key-is-fullscreen'};
 
-  /// ⚠️ מצב ההתראות שבבעלות החלון הראשי (`CalendarAlertsOwner`). חלון משני
-  /// מקבל אותו רק דרך [applyAuthoritativeValues], לפי epoch ו-revision; שידור
-  /// רגיל אינו מסודר, ולכן ערך ישן היה דורס חדש ומחזיר אירוע שנמחק.
+  /// ⚠️ מצב ההתראות של `CalendarAlertsOwner`: רק דרך [applyAuthoritativeValues].
+  /// שידור רגיל אינו מסודר, וערך ישן היה מחזיר אירוע שנמחק.
   static const Set<String> ownerAuthoritativeKeys = {
     SettingsRepository.keyCalendarEvents,
     SettingsRepository.keyCalendarNotificationsEnabled,

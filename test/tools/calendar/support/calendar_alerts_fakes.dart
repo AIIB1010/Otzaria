@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:flutter/material.dart';
 import 'package:otzaria/core/windowing/settings_sync.dart';
@@ -136,6 +137,39 @@ class WindowsLikeNotifications implements NotificationService {
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
+
+/// רישום מזהי ההתראות של התוספים בזיכרון.
+class MemoryPluginIds implements PluginNotificationIdStore {
+  final ids = <String, List<int>>{};
+
+  @override
+  Future<List<int>> read(String pluginId) async {
+    await Future<void>.delayed(Duration.zero);
+    return [...?ids[pluginId]];
+  }
+
+  @override
+  Future<void> write(String pluginId, List<int> value) async {
+    await Future<void>.delayed(Duration.zero);
+    ids[pluginId] = [...value];
+  }
+}
+
+/// האם [value] עובר ב-SendPort בין isolate groups, כמו בין חלונות.
+///
+/// נמדד מול ה-VM: מפה חייבת להיות LinkedHashMap (לא view ולא HashMap).
+bool isCrossGroupSendable(Object? value) => switch (value) {
+  null || bool() || num() || String() => true,
+  UnmodifiableMapView() ||
+  UnmodifiableListView() ||
+  UnmodifiableSetView() => false,
+  LinkedHashMap() => value.entries.every(
+    (e) => isCrossGroupSendable(e.key) && isCrossGroupSendable(e.value),
+  ),
+  LinkedHashSet() => value.every(isCrossGroupSendable),
+  List() => value.every(isCrossGroupSendable),
+  _ => false,
+};
 
 /// מצב הבעלים בזיכרון, עם יומן כתיבות הרישום.
 class MemoryAlertsStore implements CalendarAlertsStore {

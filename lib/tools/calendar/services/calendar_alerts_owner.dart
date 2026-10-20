@@ -94,11 +94,8 @@ class CalendarScheduleStatus {
   }
 }
 
-/// הבעלים היחיד של התראות לוח השנה והתוספים בתהליך.
-///
-/// כל שינוי במצב עובר בתור סדרתי אחד ומוחל על הערך השמור העדכני. התזמון
-/// עצמו רץ בעובד יחיד שקורא את המצב מחדש בכל ריצה, כך ששני חלונות לעולם
-/// אינם מבטלים ומתזמנים את אותו מזהה במקביל.
+/// הבעלים היחיד של התראות לוח השנה והתוספים בתהליך: שינויים עוברים בתור
+/// סדרתי אחד, והתזמון בעובד יחיד שקורא את המצב מחדש בכל ריצה.
 class CalendarAlertsOwner {
   CalendarAlertsOwner({
     this._store = const SettingsCalendarAlertsStore(),
@@ -108,6 +105,7 @@ class CalendarAlertsOwner {
     DateTime Function()? now,
     void Function(Map<String, Object?> message)? broadcast,
     bool? dedupeDuplicates,
+    this.pluginEventsDelay = const Duration(milliseconds: 50),
   }) : _notificationsOverride = notifications,
        _pluginIdsOverride = pluginIds,
        _pluginEvents =
@@ -141,6 +139,11 @@ class CalendarAlertsOwner {
   final void Function(Map<String, Object?> message) _broadcast;
   final bool _dedupeDuplicates;
 
+  /// חלון האיחוד של שינויי אירועי תוספים לשידור אחד.
+  final Duration pluginEventsDelay;
+  Timer? _pluginEventsTimer;
+  Completer<void>? _pluginEventsPublished;
+
   NotificationService get _notifications =>
       _notificationsOverride ?? NotificationService();
 
@@ -173,9 +176,12 @@ class CalendarAlertsOwner {
 
   Stream<CalendarScheduleStatus> get scheduleStatuses => _statuses.stream;
 
-  /// מסתיים כשאין ריצת תזמון פעילה או ממתינה.
+  /// מסתיים כשאין שידור ממתין של אירועי תוספים ואין ריצת תזמון.
   @visibleForTesting
-  Future<void> get idle => _idle?.future ?? Future<void>.value();
+  Future<void> get idle async {
+    await _pluginEventsPublished?.future;
+    await _idle?.future;
+  }
 
   static String _newEpoch() {
     final random = Random();
@@ -237,7 +243,10 @@ class CalendarAlertsOwner {
         case 'pluginCancel':
           return await _pluginCancel(args);
         case 'pluginCancelAll':
-          return await _pluginCancelAll(args);
+          return await _cancelPluginIds(_stringArg(args, 'pluginId'));
+        case 'pluginEventsChanged':
+          _schedulePluginEventsPublish();
+          return _valueAck(true);
         case 'pluginPermissions':
           return _valueAck({
             'granted': _notifications.isInitialized
@@ -272,11 +281,6 @@ class CalendarAlertsOwner {
   >
   _stateCommands = {
     'snapshot': (_, _, _) => null,
-    'pluginEventsChanged': (owner, _, _) {
-      // אירועי תוספים אינם במפתחות; החלונות טוענים אותם מחדש מהמסד.
-      owner._pluginEventsChanged = true;
-      return null;
-    },
     'upsertEvent': (_, current, args) =>
         _upsertEvents(current, [_eventArg(args['event'])]),
     'deleteEvent': (_, current, args) {
@@ -435,17 +439,13 @@ class CalendarAlertsOwner {
         _changed(current, CalendarAlertsKeys.city, _stringArg(args, 'city')),
   };
 
-  bool _pluginEventsChanged = false;
-
   Future<Map<String, Object?>> _applyState(
     Map<String, Object?>? Function(Map<String, Object?> current) mutate,
   ) => _inLane(() async {
     await _cleanupStoredPluginEvents();
     final current = await _store.readValues();
-    _pluginEventsChanged = false;
     final changed = mutate(current) ?? const {};
-    final pluginEventsChanged = _pluginEventsChanged;
-    if (changed.isEmpty && !pluginEventsChanged) {
+    if (changed.isEmpty) {
       return {
         'ok': true,
         ...CalendarAlertsUpdate(
@@ -455,11 +455,9 @@ class CalendarAlertsOwner {
         ).toJson(),
       };
     }
-    if (changed.isNotEmpty) {
-      await _store.writeValues(changed);
-      current.addAll(changed);
-    }
-    final update = _publish(current, pluginEventsChanged: pluginEventsChanged);
+    await _store.writeValues(changed);
+    current.addAll(changed);
+    final update = _publish(current);
     _requestReconcile();
     return {'ok': true, ...update.toJson()};
   });
@@ -491,6 +489,30 @@ class CalendarAlertsOwner {
     _updates.add(update);
     _broadcast({'type': requestStateChanged, ...update.toJson()});
     return update;
+  }
+
+  /// לולאת פרסום של תוסף שולחת שינוי לכל רשומה; החלונות טוענים פעם אחת.
+  void _schedulePluginEventsPublish() {
+    if (_pluginEventsTimer != null) return;
+    final published = _pluginEventsPublished ??= Completer<void>();
+    _pluginEventsTimer = Timer(pluginEventsDelay, () {
+      _pluginEventsTimer = null;
+      _pluginEventsPublished = null;
+      unawaited(
+        _inLane(() async {
+              _publish(await _store.readValues(), pluginEventsChanged: true);
+              _requestReconcile();
+            })
+            .catchError((Object error, StackTrace stackTrace) {
+              NotificationService.logFailure(
+                'שידור אירועי תוספים נכשל',
+                error,
+                stackTrace,
+              );
+            })
+            .whenComplete(published.complete),
+      );
+    });
   }
 
   /// אירועי תוספים נשמרו בעבר יחד עם אירועי המשתמש; הם נטענים מהמסד.
@@ -532,18 +554,20 @@ class CalendarAlertsOwner {
         : notifications.requestPermissions();
   }
 
+  // פעולות התראה של תוספים רצות בתור, כדי ששני תזמונים של אותו מזהה לא
+  // ישאירו שני מופעים ב-Windows. האתחול ממתין מחוץ לתור, ולא חוסם פקודות.
   Future<Map<String, Object?>> _pluginShow(Map<String, Object?> args) async {
     final pluginId = _stringArg(args, 'pluginId');
     final id = _intArg(args, 'id');
+    final title = _stringArg(args, 'title');
+    final body = _stringArg(args, 'body');
     final ready = await _pluginReady();
     if (ready != null) return ready;
-    await _notifications.showNotification(
-      id: id,
-      title: _stringArg(args, 'title'),
-      body: _stringArg(args, 'body'),
-    );
-    await _trackPluginIds(pluginId, add: {id});
-    return _valueAck({'id': id});
+    return _inLane(() async {
+      await _notifications.showNotification(id: id, title: title, body: body);
+      await _updatePluginIds(pluginId, add: {id});
+      return _valueAck({'id': id});
+    });
   }
 
   Future<Map<String, Object?>> _pluginSchedule(
@@ -551,20 +575,24 @@ class CalendarAlertsOwner {
   ) async {
     final pluginId = _stringArg(args, 'pluginId');
     final id = _intArg(args, 'id');
+    final title = _stringArg(args, 'title');
+    final body = _stringArg(args, 'body');
     final at = DateTime.tryParse(_stringArg(args, 'at'));
     if (at == null) throw const _InvalidCommand('at');
     final ready = await _pluginReady();
     if (ready != null) return ready;
-    await _notifications.cancelNotifications([id]);
-    await _notifications.scheduleNotification(
-      id: id,
-      title: _stringArg(args, 'title'),
-      body: _stringArg(args, 'body'),
-      eventDate: at,
-      reminderMinutes: 0,
-    );
-    await _trackPluginIds(pluginId, add: {id});
-    return _valueAck({'id': id});
+    return _inLane(() async {
+      await _notifications.cancelNotifications([id]);
+      await _notifications.scheduleNotification(
+        id: id,
+        title: title,
+        body: body,
+        eventDate: at,
+        reminderMinutes: 0,
+      );
+      await _updatePluginIds(pluginId, add: {id});
+      return _valueAck({'id': id});
+    });
   }
 
   Future<Map<String, Object?>?> _pluginReady() async {
@@ -579,33 +607,39 @@ class CalendarAlertsOwner {
     return null;
   }
 
-  Future<Map<String, Object?>> _pluginCancel(Map<String, Object?> args) async {
-    final pluginId = _stringArg(args, 'pluginId');
-    final id = _intArg(args, 'id');
-    // ביטול שנכשל משאיר את המזהה ברישום, כדי שאפשר יהיה לנסות שוב.
-    await _notifications.cancelNotifications([id]);
-    await _trackPluginIds(pluginId, remove: {id});
-    return _valueAck(true);
+  Future<Map<String, Object?>> _pluginCancel(Map<String, Object?> args) =>
+      _cancelPluginIds(_stringArg(args, 'pluginId'), only: _intArg(args, 'id'));
+
+  /// מבטל רק מזהים שברישום של התוסף: מזהה אחר שייך ללוח השנה או לתוסף אחר.
+  Future<Map<String, Object?>> _cancelPluginIds(
+    String pluginId, {
+    int? only,
+  }) async {
+    Future<List<int>> owned() async => [
+      for (final id in await _pluginIds.read(pluginId))
+        if (only == null || id == only) id,
+    ];
+    if ((await _inLane(owned)).isEmpty) return _valueAck(true);
+    if (!await _notifications.ensureReadyToCancel()) {
+      return _errorAck(
+        'error.unavailable: Notification service not initialized',
+      );
+    }
+    return _inLane(() async {
+      final ids = await owned();
+      // ביטול שנכשל משאיר את המזהים ברישום, כדי שאפשר יהיה לנסות שוב.
+      await _notifications.cancelNotifications(ids);
+      await _updatePluginIds(pluginId, remove: ids.toSet());
+      return _valueAck(true);
+    });
   }
 
-  Future<Map<String, Object?>> _pluginCancelAll(
-    Map<String, Object?> args,
-  ) async {
-    final pluginId = _stringArg(args, 'pluginId');
-    final ids = await _inLane(() => _pluginIds.read(pluginId));
-    if (ids.isEmpty) return _valueAck(true);
-    await _notifications.cancelNotifications(ids);
-    await _trackPluginIds(pluginId, remove: ids.toSet());
-    return _valueAck(true);
-  }
-
-  /// read-modify-write של רישום התוסף בתור של הבעלים, כך ששני גשרים שרושמים
-  /// במקביל אינם דורסים זה את זה.
-  Future<void> _trackPluginIds(
+  /// read-modify-write של רישום התוסף. רק מתוך התור.
+  Future<void> _updatePluginIds(
     String pluginId, {
     Set<int> add = const {},
     Set<int> remove = const {},
-  }) => _inLane(() async {
+  }) async {
     final ids = [...await _pluginIds.read(pluginId)];
     final before = ids.length;
     ids.removeWhere(remove.contains);
@@ -618,7 +652,7 @@ class CalendarAlertsOwner {
       }
     }
     if (added || removed) await _pluginIds.write(pluginId, ids);
-  });
+  }
 
   // ---------------------------------------------------------------------
   // התזמון
@@ -805,6 +839,9 @@ class CalendarAlertsOwner {
   @visibleForTesting
   void dispose() {
     _dailyTimer?.cancel();
+    _pluginEventsTimer?.cancel();
+    _pluginEventsPublished?.complete();
+    _pluginEventsPublished = null;
     unawaited(_updates.close());
     unawaited(_statuses.close());
   }

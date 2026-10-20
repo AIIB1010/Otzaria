@@ -44,10 +44,8 @@ class NotificationService {
     tz.setLocalLocation(tz.getLocation('Asia/Jerusalem'));
   }
 
-  /// מאתחל את התוסף אם טרם אותחל, אחרי [startupGate]. מחזיר האם הוא זמין.
-  ///
-  /// קוראים לזה רק לפני תזמון או ביטול אמיתי, כדי שמי שאינו משתמש בהתראות
-  /// לא ישלם על האתחול הנייטיבי.
+  /// מאתחל את התוסף אחרי [startupGate] ומחזיר האם הוא זמין. רק לפני תזמון
+  /// או ביטול אמיתי, כדי שמי שאינו משתמש בהתראות לא ישלם על האתחול.
   Future<bool> ensureInitialized() async {
     if (_isInitialized) return true;
     // קריאות מקבילות חולקות אתחול אחד; אחרי כשל הקריאה הבאה מנסה שוב.
