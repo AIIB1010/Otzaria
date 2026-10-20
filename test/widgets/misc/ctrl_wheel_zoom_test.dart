@@ -3,27 +3,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/widgets/misc/ctrl_wheel_zoom.dart';
+import 'package:otzaria/widgets/misc/middle_click_autoscroll.dart';
+import 'package:otzaria/widgets/misc/smooth_wheel_scroll.dart';
 
 void main() {
   late List<bool> zooms;
   late ScrollController scroll;
 
-  Future<void> pumpZoom(WidgetTester tester) async {
+  Future<void> pumpZoom(
+    WidgetTester tester, {
+    bool autoScroll = false,
+  }) async {
     zooms = [];
     scroll = ScrollController(initialScrollOffset: 500);
     addTearDown(scroll.dispose);
-    await tester.pumpWidget(
-      MaterialApp(
-        home: CtrlWheelZoom(
-          onZoom: zooms.add,
-          child: ListView.builder(
-            controller: scroll,
-            itemCount: 100,
-            itemBuilder: (_, i) => SizedBox(height: 50, child: Text('$i')),
-          ),
-        ),
-      ),
+    Widget list = ListView.builder(
+      controller: scroll,
+      itemCount: 100,
+      itemBuilder: (_, i) => SizedBox(height: 50, child: Text('שורה $i')),
     );
+    if (autoScroll) list = SmoothWheelScroll(child: list);
+    Widget viewer = CtrlWheelZoom(onZoom: zooms.add, child: list);
+    if (autoScroll) viewer = MiddleClickAutoScroll(child: viewer);
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: viewer)));
   }
 
   Future<void> wheel(
@@ -95,4 +97,37 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
   });
+
+  testWidgets(
+    'Ctrl does not turn middle-click autoscroll into zoom',
+    (
+      tester,
+    ) async {
+      await pumpZoom(tester, autoScroll: true);
+      final center = tester.getCenter(find.byType(ListView));
+      final gesture = await tester.createGesture(
+        kind: PointerDeviceKind.mouse,
+        buttons: kMiddleMouseButton,
+      );
+      await gesture.addPointer(location: center);
+      await gesture.down(center);
+      await tester.pump();
+      await gesture.moveTo(center + const Offset(0, 120));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(scroll.offset, greaterThan(500));
+
+      final beforeCtrl = scroll.offset;
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump(const Duration(milliseconds: 100));
+      final afterCtrl = scroll.offset;
+      await gesture.up();
+      await tester.pump();
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+
+      expect(zooms, isEmpty);
+      expect(afterCtrl, greaterThan(beforeCtrl));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(scroll.offset, afterCtrl);
+    },
+  );
 }

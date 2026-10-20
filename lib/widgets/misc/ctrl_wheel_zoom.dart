@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:otzaria/widgets/misc/middle_click_autoscroll.dart';
 
 /// Turns Ctrl + wheel into zoom steps. Touchpads without a precision driver
 /// send their pinch the same way.
@@ -47,7 +48,11 @@ class RenderCtrlWheelZoom extends RenderProxyBox {
 
   @override
   void handleEvent(PointerEvent event, HitTestEntry entry) {
-    if (event is! PointerScrollEvent || event.scrollDelta.dy == 0) return;
+    if (event is! PointerScrollEvent ||
+        event.device == kAutoScrollSyntheticDevice ||
+        event.scrollDelta.dy == 0) {
+      return;
+    }
     final keyboard = HardwareKeyboard.instance;
     if (!keyboard.isControlPressed ||
         keyboard.isShiftPressed ||
