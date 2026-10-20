@@ -2084,7 +2084,7 @@ class _SearchDialogState extends State<SearchDialog> {
             return KeyEventResult.ignored;
           },
           child: SizedBox(
-            key: tourSearchDialogTargetKey,
+            key: TourTargetKeys.of(context).searchDialog,
             width: dialogWidth,
             height: dialogHeight,
             child: Column(

@@ -1928,7 +1928,7 @@ class _FindRefDialogState extends State<FindRefDialog> {
       child: MediaQuery.withClampedTextScaling(
         maxScaleFactor: 1.6,
         child: SizedBox(
-          key: tourFindRefDialogTargetKey,
+          key: TourTargetKeys.of(context).findRefDialog,
           width: dialogWidth,
           height: dialogHeight,
           child: Column(

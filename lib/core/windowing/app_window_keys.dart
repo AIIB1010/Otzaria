@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
+import 'package:otzaria/tour/tour_target_keys.dart';
 
 /// ה-GlobalKey-ים שיש מהם אחד בכל חלון, כדי שחלונות ב-isolate משותף לא יתנגשו.
 /// נוצר מעל `RestartWidget` וחי כחלון, כך שה-State עובר הפעלה מחדש כמו קודם.
@@ -16,6 +17,9 @@ class AppWindowKeys {
   /// גבול הציור של אזור התוכן. ⚠️ ה-[RepaintBoundary] שלו אינו רק לצילום:
   /// הוא מבודד את הצטיירות התוכן הכבד מסרגל הכרטיסיות שמעליו.
   final GlobalKey windowContentBoundary = GlobalKey();
+
+  /// יעדי הסיור המודרך.
+  final TourTargetKeys tour = TourTargetKeys();
 
   static AppWindowKeys _current = AppWindowKeys();
 

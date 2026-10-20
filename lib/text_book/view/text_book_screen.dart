@@ -161,37 +161,6 @@ Uint8List _createTextBookWordExport(_WordExportRequest request) {
 TextDisplayProfile _exportProfile(TextBookLoaded state) =>
     state.displayProfile(target: TextTarget.body, channel: TextChannel.export);
 
-final GlobalKey textBookNavigationTourTargetKey = GlobalKey(
-  debugLabel: 'text_book_navigation_tour_target',
-);
-final GlobalKey textBookCommentatorsTourTargetKey = GlobalKey(
-  debugLabel: 'text_book_commentators_tour_target',
-);
-final GlobalKey textBookBookmarkTourTargetKey = GlobalKey(
-  debugLabel: 'text_book_bookmark_tour_target',
-);
-final GlobalKey textBookSearchTourTargetKey = GlobalKey(
-  debugLabel: 'text_book_search_tour_target',
-);
-final GlobalKey textBookPrintTourTargetKey = GlobalKey(
-  debugLabel: 'text_book_print_tour_target',
-);
-final GlobalKey textBookOverflowTourTargetKey = GlobalKey(
-  debugLabel: 'text_book_overflow_tour_target',
-);
-final GlobalKey textBookOverflowCommentatorsTourTargetKey = GlobalKey(
-  debugLabel: 'text_book_overflow_commentators_tour_target',
-);
-final GlobalKey textBookOverflowBookmarkTourTargetKey = GlobalKey(
-  debugLabel: 'text_book_overflow_bookmark_tour_target',
-);
-final GlobalKey textBookOverflowSearchTourTargetKey = GlobalKey(
-  debugLabel: 'text_book_overflow_search_tour_target',
-);
-final GlobalKey textBookOverflowPrintTourTargetKey = GlobalKey(
-  debugLabel: 'text_book_overflow_print_tour_target',
-);
-
 class TextBookViewerBloc extends StatefulWidget {
   final void Function(OpenedTab) openBookCallback;
   final TextBookTab tab;
@@ -1664,7 +1633,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
     return Builder(
       builder: (context) => NavPanelToggleButton(
         key: TourTargetsScope.enabledOf(context)
-            ? textBookNavigationTourTargetKey
+            ? TourTargetKeys.of(context).textBookNavigation
             : null,
         isOpen: state.showLeftPane,
         onToggle: () => context.read<TextBookBloc>().add(
@@ -1675,6 +1644,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
   }
 
   Widget _buildActions(BuildContext context, TextBookLoaded state) {
+    final tourKeys = TourTargetKeys.of(context);
     return ListenableBuilder(
       listenable: PluginToolbarRegistry.instance,
       builder: (context, _) => Consumer<ShamorZachorDataProvider>(
@@ -1682,15 +1652,15 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
           key: const ValueKey('responsive_actions'),
           overflowMenuOffset: const Offset(0, 8),
           overflowButtonKey: TourTargetsScope.enabledOf(context)
-              ? textBookOverflowTourTargetKey
+              ? tourKeys.textBookOverflow
               : null,
           menuItemKeysByTooltip: TourTargetsScope.enabledOf(context)
               ? {
                   _getViewModeTooltip(state):
-                      textBookOverflowCommentatorsTourTargetKey,
-                  'סימניות בספר זה': textBookOverflowBookmarkTourTargetKey,
-                  'חיפוש': textBookOverflowSearchTourTargetKey,
-                  'הדפסה': textBookOverflowPrintTourTargetKey,
+                      tourKeys.textBookOverflowCommentators,
+                  'סימניות בספר זה': tourKeys.textBookOverflowBookmark,
+                  'חיפוש': tourKeys.textBookOverflowSearch,
+                  'הדפסה': tourKeys.textBookOverflowPrint,
                 }
               : null,
           actions: [
@@ -1737,7 +1707,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
       ActionButtonData(
         widget: KeyedSubtree(
           key: TourTargetsScope.enabledOf(context)
-              ? textBookCommentatorsTourTargetKey
+              ? TourTargetKeys.of(context).textBookCommentators
               : null,
           child: _buildViewModeDropdown(context, state),
         ),
@@ -1811,7 +1781,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
           context,
           state,
           key: TourTargetsScope.enabledOf(context)
-              ? textBookSearchTourTargetKey
+              ? TourTargetKeys.of(context).textBookSearch
               : null,
         ),
         icon: FluentIcons.search_24_regular,
@@ -1880,7 +1850,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
           book: state.book,
           compact: context.read<SettingsBloc>().state.compactMenuMode,
           tourKey: TourTargetsScope.enabledOf(context)
-              ? textBookBookmarkTourTargetKey
+              ? TourTargetKeys.of(context).textBookBookmark
               : null,
         ),
       ),
@@ -1996,7 +1966,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
               context,
               state,
               key: TourTargetsScope.enabledOf(context)
-                  ? textBookPrintTourTargetKey
+                  ? TourTargetKeys.of(context).textBookPrint
                   : null,
             ),
             icon: FluentIcons.print_24_regular,
