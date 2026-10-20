@@ -2323,6 +2323,22 @@ void main() {
         expect(platform.calls, ['start'], reason: 'המערכת כבר עצרה אותו');
       },
     );
+
+    test('מכסת הזמן בזמן כתיבת הדלתא אינה עוצרת את ההחלה', () async {
+      final gate = Completer<void>();
+      final bloc = build(_GatedAtApplyService(deltaPlan, gate));
+      addTearDown(bloc.close);
+      bloc.add(const StartLibraryUpdate());
+      await until(bloc, LibraryUpdateStatus.applying);
+      await foregroundWork.settled;
+
+      platform.timeout();
+      await Future<void>.delayed(Duration.zero);
+      expect(bloc.state.status, LibraryUpdateStatus.applying);
+
+      gate.complete();
+      await until(bloc, LibraryUpdateStatus.completed);
+    });
   });
 
   group('הודעת "לחץ להמשך" אחרי קטיעת רשת', () {
