@@ -315,7 +315,7 @@ if (response.success) {
 | `database.batchQuery` | 0.9.89 |
 | `shortcut.create` | 0.9.94 |
 
-> מקור-האמת לאכיפה הוא המפה `_methodMinVersion` ב-`lib/plugins/services/plugin_extended_validator.dart`. הטבלה כאן נגזרת ממנה ו-`test/plugins/plugin_method_versions_test.dart` מוודא ששתיהן זהות.
+> מקור האמת לאכיפה הוא הקטלוג `pluginApiMethods` ב-`lib/plugins/models/plugin_api_catalog.dart`. הטבלה כאן תואמת לגרסאות הקטלוג, ו-`test/plugins/plugin_method_versions_test.dart` מוודא שהן זהות.
 
 ---
 
