@@ -8,11 +8,14 @@ import 'package:otzaria/plugins/models/installed_plugin.dart';
 import 'package:otzaria/plugins/models/plugin_manifest.dart';
 import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
 import 'package:otzaria/search/search_repository.dart';
+import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
 import 'package:otzaria/tools/calendar/bloc/calendar_cubit.dart';
 import 'package:otzaria/tools/calendar/services/notification_service.dart';
 import 'package:otzaria/utils/navigation/book_open_coordinator.dart';
 import 'package:otzaria/workspaces/bloc/workspace_bloc.dart';
+
+import '../../test_helpers/memory_cache_provider.dart';
 
 class _MockHistoryBloc extends Mock implements HistoryBloc {}
 
@@ -140,6 +143,9 @@ String _future() =>
     DateTime.now().add(const Duration(hours: 1)).toIso8601String();
 
 void main() {
+  // הבעלים בודק שהמזהה אינו של התראת לוח השנה, ברישום שבהגדרות.
+  setUpAll(() => Settings.init(cacheProvider: MemoryCacheProvider()));
+
   group('מזהה ברירת המחדל של התראת תוסף נכנס ב-32 ביט', () {
     test('sendSystem בלי id', () async {
       final notifications = _FakeNotifications();
