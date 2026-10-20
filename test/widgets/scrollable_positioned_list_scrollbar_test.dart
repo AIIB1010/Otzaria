@@ -1406,8 +1406,8 @@ void main() {
   });
 
   group('פריט גבוה מהמסך (חלונית המפרשים)', () {
-    /// רשימה של [itemCount] פריטים בגובה 4000px בתוך מסך 600px, עם סרגל
-    /// שמקבל offsetController — בדיוק צורת חלונית המפרשים (פריט = מפרש שלם).
+    /// רשימה של [itemCount] פריטים בגובה 4000px בתוך מסך 600px, עם סרגל —
+    /// בדיוק צורת חלונית המפרשים (פריט = מפרש שלם).
     Future<ItemPositionsListener> dragThumbToBottom(
       WidgetTester tester, {
       required int itemCount,
@@ -1425,7 +1425,6 @@ void main() {
           home: Scaffold(
             body: ScrollablePositionedListScrollbar(
               scrollController: controller,
-              offsetController: offsetController,
               itemPositionsListener: listener,
               itemCount: itemCount,
               child: ScrollablePositionedList.builder(
@@ -1781,11 +1780,10 @@ void main() {
   );
 
   testWidgets(
-    'ספר בקטע יחיד: גרירה גוללת בתוך הקטע דרך offsetController (issue #1169)',
+    'ספר בקטע יחיד: גרירה גוללת בתוך הקטע (issue #1169)',
     (tester) async {
       final listener = ItemPositionsListener.create();
       final controller = _RecordingItemScrollController();
-      final offsets = ScrollOffsetController();
 
       await tester.pumpWidget(
         MaterialApp(
@@ -1793,7 +1791,6 @@ void main() {
             body: ScrollablePositionedListScrollbar(
               scrollController: controller,
               itemPositionsListener: listener,
-              offsetController: offsets,
               itemCount: 1,
               child: const _ScrollableStub(),
             ),

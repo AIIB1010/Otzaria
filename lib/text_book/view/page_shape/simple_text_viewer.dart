@@ -2754,7 +2754,6 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
                                 ? ScrollablePositionedListScrollbar(
                                     scrollController: _scrollController,
                                     itemPositionsListener: _positionsListener,
-                                    offsetController: _offsetController,
                                     itemCount: itemCount,
                                     labelForIndex: widget.labelForIndex,
                                     child: SmoothWheelScroll(

@@ -30,11 +30,6 @@ class ScrollablePositionedListScrollbar extends StatefulWidget {
   /// אינדקס→תוכן עניינים).
   final String Function(int index)? labelForIndex;
 
-  /// ה-ScrollOffsetController של אותה רשימה. בלעדיו הסרגל יכול לנחות רק על
-  /// גבולות פריטים; חובה לספקו כשפריט בודד גבוה מה-viewport (חלונית המפרשים —
-  /// פריט = מפרש שלם), אחרת גרירת האגודל אינה מזיזה כלום.
-  final ScrollOffsetController? offsetController;
-
   const ScrollablePositionedListScrollbar({
     super.key,
     required this.scrollController,
@@ -42,7 +37,6 @@ class ScrollablePositionedListScrollbar extends StatefulWidget {
     required this.itemCount,
     required this.child,
     this.labelForIndex,
-    this.offsetController,
   });
 
   @override
@@ -377,11 +371,6 @@ class _ScrollablePositionedListScrollbarState
       ..start();
 
     final int maxIndex = max(widget.itemCount - 1, 0);
-    if (widget.offsetController == null) {
-      widget.scrollController.jumpTo(index: target.round().clamp(0, maxIndex));
-      return;
-    }
-
     final int index = target.floor().clamp(0, maxIndex);
     final double withinItem =
         (target - index) * _itemHeight(index) * _viewportHeight;

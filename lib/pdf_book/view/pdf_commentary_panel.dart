@@ -1663,7 +1663,6 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
                 maintainSize: true,
                 child: ScrollablePositionedListScrollbar(
                   scrollController: _itemScrollController,
-                  offsetController: _scrollOffsetController,
                   itemPositionsListener: _itemPositionsListener,
                   itemCount: flatItems.length,
                   labelForIndex: (index) =>

@@ -585,7 +585,6 @@ class _LinksListViewState extends State<LinksListView> {
         return ScrollablePositionedListScrollbar(
           scrollController: _itemScrollController,
           itemPositionsListener: _itemPositionsListener,
-          offsetController: _scrollOffsetController,
           itemCount: filteredLinks.length,
           child: ScrollablePositionedList.builder(
             itemScrollController: _itemScrollController,

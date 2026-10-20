@@ -82,20 +82,6 @@ void main() {
     );
   });
 
-  testWidgets('המסילה והרשימה חולקות offsetController', (tester) async {
-    await pumpSidebar(tester);
-
-    final bar = tester.widget<ScrollablePositionedListScrollbar>(
-      find.byType(ScrollablePositionedListScrollbar),
-    );
-    final list = tester.widget<ScrollablePositionedList>(
-      find.byType(ScrollablePositionedList),
-    );
-
-    expect(bar.offsetController, isNotNull);
-    expect(bar.offsetController, same(list.scrollOffsetController));
-  });
-
   testWidgets('גרירת המסילה גוללת בתוך הערה יחידה וארוכה', (tester) async {
     final longContent = List.filled(200, 'שורה ארוכה לבדיקה').join('\n');
     final longNote = PersonalNote(
@@ -139,7 +125,7 @@ void main() {
     expect(
       list.itemPositionsListener!.itemPositions.value.single.itemLeadingEdge,
       lessThan(-0.1),
-      reason: 'ה־offsetController מאפשר למסילה לגלול בתוך אותו פריט',
+      reason: 'המסילה גוללת בתוך אותו פריט',
     );
   });
 

@@ -437,15 +437,6 @@ void main() {
       barRect.left,
       reason: 'אין מסילה בקצה השמאלי — הרשימה מגיעה עד לשם',
     );
-
-    final bar = tester.widget<ScrollablePositionedListScrollbar>(
-      find.byType(ScrollablePositionedListScrollbar),
-    );
-    final list = tester.widget<ScrollablePositionedList>(
-      find.byType(ScrollablePositionedList),
-    );
-    expect(bar.offsetController, isNotNull);
-    expect(bar.offsetController, same(list.scrollOffsetController));
   });
 
   testWidgets('גרירת המסילה גוללת בתוך קישור יחיד ומורחב', (tester) async {
@@ -511,7 +502,7 @@ void main() {
     expect(
       list.itemPositionsListener!.itemPositions.value.single.itemLeadingEdge,
       lessThan(-0.1),
-      reason: 'ה־offsetController מאפשר למסילה לגלול בתוך אותו קישור',
+      reason: 'המסילה גוללת בתוך אותו קישור',
     );
   });
 

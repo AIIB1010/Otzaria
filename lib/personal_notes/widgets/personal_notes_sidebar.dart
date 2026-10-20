@@ -534,7 +534,6 @@ class PersonalNotesSidebarState extends State<PersonalNotesSidebar>
     return ScrollablePositionedListScrollbar(
       scrollController: _itemScrollController,
       itemPositionsListener: _itemPositionsListener,
-      offsetController: _scrollOffsetController,
       itemCount: items.length,
       child: ScrollablePositionedList.builder(
         itemScrollController: _itemScrollController,

@@ -2115,7 +2115,6 @@ class CommentaryListBaseState extends State<CommentaryListBase>
                                     ),
                                 child: ScrollablePositionedListScrollbar(
                                   scrollController: _itemScrollController,
-                                  offsetController: scrollController,
                                   itemPositionsListener: _itemPositionsListener,
                                   itemCount: flatItems.length,
                                   child: SmoothWheelScroll(

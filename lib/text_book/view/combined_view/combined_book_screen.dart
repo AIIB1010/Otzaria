@@ -2063,8 +2063,6 @@ class _CombinedViewState extends State<CombinedView> {
                                     widget.tab.lines.itemController,
                                 itemPositionsListener:
                                     widget.tab.lines.positionsListener,
-                                offsetController:
-                                    widget.tab.lines.offsetController,
                                 itemCount: readingLayoutOf(state).itemCount,
                                 labelForIndex: state.tableOfContents.isEmpty
                                     ? null
@@ -2163,7 +2161,6 @@ class _CombinedViewState extends State<CombinedView> {
     return ScrollablePositionedListScrollbar(
       scrollController: widget.tab.lines.itemController,
       itemPositionsListener: widget.tab.lines.positionsListener,
-      offsetController: widget.tab.lines.offsetController,
       itemCount: itemCount,
       child: SmoothWheelScroll(
         child: widget.tab.lines.trackUserScroll(
