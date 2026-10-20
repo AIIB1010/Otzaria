@@ -2619,8 +2619,15 @@ class _CombinedViewState extends State<CombinedView> {
   /// גלילה שחושפת את כרטיס המפרשים שנפתח מתחת לפריט [index].
   void _revealCommentaryCardBelow(int index, TextBookLoaded state) {
     final lines = widget.tab.lines;
-    final tapped = lines.positionsListener.itemPositions.value
+    final positions = lines.positionsListener.itemPositions.value;
+    final tapped = positions
         .where((p) => p.index == index && p.itemLeadingEdge >= 0)
+        .firstOrNull;
+    final lastIndex = readingLayoutOf(state).itemCount - 1;
+    final bookEnd = positions
+        .where(
+          (p) => p.index == lastIndex && (p.itemTrailingEdge - 1).abs() < 1e-3,
+        )
         .firstOrNull;
     // עיגון על הפסקה בגובה הנוכחי (התצוגה לא זזה): הכרטיס נפתח
     // כלפי מטה גם כשעוגן הרשימה מתחתיה, ולא דוחף אותה מהמסך.
@@ -2642,6 +2649,15 @@ class _CombinedViewState extends State<CombinedView> {
         // הגלילה רק חושפת את הכרטיס: טקסט הבא שכבר מעל קו ה-90%
         // (בסוף הספר) היה נגרר אליו למטה, והרשימה קופצת אחורה.
         if (tapped != null && next != null && next.itemLeadingEdge <= 0.9) {
+          // הכרטיס דחף את סוף הספר מתחת למסך; מחזירים אותו לתחתית.
+          if (bookEnd != null) {
+            lines.itemController.scrollTo(
+              index: lastIndex,
+              alignment: bookEnd.itemLeadingEdge,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+            );
+          }
           return;
         }
         lines.itemController.scrollTo(
