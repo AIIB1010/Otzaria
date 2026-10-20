@@ -21,7 +21,7 @@ import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/view/combined_view/combined_book_screen.dart';
-import 'package:otzaria/widgets/selection/viewport_aligned_selection_container.dart';
+import 'package:otzaria/widgets/selection/item_selection_container.dart';
 
 import '../../../test_helpers/memory_cache_provider.dart';
 
@@ -234,7 +234,7 @@ void main() {
         find
             .ancestor(
               of: text,
-              matching: find.byType(ViewportAlignedSelectionContainer),
+              matching: find.byType(ItemSelectionContainer),
             )
             .first,
       );
@@ -292,12 +292,12 @@ void main() {
     expect(selected, isNot(contains('אדמומית')));
   });
 
-  testWidgets('כל פריט ברשימה עטוף ב-ViewportAlignedSelectionContainer', (
+  testWidgets('כל פריט ברשימה עטוף ב-ItemSelectionContainer', (
     tester,
   ) async {
     await pumpScrolledView(tester);
     expect(
-      find.byType(ViewportAlignedSelectionContainer),
+      find.byType(ItemSelectionContainer),
       findsAtLeastNWidgets(3),
     );
   });

@@ -3,18 +3,16 @@ import 'package:flutter/widgets.dart';
 
 /// עוטף פריט של רשימת קריאה כדי שקצות הבחירה יישמרו יחסית לפריט
 /// ולא יחרגו לצדדים בגרירה (ראו [_ItemSelectionDelegate]).
-class ViewportAlignedSelectionContainer extends StatefulWidget {
-  const ViewportAlignedSelectionContainer({super.key, required this.child});
+class ItemSelectionContainer extends StatefulWidget {
+  const ItemSelectionContainer({super.key, required this.child});
 
   final Widget child;
 
   @override
-  State<ViewportAlignedSelectionContainer> createState() =>
-      _ViewportAlignedSelectionContainerState();
+  State<ItemSelectionContainer> createState() => _ItemSelectionContainerState();
 }
 
-class _ViewportAlignedSelectionContainerState
-    extends State<ViewportAlignedSelectionContainer> {
+class _ItemSelectionContainerState extends State<ItemSelectionContainer> {
   late final _delegate = _ItemSelectionDelegate(context.findRenderObject);
 
   @override

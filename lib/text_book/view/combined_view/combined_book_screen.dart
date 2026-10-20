@@ -53,7 +53,7 @@ import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/search/models/search_configuration.dart';
 import 'package:otzaria/widgets/feedback/scrollable_positioned_list_scrollbar.dart';
 import 'package:otzaria/widgets/layout/reading_area_width.dart';
-import 'package:otzaria/widgets/selection/viewport_aligned_selection_container.dart';
+import 'package:otzaria/widgets/selection/item_selection_container.dart';
 import 'package:otzaria/widgets/smart_text/smart_text.dart';
 import 'package:otzaria/text_book/view/selection/text_selection_manager.dart';
 import 'package:otzaria/text_book/view/selection/selection_sync_controller.dart';
@@ -2236,7 +2236,7 @@ class _CombinedViewState extends State<CombinedView> {
           child: buildExpansiomTile(index, state, noteMap),
         );
         final bannerText = state.protection.bannerText;
-        final item = ViewportAlignedSelectionContainer(
+        final item = ItemSelectionContainer(
           child: index == 0 && state.protection.hasBanner
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
