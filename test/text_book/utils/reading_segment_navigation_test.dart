@@ -353,4 +353,52 @@ void main() {
       expect(initialReadingAlignment(120), kReadingAnchorAlignment);
     });
   });
+
+  group('readingExtentEstimator', () {
+    const plain = 'בראשית ברא אלהים את השמים ואת הארץ והארץ היתה תהו ובהו';
+    const vocalized =
+        'בְּרֵאשִׁ֖ית בָּרָ֣א אֱלֹהִ֑ים אֵ֥ת הַשָּׁמַ֖יִם וְאֵ֥ת הָאָֽרֶץ '
+        'וְהָאָ֗רֶץ הָיְתָ֥ה תֹ֙הוּ֙ וָבֹ֔הוּ';
+
+    test('אינו בונה פסקאות', () {
+      final segments = buildReadingSegments(
+        [for (var i = 0; i < 2000; i++) plain],
+        continuous: true,
+        breakLines: [for (var i = 0; i < 2000; i += 10) i],
+      );
+      final estimate = readingExtentEstimator(segments, 20);
+      for (var i = 0; i < segments.length; i++) {
+        estimate(i, 400);
+      }
+      expect(segments.debugBuiltCount, 0);
+    });
+
+    test('ניקוד, טעמים ותגיות אינם מגדילים את ההערכה', () {
+      expect(visibleReadingCharCount(vocalized), plain.length);
+      expect(visibleReadingCharCount('<b>$plain</b>'), plain.length);
+      final lines = [
+        for (var i = 0; i < 20; i++) plain,
+        for (var i = 0; i < 20; i++) '<span>$vocalized</span>',
+      ];
+      final segments = buildReadingSegments(
+        lines,
+        continuous: true,
+        breakLines: const [0, 20],
+      );
+      final estimate = readingExtentEstimator(segments, 20);
+      expect(estimate(3, 400) / estimate(1, 400), closeTo(1, 0.05));
+    });
+
+    test('פריט שלא נטען מוערך לפי האורך הממוצע של הטעונים', () {
+      final lines = [for (var i = 0; i < 30; i++) plain];
+      final segments = buildReadingSegments(
+        lines,
+        continuous: true,
+        breakLines: const [0, 10, 20],
+        loadedLineFlags: [for (var i = 0; i < 30; i++) i < 20],
+      );
+      final estimate = readingExtentEstimator(segments, 20);
+      expect(estimate(5, 400), estimate(1, 400));
+    });
+  });
 }
