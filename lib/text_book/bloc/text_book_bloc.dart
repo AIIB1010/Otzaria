@@ -2084,6 +2084,10 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
     _supportsContentRangeLoading = true;
 
     final nextContent = List<String>.of(currentState.content);
+    final hasTrackedFlags = identical(
+      currentState.loadedLineFlags,
+      _loadedContentFlags,
+    );
     final nextLoadedFlags = List<bool>.of(_loadedContentFlags);
     var hasContentChanged = false;
     var hasLoadedFlagsChanged = false;
@@ -2143,9 +2147,25 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
           content: nextContent,
           contentVersion: currentState.contentVersion + 1,
           loadedLineFlags: _loadedContentFlags,
+          contentChanges: ContentLineChanges(
+            fromVersion: currentState.contentVersion,
+            ranges: [
+              if (!hasTrackedFlags && nextContent.isNotEmpty)
+                (first: 0, last: nextContent.length - 1)
+              else
+                for (final range in applicable)
+                  if (range.startLine + range.lines.length > 0)
+                    (
+                      first: range.startLine.clamp(0, nextContent.length - 1),
+                      last: (range.startLine + range.lines.length - 1).clamp(
+                        0,
+                        nextContent.length - 1,
+                      ),
+                    ),
+            ],
+          ),
         ),
-        // אופטימיזציה: לסרוק רק את השורות החדשות במקום את כל ה-content
-        // המצטבר (מונע עבודה ריבועית במהלך warming הדרגתי של ספר ארוך).
+        // סורקים הערות רק בטווחים החדשים, בלי לחזור על כל הספר.
         scanOnly: [for (final range in applicable) ...range.lines],
       ),
     );

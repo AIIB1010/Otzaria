@@ -1,9 +1,9 @@
-import 'dart:typed_data';
-
 import 'package:flutter/widgets.dart';
 import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:otzaria/widgets/lists/jump_aware_item_scroll_controller.dart';
 import 'package:positioned_sliver_list/positioned_list.dart';
+
+export 'package:otzaria/text_book/utils/reading_extent_estimates.dart';
 
 /// קו העוגן (חלק מ-0..1 מגובה ה-viewport) שאליו הניווט מיישר את תחילת הקטע,
 /// וגם הקו שלפיו נקבע "המיקום הנוכחי" בספר (ההדגשה בסרגל הניווט). שני הצדדים
@@ -18,85 +18,6 @@ double initialReadingAlignment(int initialIndex) =>
 /// טווח המטמון של רשימות הקריאה, במסכים לכל צד. כל קפיצה בונה אותו מחדש,
 /// וברירת המחדל של החבילה (2) בונה כחמישה מסכים של פסקאות.
 const double kReaderCacheExtentScreens = 1.5;
-
-/// גובה משוער של פריט קריאה שטרם נפרס, לפי אורך הטקסט ורוחב הרשימה. גס
-/// בכוונה: הקפיצות מדויקות בכל מקרה, וההערכה רק מקרבת את טווח הגלילה.
-ItemExtentEstimator readingExtentEstimator(
-  ReadingSegments segments,
-  double fontSize,
-) {
-  final lineExtent = fontSize * 1.6;
-  final charWidth = fontSize * 0.45;
-  final layout = segments.layout;
-  return (index, width) {
-    if (index >= layout.itemCount || width <= charWidth) return lineExtent;
-    final sums = _visibleLengthSums[segments] ??= _VisibleLengthSums(segments);
-    final chars = sums.charsBetween(
-      layout.firstLineOf(index),
-      layout.lastLineOf(index),
-    );
-    final lines = (chars * charWidth / width).ceil();
-    return (lines < 1 ? 1 : lines) * lineExtent + fontSize;
-  };
-}
-
-final Expando<_VisibleLengthSums> _visibleLengthSums = Expando(
-  'visibleLengthSums',
-);
-
-/// סכומים מצטברים של תווים נראים ושל שורות שלא נטענו, כדי שהערכת פריט תהיה
-/// O(1) בלי לבנות את הפסקה. שורה שלא נטענה נספרת כאורך הממוצע של הטעונות.
-class _VisibleLengthSums {
-  _VisibleLengthSums(ReadingSegments segments)
-    : _chars = Int64List(segments.content.length + 1),
-      _unloaded = Int32List(segments.content.length + 1) {
-    final content = segments.content;
-    final flags = segments.loadedLineFlags;
-    var loadedLines = 0;
-    for (var line = 0; line < content.length; line++) {
-      final loaded = flags == null || (line < flags.length && flags[line]);
-      _chars[line + 1] =
-          _chars[line] + (loaded ? visibleReadingCharCount(content[line]) : 0);
-      _unloaded[line + 1] = _unloaded[line] + (loaded ? 0 : 1);
-      if (loaded) loadedLines++;
-    }
-    _unloadedLineChars = loadedLines == 0
-        ? _defaultLineChars
-        : _chars[content.length] / loadedLines;
-  }
-
-  static const double _defaultLineChars = 200;
-
-  final Int64List _chars;
-  final Int32List _unloaded;
-  late final double _unloadedLineChars;
-
-  double charsBetween(int first, int last) {
-    final end = (last + 1).clamp(0, _chars.length - 1);
-    final start = first.clamp(0, end);
-    return (_chars[end] - _chars[start]) +
-        (_unloaded[end] - _unloaded[start]) * _unloadedLineChars;
-  }
-}
-
-/// מספר התווים שתופסים רוחב בשורה: בלי תגיות HTML ובלי ניקוד וטעמים
-/// (U+0591–U+05C7), שאינם מוסיפים רוחב לאות שעליה הם יושבים.
-@visibleForTesting
-int visibleReadingCharCount(String text) {
-  var count = 0;
-  var inTag = false;
-  for (var i = 0; i < text.length; i++) {
-    final c = text.codeUnitAt(i);
-    if (inTag) {
-      if (c == 0x3E) inTag = false;
-    } else if (c == 0x3C) {
-      inTag = true;
-    } else if (c < 0x0591 || c > 0x05C7) {
-      count++;
-    }
-  }
-  return count;
-}
 
 /// קו העוגן לניווט אל תוצאת חיפוש — ממקם את המילה שנמצאה סביב מרכז-עליון
 /// התצוגה (ולא בראש), כדי שיהיה הקשר גם מעל המילה. זהה לסרגל התוצאות בחלונית

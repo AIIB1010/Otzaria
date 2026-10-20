@@ -386,7 +386,15 @@ void main() {
       isA<TextBookLoaded>()
           .having((state) => state.content.length, 'content length', 6)
           .having((state) => state.content[3], 'line 3', 'שורה 3')
-          .having((state) => state.content[5], 'line 5', 'שורה 5'),
+          .having((state) => state.content[5], 'line 5', 'שורה 5')
+          .having(
+            (state) => state.contentChanges?.fromVersion,
+            'previous version',
+            0,
+          )
+          .having((state) => state.contentChanges?.ranges, 'changed ranges', [
+            (first: 0, last: 5),
+          ]),
     ],
   );
 

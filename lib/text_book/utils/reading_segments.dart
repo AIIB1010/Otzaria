@@ -11,10 +11,12 @@ library;
 import 'package:characters/characters.dart';
 import 'package:flutter/foundation.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
+import 'package:otzaria/text_book/models/content_line_changes.dart';
 import 'package:otzaria/text_book/utils/inline_notes_utils.dart' as notes;
 import 'package:otzaria/text_book/utils/reading_layout.dart';
 
 export 'package:otzaria/text_book/utils/reading_layout.dart';
+export 'package:otzaria/text_book/models/content_line_changes.dart';
 
 class ReadingLineRange {
   final int lineIndex;
@@ -76,11 +78,40 @@ class ReadingSegments {
     this.loadedLineFlags,
     this.maxCachedSegments = kMaxBuiltReadingSegments,
     this.maxCachedCharacters = 512 * 1024,
+    this.readerIdentity,
+    this.contentVersion = 0,
+    this.contentChanges,
   }) : assert(maxCachedSegments > 0),
        assert(maxCachedCharacters >= 0);
 
   final ReadingLayout layout;
   final List<String> content;
+  final Object? readerIdentity;
+  final int contentVersion;
+  final ContentLineChanges? contentChanges;
+
+  /// null מציין שאין דלתא ידועה מהתצלום המבוקש, ונדרשת השוואה מלאה.
+  List<ContentLineRange>? changedLinesSince(ReadingSegments before) {
+    if (readerIdentity != null &&
+        before.readerIdentity != null &&
+        !identical(readerIdentity, before.readerIdentity)) {
+      return null;
+    }
+    if (identical(content, before.content) &&
+        identical(loadedLineFlags, before.loadedLineFlags)) {
+      return const [];
+    }
+    final changes = contentChanges;
+    if (readerIdentity == null ||
+        !identical(readerIdentity, before.readerIdentity) ||
+        content.length != before.content.length ||
+        changes == null ||
+        changes.fromVersion != before.contentVersion ||
+        contentVersion == before.contentVersion) {
+      return null;
+    }
+    return changes.ranges;
+  }
 
   /// null = כל השורות טעונות.
   final List<bool>? loadedLineFlags;
@@ -214,7 +245,10 @@ ReadingSegments readingSegmentsOf(TextBookLoaded state) {
   final cached = _segmentsByContent[state.content];
   if (cached != null &&
       identical(cached.layout, layout) &&
-      identical(cached.loadedLineFlags, state.loadedLineFlags)) {
+      identical(cached.loadedLineFlags, state.loadedLineFlags) &&
+      identical(cached.readerIdentity, state.readerIdentity) &&
+      cached.contentVersion == state.contentVersion &&
+      identical(cached.contentChanges, state.contentChanges)) {
     cached.retainVisibleItems(state.visibleIndices.map(layout.itemForLine));
     return cached;
   }
@@ -222,6 +256,9 @@ ReadingSegments readingSegmentsOf(TextBookLoaded state) {
     layout: layout,
     content: state.content,
     loadedLineFlags: state.loadedLineFlags,
+    readerIdentity: state.readerIdentity,
+    contentVersion: state.contentVersion,
+    contentChanges: state.contentChanges,
   );
   _segmentsByContent[state.content] = segments;
   segments.retainVisibleItems(state.visibleIndices.map(layout.itemForLine));
