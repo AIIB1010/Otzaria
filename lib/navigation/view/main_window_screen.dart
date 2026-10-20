@@ -1,3 +1,4 @@
+import 'package:otzaria/data/book_identity.dart';
 // לתחזוקת חיבור הסיור המודרך למסך הראשי ראו:
 // docs/guided_tour_developer_guide.md
 
@@ -954,7 +955,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
               RefreshLibrary(
                 changedBookKeys: {
                   for (final id in result.updatedBookIds)
-                    IndexingRepository.userBookKey(id),
+                    BookIdentity.userBookKey(id),
                 },
               ),
             );
@@ -2968,7 +2969,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
                   RefreshLibrary(
                     changedBookKeys: {
                       for (final id in state.changedBookIds)
-                        IndexingRepository.officialBookKey(id),
+                        BookIdentity.officialBookKey(id),
                     },
                     requestIds: {requestId},
                   ),

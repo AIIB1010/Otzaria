@@ -31,16 +31,11 @@ import 'package:otzaria/services/target_line_links_service.dart';
 Future<void> resetRuntimeStateForAppRestart({
   String? correctionStorageMoveRequestId,
 }) async {
-  MultiWindowService.clearVisibilityRequestsForRestart();
-  await PluginCorrectionSessionService.instance.prepareForRuntimeReset(
-    requestId: correctionStorageMoveRequestId,
+  await _prepareLibraryRuntimeReset(
+    correctionStorageMoveRequestId: correctionStorageMoveRequestId,
   );
-  await const HiddenLibraryStore().resetRuntimeStateForAppRestart();
-  await PluginRuntimeDispatcher.instance.prepareForAppRestart();
-  await SqliteDataProvider.instance.dispose();
   await UserBooksDatabaseHolder.instance.close();
   await AttachedLibraryRegistry.instance.reset();
-  ExternalLinkRepository.instance.resetRuntime();
   await CacheDatabaseHolder.instance.close();
   await PersonalNotesDatabase.instance.close();
   await PluginSystemDatabase.instance.close();
@@ -48,23 +43,43 @@ Future<void> resetRuntimeStateForAppRestart({
 
   final libraryPath = await AppPaths.getLibraryPath();
   FileSystemData.instance.libraryPath = libraryPath;
-  FileSystemData.instance.clearBookCache();
-
-  LibraryProviderManager.instance.resetRuntimeState();
-  DataRepository.instance.invalidateLibraryCache();
+  _invalidateLibraryRuntimeCaches();
   DataRepository.instance.invalidateExternalBooksCache();
 
-  // בלי זה סריקת התיקיות האישיות לא תרוץ שוב אחרי הבנייה מחדש, ותיקיות
-  // ספרים ששוחזרו מגיבוי יישארו בלי ספרים עד ההפעלה הבאה.
+  // תיקיות אישיות ששוחזרו מגיבוי צריכות להיסרק שוב לאחר הבנייה מחדש.
   BackgroundSyncInitializer.resetForAppRestart();
+}
+
+/// מאפס משאבים תלויי מקור ומטמוני ספרייה, בלי לסגור מסדי משתמש עצמאיים.
+Future<void> resetLibraryRuntimeState() async {
+  await _prepareLibraryRuntimeReset();
+  _invalidateLibraryRuntimeCaches();
+}
+
+Future<void> _prepareLibraryRuntimeReset({
+  String? correctionStorageMoveRequestId,
+}) async {
+  MultiWindowService.clearVisibilityRequestsForRestart();
+  await PluginCorrectionSessionService.instance.prepareForRuntimeReset(
+    requestId: correctionStorageMoveRequestId,
+  );
+  await const HiddenLibraryStore().resetRuntimeStateForAppRestart();
+  await PluginRuntimeDispatcher.instance.prepareForAppRestart();
+  await SqliteDataProvider.instance.dispose();
+}
+
+void _invalidateLibraryRuntimeCaches() {
+  ExternalLinkRepository.instance.resetRuntime();
+  FileSystemData.instance.clearBookCache();
+  LibraryProviderManager.instance.resetRuntimeState();
+  DataRepository.instance.invalidateLibraryCache();
 
   ReferenceBooksCache.instance.clear();
   BooksCache.instance.clear();
   AcronymsCache.instance.clear();
   GenerationCache.instance.clear();
   BookFacetMetadataCache.instance.clear();
-  // ה-FindRefRepository מחזיק caches פנימיים (מפרשים, AltToc שטוח) שלא
-  // ניזונים מהקאשים שלמעלה. בלי איפוס יזום הם ישרדו עד restart מלא.
+  // מטמוני המפרשים וה-AltToc של האיתור נפרדים מהמטמונים המשותפים.
   FindRefRepository.clearAllCaches();
   FindRefBloc.clearAllSearches();
   CommentaryService.clearEraCache();

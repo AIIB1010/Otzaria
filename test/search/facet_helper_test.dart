@@ -1,5 +1,5 @@
+import 'package:otzaria/data/book_identity.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:otzaria/indexing/repository/indexing_repository.dart';
 import 'package:otzaria/library/models/library.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/search/utils/facet_helper.dart';
@@ -25,17 +25,17 @@ void main() {
       );
 
       final bookByIndexedFilePath = <String, Book>{
-        IndexingRepository.buildIndexedBookFilePath(genesis): genesis,
-        IndexingRepository.buildIndexedBookFilePath(berachot): berachot,
+        BookIdentity.indexedFilePath(genesis): genesis,
+        BookIdentity.indexedFilePath(berachot): berachot,
       };
 
       final counts = FacetHelper.buildFacetCountsFromResults(
         [
           _FakeSearchResult(
-            IndexingRepository.buildIndexedBookFilePath(genesis),
+            BookIdentity.indexedFilePath(genesis),
           ),
           _FakeSearchResult(
-            IndexingRepository.buildIndexedBookFilePath(berachot),
+            BookIdentity.indexedFilePath(berachot),
           ),
         ],
         bookByIndexedFilePath,
@@ -65,15 +65,15 @@ void main() {
       final counts = FacetHelper.buildFacetCountsFromResults(
         [
           _FakeSearchResult(
-            IndexingRepository.buildIndexedBookFilePath(firstBook),
+            BookIdentity.indexedFilePath(firstBook),
           ),
           _FakeSearchResult(
-            IndexingRepository.buildIndexedBookFilePath(secondBook),
+            BookIdentity.indexedFilePath(secondBook),
           ),
         ],
         {
-          IndexingRepository.buildIndexedBookFilePath(firstBook): firstBook,
-          IndexingRepository.buildIndexedBookFilePath(secondBook): secondBook,
+          BookIdentity.indexedFilePath(firstBook): firstBook,
+          BookIdentity.indexedFilePath(secondBook): secondBook,
         },
       );
 
@@ -106,12 +106,12 @@ void main() {
 
       final counts = FacetHelper.buildFacetCountsFromBookCounts(
         {
-          IndexingRepository.buildIndexedBookFilePath(genesis): 3,
-          IndexingRepository.buildIndexedBookFilePath(berachot): 2,
+          BookIdentity.indexedFilePath(genesis): 3,
+          BookIdentity.indexedFilePath(berachot): 2,
         },
         {
-          IndexingRepository.buildIndexedBookFilePath(genesis): genesis,
-          IndexingRepository.buildIndexedBookFilePath(berachot): berachot,
+          BookIdentity.indexedFilePath(genesis): genesis,
+          BookIdentity.indexedFilePath(berachot): berachot,
         },
       );
 
@@ -133,10 +133,10 @@ void main() {
 
       final counts = FacetHelper.buildFacetCountsFromBookCounts(
         {
-          IndexingRepository.buildIndexedBookFilePath(genesis): 1,
+          BookIdentity.indexedFilePath(genesis): 1,
         },
         {
-          IndexingRepository.buildIndexedBookFilePath(genesis): genesis,
+          BookIdentity.indexedFilePath(genesis): genesis,
         },
       );
 
@@ -170,12 +170,12 @@ void main() {
       booksByKey = {};
       for (var i = 0; i < 40; i++) {
         final book = TextBook(title: 'מסכת $i', id: 300 + i, category: leaf);
-        final key = IndexingRepository.buildIndexedBookFilePath(book);
+        final key = BookIdentity.indexedFilePath(book);
         bookCounts[key] = i + 1;
         booksByKey[key] = book;
       }
       final loose = TextBook(title: 'ספר בלי קטגוריה', id: 900);
-      final looseKey = IndexingRepository.buildIndexedBookFilePath(loose);
+      final looseKey = BookIdentity.indexedFilePath(loose);
       bookCounts[looseKey] = 7;
       booksByKey[looseKey] = loose;
     });
