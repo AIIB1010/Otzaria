@@ -82,9 +82,13 @@ class LineScrollController {
   final ReaderItemBoxes itemBoxes = ReaderItemBoxes();
 
   final ValueNotifier<ReadingPosition?> _position = ValueNotifier(null);
+  final ValueNotifier<int> _navigationEpoch = ValueNotifier(0);
 
   /// המיקום הנוכחי, או יעד הניווט מרגע שהתחיל ועד שנחת.
   ValueListenable<ReadingPosition?> get position => _position;
+
+  /// משתנה בתחילת ניווט מפורש, לפני פרסום היעד; תיקוני פריסה אינם ניווט.
+  ValueListenable<int> get navigationEpoch => _navigationEpoch;
 
   ReadingViewportBinding? _binding;
   ExternalLineNavigator? _external;
@@ -155,6 +159,7 @@ class LineScrollController {
     Duration duration = const Duration(milliseconds: 250),
     Curve curve = Curves.ease,
   }) {
+    _navigationEpoch.value++;
     final segments = _segments;
     final target = _Target(
       line: segments == null || segments.isEmpty
@@ -202,6 +207,7 @@ class LineScrollController {
 
   /// היעד יבוצע רק בתצוגה הבאה שתתחבר — למשל ביציאה מצורת הדף.
   void scrollToLineOnNextAttach(int line) {
+    _navigationEpoch.value++;
     _awaitingLoad = null;
     _token++;
     _publish(ReadingPosition.target(line));
@@ -506,6 +512,7 @@ class LineScrollController {
   void dispose() {
     _disposed = true;
     positionsListener.itemPositions.removeListener(_onItemPositions);
+    _navigationEpoch.dispose();
   }
 }
 
