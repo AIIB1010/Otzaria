@@ -53,8 +53,7 @@ dependencies:
   flutter_widget_from_html_core: ^0.17.4
   fwfh_svg: ^0.16.1
   fwfh_url_launcher: ^0.16.1
-  positioned_sliver_list:
-    path: C:/wt/pkg/_ext/sliver-list-pkg
+  positioned_sliver_list: ^0.1.0
   flutter_svg: ^2.3.0  
   fluentui_system_icons: ^1.1.273
   # אחרי עדכון ה-ref: הרץ את הפקודה שב-docs/plugin-sdk/ICONS.md כדי לרענן את

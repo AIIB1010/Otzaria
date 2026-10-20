@@ -1387,9 +1387,10 @@ packages:
   positioned_sliver_list:
     dependency: "direct main"
     description:
-      path: "C:/wt/pkg/_ext/sliver-list-pkg"
-      relative: false
-    source: path
+      name: positioned_sliver_list
+      sha256: "81e557a4d5901e6bbb90b9ca1c5db44794ff87ec3c94bf8a5693fa6790a399c1"
+      url: "https://pub.dev"
+    source: hosted
     version: "0.1.0"
   posix:
     dependency: transitive
