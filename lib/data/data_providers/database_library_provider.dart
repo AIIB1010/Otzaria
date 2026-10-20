@@ -4129,6 +4129,8 @@ class DatabaseLibraryProvider implements LibraryProvider, LinkLinesProvider {
     _AttachedCatalogBuild build,
   ) {
     final slug = build.source.slug;
+    // כל הספרים כאן באותה קטגוריה — הנתיב מחושב פעם אחת ולא לכל ספר.
+    final categoryPathInfo = _categoryPathInfo(category);
     for (final row in rows) {
       final id = row['id'] as int? ?? 0;
       final book = _convertMinimalBookMapToBook(
@@ -4145,6 +4147,7 @@ class DatabaseLibraryProvider implements LibraryProvider, LinkLinesProvider {
         idOverride: id,
         categoryIdOverride: categoryId,
         remapMovedPath: false,
+        categoryPathInfo: categoryPathInfo,
       );
       if (book == null) continue;
       category.books.add(book);
@@ -4377,6 +4380,7 @@ class DatabaseLibraryProvider implements LibraryProvider, LinkLinesProvider {
     int? idOverride,
     int? categoryIdOverride,
     bool remapMovedPath = true,
+    ({String categoryPath, String topics})? categoryPathInfo,
   }) {
     final title = bookMap['title'] as String;
     final id = idOverride ?? (bookMap['id'] as int? ?? 0);
@@ -4390,31 +4394,8 @@ class DatabaseLibraryProvider implements LibraryProvider, LinkLinesProvider {
         categoryIdOverride ?? (bookMap['categoryId'] as int? ?? 0);
 
     final bookMeta = metadata[title];
-
-    // Build category path from the Category object
-    String getCategoryPath(Category? cat) {
-      final List<String> path = [];
-      final Set<Category> visited = {};
-      while (cat != null && !visited.contains(cat)) {
-        if (cat.title == 'ספריית אוצריא') break;
-        visited.add(cat);
-        path.insert(0, cat.title);
-        cat = cat.parent;
-      }
-      return path.join(', ');
-    }
-
-    final categoryPath = getCategoryPath(category);
-
-    // Use metadata for topics (no junction table data available)
-    String topics = '';
-    if (categoryPath.isNotEmpty) {
-      topics = categoryPath
-          .split(',')
-          .map((p) => p.trim())
-          .where((p) => p.isNotEmpty)
-          .join(', ');
-    }
+    final (:categoryPath, :topics) =
+        categoryPathInfo ?? _categoryPathInfo(category);
 
     final author = authorFromDatabase ?? (bookMeta?['author'] as String?);
     final pubDate = bookMeta?['pubDate'] as String?;
@@ -4452,6 +4433,31 @@ class DatabaseLibraryProvider implements LibraryProvider, LinkLinesProvider {
       categoryId: categoryId,
       source: source,
     );
+  }
+
+  static ({String categoryPath, String topics}) _categoryPathInfo(
+    Category? category,
+  ) {
+    final List<String> path = [];
+    final Set<Category> visited = {};
+    while (category != null && !visited.contains(category)) {
+      if (category.title == 'ספריית אוצריא') break;
+      visited.add(category);
+      path.insert(0, category.title);
+      category = category.parent;
+    }
+    final categoryPath = path.join(', ');
+
+    // Use metadata for topics (no junction table data available)
+    String topics = '';
+    if (categoryPath.isNotEmpty) {
+      topics = categoryPath
+          .split(',')
+          .map((p) => p.trim())
+          .where((p) => p.isNotEmpty)
+          .join(', ');
+    }
+    return (categoryPath: categoryPath, topics: topics);
   }
 
   @visibleForTesting
