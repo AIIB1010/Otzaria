@@ -260,7 +260,29 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
       _warmContentCacheInBackground(currentState.book);
     } else {
       _releaseContentOutsideWindow(currentState, emit);
+      _releaseLinksOutsideWindow(state as TextBookLoaded, emit);
     }
+  }
+
+  /// הקישורים מצטברים לאורך הגלילה; בטאב רקע נשארים רק החלון והשורות
+  /// הנבחרות, ושאר הקישורים נטענים שוב כשמגיעים לחלון שלהם.
+  void _releaseLinksOutsideWindow(
+    TextBookLoaded current,
+    Emitter<TextBookState> emit,
+  ) {
+    final window = _calculateLinksWindow(current.visibleIndices);
+    final start = min(window.start, _loadedLinksStart ?? window.start) + 1;
+    final end = max(window.end, _loadedLinksEnd ?? window.end) + 1;
+    final kept = [
+      for (final link in current.links)
+        if (link.overlapsSourceLines(start, end) ||
+            current.selectedIndices.any(
+              (i) => link.overlapsSourceLines(i + 1, i + 1),
+            ))
+          link,
+    ];
+    if (kept.length == current.links.length) return;
+    emit(current.copyWith(links: kept, linksByLine: buildLinksByLineMap(kept)));
   }
 
   /// משחרר את תוכן הספר של טאב רקע ומשאיר רק חלון סביב המיקום הנוכחי.
