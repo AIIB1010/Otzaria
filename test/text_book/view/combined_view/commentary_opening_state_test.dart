@@ -270,7 +270,6 @@ void main() {
                 .key!
             as GlobalKey;
     expect(key.currentContext, isNotNull);
-    var sawOverlap = false;
     for (final index in [12, 60, 0, 79]) {
       final scrolling = h.tab.lines.itemController.scrollTo(
         index: index,
@@ -278,22 +277,22 @@ void main() {
       );
       for (var frame = 0; frame < 20; frame++) {
         await tester.pump(const Duration(milliseconds: 100));
-        sawOverlap |=
-            find
-                .byKey(ValueKey('html_${_title}_17'), skipOffstage: false)
-                .evaluate()
-                .length >
-            1;
+        expect(
+          find.byType(SuperSliverList, skipOffstage: false),
+          findsOneWidget,
+          reason: 'גלילה רחוקה אינה בונה עותק שני של הרשימה',
+        );
         expect(tester.takeException(), isNull);
       }
       await tester.pumpAndSettle();
       await scrolling;
+      final target = h.tab.lines.positionsListener.itemPositions.value
+          .where((p) => p.index == index)
+          .firstOrNull;
+      expect(target, isNotNull, reason: 'היעד $index לא נבנה');
+      expect(target!.itemLeadingEdge, lessThan(1), reason: 'היעד $index');
+      expect(target.itemTrailingEdge, greaterThan(0), reason: 'היעד $index');
     }
-    expect(
-      sawOverlap,
-      isFalse,
-      reason: 'גלילה רחוקה אינה בונה עותק שני של הרשימה',
-    );
     expect(
       key.currentContext,
       isNull,
