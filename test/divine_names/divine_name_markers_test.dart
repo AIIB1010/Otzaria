@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/book_common/utils/link_anchor_markers.dart';
 import 'package:otzaria/divine_names/models/divine_name_spans.dart';
@@ -372,6 +374,71 @@ void main() {
     test('סמן שתוכנו השתנה ואינו תואם — מוצג ככתבו', () {
       final html = '${divineNameMarkerOpen(DivineNameKind.shaddai)}שלום</span>';
       expect(resolve(html), 'שלום');
+    });
+  });
+
+  group('שורה עם מופעים רבים', () {
+    const names = [
+      ('אלהים', DivineNameKind.elohim),
+      ('אֱלֹהִים', DivineNameKind.elohim),
+      ('יהוה', DivineNameKind.hvyh),
+      ('שדי', DivineNameKind.shaddai),
+      ('אל', DivineNameKind.el),
+      ('צבאות', DivineNameKind.tzevaot),
+    ];
+    // [raw, מספר התווים הגלויים בו]
+    const separators = [
+      (' ', 1),
+      (' <b>', 1),
+      ('</b> ', 1),
+      (' &amp; ', 3),
+      (' & ', 3),
+      ('<br>', 0),
+      (' שלום ישראל ', 12),
+    ];
+
+    ({String line, List<DivineNameSpan> spans}) buildLine(int seed, int n) {
+      final random = Random(seed);
+      final raw = StringBuffer();
+      final spans = <DivineNameSpan>[];
+      var visible = 0;
+      for (var i = 0; i < n; i++) {
+        final (sep, sepVisible) = separators[random.nextInt(separators.length)];
+        raw.write(sep);
+        visible += sepVisible;
+        if (random.nextBool()) {
+          raw.write('ו');
+          visible++;
+        }
+        final (name, kind) = names[random.nextInt(names.length)];
+        // מדי פעם סוג שאינו תואם — המופע נסרק ומושמט.
+        final spanKind = random.nextInt(8) == 0 ? DivineNameKind.yah : kind;
+        spans.add((start: visible, end: visible + name.length, kind: spanKind));
+        raw.write(name);
+        visible += name.length;
+      }
+      raw.write(' סוף');
+      spans.add((start: visible, end: visible + 99, kind: DivineNameKind.el));
+      return (line: raw.toString(), spans: spans);
+    }
+
+    test('כמו עטיפת כל מופע בנפרד', () {
+      for (var seed = 0; seed < 50; seed++) {
+        final (:line, :spans) = buildLine(seed, 60);
+        final oneByOne = spans.reversed.fold(
+          line,
+          (html, span) => wrapDivineNameSpans(html, [span]),
+        );
+        expect(oneByOne, isNot(line));
+        expect(wrapDivineNameSpans(line, spans), oneByOne, reason: '$seed');
+      }
+    });
+
+    test('השורה אינה נסרקת מתחילתה לכל מופע', () {
+      final (:line, :spans) = buildLine(1, 300);
+      debugVisibleScanCount = 0;
+      wrapDivineNameSpans(line, spans);
+      expect(debugVisibleScanCount, lessThanOrEqualTo(1));
     });
   });
 }

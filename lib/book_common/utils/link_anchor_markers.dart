@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:otzaria/divine_names/models/divine_name_forms.dart';
 import 'package:otzaria/divine_names/models/divine_name_spans.dart';
 import 'package:otzaria/divine_names/utils/divine_name_markers.dart';
@@ -248,6 +249,10 @@ String wrapVisibleRange({
 
 const _lt = 0x3C, _amp = 0x26;
 
+/// מספר הסריקות של שורה מתחילתה למיפוי אופסט גלוי לגולמי.
+@visibleForTesting
+int debugVisibleScanCount = 0;
+
 /// עוטף את מופעי השמות [spans] של שורה בסמן שהרינדור ממיר לצורת התצוגה.
 /// האופסטים גלויים, ולכן מותר להזריק קודם רק תגים (קישורי inline), לא תוכן.
 /// מופע ששלדו אינו תואם את סוגו, או שחוצה תג, מושמט.
@@ -289,6 +294,7 @@ String injectDivineNameMarkers(
 /// אינדקס גולמי של תחילת התו הגלוי מספר [visibleOffset] (אחרי תגים קודמים);
 /// אורך המחרוזת כשהאופסט מעבר לסוף.
 int _rawStartOfVisible(String html, int visibleOffset) {
+  debugVisibleScanCount++;
   var visible = 0;
   var i = 0;
   final len = html.length;
@@ -316,6 +322,7 @@ int _rawStartOfVisible(String html, int visibleOffset) {
 /// אקסקלוסיבי שאינו בולע תגים עוקבים.
 int _rawEndOfVisible(String html, int visibleOffset) {
   if (visibleOffset <= 0) return 0;
+  debugVisibleScanCount++;
   var visible = 0;
   var i = 0;
   final len = html.length;
@@ -353,6 +360,7 @@ class _VisibleChars {
     : _length = html.length,
       _starts = Int32List(maxEnd < html.length ? maxEnd : html.length),
       _ends = Int32List(maxEnd < html.length ? maxEnd : html.length) {
+    debugVisibleScanCount++;
     final len = html.length;
     var i = 0;
     while (i < len && _count < _starts.length) {
