@@ -123,10 +123,6 @@ class CalendarAlertsOwner {
   static CalendarAlertsOwner get instance =>
       _instance ??= CalendarAlertsOwner();
 
-  @visibleForTesting
-  static set instanceForTesting(CalendarAlertsOwner? owner) =>
-      _instance = owner;
-
   /// בקשת אפיק: פקודה מחלון משני. רק הבעלים עונה עליה.
   static const String requestCommand = 'calendarAlerts.command';
 
@@ -155,7 +151,8 @@ class CalendarAlertsOwner {
   int _revision = 0;
   int get revision => _revision;
 
-  Future<void> _lane = Future<void>.value();
+  Future<void>? _lane;
+  int _laneDepth = 0;
   bool _cleanedStoredEvents = false;
   bool _dedupedPending = false;
 
@@ -467,8 +464,15 @@ class CalendarAlertsOwner {
   });
 
   Future<T> _inLane<T>(Future<T> Function() body) {
-    final result = _lane.then((_) => body());
-    _lane = result.then<void>((_) {}, onError: (Object _) {});
+    // תור ריק אינו מחזיק Future שהושלם: זה היה מקשר את ההמשך ל-zone ישן.
+    final previous = _lane;
+    final result = previous == null
+        ? Future<T>.sync(body)
+        : previous.then((_) => body());
+    _laneDepth++;
+    _lane = result.then<void>((_) {}, onError: (Object _) {}).whenComplete(() {
+      if (--_laneDepth == 0) _lane = null;
+    });
     return result;
   }
 
@@ -655,13 +659,17 @@ class CalendarAlertsOwner {
     final values = await _store.readValues();
     final plan = <int, PlannedAlert>{};
     final now = _now();
-    final events = [
-      ..._decodeEvents(values[CalendarAlertsKeys.events]),
-      ...await _pluginEvents(),
-    ];
+    final enabled = values[CalendarAlertsKeys.enabled] == true;
+    // בלי תזכורות לאירועים אין צורך לקרוא את מסד התוספים.
+    final events = enabled
+        ? [
+            ..._decodeEvents(values[CalendarAlertsKeys.events]),
+            ...await _pluginEvents(),
+          ]
+        : const <CustomEvent>[];
     for (final alert in CalendarAlertPlanner.planEventReminders(
       events: events,
-      enabled: values[CalendarAlertsKeys.enabled] == true,
+      enabled: enabled,
       defaultMinutes: values[CalendarAlertsKeys.time] as int? ?? 60,
       soundEnabled: values[CalendarAlertsKeys.sound] != false,
       now: now,
@@ -692,6 +700,8 @@ class CalendarAlertsOwner {
       _reportStatus(revision, ok: false, failures: plan.length);
       return;
     }
+    // ההמתנה לאתחול עשויה להיות ארוכה; תוכנית שהתיישנה בינתיים נבנית מחדש.
+    if (_revision != revision) return;
     await _removeDuplicatesOnce({...previous, ...plan.keys});
 
     // הרישום נכתב לפני כל פעולה: קריסה באמצע לא תשאיר התראה שאין לבטל.

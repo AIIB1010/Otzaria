@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:otzaria/core/windowing/settings_sync.dart';
 import 'package:otzaria/core/windowing/window_bus.dart';
 import 'package:otzaria/core/windowing/window_role.dart';
+import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:otzaria/tools/calendar/services/calendar_alerts_owner.dart';
 
 /// למה פקודה לא אושרה.
@@ -84,12 +85,16 @@ abstract class CalendarAlertsClient {
 mixin _OrderedUpdates {
   String? _epoch;
   int _revision = -1;
-  Future<void> _applying = Future<void>.value();
+  Future<void>? _applying;
+  int _applyingDepth = 0;
 
   final StreamController<CalendarAlertsUpdate> _updates =
       StreamController<CalendarAlertsUpdate>.broadcast(sync: true);
 
   Stream<CalendarAlertsUpdate> get updates => _updates.stream;
+
+  /// ה-revision האחרון שהוחל בחלון הזה; -1 לפני העדכון הראשון.
+  int get appliedRevision => _revision;
 
   Future<bool> _applyValues(Map<String, Object?> values) async => true;
 
@@ -98,14 +103,22 @@ mixin _OrderedUpdates {
     if (!update.isNewerThan(_epoch, _revision)) return Future.value(false);
     _epoch = update.epoch;
     _revision = update.revision;
-    final applied = _applying.then((_) async {
+    Future<bool> apply() async {
       // עדכון חדש יותר הגיע בינתיים: הוא שיוחל ויפורסם.
       if (_epoch != update.epoch || _revision != update.revision) return false;
       await _applyValues(update.values);
       _updates.add(update);
       return true;
-    });
-    _applying = applied.then<void>((_) {}, onError: (Object _) {});
+    }
+
+    final previous = _applying;
+    final applied = previous == null ? apply() : previous.then((_) => apply());
+    _applyingDepth++;
+    _applying = applied.then<void>((_) {}, onError: (Object _) {}).whenComplete(
+      () {
+        if (--_applyingDepth == 0) _applying = null;
+      },
+    );
     return applied;
   }
 }
@@ -153,7 +166,7 @@ class RemoteCalendarAlertsClient
     this.timeout = const Duration(seconds: 10),
     this.userTimeout = const Duration(minutes: 5),
   }) : _bus = bus ?? WindowBus.instance,
-       _apply = applyValues ?? SettingsSync.instance.applyAuthoritativeValues;
+       _apply = applyValues ?? _applyChangedValues;
 
   static final RemoteCalendarAlertsClient instance =
       RemoteCalendarAlertsClient();
@@ -166,6 +179,17 @@ class RemoteCalendarAlertsClient
   final Duration userTimeout;
 
   static const Set<String> _waitsForUser = {'ensurePermission', 'sendTest'};
+
+  /// רק מה שהשתנה: כל מפתח שמוחל מרענן את ההגדרות של החלון.
+  static Future<bool> _applyChangedValues(Map<String, Object?> values) {
+    final changed = {
+      for (final entry in values.entries)
+        if (Settings.getValue<Object>(entry.key) != entry.value)
+          entry.key: entry.value,
+    };
+    if (changed.isEmpty) return Future.value(true);
+    return SettingsSync.instance.applyAuthoritativeValues(changed);
+  }
 
   final StreamController<CalendarScheduleStatus> _statuses =
       StreamController<CalendarScheduleStatus>.broadcast();

@@ -19,7 +19,10 @@ import 'package:otzaria/tools/calendar/bloc/calendar_cubit.dart';
 ///
 /// currentWorkspaceId / currentBookId מוזנקים מבחוץ (ראה [loadAndMergePluginEvents]).
 class PluginCalendarAdapter {
-  const PluginCalendarAdapter();
+  const PluginCalendarAdapter({this.recordsLoader});
+
+  /// מקור הרשומות; ברירת המחדל היא מסד התוספים.
+  final Future<List<Map<String, dynamic>>> Function(String type)? recordsLoader;
 
   /// טוען records מסוג calendar.event ומאחד עם [existingEvents].
   ///
@@ -49,8 +52,11 @@ class PluginCalendarAdapter {
   /// null = הטעינה נכשלה.
   Future<List<CustomEvent>?> _load(bool Function(String scope) visible) async {
     try {
-      final records = await PluginSystemDatabase.instance
-          .getPublishedRecordsFull('calendar.event');
+      final records =
+          await (recordsLoader ??
+              PluginSystemDatabase.instance.getPublishedRecordsFull)(
+            'calendar.event',
+          );
 
       final pluginEvents = <CustomEvent>[];
       for (final record in records) {
