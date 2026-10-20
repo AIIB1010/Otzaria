@@ -2703,7 +2703,6 @@ class _PrintingScreenState extends State<PrintingScreen> {
 
               final list = ScrollablePositionedListScrollbar(
                 scrollController: _itemScrollController,
-                itemPositionsListener: _itemPositionsListener,
                 itemCount: itemCount,
                 child: ScrollablePositionedList.separated(
                   itemScrollController: _itemScrollController,

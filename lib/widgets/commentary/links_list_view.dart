@@ -270,12 +270,6 @@ class LinksListView extends StatefulWidget {
 class _LinksListViewState extends State<LinksListView> {
   final TextEditingController _searchController = TextEditingController();
   final ItemScrollController _itemScrollController = ItemScrollController();
-  final ItemPositionsListener _itemPositionsListener =
-      ItemPositionsListener.create();
-  // פריט = קישור, ומורחב הוא עשוי להיות גבוה מהמסך. בלי ה-offsetController
-  // גרירת האגודל הייתה נעצרת על גבולות פריטים ולא מזיזה כלום בתוך קישור כזה.
-  final ScrollOffsetController _scrollOffsetController =
-      ScrollOffsetController();
   String _searchQuery = '';
   final Map<String, Future<String>> _contentCache = {};
   final Map<String, bool> _expanded = {};
@@ -584,12 +578,9 @@ class _LinksListViewState extends State<LinksListView> {
 
         return ScrollablePositionedListScrollbar(
           scrollController: _itemScrollController,
-          itemPositionsListener: _itemPositionsListener,
           itemCount: filteredLinks.length,
           child: ScrollablePositionedList.builder(
             itemScrollController: _itemScrollController,
-            itemPositionsListener: _itemPositionsListener,
-            scrollOffsetController: _scrollOffsetController,
             itemCount: filteredLinks.length,
             itemBuilder: (context, index) {
               final link = filteredLinks[index];

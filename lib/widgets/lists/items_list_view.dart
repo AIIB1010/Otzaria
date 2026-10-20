@@ -394,7 +394,6 @@ class _ItemsListViewState extends State<ItemsListView> {
   Widget _buildRowsList(BuildContext context, List<_ListRow> rows) {
     return ScrollablePositionedListScrollbar(
       scrollController: _itemScrollController,
-      itemPositionsListener: _itemPositionsListener,
       itemCount: rows.length,
       child: ScrollablePositionedList.builder(
         itemScrollController: _itemScrollController,

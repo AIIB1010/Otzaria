@@ -483,13 +483,14 @@ void main() {
     final scrollbarRect = tester.getRect(scrollbar);
     final listFinder = find.byType(ScrollablePositionedList);
     final list = tester.widget<ScrollablePositionedList>(listFinder);
+    final position = list.itemScrollController!.scrollController!.position;
     expect(
       tester.getRect(listFinder).right,
       lessThan(scrollbarRect.right),
       reason: 'קישור מורחב וגבוה מציג מסילה',
     );
     expect(
-      list.itemPositionsListener!.itemPositions.value.single.itemLeadingEdge,
+      position.pixels,
       closeTo(0, 0.01),
     );
 
@@ -500,8 +501,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      list.itemPositionsListener!.itemPositions.value.single.itemLeadingEdge,
-      lessThan(-0.1),
+      position.pixels,
+      greaterThan(position.viewportDimension * 0.1),
       reason: 'המסילה גוללת בתוך אותו קישור',
     );
   });

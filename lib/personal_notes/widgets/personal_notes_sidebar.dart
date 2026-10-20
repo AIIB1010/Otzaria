@@ -72,12 +72,6 @@ class PersonalNotesSidebarState extends State<PersonalNotesSidebar>
   final ValueNotifier<List<int>> _visibleLineIndices = ValueNotifier(const []);
   final ValueNotifier<int> _newNoteCancelRequest = ValueNotifier<int>(0);
   final ItemScrollController _itemScrollController = ItemScrollController();
-  final ItemPositionsListener _itemPositionsListener =
-      ItemPositionsListener.create();
-  // פריט = הערה, והערה ארוכה עשויה להיות גבוהה מהמסך. בלי ה-offsetController
-  // גרירת האגודל הייתה נעצרת על גבולות פריטים ולא מזיזה כלום בתוכה.
-  final ScrollOffsetController _scrollOffsetController =
-      ScrollOffsetController();
 
   @override
   void initState() {
@@ -533,12 +527,9 @@ class PersonalNotesSidebarState extends State<PersonalNotesSidebar>
 
     return ScrollablePositionedListScrollbar(
       scrollController: _itemScrollController,
-      itemPositionsListener: _itemPositionsListener,
       itemCount: items.length,
       child: ScrollablePositionedList.builder(
         itemScrollController: _itemScrollController,
-        itemPositionsListener: _itemPositionsListener,
-        scrollOffsetController: _scrollOffsetController,
         itemCount: items.length,
         itemBuilder: (context, index) => items[index],
       ),
