@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/text_book/utils/reading_segment_navigation.dart';
-import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:otzaria/widgets/smart_text/render_settings.dart';
 import 'package:otzaria/widgets/smart_text/smart_text_widget.dart';
 import 'package:positioned_sliver_list/positioned_list.dart';
@@ -38,11 +37,11 @@ String _nastyText(int chars, {int seed = 3, double? markerAt}) {
       case 0:
         out.write('־');
       case 1:
-        out.write('‏ ');
+        out.write('\u200F ');
       case 2:
-        out.write(' ‎');
+        out.write(' \u200E');
       case 3:
-        out.write(' ⁦abc def ghi⁩ ');
+        out.write(' \u2066abc def ghi\u2069 ');
       case 4:
         out.write(' \u{1F600} ');
       case 5:

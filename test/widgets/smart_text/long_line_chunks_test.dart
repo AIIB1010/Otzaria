@@ -150,8 +150,8 @@ void main() {
 
     test('אין חיתוך בתוך בידוד או הטבעה כיווניים', () {
       // LRI ו-RLO פתוחים לאורך יותר ממקטע שלם; רק אחרי PDI ו-PDF מותר לחתוך.
-      final isolated = '⁦${'abc ' * 6000}⁩';
-      final embedded = '‮${'abc ' * 6000}‬';
+      final isolated = '\u2066${'abc ' * 6000}\u2069';
+      final embedded = '\u202E${'abc ' * 6000}\u202C';
       final span = TextSpan(
         text:
             '${'מילה ' * 3000}$isolated ${'מילה ' * 3000}$embedded '
