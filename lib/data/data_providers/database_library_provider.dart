@@ -4858,22 +4858,20 @@ class DatabaseLibraryProvider implements LibraryProvider, LinkLinesProvider {
   }
 
   /// הערות השוליים של ספר (`line_note`), לפי `lineIndex`. במסד בלי הטבלה,
-  /// או לספר בלי הערות, מוחזר [BookNotes.empty].
+  /// או לספר בלי הערות, מוחזר [BookNotes.empty]. כשל נזרק: הגופים הם חלק
+  /// מטקסט הספר, ועוגני הקישורים נמדדים עליהם.
   Future<BookNotes> getBookNotes(
     String bookTitle, {
     int? categoryId,
     BookSource source = BookSource.official,
   }) async {
-    return _readTarget(
-      source,
-      BookNotes.empty,
-      'getBookNotes "$bookTitle"',
-      (target) => _runBookLoadInIsolate(
-        _loadBookNotesInIsolate,
-        target: target,
-        bookTitle: bookTitle,
-        categoryId: categoryId,
-      ),
+    final target = _isolateTargetFor(source);
+    if (target == null) return BookNotes.empty;
+    return _runBookLoadInIsolate(
+      _loadBookNotesInIsolate,
+      target: target,
+      bookTitle: bookTitle,
+      categoryId: categoryId,
     );
   }
 

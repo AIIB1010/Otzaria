@@ -33,8 +33,12 @@ mixin PanelAnchorLinksMixin<T extends StatefulWidget> on State<T> {
   BookNotes _targetNotes = BookNotes.empty;
 
   /// עוגני הקטע נמדדים על השורה המלאה, עם גופי ההערות: עד שההערות נטענו
-  /// אין להם מקום בטקסט.
+  /// אין להם מקום בטקסט, וכשהטעינה נכשלה ([targetNotesError]) — לא יהיה.
   bool _targetNotesLoaded = false;
+  Object? _targetNotesError;
+
+  /// כשל בטעינת הערות ספר הקטע; העוגנים שלו אינם מוצבים.
+  Object? get targetNotesError => _targetNotesError;
   DivineNameSpans _targetNames = DivineNameSpans.empty;
   List<LinkContentLine>? _targetLines;
   int _anchorHoverGeneration = 0;
@@ -79,6 +83,7 @@ mixin PanelAnchorLinksMixin<T extends StatefulWidget> on State<T> {
     _noteLinks = const [];
     _targetNotes = BookNotes.empty;
     _targetNotesLoaded = false;
+    _targetNotesError = null;
     _targetNames = DivineNameSpans.empty;
     _targetLines = null;
     _requestAnchorLinks();
@@ -270,15 +275,42 @@ mixin PanelAnchorLinksMixin<T extends StatefulWidget> on State<T> {
 
   Future<void> _loadTargetNotes() async {
     final link = anchorSourceLink;
-    if (link.path2.isEmpty) return;
-    final notes = await BookNotesRepository.instance.notesFor(
-      utils.getTitleFromPath(link.path2),
-      categoryId: link.targetCategoryId,
-      source: link.targetSource,
-      fileType: link.targetFileType,
-    );
+    // בלי ספר אין הערות: העוגנים (אם יש) נמדדים על השורה עצמה.
+    if (link.path2.isEmpty) {
+      _targetNotesLoaded = true;
+      return;
+    }
+    final title = utils.getTitleFromPath(link.path2);
+    final BookNotes notes;
+    try {
+      notes = await BookNotesRepository.instance.notesFor(
+        title,
+        categoryId: link.targetCategoryId,
+        source: link.targetSource,
+        fileType: link.targetFileType,
+      );
+    } catch (error, stack) {
+      if (!mounted || !identical(anchorSourceLink, link)) return;
+      setState(() => _targetNotesError = error);
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stack,
+          library: 'otzaria',
+          context: ErrorDescription(
+            'while loading the footnotes of "$title"; its link anchors are not shown',
+          ),
+        ),
+      );
+      return;
+    }
+    if (!mounted || !identical(anchorSourceLink, link)) return;
+    setState(() {
+      _targetNotes = notes;
+      _targetNotesLoaded = true;
+    });
     final names = await DivineNamesRepository.instance.spansFor(
-      utils.getTitleFromPath(link.path2),
+      title,
       categoryId: link.targetCategoryId,
       source: link.targetSource,
       fileType: link.targetFileType,
@@ -286,8 +318,6 @@ mixin PanelAnchorLinksMixin<T extends StatefulWidget> on State<T> {
     final lines = _isSingleLine ? null : await link.contentLines;
     if (!mounted || !identical(anchorSourceLink, link)) return;
     setState(() {
-      _targetNotes = notes;
-      _targetNotesLoaded = true;
       _targetNames = names;
       _targetLines = lines;
     });

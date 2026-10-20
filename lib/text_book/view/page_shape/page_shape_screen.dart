@@ -2163,20 +2163,38 @@ class _CommentaryPaneState extends State<_CommentaryPane> {
       return;
     }
     if (!mounted || widget.commentatorName != requested) return;
+    final anchorLinks = filterCommentaryAnchorLinks(links);
+    // העוגנים נמדדים על השורה המלאה: בלי ההערות אין להם מקום בטור.
+    final BookNotes notes;
+    try {
+      notes = anchorLinks.isEmpty
+          ? BookNotes.empty
+          : await BookNotesRepository.instance.notesFor(
+              book.title,
+              categoryId: categoryId,
+              source: book.source,
+              fileType: 'txt',
+            );
+    } catch (error, stack) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stack,
+          library: 'otzaria',
+          context: ErrorDescription(
+            'while loading the footnotes of "${book.title}"; its anchors are not shown',
+          ),
+        ),
+      );
+      return;
+    }
+    if (!mounted || widget.commentatorName != requested) return;
     _anchorLoadedRanges = TextBookBloc.mergeLoadedContentRanges(
       _anchorLoadedRanges,
       startLine: start,
       endLine: endLine,
     );
-    final anchorLinks = filterCommentaryAnchorLinks(links);
     if (anchorLinks.isEmpty) return;
-    final notes = await BookNotesRepository.instance.notesFor(
-      book.title,
-      categoryId: categoryId,
-      source: book.source,
-      fileType: 'txt',
-    );
-    if (!mounted || widget.commentatorName != requested) return;
     setState(() {
       _anchorBookNotes = notes;
       _anchorLinksByLine = mergeAnchorLinksByLine(

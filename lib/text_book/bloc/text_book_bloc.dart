@@ -771,8 +771,10 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
     // במקביל לטעינת התוכן, כדי שה-UI יקבל את ההגבלה כבר במצב ה-Loaded.
     // גם בטעינה-מחדש: הספרייה עשויה להתעדכן בינתיים.
     final protectionFuture = _protectionLoader(book);
-    // ההערות מהמסד קובעות אם 'הערות' זמין כבר ב-emit הראשון.
+    // ההערות מהמסד קובעות אם 'הערות' זמין כבר ב-emit הראשון. כשל בהן נכשל
+    // את הטעינה (TextBookError) כשהן נדרשות למטה, ולא כשגיאה לא-מטופלת.
     final bookNotesFuture = _bookNotesLoader(book);
+    bookNotesFuture.then<void>((_) {}, onError: (Object _) {});
 
     // ספר שנפתח עם חיפוש פעיל (מתוצאות חיפוש או טאב משוחזר): מזינים ברקע את
     // תבנית ההדגשה מבוססת-האינדקס, במקביל לטעינת התוכן — כך הרינדור מדגיש
