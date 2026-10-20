@@ -9,10 +9,10 @@ import 'package:flutter/services.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:otzaria_icons/otzaria_icons.dart';
 import 'package:otzaria/app_report/view/app_report_dialog.dart';
+import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
 import 'package:otzaria/core/startup_timeline.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
-import 'package:otzaria/core/windowing/tab_drag_preview.dart';
 import 'package:otzaria/widgets/misc/rtl_icon.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otzaria/core/error_log_file.dart';
@@ -307,13 +307,19 @@ bool shouldResyncMainPage({
     cachedPage != targetPage ||
     (shownPage?.round() ?? targetPage) != targetPage;
 
-final GlobalKey<State<LibraryBrowser>> libraryBrowserKey =
-    GlobalKey<State<LibraryBrowser>>();
-final GlobalKey<MainWindowScreenState> mainWindowScreenKey =
-    GlobalKey<MainWindowScreenState>();
+final _mainWindowScreenKeys = Expando<GlobalKey<MainWindowScreenState>>();
+
+extension MainWindowScreenKeyX on AppWindowKeys {
+  /// מפתח המסך הראשי של החלון. נוצר בגישה הראשונה וקבוע לחיי ה-[AppWindowKeys].
+  GlobalKey<MainWindowScreenState> get mainWindowScreen =>
+      _mainWindowScreenKeys[this] ??= GlobalKey<MainWindowScreenState>();
+}
 
 class MainWindowScreenState extends State<MainWindowScreen>
     with TickerProviderStateMixin {
+  /// מפתחות החלון — נשלפים פעם אחת, כדי שיהיו זמינים גם מ-callback-ים מאוחרים.
+  late final AppWindowKeys _windowKeys = AppWindowKeys.of(context);
+
   // לא final: ה-controller נוצר מחדש בעת שינוי אוריינטציה
   // (ראה _handleOrientationChange) כדי למנוע מצב שבו pixel offset מהציר
   // הישן (vertical) מתפרש כעמוד שגוי בציר החדש (horizontal).
@@ -1461,7 +1467,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
   }
 
   /// מטפל בקישור otzaria:// שהגיע ממקור פנימי (למשל שדה חיפוש בספרייה).
-  /// ניתן לקרוא לפונקציה זו דרך [mainWindowScreenKey]. מחזיר `true` אם הקישור
+  /// ניתן לקרוא לפונקציה זו דרך [MainWindowScreenKeyX.mainWindowScreen]. מחזיר `true` אם הקישור
   /// טופל בהצלחה — שדה החיפוש בספרייה משתמש בערך הזה כדי להחליט אם לנקות.
   Future<bool> handleInternalDeepLink(String uriString) =>
       _handleExternalActivationUriString(uriString);
@@ -2171,7 +2177,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
       // חייבים לסגור את הפאנל — ה-scrim שלו מכסה רק את אזור התוכן.
       _closeToolsLauncher();
       if (_lastScreen == Screen.library) {
-        final libraryState = libraryBrowserKey.currentState;
+        final libraryState = _windowKeys.libraryBrowser.currentState;
         if (libraryState != null) {
           (libraryState as dynamic).closeTransientPanels();
         }
@@ -2308,7 +2314,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
         );
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
-          (libraryBrowserKey.currentState as dynamic).navigateHome();
+          (_windowKeys.libraryBrowser.currentState as dynamic).navigateHome();
         });
       case TourStepAction.openLibraryBookPreview:
         context.read<NavigationBloc>().add(
@@ -2316,7 +2322,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
         );
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
-          final libraryState = libraryBrowserKey.currentState;
+          final libraryState = _windowKeys.libraryBrowser.currentState;
           if (libraryState != null) {
             (libraryState as dynamic).prepareTourBookPreview();
           }
@@ -2570,7 +2576,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
     if (step.area != TourSpotlightArea.bookCard) {
       return null;
     }
-    final libraryState = libraryBrowserKey.currentState;
+    final libraryState = _windowKeys.libraryBrowser.currentState;
     if (libraryState == null) {
       return null;
     }
@@ -2743,7 +2749,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
   }
 
   Rect? _libraryTourRect(String methodName) {
-    final libraryState = libraryBrowserKey.currentState;
+    final libraryState = _windowKeys.libraryBrowser.currentState;
     if (libraryState == null) {
       return null;
     }
@@ -3594,7 +3600,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
                 LibraryPageBuildDecision.buildRealPage) {
               _cachedLibraryPage = KeepAlivePage(
                 key: const ValueKey('page-library'),
-                child: LibraryBrowser(key: libraryBrowserKey),
+                child: LibraryBrowser(key: _windowKeys.libraryBrowser),
               );
               _hasBuiltRealLibraryPage = true;
             } else if (libraryBuildDecision ==
@@ -3949,8 +3955,8 @@ class MainWindowScreenState extends State<MainWindowScreen>
                                                 ),
                                                 Expanded(
                                                   child: RepaintBoundary(
-                                                    key:
-                                                        windowContentBoundaryKey,
+                                                    key: _windowKeys
+                                                        .windowContentBoundary,
                                                     child: pageView,
                                                   ),
                                                 ),
