@@ -719,8 +719,7 @@ class LibraryUpdateRepository implements LibraryUpdateService {
     final sidecarPath = PatchDownloader.resumeSidecarPath(archivePath);
     // מחולץ ליד ה-DB (אותו filesystem) כדי שה-rename יהיה אטומי.
     final newDbPath = '$dbPath.new';
-    final resumeToken =
-        '${asset.downloadUrl}|${asset.size}|${asset.id ?? ''}|${asset.updatedAt ?? ''}';
+    final resumeToken = _fullDbResumeToken(asset);
     await ensureDiskSpaceForFullDownload(
       archivePath: archivePath,
       archiveNeeded: await additionalDownloadBytes(
@@ -796,7 +795,6 @@ class LibraryUpdateRepository implements LibraryUpdateService {
     }
   }
 
-  // זהה ל-resumeToken שב-applyFullDownload; בדיקת הקטיעה ברשת מאמתת את ההתאמה.
   static String _fullDbResumeToken(ReleaseAsset asset) =>
       '${asset.downloadUrl}|${asset.size}|${asset.id ?? ''}|${asset.updatedAt ?? ''}';
 
