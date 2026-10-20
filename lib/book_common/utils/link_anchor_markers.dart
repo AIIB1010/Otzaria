@@ -259,12 +259,23 @@ int debugVisibleScanCount = 0;
 String wrapDivineNameSpans(String rawLine, List<DivineNameSpan> spans) {
   if (spans.isEmpty || rawLine.isEmpty) return rawLine;
   final visibleLength = _visibleOffsetAtRaw(rawLine, rawLine.length);
+  // שורה ארוכה נושאת מאות שמות, וסריקה מתחילתה לכל מופע ריבועית.
+  _VisibleChars? chars;
+  if (spans.length > 1) {
+    var maxEnd = 0;
+    for (final span in spans) {
+      if (span.end <= visibleLength && span.end > maxEnd) maxEnd = span.end;
+    }
+    chars = _VisibleChars(rawLine, maxEnd);
+  }
   final ranges = <HtmlWrapRange>[];
   for (final span in spans) {
     // מופע שחורג מסוף השורה מעיד על אופסטים שזזו.
     if (span.end > visibleLength) continue;
-    final rawStart = _rawStartOfVisible(rawLine, span.start);
-    final rawEnd = _rawEndOfVisible(rawLine, span.end);
+    final rawStart =
+        chars?.rawStart(span.start) ?? _rawStartOfVisible(rawLine, span.start);
+    final rawEnd =
+        chars?.rawEnd(span.end) ?? _rawEndOfVisible(rawLine, span.end);
     if (rawStart >= rawEnd) continue;
     final skeleton = divineNameSkeleton(rawLine.substring(rawStart, rawEnd));
     if (skeleton == null ||
