@@ -16,6 +16,7 @@ class ReadingExtentEstimation extends StatefulWidget {
     this.lineHeight = 1.5,
     this.fontFamily,
     this.fontWeight,
+    this.fontVariations,
     this.contentWidthRatio = 1,
     this.verticalPadding = 4,
     this.textWidth,
@@ -28,6 +29,7 @@ class ReadingExtentEstimation extends StatefulWidget {
   final double lineHeight;
   final String? fontFamily;
   final FontWeight? fontWeight;
+  final List<FontVariation>? fontVariations;
   final double contentWidthRatio;
   final double verticalPadding;
   final double Function(double availableWidth)? textWidth;
@@ -124,6 +126,9 @@ class _ReadingExtentEstimationState extends State<ReadingExtentEstimation> {
       widget.lineHeight,
       widget.fontFamily,
       widget.fontWeight,
+      Object.hashAll(
+        widget.fontVariations?.map((v) => (v.axis, v.value)) ?? const [],
+      ),
       widget.contentWidthRatio,
       widget.verticalPadding,
       widget.styleKey,
@@ -139,6 +144,7 @@ class _ReadingExtentEstimationState extends State<ReadingExtentEstimation> {
             height: widget.lineHeight,
             fontFamily: widget.fontFamily,
             fontWeight: widget.fontWeight,
+            fontVariations: widget.fontVariations,
           ),
         ),
         textDirection: Directionality.of(context),

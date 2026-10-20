@@ -9,12 +9,16 @@ import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/book_protection/repository/book_protection_repository.dart';
+import 'package:otzaria/book_protection/models/book_protection.dart';
 import 'package:otzaria/data/data_providers/library_provider.dart';
 import 'package:otzaria/data/data_providers/library_provider_manager.dart';
 import 'package:otzaria/library/models/library.dart';
 import 'package:otzaria/models/book_source.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/models/links.dart';
+import 'package:otzaria/navigation/bloc/navigation_bloc.dart';
+import 'package:otzaria/navigation/bloc/navigation_event.dart';
+import 'package:otzaria/navigation/bloc/navigation_state.dart';
 import 'package:otzaria/data/data_providers/file_system_data_provider.dart';
 import 'package:otzaria/data/repository/text_book_repository.dart';
 import 'package:otzaria/personal_notes/bloc/personal_notes_bloc.dart';
@@ -27,6 +31,7 @@ import 'package:otzaria/personal_notes/widgets/personal_note_editor_dialog.dart'
 import 'package:otzaria/settings/engine/settings_bloc.dart';
 import 'package:otzaria/settings/engine/settings_event.dart';
 import 'package:otzaria/settings/engine/settings_state.dart';
+import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/shortcuts/shortcut_helper.dart';
 import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
@@ -37,6 +42,7 @@ import 'package:otzaria/text_book/view/selection/selected_text_copy.dart';
 import 'package:otzaria/text_book/view/selection/selection_sync_controller.dart';
 import 'package:otzaria/text_display/text_display_exports.dart';
 import 'package:otzaria/text_book/view/tabbed_commentary_panel.dart';
+import 'package:otzaria/text_book/view/widgets/book_source_banner.dart';
 import 'package:otzaria/widgets/misc/app_context_menu.dart';
 import 'package:otzaria/widgets/misc/link_context_menu_entry.dart';
 import 'package:otzaria/widgets/misc/link_preview_overlay.dart';
@@ -51,6 +57,160 @@ void main() {
 
   setUpAll(() async {
     await Settings.init(cacheProvider: MemoryCacheProvider());
+  });
+
+  testWidgets('PageUp ו־PageDown עוברים מסך פיזי בתוך פסקה ארוכה', (
+    tester,
+  ) async {
+    final lines = LineScrollController();
+    addTearDown(lines.dispose);
+    await _pumpMarkedViewer(
+      tester,
+      lines: [
+        '${'מילה ' * 1500}סוף הפסקה',
+        for (var i = 1; i < 40; i++) 'שורה $i',
+      ],
+      lineScroll: lines,
+    );
+    final position = lines.itemController.scrollController!.position;
+    final before = position.pixels;
+    final page = position.viewportDimension * 0.8;
+    final focus = tester
+        .widget<Focus>(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is Focus &&
+                widget.focusNode?.debugLabel == 'PageShapeContentFocus',
+          ),
+        )
+        .focusNode!;
+    focus.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+    await tester.pumpAndSettle();
+    expect(position.pixels - before, closeTo(page, 0.1));
+    await tester.sendKeyEvent(LogicalKeyboardKey.pageUp);
+    await tester.pumpAndSettle();
+    expect(position.pixels, closeTo(before, 0.1));
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('פתיחה בתוך פסקה ארוכה מציירת את העוגן המדויק מיד', (
+    tester,
+  ) async {
+    final lines = LineScrollController();
+    addTearDown(lines.dispose);
+    await lines.jumpToLine(0, intraLineFraction: 0.7, alignment: 0.2);
+    await _pumpMarkedViewer(
+      tester,
+      lines: ['${'מילה ' * 1500}סוף הפסקה', 'המשך הספר'],
+      lineScroll: lines,
+      protection: BookProtection(bannerText: 'קרדיט למקור הספר ' * 80),
+      settle: false,
+    );
+    final sliver = tester.renderObject<RenderSliverMultiBoxAdaptor>(
+      find.byType(SuperSliverList).first,
+    );
+    final child = sliver.firstChild!;
+    final extent = lines.itemBoxes.lineExtent(0, 0)!;
+    expect(extent.top, greaterThan(0));
+    final viewport =
+        lines.itemController.scrollController!.position.viewportDimension;
+    expect(
+      child.localToGlobal(Offset.zero).dy +
+          child.size.height * (extent.top + 0.7 * (extent.bottom - extent.top)),
+      closeTo(viewport * 0.2, 0.1),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('תחילת ספר מציגה את באנר הקרדיט לפני הטקסט', (tester) async {
+    final lines = LineScrollController();
+    addTearDown(lines.dispose);
+    await _pumpMarkedViewer(
+      tester,
+      lines: const ['שורת המקור הראשונה', 'המשך הספר'],
+      lineScroll: lines,
+      protection: BookProtection(bannerText: 'קרדיט למקור הספר ' * 80),
+      settle: false,
+    );
+    expect(
+      tester.getTopLeft(find.byType(BookSourceBanner)).dy,
+      greaterThanOrEqualTo(0),
+    );
+    expect(
+      tester
+          .widget<ScrollablePositionedList>(
+            find.byType(ScrollablePositionedList),
+          )
+          .initialTargetRectResolver,
+      isNull,
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('החלפת ספר באותו State מנתקת את הבקר הישן ונפתחת בעוגן החדש', (
+    tester,
+  ) async {
+    final first = TextBookTab(book: TextBook(title: 'ספר ראשון'), index: 0);
+    final second = TextBookTab(
+      book: TextBook(title: 'ספר שני'),
+      index: 7,
+      initialReadingAnchor: const ReadingAnchor(
+        line: 7,
+        intraLineFraction: 0.4,
+        alignment: 0.3,
+      ),
+    );
+    addTearDown(first.dispose);
+    addTearDown(second.dispose);
+    await _pumpMarkedViewer(
+      tester,
+      lines: [for (var i = 0; i < 40; i++) 'ספר ראשון שורה $i'],
+      lineScroll: first.lines,
+      tab: first,
+    );
+    final state = tester.state(find.byType(SimpleTextViewer));
+    expect(first.lines.isAttached, isTrue);
+    await _pumpMarkedViewer(
+      tester,
+      lines: [
+        for (var i = 0; i < 40; i++)
+          i == 7 ? 'מילה ' * 1500 : 'ספר שני שורה $i',
+      ],
+      lineScroll: second.lines,
+      tab: second,
+      settle: false,
+    );
+    expect(tester.state(find.byType(SimpleTextViewer)), same(state));
+    expect(first.lines.isAttached, isFalse);
+    expect(second.lines.isAttached, isTrue);
+    final target = second.lines.itemBoxes.boxForItem(7)!;
+    final extent = second.lines.itemBoxes.lineExtent(7, 7)!;
+    final viewport = second
+        .lines
+        .itemController
+        .scrollController!
+        .position
+        .viewportDimension;
+    expect(
+      target.localToGlobal(Offset.zero).dy +
+          target.size.height *
+              (extent.top + 0.4 * (extent.bottom - extent.top)),
+      closeTo(viewport * 0.3, 0.1),
+    );
+    await tester.pumpAndSettle();
+    await first.lines.jumpToLine(12);
+    expect(first.lines.hasPendingTarget, isTrue);
+    expect(second.lines.position.value!.topLine, 7);
+    await tester.pumpWidget(const SizedBox());
+    await second.lines.jumpToLine(15);
+    expect(second.lines.hasPendingTarget, isTrue);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('סימון הערה inline מוזרק לטקסט ולחיצתו פותחת את טאב ההערות', (
@@ -2441,6 +2601,9 @@ Future<_SelectionEmittingTextBookBloc> _pumpMarkedViewer(
   List<String>? lines,
   TextDisplayPolicy? displayPolicy,
   LineScrollController? lineScroll,
+  TextBookTab? tab,
+  BookProtection protection = BookProtection.none,
+  bool settle = true,
 }) async {
   lines ??= [line];
   final anchorLink = Link(
@@ -2454,6 +2617,8 @@ Future<_SelectionEmittingTextBookBloc> _pumpMarkedViewer(
   );
   final textBookBloc = _SelectionEmittingTextBookBloc(
     _loadedState().copyWith(
+      book: tab?.book,
+      protection: protection,
       content: lines,
       clearSelectedIndex: true,
       displayPolicy: displayPolicy,
@@ -2470,6 +2635,12 @@ Future<_SelectionEmittingTextBookBloc> _pumpMarkedViewer(
           BlocProvider<PersonalNotesBloc>.value(
             value: _TestPersonalNotesBloc(const PersonalNotesState.initial()),
           ),
+          if (tab != null)
+            BlocProvider<NavigationBloc>(
+              create: (_) => _TestNavigationBloc(
+                const NavigationState(currentScreen: Screen.library),
+              ),
+            ),
           BlocProvider<SettingsBloc>.value(
             value: _TestSettingsBloc(SettingsState.initial()),
           ),
@@ -2481,12 +2652,13 @@ Future<_SelectionEmittingTextBookBloc> _pumpMarkedViewer(
             openBookCallback: (_) {},
             isMainText: true,
             lines: lineScroll,
+            tab: tab,
           ),
         ),
       ),
     ),
   );
-  await tester.pumpAndSettle();
+  if (settle) await tester.pumpAndSettle();
   return textBookBloc;
 }
 
@@ -2761,6 +2933,16 @@ class _TestPersonalNotesBloc
     on<PersonalNotesEvent>((event, emit) {
       receivedEvents.add(event);
     });
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _TestNavigationBloc extends Bloc<NavigationEvent, NavigationState>
+    implements NavigationBloc {
+  _TestNavigationBloc(super.initialState) {
+    on<NavigationEvent>((event, emit) {});
   }
 
   @override

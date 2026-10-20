@@ -5,13 +5,10 @@ import 'package:positioned_sliver_list/positioned_list.dart';
 
 export 'package:otzaria/text_book/utils/reading_extent_estimates.dart';
 
-/// קו העוגן (חלק מ-0..1 מגובה ה-viewport) שאליו הניווט מיישר את תחילת הקטע,
-/// וגם הקו שלפיו נקבע "המיקום הנוכחי" בספר (ההדגשה בסרגל הניווט). שני הצדדים
-/// חייבים להשתמש באותו ערך כדי שההדגשה תתאים בדיוק למקום שהניווט מוביל אליו.
+/// קו היישור לניווט ולמדידת מיקום הקריאה, כחלק מגובה התצוגה.
 const double kReadingAnchorAlignment = 0.05;
 
-/// היישור שבו נפתחת רשימת הקריאה. מעל הפריט הראשון אין תוכן, ולכן קו העוגן
-/// אינו בר-השגה שם: הפתיחה מציגה רווח ריק שנעלם בגלילה הראשונה ואינו חוזר.
+/// הפריט הראשון נפתח בקצה, בלי להוסיף רווח שאי אפשר לחזור אליו בגלילה.
 double initialReadingAlignment(int initialIndex) =>
     initialIndex == 0 ? 0 : kReadingAnchorAlignment;
 
@@ -19,17 +16,14 @@ double initialReadingAlignment(int initialIndex) =>
 /// וברירת המחדל של החבילה (2) בונה כחמישה מסכים של פסקאות.
 const double kReaderCacheExtentScreens = 1.5;
 
-/// קו העוגן לניווט אל תוצאת חיפוש — ממקם את המילה שנמצאה סביב מרכז-עליון
-/// התצוגה (ולא בראש), כדי שיהיה הקשר גם מעל המילה. זהה לסרגל התוצאות בחלונית
-/// ולפתיחת ספר מהחיפוש הכללי.
+/// יישור תוצאת חיפוש משאיר הקשר מעל המילה שנמצאה.
 const double kSearchResultAnchorAlignment = 0.35;
 
 /// סבילות סיווג סביב קו העוגן. חייבת להיות גדולה מ-[kAnchorLandingEpsilon]
 /// (שגיאת נחיתה מותרת) וקטנה מגובה שורת טקסט (~0.025) - אחרת הסיווג מתהפך.
 const double _anchorRemnantTolerance = 0.008;
 
-/// סף עצירה לדיוק העדין האיטרטיבי (חלק מה-viewport): מתחת למרחק הזה מהעוגן
-/// הניווט נחשב "הגיע". חייב להישאר קטן מ-[_anchorRemnantTolerance].
+/// סבילות הנחיתה כחלק מהתצוגה; קטנה מסבילות הסיווג של שייר פסקה.
 const double kAnchorLandingEpsilon = 0.003;
 
 /// כמה מהקטע (חלק מה-viewport) נמצא ב"אזור הקריאה" - מתחת לקו העוגן.
@@ -61,26 +55,28 @@ Future<void> closePaneAfterNavigation({
   }
 }
 
-ItemPosition? _findPosition(ItemPositionsListener listener, int segmentIndex) {
-  for (final position in listener.itemPositions.value) {
-    if (position.index == segmentIndex) {
-      return position;
-    }
-  }
-  return null;
-}
+/// פותר נקודה בשורת מקור לאחר פריסת פריט הרשימה ולפני ציורו.
+TargetRectResolver readingAnchorTargetRectResolver({
+  required ReadingSegments Function() segments,
+  required int lineIndex,
+  double intraLineFraction = 0,
+  MeasuredLineExtent? measure,
+  bool Function()? isCurrent,
+}) => (item, box) {
+  if (!(isCurrent?.call() ?? true)) return null;
+  final current = segments();
+  if (current.isEmpty) return null;
+  final line = lineIndex.clamp(0, current.layout.lineCount - 1);
+  if (current.layout.itemForLine(line) != item) return null;
+  final within = intraLineFraction.clamp(0.0, 1.0);
+  final measured = measure?.call(item, line);
+  final fraction = measured == null
+      ? lineFractionInItem(current, item, line, intraLineFraction: within)
+      : measured.top + within * (measured.bottom - measured.top);
+  return Rect.fromLTWH(0, fraction * box.size.height, 0, 0);
+};
 
-/// גלילה לשורת מקור [lineIndex] תוך תרגום אוטומטי לסגמנט.
-///
-/// [intraLineFraction] (0..1) הוא מיקום היעד בתוך השורה (למשל מילת חיפוש בתוך
-/// פסקה ארוכה). הגלילה מכוונת ישר אל השורה ולא לתחילת הסגמנט.
-///
-/// אחרי הנחיתה היעד נמדד ומתוקן בקפיצה מדויקת: תוכן שנטען תוך כדי הגלילה
-/// (טעינה הדרגתית) או הפרעה לאנימציה מסיטים אותו.
-///
-/// [latestSegments] מחשב מחדש את מיקום השורה בפסקה כשתוכנה נטען תוך כדי
-/// הגלילה; בלעדיו משתמשים ב-[segments] לאורך כל הגלילה. [measure] — גבולות
-/// השורה מהרינדור כשהפריט בנוי; בלעדיו לפי אורך הטקסט.
+/// מיישר שורת מקור מדודה בתוך הפריט, בלי תיקוני קפיצה אחרי הציור.
 Future<void> scrollToSourceLine({
   required ItemScrollController scrollController,
   required ItemPositionsListener? positionsListener,
@@ -95,122 +91,44 @@ Future<void> scrollToSourceLine({
   bool Function()? isCurrent,
   MeasuredLineExtent? measure,
 }) async {
-  if (segments.isEmpty || !scrollController.isAttached) {
+  if (segments.isEmpty ||
+      !scrollController.isAttached ||
+      !(isCurrent?.call() ?? true)) {
     return;
   }
-
-  var segmentIndex = -1;
-  var fraction = 0.0;
-  var safeLineIndex = lineIndex;
-  bool resolveTarget() {
-    final current = latestSegments?.call() ?? segments;
-    if (current.isEmpty) return false;
-    safeLineIndex = lineIndex.clamp(0, current.layout.lineCount - 1).toInt();
-    segmentIndex = segmentIndexForLine(current, safeLineIndex);
-    fraction = lineFractionInItem(
-      current,
-      segmentIndex,
-      safeLineIndex,
-      intraLineFraction: intraLineFraction,
-      measure: measure,
-    );
-    return true;
-  }
-
-  // היסט השורה מתחילת הפריט; לפריט שטרם נפרס לפי גובהו המוערך.
-  double lineOffset() {
-    // הלקוח של הבקר מתחבר לפני ה-sliver; אז אין עדיין גובה פריט.
-    final list = scrollController.listController;
-    final extent = list != null && list.isAttached
-        ? list.extentForIndex(segmentIndex).$1
-        : 0.0;
-    return -fraction * extent;
-  }
-
-  // ניווט ליעד שבמסך ותיקוני הנחיתה אינם קפיצה: הבחירה בטקסט נשמרת.
-  T quietly<T>(T Function() move) {
-    final controller = scrollController;
-    return controller is JumpAwareItemScrollController
-        ? controller.withoutNotifying(move)
-        : move();
-  }
-
-  if (!resolveTarget()) return;
-  final visible = positionsListener?.itemPositions.value.any(
-    (p) =>
-        p.index == segmentIndex &&
-        p.itemTrailingEdge > 0 &&
-        p.itemLeadingEdge < 1,
+  ReadingSegments current() => latestSegments?.call() ?? segments;
+  final initial = current();
+  if (initial.isEmpty) return;
+  final line = lineIndex.clamp(0, initial.layout.lineCount - 1);
+  final item = initial.layout.itemForLine(line);
+  final resolver = readingAnchorTargetRectResolver(
+    segments: current,
+    lineIndex: lineIndex,
+    intraLineFraction: intraLineFraction,
+    measure: measure,
+    isCurrent: isCurrent,
   );
-  T initialMove<T>(T Function() move) =>
-      visible == true ? quietly(move) : move();
-  if (duration == Duration.zero) {
-    initialMove(
-      () => scrollController.jumpTo(
-        index: segmentIndex,
-        alignment: alignment,
-        offset: lineOffset(),
-      ),
-    );
-  } else {
-    await initialMove(
-      () => scrollController.scrollTo(
-        index: segmentIndex,
-        alignment: alignment,
-        offset: lineOffset(),
-        duration: duration,
-        curve: curve,
-      ),
-    );
-  }
-  if (positionsListener == null) return;
-  await WidgetsBinding.instance.endOfFrame;
-
-  var previousDistance = double.infinity;
-  var confirmed = false;
-  for (var attempt = 0; attempt < 5; attempt++) {
-    // הרשימה יורדת מהעץ באמצע האנימציה (מעבר כרטיסיה, סגירתה, העברתה לחלון
-    // אחר), או מוחלפת בקורא חיצוני — מדידות ישנות אינן מעידות שהרשימה חיה.
-    if (!scrollController.isAttached || !(isCurrent?.call() ?? true)) {
-      return;
-    }
-    final previousTarget = (segmentIndex, fraction);
-    if (!resolveTarget()) return;
-    // תוכן שנטען הזיז את היעד: המרחק הקודם אינו בסיס להשוואה.
-    if (previousTarget != (segmentIndex, fraction)) {
-      previousDistance = double.infinity;
-    }
-    final scroll = scrollController.scrollController;
-    final viewport = scroll != null && scroll.hasClients
-        ? scroll.position.viewportDimension
-        : viewportExtent;
-    final measured = _findPosition(positionsListener, segmentIndex);
-    if (measured != null) {
-      final extent =
-          (measured.itemTrailingEdge - measured.itemLeadingEdge) * viewport;
-      final distance =
-          ((measured.itemLeadingEdge - alignment) * viewport +
-                  fraction * extent)
-              .abs();
-      if (distance <= viewport * kAnchorLandingEpsilon) {
-        // מאמתים בפריים הבא: מדידת השורות בפריט החדש מגיעה אחרי פריסתו.
-        if (confirmed) return;
-        confirmed = true;
-        await WidgetsBinding.instance.endOfFrame;
-        continue;
-      }
-      // קצה הספר אינו מאפשר ליישר את היעד לעוגן; אז המרחק לא קטן.
-      if (distance >= previousDistance) return;
-      previousDistance = distance;
-    }
-    confirmed = false;
-    quietly(
-      () => scrollController.jumpTo(
-        index: segmentIndex,
-        alignment: alignment,
-        offset: lineOffset(),
-      ),
-    );
-    await WidgetsBinding.instance.endOfFrame;
-  }
+  final visible =
+      positionsListener?.itemPositions.value.any(
+        (p) =>
+            p.index == item && p.itemTrailingEdge > 0 && p.itemLeadingEdge < 1,
+      ) ??
+      false;
+  Future<void> move() => duration == Duration.zero
+      ? scrollController.jumpToAsync(
+          index: item,
+          alignment: alignment,
+          targetRectResolver: resolver,
+        )
+      : scrollController.scrollTo(
+          index: item,
+          alignment: alignment,
+          duration: duration,
+          curve: curve,
+          targetRectResolver: resolver,
+        );
+  final controller = scrollController;
+  await (visible && controller is JumpAwareItemScrollController
+      ? controller.withoutNotifying(move)
+      : move());
 }

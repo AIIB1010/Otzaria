@@ -87,7 +87,7 @@ void main() {
   );
 
   testWidgets(
-    'scrollToSourceLine: יעד כותרת (ללא דיוק תוך-שורתי) מתוקן לעוגן גם כשהגלילה הופרעה',
+    'scrollToSourceLine: ניווט חדש מבטל את הישן בלי תיקון שמחזיר אליו',
     (tester) async {
       final itemScrollController = ItemScrollController();
       final positionsListener = ItemPositionsListener.create();
@@ -122,8 +122,7 @@ void main() {
         duration: const Duration(milliseconds: 250),
       );
 
-      // הפרעה באמצע האנימציה (מדמה reanchor/רה-פריסה מטעינה הדרגתית):
-      // היעד נשאר גלוי אך רחוק מקו העוגן.
+      // ניווט חדש מחליף את הקודם גם כשהוא בוחר את אותו פריט ביישור אחר.
       await tester.pump(const Duration(milliseconds: 100));
       itemScrollController.jumpTo(index: 7, alignment: 0.5);
 
@@ -136,8 +135,8 @@ void main() {
       );
       expect(
         position.itemLeadingEdge,
-        closeTo(kReadingAnchorAlignment, kAnchorLandingEpsilon),
-        reason: 'ניווט מכותרות חייב להתאושש מהפרעה ולנחות על קו העוגן',
+        closeTo(0.5, kAnchorLandingEpsilon),
+        reason: 'ניווט שבוטל לא רשאי לתקן את המיקום שבחר הניווט החדש',
       );
     },
   );
