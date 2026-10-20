@@ -4,10 +4,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:otzaria/data/data_providers/file_system_data_provider.dart';
 import 'package:otzaria/models/books.dart';
+import 'package:otzaria/models/links.dart';
 import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/data/repository/text_book_repository.dart';
+import 'package:otzaria/text_book/utils/link_processing.dart';
 import 'package:otzaria/text_book/utils/reading_segments.dart';
 import '../../test_helpers/memory_cache_provider.dart';
 
@@ -250,6 +252,44 @@ void main() {
         ),
       ],
     );
+
+    test('הסתרת טאב משחררת קישורים שנצברו בגלילה מחוץ לחלון', () async {
+      Link linkAt(int index1, {int? index1End}) => Link(
+        heRef: 'מפרש $index1',
+        index1: index1,
+        index1End: index1End,
+        path2: 'מפרש',
+        index2: index1,
+        connectionType: 'reference',
+      );
+      // קישור לכל שורה בספר, כמו אחרי גלילה מתחילתו ועד סופו.
+      final links = [
+        for (var line = 1; line <= 3000; line++) linkAt(line),
+        linkAt(400, index1End: 900),
+      ];
+      final linksByLine = buildLinksByLineMap(links);
+      final seeded =
+          buildLoadedState(
+            content: longContent,
+            visibleIndices: const [1000],
+          ).copyWith(
+            links: links,
+            linksByLine: linksByLine,
+            selectedIndices: const {2500},
+          );
+      bloc.emit(seeded);
+
+      bloc.add(const SetTabVisibility(false));
+      await pumpEventQueue();
+      final released = bloc.state as TextBookLoaded;
+
+      expect(released.links.length, lessThan(links.length ~/ 5));
+      expect(released.linksByLine[1], isNull);
+      expect(released.linksByLine[1001], linksByLine[1001]);
+      expect(released.linksByLine[2501], linksByLine[2501]);
+      expect(released.linksByLine[880], linksByLine[880]);
+      expect(released.visibleLinks, seeded.visibleLinks);
+    });
   });
 
   blocTest<TextBookBloc, TextBookState>(
