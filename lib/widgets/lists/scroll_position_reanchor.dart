@@ -24,12 +24,16 @@ class ScrollPositionReanchor extends StatefulWidget {
     required this.child,
     this.enabled = true,
     this.preferredIndex,
+    this.layoutKey,
   });
 
   final ItemScrollController scrollController;
   final ItemPositionsListener positionsListener;
   final bool enabled;
   final int? preferredIndex;
+
+  /// שינוי שלו (למשל מרווח השורות) משנה את גובה הפריטים כמו שינוי רוחב.
+  final Object? layoutKey;
   final Widget child;
 
   @override
@@ -37,7 +41,7 @@ class ScrollPositionReanchor extends StatefulWidget {
 }
 
 class _ScrollPositionReanchorState extends State<ScrollPositionReanchor> {
-  double? _lastWidth;
+  (double, Object?)? _lastLayout;
   double? _selectedEdge;
   bool _holdSelectedEdge = false;
   ScrollableState? _scrollable;
@@ -93,10 +97,11 @@ class _ScrollPositionReanchorState extends State<ScrollPositionReanchor> {
 
   /// נקרא לפני שהרשימה נפרסת ברוחב החדש, ולכן [_selectedEdge] עדיין מהרוחב
   /// הקודם.
-  void _onWidth(double width) {
-    final previous = _lastWidth;
-    _lastWidth = width;
-    if (previous == null || previous == width || !widget.enabled) return;
+  void _onLayout(double width) {
+    final previous = _lastLayout;
+    final layout = (width, widget.layoutKey);
+    _lastLayout = layout;
+    if (previous == null || previous == layout || !widget.enabled) return;
     if (_isScrolling) return;
     // בלי פסקה נבחרת במסך: הפריט הראשון שתחילתו במסך. הרשימה לבדה שומרת את
     // החלק שנגלל מהפריט העליון, וכרטיס מקונן בו אינו נמתח עם הטקסט.
@@ -132,7 +137,7 @@ class _ScrollPositionReanchorState extends State<ScrollPositionReanchor> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        _onWidth(constraints.maxWidth);
+        _onLayout(constraints.maxWidth);
         return NotificationListener<ScrollNotification>(
           onNotification: _onScroll,
           child: widget.child,

@@ -2110,6 +2110,10 @@ class _CombinedViewState extends State<CombinedView> {
                                                   ) => ScrollPositionReanchor(
                                                     // עיגון הוא קפיצה, והיה מנקה את הבחירה.
                                                     enabled: selected == null,
+                                                    layoutKey: context.select(
+                                                      (SettingsBloc bloc) =>
+                                                          bloc.state.lineHeight,
+                                                    ),
                                                     preferredIndex:
                                                         _selectedItemIndex(
                                                           state,
