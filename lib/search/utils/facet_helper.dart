@@ -1,4 +1,5 @@
 import 'package:otzaria/indexing/repository/indexing_repository.dart';
+import 'package:otzaria/library/models/library.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/search/book_facet.dart';
 
@@ -146,6 +147,10 @@ class FacetHelper {
     Map<String, Book> bookByIndexedFilePath,
   ) {
     final counts = <String, int>{};
+    // בחיפוש רחב זה כל הספרייה: הנתיב נפתר פעם אחת לקטגוריה, והאבות
+    // מקבלים את סכום הנתיב במקום תוספת לכל ספר.
+    final pathByCategory = Map<Category, String?>.identity();
+    final countByCategoryPath = <String, int>{};
 
     for (final entry in bookCounts.entries) {
       final count = entry.value;
@@ -154,7 +159,24 @@ class FacetHelper {
       final book = bookByIndexedFilePath[entry.key];
       if (book == null) continue;
 
-      _incrementBookAndAncestors(counts, book, delta: count);
+      final category = book.category;
+      final categoryPath = category == null
+          ? resolveCategoryPath(book)
+          : pathByCategory.putIfAbsent(
+              category,
+              () => resolveCategoryPath(book),
+            );
+      incrementFacet(counts, buildBookFacet(categoryPath, book), count);
+      incrementFacet(countByCategoryPath, categoryPath ?? '', count);
+    }
+
+    for (final MapEntry(key: categoryPath, value: count)
+        in countByCategoryPath.entries) {
+      if (categoryPath.isNotEmpty) {
+        incrementFacetWithAncestors(counts, categoryPath, count);
+      } else {
+        incrementFacet(counts, '/', count);
+      }
     }
 
     return counts;
