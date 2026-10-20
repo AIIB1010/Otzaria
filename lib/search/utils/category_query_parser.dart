@@ -11,6 +11,7 @@ import 'package:otzaria/search/utils/find_match_utils.dart';
 /// `ערבך ערבא@רמב"ן@רש"י` → מחפש את המילים רק ברש"י וברמב"ן.
 /// `שלום@תורה` → מחפש "שלום" בכל הקטגוריות שכותרתן "תורה"; ו-`שלום@בראשית`
 /// → מחפש "שלום" בכל ספר או קטגוריה שכותרתם "בראשית" (בכל עומק בעץ).
+/// שם יכול להיות נתיב: `מוקצה@רשבא/ביצה` → רק "ביצה" שמתחת ל"רשב"א" (בכל סדר).
 class ParsedCategoryQuery {
   /// השאילתה ללא חלק הצמצום (מה שלפני ה-@ הראשון).
   final String query;
@@ -79,7 +80,7 @@ ParsedCategoryQuery parseCategoryQuery(String rawQuery, Library? library) {
   final facets = <String>[];
   final notFoundNames = <String>[];
   for (final name in names) {
-    final matches = _facetsForName(name, library);
+    final matches = _facetsForPath(name, library);
     if (matches.isEmpty) {
       notFoundNames.add(name);
     } else {
@@ -95,15 +96,47 @@ ParsedCategoryQuery parseCategoryQuery(String rawQuery, Library? library) {
   );
 }
 
-/// נתיבי ה-facet של כל הקטגוריות והספרים שכותרתם תואמת ל-[name].
+/// נתיבי ה-facet עבור [name], שיכול להיות נתיב `שם/שם...`: כל חלק מותאם רק
+/// מתחת להתאמות החלק שלפניו. אם הסדר שהוקלד לא מניב דבר — מנסים בסדר ההפוך.
+List<String> _facetsForPath(String name, Library? library) {
+  final segments = name
+      .split('/')
+      .map((segment) => segment.trim())
+      .where((segment) => segment.isNotEmpty)
+      .toList(growable: false);
+
+  List<String> resolve(Iterable<String> ordered) {
+    List<String>? scopes;
+    for (final segment in ordered) {
+      scopes = _facetsForName(segment, library, within: scopes);
+      if (scopes.isEmpty) break;
+    }
+    return scopes ?? const [];
+  }
+
+  final matches = resolve(segments);
+  return matches.isNotEmpty || segments.length < 2
+      ? matches
+      : resolve(segments.reversed);
+}
+
+/// נתיבי ה-facet של כל הקטגוריות והספרים שכותרתם תואמת ל-[name], ואם ניתן
+/// [within] — רק אלה שנמצאים מתחת לאחד מנתיביו.
 ///
 /// כותרת ספר מדויקת כוללת גם קטגוריות בשם זהה. אחרת מחפשים מילים שלמות,
 /// הכלה חלקית ולבסוף שגיאות כתיב; מוחזרת השכבה הטובה ביותר שאינה ריקה.
-List<String> _facetsForName(String name, Library? library) {
+List<String> _facetsForName(
+  String name,
+  Library? library, {
+  List<String>? within,
+}) {
   final normalizedName = normalizeFindText(name);
   if (library == null || normalizedName.isEmpty) {
     return const [];
   }
+
+  bool inScope(String facet) =>
+      within == null || within.any((scope) => facet.startsWith('$scope/'));
 
   final nameWords = normalizedName.split(' ');
   final tiers = [<String>[], <String>[], <String>[], <String>[]];
@@ -131,18 +164,17 @@ List<String> _facetsForName(String name, Library? library) {
         ? const <String>[]
         : AcronymsCache.instance.acronymsFor(book.source, id) ??
               const <String>[];
+    final facet = FacetHelper.buildBookFacet(
+      FacetHelper.resolveCategoryPath(book),
+      book,
+    );
+    if (!inScope(facet)) continue;
     final title = normalizeFindText(book.title);
     final tier = title == normalizedName ? 0 : tierOf([title, ...acronyms]);
-    if (tier != null) {
-      tiers[tier].add(
-        FacetHelper.buildBookFacet(
-          FacetHelper.resolveCategoryPath(book),
-          book,
-        ),
-      );
-    }
+    if (tier != null) tiers[tier].add(facet);
   }
   for (final category in library.getAllCategories()) {
+    if (!inScope(category.path)) continue;
     final title = normalizeFindText(category.title);
     final tier = tiers[0].isNotEmpty && title == normalizedName
         ? 0

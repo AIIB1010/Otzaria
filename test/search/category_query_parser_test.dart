@@ -215,6 +215,123 @@ void main() {
       );
     });
 
+    group('נתיב (issue #2842)', () {
+      // שתי קטגוריות "רשב"א" — כמו בספרייה: תחת הבבלי ותחת השו"ת.
+      const bavliRashbaPath = '/תלמוד בבלי/ראשונים/רשב״א';
+      final beitza = TextBook(
+        title: 'רשב״א על ביצה',
+        id: 10,
+        categoryPath: bavliRashbaPath,
+      );
+      final shabbat = TextBook(
+        title: 'רשב״א על שבת',
+        id: 11,
+        categoryPath: bavliRashbaPath,
+      );
+      final shut = TextBook(
+        title: 'שו"ת הרשב"א חלק ה',
+        id: 12,
+        categoryPath: '/שו״ת/ראשונים/רשב״א',
+      );
+      final rashiBeitza = TextBook(
+        title: 'רש"י על ביצה',
+        id: 13,
+        categoryPath: '/תלמוד בבלי/רש"י',
+      );
+      final bavliRashba = _category('רשב״א', [beitza, shabbat]);
+      final shutRashba = _category('רשב״א', [shut]);
+      final bavli = _category(
+        'תלמוד בבלי',
+        [],
+        sub: [
+          _category('ראשונים', [], sub: [bavliRashba]),
+          _category('רש"י', [rashiBeitza]),
+        ],
+      );
+      final shutCategory = _category(
+        'שו״ת',
+        [],
+        sub: [
+          _category('ראשונים', [], sub: [shutRashba]),
+        ],
+      );
+      final library = Library(categories: [bavli, shutCategory]);
+      // ספק הספרייה מקשר כל תת-קטגוריה לאביה; כאן מקשרים ידנית.
+      void linkParents(Category category) {
+        for (final sub in category.subCategories) {
+          sub.parent = category;
+          linkParents(sub);
+        }
+      }
+
+      linkParents(library);
+
+      String facetOf(Book book) => FacetHelper.buildBookFacet(
+        FacetHelper.resolveCategoryPath(book),
+        book,
+      );
+
+      // שם מחזיר גם ספרים שבתוך הקטגוריה שהותאמה; מה שקובע הוא היקף הסינון.
+      Matcher onlyUnder(List<String> scopes) => everyElement(
+        predicate<String>(
+          (facet) => scopes.any(
+            (scope) => facet == scope || facet.startsWith('$scope/'),
+          ),
+          'under one of $scopes',
+        ),
+      );
+
+      test('ללא נתיב — שתי הקטגוריות בשם זהה נכללות', () {
+        final parsed = parseCategoryQuery('מוקצה@רשבא', library);
+
+        expect(parsed.facets, containsAll([bavliRashba.path, shutRashba.path]));
+      });
+
+      test('הורה/שם — מבחין בין קטגוריות בשם זהה', () {
+        final parsed = parseCategoryQuery('מוקצה@בבלי/רשבא', library);
+
+        expect(parsed.query, 'מוקצה');
+        expect(parsed.categoryFound, isTrue);
+        expect(parsed.facets, contains(bavliRashba.path));
+        expect(parsed.facets, onlyUnder([bavliRashba.path]));
+      });
+
+      test('שם/ספר — רק הספר שמתחת לשם, לא ספרים מקבילים במקום אחר', () {
+        final parsed = parseCategoryQuery('מוקצה@רשבא/ביצה', library);
+
+        expect(parsed.facets, [facetOf(beitza)]);
+      });
+
+      test('סדר הפוך — ספר/שם מתפרש כמו שם/ספר', () {
+        final parsed = parseCategoryQuery('מוקצה@ביצה/רשבא', library);
+
+        expect(parsed.facets, [facetOf(beitza)]);
+      });
+
+      test('רווחים סביב המפריד ומקטעים ריקים נבלעים', () {
+        final parsed = parseCategoryQuery('מוקצה@ שו"ת / / רשבא ', library);
+
+        expect(parsed.facets, contains(shutRashba.path));
+        expect(parsed.facets, onlyUnder([shutRashba.path]));
+        expect(parsed.categoryNames, ['שו"ת / / רשבא']);
+      });
+
+      test('נתיב ללא התאמה — מדווח בשמו המלא', () {
+        final parsed = parseCategoryQuery('מוקצה@שו"ת/ביצה', library);
+
+        expect(parsed.categoryFound, isFalse);
+        expect(parsed.notFoundNames, ['שו"ת/ביצה']);
+      });
+
+      test('נתיב לצד @ נוסף — הצמצומים מתאחדים', () {
+        final parsed = parseCategoryQuery('מוקצה@רשבא/ביצה@רש"י', library);
+
+        final rashiPath = rashiBeitza.categoryPath!;
+        expect(parsed.facets, containsAll([facetOf(beitza), rashiPath]));
+        expect(parsed.facets, onlyUnder([facetOf(beitza), rashiPath]));
+      });
+    });
+
     test('@ ריק — מתעלם מהתחביר', () {
       final library = Library(categories: []);
 
