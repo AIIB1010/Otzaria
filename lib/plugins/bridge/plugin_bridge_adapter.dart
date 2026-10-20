@@ -7301,7 +7301,7 @@ class PluginBridgeAdapter {
   }
 
   /// מה נתמך **בפועל** בהקשר הקריאה הנוכחי. הדגשות מצוירות רק בטור הטקסט
-  /// הראשי (תצוגה משולבת וצורת הדף), ואין הדגשות/בחירה/תפריט הקשר ב-PDF.
+  /// הראשי (תצוגה משולבת וצורת הדף), ואין ב-PDF הדגשות ובחירה דרך ה-API.
   Map<String, dynamic> _getHighlightCapabilities() {
     final pane = _dependencies.tabsBloc.state.readingPane;
     if (pane is TextBookTab) {
@@ -7311,7 +7311,7 @@ class PluginBridgeAdapter {
         'surface': pageShape ? 'pageShape' : 'combined',
         'highlights': true,
         'selection': true,
-        'contextMenu': const ['mainText'],
+        'contextMenu': const ['mainText', 'commentary'],
       };
     }
     if (pane is PdfBookTab) {
@@ -7319,7 +7319,7 @@ class PluginBridgeAdapter {
         'surface': 'pdf',
         'highlights': false,
         'selection': false,
-        'contextMenu': const <String>[],
+        'contextMenu': const ['pdf', 'commentary'],
       };
     }
     return {

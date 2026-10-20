@@ -2224,20 +2224,20 @@ await Otzaria.call('reader.scrollToSection', { sectionIndex: 42 });
 
 מה נתמך **בפועל** בהקשר הקריאה הנוכחי, כדי שתוסף לא ינסה פעולה שאינה
 קיימת במשטח שבו המשתמש נמצא. הדגשות מצוירות רק בטור הטקסט הראשי — לא
-בחלוניות המפרשים — ו-PDF אינו תומך בהדגשות, בבחירת טקסט ובפריטי תפריט הקשר.
+בחלוניות המפרשים — ו-PDF אינו תומך בהדגשות וב-`reader.getSelection`.
 
 | שדה | משמעות |
 |-----|--------|
 | `surface` | `'combined'` \| `'pageShape'` \| `'pdf'` \| `null` |
 | `highlights` | האם `reader.setHighlight` ייראה במשטח הזה |
 | `selection` | האם `reader.getSelection` יכול להחזיר בחירה |
-| `contextMenu` | האזורים שבהם פריטי `reader.addContextMenuItem` מוצגים |
+| `contextMenu` | האזורים במשטח הנוכחי שבהם פריטי `reader.addContextMenuItem` מוצגים: `mainText` בספר טקסט, `commentary` (מ-0.9.99), ו-`pdf` בספר PDF (מ-0.9.99) |
 
 ```javascript
 const { data } = await Otzaria.call('reader.getHighlightCapabilities');
 if (data.highlights) { /* ... */ }
 // { surface: 'combined', highlights: true, selection: true,
-//   contextMenu: ['mainText'] }
+//   contextMenu: ['mainText', 'commentary'] }
 ```
 
 ### `reader.findTextOccurrences`
@@ -5162,7 +5162,7 @@ async function scheduleReminder(title, body, dateTime) {
 
 קיצור עם `command` מפעיל את מנוע התוסף ושולח לו אירוע `app.command`;
 קיצור עם `contextMenuItemId` מפעיל את פעולת תפריט ההקשר בדיוק כמו לחיצה
-ימנית עליה (דורש טקסט מסומן בספר).
+ימנית עליה (דורש טקסט מסומן בטקסט הראשי של הספר — לא במפרש ולא ב-PDF).
 
 ### תכניות Host ללא WebView
 
@@ -6189,7 +6189,7 @@ await Otzaria.call('reader.addContextMenuItem', {
   הטקסט המסומן ולפעול עליו בדף שלו.
 - `type` יכול להיות `item`,‏ `submenu`,‏ `color-row` או `separator`
 - תת־תפריט מקבל `children`; שורת צבעים מקבלת `colors` עם `id`,‏ `color`,‏ `label`,‏ `selected` ו־`icon` אופציונלי. כאשר `icon` קיים הוא מוצג במקום גוש הצבע ומתאים לפעולות קומפקטיות כמו מחק
-- `contexts` הוא מערך ויכול להכיל את `reader-selection`, את `reader-page-shape-selection`, או את שניהם באותו פריט. מ-`0.9.97` נתמך גם `reader-highlight` (ראו למטה), ומ־`0.9.99` נתמך `reader-book` ללא סימון. ערכי `contexts` חייבים להיות חוקיים וייחודיים. פריט שלא מגדיר `contexts` מופיע בשני הקשרי הבחירה (כהתנהגות הרישום המקורית).
+- `contexts` הוא מערך ויכול להכיל את `reader-selection`, את `reader-page-shape-selection`, או את שניהם באותו פריט. מ-`0.9.97` נתמך גם `reader-highlight` (ראו למטה), ומ־`0.9.99` נתמכים גם `reader-book` (ללא סימון) וארבעת הקשרי המפרשים וה־PDF (ראו למטה). ערכי `contexts` חייבים להיות חוקיים וייחודיים. פריט שלא מגדיר `contexts` מופיע בשני הקשרי הבחירה (כהתנהגות הרישום המקורית).
 - ילד שלא מגדיר `contexts` יורש את המערך של אביו. ילד שמגדיר `contexts` במפורש מוצג רק בהקשרים שלו, ללא איחוד אוטומטי עם הקשר האב; ההקשרים המפורשים חייבים להיות תת־קבוצה של הקשרי האב.
 - אפשר להגדיר `onClickEvent` או `onColorClickEvent` כאירוע מותאם אישית
 
@@ -6199,6 +6199,82 @@ await Otzaria.call('reader.addContextMenuItem', {
 `reader.beginCorrectionSession`; אין לבחור לשונית לפי כותרת הספר או לפי הלשונית
 הפעילה לאחר פתיחת התוסף. השדה יכול להיעדר בתצוגה מקדימה שאינה מחוברת ללשונית.
 אפשר לרשום `contexts: ['reader-book']` להצגת פעולה בלחיצה ימנית ללא סימון, בשני קוראי הטקסט: הקורא הרגיל וקורא צורת הדף. ה־payload כולל את זהות הספר ואת `sectionIndex` ו־`currentIndex` של הפסקה שנלחצה. בשדה `selection`, הערך `text` הוא מחרוזת ריקה, `start` ו־`end` הם `null`, ואין `sourceRange`. ברירות המחדל של פריט ללא `contexts` נשארות שני הקשרי הבחירה; ילדים ללא `contexts` יורשים את הקשרי האב גם עבור `reader-book`.
+
+**מפרשים ו־PDF — `reader-commentary`, `reader-pdf` וגרסאות `-selection` (מ־`0.9.99`):**
+
+| הקשר | היכן מופיע הפריט |
+|------|------------------|
+| `reader-commentary` | לחיצה ימנית על מפרש, ללא סימון |
+| `reader-commentary-selection` | לחיצה ימנית על מפרש עם טקסט מסומן בו |
+| `reader-pdf` | לחיצה ימנית על עמוד PDF, ללא סימון |
+| `reader-pdf-selection` | לחיצה ימנית על עמוד PDF עם טקסט מסומן |
+
+"מפרש" הוא רשימת המפרשים של התצוגה הרגילה (גם בחלונית הצד), עמודות המפרשים
+של צורת הדף וחלונית המפרשים של ספר PDF — לא לשונית הקישורים. ההקשרים אינם
+נכללים בברירת המחדל: פריט שלא מגדיר `contexts` ממשיך להופיע רק בטקסט הראשי.
+`reader-highlight` אינו פעיל במפרשים וב־PDF, וקיצור מקלדת עם
+`contextMenuItemId` פועל על בחירה בטקסט הראשי בלבד. (`reader-pdf` כאן אינו
+ההקשר באותו שם של `reader.addToolbarItem`, שמשמעו כל ספר PDF.)
+
+**ב־payload של מפרש, המפרש הוא הספר הנוכחי:** `currentBook`, `bookTitle`,
+`bookId` ו־`id` מתארים את ספר המפרש; `sectionIndex`/`currentIndex` הם השורה
+בתוכו (מבוסס־0), ו־`currentRef` הוא כתובת המפרש. כך פריט ופעולה דקלרטיבית
+(`action`) שנכתבו לטקסט הראשי עובדים גם על מפרש בלי שינוי. `bookUid` חסר
+כשאין לספר המפרש `id` (למשל ספר משתמש). הספר הנקרא נמסר ב־`selection.mainBook`:
+
+| שדה | בספר טקסט | בספר PDF |
+|-----|-----------|----------|
+| זהות (`id`, `bookId`, `bookUid`, `type`, `source`) | הספר הנקרא | ה־PDF |
+| `currentRef` | המיקום הנוכחי בספר | כתובת העמוד הנוכחי |
+| `sectionIndex` | השורה שאליה המפרש מקושר (מבוסס־0); חסר בעמודת צורת הדף | העמוד הנוכחי (מבוסס־1) |
+| `pageNumber` | — | העמוד הנוכחי (מבוסס־1) |
+
+**ב־payload של עמוד PDF** מספר העמוד שנלחץ (או עמוד תחילת הסימון) נמסר
+ב־`pageNumber`, וכמו ב־`reader.getCurrentState` גם ב־`sectionIndex`/`currentIndex`
+(מבוסס־1). `currentRef` הוא כותרת העמוד מתוכן העניינים של ה־PDF, או "עמוד N".
+
+אין `sourceRange` במפרשים וב־PDF. הטקסט כפוף למגבלות ההעתקה: בספר מוגן הוא
+נחתך כמו בטקסט הראשי, ובמסמך PDF שאוסר העתקה — או בבחירה החוצה כמה מפרשים
+מעבר למגבלה — הלחיצה נמסרת עם `selectedText` ריק. ב־PDF שעמודי הסימון שלו
+עוד לא נטענו הטקסט נקרא בזמן הלחיצה, ולכן פריט עם `showWhen` אינו מוצג במצב
+כזה.
+
+```javascript
+await Otzaria.call('reader.addContextMenuItem', {
+  id: 'search',
+  title: 'חפש במאגר שלי',
+  contexts: [
+    'reader-selection',
+    'reader-page-shape-selection',
+    'reader-commentary-selection',
+    'reader-pdf-selection'
+  ],
+  onClickEvent: 'myPlugin.search'
+});
+
+Otzaria.on('myPlugin.search', ({ selectedText, currentBook, selection }) => {
+  // currentBook — הספר שבו סומן הטקסט: הספר הנקרא, המפרש או ה-PDF
+  // selection.mainBook — הספר הנקרא, רק כשהלחיצה הייתה על מפרש
+  // selection.pageNumber — רק בעמוד PDF
+});
+```
+
+בגרסאות שלפני `0.9.99` הפריט כולו נדחה עם `error.unsupported_context`, גם כשהוא
+כולל לצדם הקשרים מוכרים. תוסף שתומך בגרסאות קודמות רושם שוב בלי ההקשרים
+החדשים:
+
+```javascript
+const legacy = ['reader-selection', 'reader-page-shape-selection'];
+const item = { id: 'search', title: 'חפש', onClickEvent: 'myPlugin.search' };
+try {
+  await Otzaria.call('reader.addContextMenuItem', {
+    ...item, contexts: [...legacy, 'reader-commentary-selection']
+  });
+} catch (error) {
+  if (!String(error?.code ?? error).includes('unsupported_context')) throw error;
+  await Otzaria.call('reader.addContextMenuItem', { ...item, contexts: legacy });
+}
+```
 
 **בחירה חוצת־פסקאות — `selection.sections` (מ-`0.9.97`):**
 כשהבחירה משתרעת על כמה פסקאות, ה־`selection` שנמסר לאירועי הלחיצה של
