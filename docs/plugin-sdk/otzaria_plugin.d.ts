@@ -654,8 +654,9 @@ export interface HighlightCapabilities {
   highlights: boolean;
   /** בחירת טקסט אינה נתמכת ב-PDF. */
   selection: boolean;
-  /** האזורים שבהם פריטי תפריט הקשר של תוספים מוצגים. */
-  contextMenu: string[];
+  /** האזורים שבמשטח הנוכחי שבהם פריטי תפריט הקשר של תוספים מוצגים:
+   * `mainText` בספר טקסט, ומ־0.9.99 גם `commentary`, ו־`pdf` בספר PDF. */
+  contextMenu: Array<'mainText' | 'commentary' | 'pdf'>;
 }
 
 /**
@@ -1061,6 +1062,33 @@ export interface ReaderSelection {
   /** `reader-highlight` context only: the plugin highlights found under the
    * click position. Act only on your own ids. From 0.9.97. */
   clickedHighlights?: ClickedHighlightRef[];
+  /** `reader-commentary*` contexts only: the book being read, while the
+   * top-level fields describe the commentary. From 0.9.99. */
+  mainBook?: CommentaryMainBook;
+  /** `reader-pdf*` contexts only (a PDF page, not its commentary pane): the
+   * 1-based page that was clicked, or where the selection starts; also given
+   * as `sectionIndex`/`currentIndex`. From 0.9.99. */
+  pageNumber?: number;
+  /** Identity of the book the text belongs to (see `BookIdentity`). */
+  id?: number | null;
+  type?: BookType | null;
+  source?: 'library' | 'user' | 'external' | 'attached' | null;
+  external?: { provider: 'hebrewbooks' | 'otzar'; id: number | string };
+}
+
+/** The book a right-clicked commentary belongs to. From 0.9.99. */
+export interface CommentaryMainBook extends BookIdentity {
+  bookId: string;
+  bookTitle: string;
+  bookUid: string;
+  /** The current position in the book being read. */
+  currentRef: string | null;
+  /** Text book: the 0-based line the commentary is linked to (commentary
+   * list only; absent in a page-shape column). PDF: the 1-based current
+   * page, also given as `pageNumber`. */
+  sectionIndex?: number;
+  /** PDF only: the 1-based current page. */
+  pageNumber?: number;
 }
 
 /** One section of a multi-paragraph selection (same shape as a verified
@@ -1333,7 +1361,20 @@ export type ContextMenuContext =
   | 'reader-page-shape-selection'
   /** Right-click on a plugin highlight, with or without an active selection.
    * The click payload carries `selection.clickedHighlights`. From 0.9.97. */
-  | 'reader-highlight';
+  | 'reader-highlight'
+  /** Right-click on a commentary (commentary list, page-shape column or the
+   * PDF commentary pane) without a selection. Opt-in: an item without
+   * `contexts` does not appear. The commentary is the current book; see
+   * `ReaderSelection.mainBook`. From 0.9.99. */
+  | 'reader-commentary'
+  /** Like `reader-commentary`, with selected text in the commentary.
+   * From 0.9.99. */
+  | 'reader-commentary-selection'
+  /** Right-click on a PDF page without a selection. Opt-in; see
+   * `ReaderSelection.pageNumber`. From 0.9.99. */
+  | 'reader-pdf'
+  /** Like `reader-pdf`, with selected text on the page. From 0.9.99. */
+  | 'reader-pdf-selection';
 
 export interface ContextMenuColor {
   id: string;
