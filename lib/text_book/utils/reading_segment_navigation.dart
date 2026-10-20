@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
 import 'package:otzaria/text_book/utils/reading_segments.dart';
+import 'package:otzaria/widgets/lists/jump_aware_item_scroll_controller.dart';
 import 'package:positioned_sliver_list/positioned_list.dart';
 
 /// קו העוגן (חלק מ-0..1 מגובה ה-viewport) שאליו הניווט מיישר את תחילת הקטע,
@@ -205,20 +206,40 @@ Future<void> scrollToSourceLine({
     return -fraction * extent;
   }
 
+  // ניווט ליעד שבמסך ותיקוני הנחיתה אינם קפיצה: הבחירה בטקסט נשמרת.
+  T quietly<T>(T Function() move) {
+    final controller = scrollController;
+    return controller is JumpAwareItemScrollController
+        ? controller.withoutNotifying(move)
+        : move();
+  }
+
   if (!resolveTarget()) return;
+  final visible = positionsListener?.itemPositions.value.any(
+    (p) =>
+        p.index == segmentIndex &&
+        p.itemTrailingEdge > 0 &&
+        p.itemLeadingEdge < 1,
+  );
+  T initialMove<T>(T Function() move) =>
+      visible == true ? quietly(move) : move();
   if (duration == Duration.zero) {
-    scrollController.jumpTo(
-      index: segmentIndex,
-      alignment: alignment,
-      offset: lineOffset(),
+    initialMove(
+      () => scrollController.jumpTo(
+        index: segmentIndex,
+        alignment: alignment,
+        offset: lineOffset(),
+      ),
     );
   } else {
-    await scrollController.scrollTo(
-      index: segmentIndex,
-      alignment: alignment,
-      offset: lineOffset(),
-      duration: duration,
-      curve: curve,
+    await initialMove(
+      () => scrollController.scrollTo(
+        index: segmentIndex,
+        alignment: alignment,
+        offset: lineOffset(),
+        duration: duration,
+        curve: curve,
+      ),
     );
   }
   if (positionsListener == null) return;
@@ -262,10 +283,12 @@ Future<void> scrollToSourceLine({
       previousDistance = distance;
     }
     confirmed = false;
-    scrollController.jumpTo(
-      index: segmentIndex,
-      alignment: alignment,
-      offset: lineOffset(),
+    quietly(
+      () => scrollController.jumpTo(
+        index: segmentIndex,
+        alignment: alignment,
+        offset: lineOffset(),
+      ),
     );
     await WidgetsBinding.instance.endOfFrame;
   }

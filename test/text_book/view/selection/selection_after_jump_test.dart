@@ -257,6 +257,19 @@ void main() {
     });
   }
 
+  // יעד שכבר במסך: הניווט רק גולל, ותיקוני הנחיתה אינם קפיצה שמנקה בחירה.
+  for (final duration in [Duration.zero, const Duration(milliseconds: 250)]) {
+    testWidgets('ניווט לשורה שבמסך שומר את הבחירה, $duration', (tester) async {
+      await selectThenMove(
+        tester,
+        scrolledBy: 0,
+        move: (tab) async =>
+            unawaited(tab.lines.scrollToLine(5, duration: duration)),
+        expected: 'מילה8',
+      );
+    });
+  }
+
   // מעבר למסך שלם ומנוחה מפעילים עיגון מחדש; בחזרה הבחירה על אותה מילה.
   testWidgets('גלילה של יותר ממסך וחזרה שומרת את הבחירה', (tester) async {
     Future<void> scrollBy(TextBookTab tab, double offset) async {

@@ -5,6 +5,7 @@ import 'package:positioned_sliver_list/positioned_list.dart';
 /// [ItemScrollController] שמודיע למאזינים לפני כל קפיצה לאינדקס.
 class JumpAwareItemScrollController extends ItemScrollController {
   final _beforeJumpListeners = ObserverList<VoidCallback>();
+  var _silent = 0;
 
   void addBeforeJumpListener(VoidCallback listener) =>
       _beforeJumpListeners.add(listener);
@@ -19,9 +20,20 @@ class JumpAwareItemScrollController extends ItemScrollController {
     }
   }
 
+  /// מריץ את [move] בלי להודיע למאזינים: תיקון של ניווט שכבר הודיעו עליו,
+  /// או גלילה ליעד שכבר במסך.
+  T withoutNotifying<T>(T Function() move) {
+    _silent++;
+    try {
+      return move();
+    } finally {
+      _silent--;
+    }
+  }
+
   @override
   void jumpTo({required int index, double alignment = 0, double offset = 0}) {
-    notifyBeforeJump();
+    if (_silent == 0) notifyBeforeJump();
     super.jumpTo(index: index, alignment: alignment, offset: offset);
   }
 
@@ -34,7 +46,7 @@ class JumpAwareItemScrollController extends ItemScrollController {
     Curve curve = Curves.linear,
     List<double> opacityAnimationWeights = const [40, 20, 40],
   }) {
-    notifyBeforeJump();
+    if (_silent == 0) notifyBeforeJump();
     return super.scrollTo(
       index: index,
       alignment: alignment,
