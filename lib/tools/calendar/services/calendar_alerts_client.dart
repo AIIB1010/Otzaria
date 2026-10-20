@@ -98,6 +98,12 @@ mixin _OrderedUpdates {
 
   Future<bool> _applyValues(Map<String, Object?> values) async => true;
 
+  /// ההגדרות המקומיות נמחקו: המצב הבא מהבעלים מוחל גם אם ה-revision שלו כבר הוחל.
+  void forgetAppliedRevision() {
+    _epoch = null;
+    _revision = -1;
+  }
+
   /// מחיל ומפרסם את [update] אם הוא חדש. מחזיר false כשנזרק.
   Future<bool> accept(CalendarAlertsUpdate update) {
     if (!update.isNewerThan(_epoch, _revision)) return Future.value(false);

@@ -114,10 +114,6 @@ class _WindowBusHostState extends State<WindowBusHost> {
     // שנגזר ממנה עוד לא. בלי הטעינה מחדש המשתמש היה מחליף ערכת נושא
     // בחלון אחד ורואה שני חלונות של אותה תוכנה נראים שונה.
     _settingsChanged = SettingsSync.instance.changes.listen((key) {
-      // איפוס מחלון אחר מחק גם את ההתראות; הבעלים מבטל מול מה שבזיכרון.
-      if (key.isEmpty && !WindowRole.isSecondary) {
-        unawaited(CalendarAlertsOwner.instance.handleSettingsReset());
-      }
       if (!mounted) return;
       context.read<SettingsBloc>().add(LoadSettings());
       if (key == HiddenLibraryStore.bookKeysSetting ||
@@ -236,7 +232,6 @@ class _WindowBusHostState extends State<WindowBusHost> {
         );
         return true;
       case SettingsSync.requestChanged:
-      case SettingsSync.requestReset:
         // הגדרה שונתה בחלון אחר — מוחלת על ה-box המקומי ומרעננת את ה-state.
         return SettingsSync.instance.handleRequest(request);
       case CalendarAlertsOwner.requestCommand:
