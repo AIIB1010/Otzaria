@@ -369,6 +369,32 @@ void main() {
       final out = _convert(_doc(r'טקסט{\footnote }\par'));
       expect(out, '<h1>ספר</h1>\nטקסט');
     });
+
+    // מבנה ייצוא "עם הערות" של פרויקט השו"ת: סימן מילולי בלי \chftn, שחוזר
+    // בראש גוף ההערה, ו-"40" מפוצל סביב קבוצת ההערה. גוף ההערה אינו יורש את
+    // ה-\super של הסימן — כך Word מציג אותו. סימן מותאם של Word (`*`) בנוי
+    // באותה צורה, ו-\chftn ממשיך להיות ממוספר.
+    test('סימן מילולי אינו מוכפל וגוף ההערה אינו עילי (issue #2685)', () {
+      final out = _convert(
+        _doc(
+          r'{א}{\super 1{\footnote \rtlpar {\super 1} {{\b ראשונה}} רגיל}}'
+          r'{ ב}{\super 4{\footnote \rtlpar {\super 40} {{\b ארבעים}}}0}'
+          r'{ ג x}{\super 2}{\super\chftn{\footnote {\super\chftn}וורד}}'
+          r'{ ד}{\b\super *{\footnote \pard\plain {\super *} כוכבית}}\par',
+        ),
+      );
+      expect(
+        out,
+        '<h1>ספר</h1>\n'
+        'א<sup class="footnote-marker">1</sup>'
+        '<i class="footnote"><b>ראשונה</b> רגיל</i>'
+        ' ב<sup class="footnote-marker">40</sup>'
+        '<i class="footnote"><b>ארבעים</b></i>'
+        ' ג x<sup>2</sup><sup class="footnote-marker">1</sup>'
+        '<i class="footnote">וורד</i>'
+        ' ד<sup class="footnote-marker">*</sup><i class="footnote">כוכבית</i>',
+      );
+    });
   });
 
   group('טבלאות', () {
