@@ -21,7 +21,9 @@ import 'package:otzaria/utils/text/otzaria_markup.dart';
 /// v5: בית גבוה גולמי עובר דרך דף-הקוד המוצהר (עברית שנשמרה בלי `\'hh`
 /// הפכה ללטינית), `\tab`/`\~` אינם קוטעים את ה-run המעוצב, ורקע תא לבן
 /// אינו נכתב.
-const int kRtfConverterVersion = 6;
+/// v7: סימן הערה מילולי (בלי `\chftn`) הוא הסימן עצמו ואינו מוכפל, וגוף
+/// ההערה אינו יורש את עיצוב הסימן (#2685).
+const int kRtfConverterVersion = 7;
 
 /// רווח קשיח. `\tab` ו-`\~` מייצגים רווחים שהמסמך דורש שיישמרו, ורווח
 /// רגיל היה נבלע ברינדור ה-HTML.
@@ -289,6 +291,10 @@ class _RtfParser {
   int _footnoteNumber = 1;
   final StringBuffer _footnote = StringBuffer();
 
+  /// סימן הערה מילולי (בלי `\chftn`) והמשכו אחרי הקבוצה (`4{\footnote…}0`).
+  String _footnoteMark = '';
+  String _footnoteMarkRest = '';
+
   /// הבייטים ההקסדצימליים של תמונה שנצברת (`\pict`). האורך נמנה בנפרד, כי
   /// בלי הטמעה הבייטים עצמם אינם נצברים.
   final StringBuffer _pictureHex = StringBuffer();
@@ -551,6 +557,19 @@ class _RtfParser {
       case 'footnote':
         _state.destination = _Destination.footnote;
         _footnote.clear();
+        // גוף ההערה אינו יורש את עיצוב הסימן שסביבו (`{\super 1{\footnote…}}`)
+        // — כך Word מציג אותו. הערה של סימן מוסתר נשארת מוסתרת.
+        final hidden = _state.hidden;
+        _state.resetCharacterFormatting();
+        _state.hidden = hidden;
+        // טקסט עילי צמוד שלא קדם לו `\chftn` הוא סימן ההערה עצמו, לא תוכן.
+        final isMark =
+            _pendingOpen.endsWith('<sup>') &&
+            _pendingDestination == _Destination.body;
+        _footnoteMark = isMark ? _pendingText.toString().trim() : '';
+        if (isMark) _pendingText.clear();
+      case 'chftn':
+        _flushRun();
       // טקסט של אובייקט צף (תיבת-טקסט). הוא יושב בתוך `\*\shpinst` הנבלעת,
       // ובלי ההחזרה המפורשת הזו כל תוכן התיבות במסמך נעלם.
       case 'shptxt':
@@ -872,6 +891,12 @@ class _RtfParser {
     if (text.isEmpty) return;
     // טקסט מוסתר אינו נכתב, אך גם אינו מפסיק את ה-run הנצבר.
     if (_state.hidden) return;
+    final rest = _footnoteMarkRest;
+    if (rest.isNotEmpty && _state.destination == _Destination.body) {
+      final inMark = rest.startsWith(text); // כבר בתוך סימן ההערה
+      _footnoteMarkRest = inMark ? rest.substring(text.length) : '';
+      if (inMark) return;
+    }
     if (_state.destination == _Destination.colorTable) {
       // הרשומות בטבלת הצבעים מופרדות ב-`;` — התו היחיד שיש לו משמעות שם.
       for (final char in text.split('')) {
@@ -1055,10 +1080,21 @@ class _RtfParser {
   }
 
   void _emitFootnote() {
-    final body = _trimBreaks(_footnote.toString());
+    var body = _trimBreaks(_footnote.toString());
+    var mark = _footnoteMark;
     _footnote.clear();
+    _footnoteMark = '';
     if (body.isEmpty) return;
-    _paragraph.write(otzariaFootnote('${_footnoteNumber++}', body));
+    // גוף ההערה פותח בסימן המלא; בלעדיו הוא היה מופיע פעמיים.
+    final echo = RegExp(r'^<sup>\s*(\S+?)\s*</sup>\s*').firstMatch(body);
+    if (mark.isNotEmpty && echo != null && echo[1]!.startsWith(mark)) {
+      _footnoteMarkRest = echo[1]!.substring(mark.length);
+      mark = echo[1]!;
+      body = body.substring(echo.end);
+    }
+    _paragraph.write(
+      otzariaFootnote(mark.isEmpty ? '${_footnoteNumber++}' : mark, body),
+    );
   }
 
   /// תיבת-טקסט צפה — אותה מסגרת שממיר ה-Word מייצר, כדי שהקורא יזהה אותה
