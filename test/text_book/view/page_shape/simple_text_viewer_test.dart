@@ -38,6 +38,7 @@ import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/view/page_shape/simple_text_viewer.dart';
 import 'package:otzaria/text_book/utils/reader_build_policy.dart';
+import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:otzaria/text_book/view/selection/selected_text_copy.dart';
 import 'package:otzaria/text_book/view/selection/selection_sync_controller.dart';
 import 'package:otzaria/text_display/text_display_exports.dart';
@@ -211,6 +212,40 @@ void main() {
     await second.lines.jumpToLine(15);
     expect(second.lines.hasPendingTarget, isTrue);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('מעבר לקריאה רציפה משמר עוגן פנימי כבר בפריים הראשון', (
+    tester,
+  ) async {
+    final lines = LineScrollController();
+    addTearDown(lines.dispose);
+    await lines.jumpToLine(50, intraLineFraction: 0.6);
+    final bloc = await _pumpMarkedViewer(
+      tester,
+      lines: [for (var i = 0; i < 1000; i++) 'שורה $i ${'מילה ' * 12}'],
+      lineScroll: lines,
+    );
+    final before = lines.captureAnchor()!;
+    expect(before.line, 50);
+    expect(before.intraLineFraction, greaterThan(0));
+    bloc.setContinuousForTest(true);
+    await tester.pump(Duration.zero);
+    final segments = readingSegmentsOf(bloc.state as TextBookLoaded);
+    final item = segments.layout.itemForLine(before.line);
+    final box = lines.itemBoxes.boxForItem(item)!;
+    final extent = lines.itemBoxes.lineExtent(item, before.line)!;
+    final point =
+        box.localToGlobal(Offset.zero).dy +
+        box.size.height *
+            (extent.top +
+                before.intraLineFraction * (extent.bottom - extent.top));
+    final viewport =
+        lines.itemController.scrollController!.position.viewportDimension;
+    expect(point, closeTo(viewport * before.alignment, 0.1));
+    await tester.pumpAndSettle();
+    expect(lines.captureAnchor()!.line, 50);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('סימון הערה inline מוזרק לטקסט ולחיצתו פותחת את טאב ההערות', (
@@ -2719,6 +2754,15 @@ class _SelectionEmittingTextBookBloc extends Bloc<TextBookEvent, TextBookState>
 
   final List<String?> selectionEvents = [];
   final List<UpdateSelectedTextForNote> noteEvents = [];
+
+  void setContinuousForTest(bool enabled) {
+    emit(
+      (state as TextBookLoaded).copyWith(
+        supportsContinuousReadingMode: true,
+        continuousReadingMode: enabled,
+      ),
+    );
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

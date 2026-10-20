@@ -2851,7 +2851,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     ReadingSegments? segments,
     bool continuous,
   ) {
-    final anchor = _initialAnchor;
+    final anchor = _lines?.captureAnchor() ?? _initialAnchor;
     TargetRectResolver? initialResolver;
     if (segments != null &&
         anchor != null &&
@@ -2868,7 +2868,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     }
     Widget buildList(ItemExtentEstimator? estimate, Object? estimationKey) =>
         ScrollablePositionedList.builder(
-          key: ObjectKey(_scrollController),
+          key: ValueKey((_scrollController, continuous)),
           itemScrollController: _scrollController,
           itemPositionsListener: _positionsListener,
           scrollOffsetController: _offsetController,
