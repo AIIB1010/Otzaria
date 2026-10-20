@@ -385,6 +385,18 @@ void main() {
       'at': now.add(const Duration(hours: 2)).toIso8601String(),
     };
 
+    test('ביטול של תוסף בלי מזהים אינו מאתחל את השירות', () async {
+      final o = owner();
+
+      final acks = [
+        await o.execute('pluginCancelAll', {'pluginId': 'p'}),
+        await o.execute('pluginCancel', {'pluginId': 'p', 'id': 3}),
+      ];
+
+      expect(acks.map((a) => a['ok']), [true, true]);
+      expect(notifications.initCalls, 0);
+    });
+
     test('שני תזמונים מקבילים של אותו מזהה משאירים מופע אחד', () async {
       final o = owner();
 

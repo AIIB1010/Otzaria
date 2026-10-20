@@ -104,6 +104,33 @@ void main() {
     expect(notifications.present, isEmpty);
   });
 
+  testWidgets('שינוי הגדרה רגיל מחלון אחר אינו מיישר את הבעלים', (
+    tester,
+  ) async {
+    await tester.runAsync(owner.restoreIfNeeded);
+    SettingsSync.instance.applyLocally = (_, _) async {};
+    addTearDown(() => SettingsSync.instance.applyLocally = null);
+    await tester.pumpWidget(
+      BlocProvider<SettingsBloc>.value(
+        value: _MockSettingsBloc(),
+        child: const WindowBusHost(child: SizedBox()),
+      ),
+    );
+    final revision = owner.revision;
+
+    await tester.runAsync(
+      () => SettingsSync.instance.handleRequest({
+        'type': SettingsSync.requestChanged,
+        'key': 'key-font-size',
+        'value': 20,
+      }),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(owner.revision, revision);
+    expect(notifications.present, {reminderId('a')});
+  });
+
   testWidgets('בחלון משני הבעלים אינו נוגע', (tester) async {
     WindowRole.isSecondary = true;
 
