@@ -3,6 +3,23 @@ import 'package:otzaria/divine_names/models/divine_name_spans.dart';
 
 /// המבנה הדחוס של מופעי השמות: חיפוש לפי שורה, סדר, וקלט פגום.
 void main() {
+  test('פענוח span — אותם ערכים כמו DivineSpanCodeTest ב-SeforimLibrary', () {
+    expect(decodeDivineNameSpan(0, 145), (end: 1, kind: DivineNameKind.hvyh));
+    expect(
+      decodeDivineNameSpan(149759, 1737),
+      (end: 149772, kind: DivineNameKind.yah),
+    );
+    expect(
+      decodeDivineNameSpan(10, 677),
+      (end: 15, kind: DivineNameKind.elohim),
+    );
+    // אורך מרבי (2^24 - 1), מקור 4, סוג 9.
+    expect(
+      decodeDivineNameSpan(0, 2147483593),
+      (end: 16777215, kind: DivineNameKind.yah),
+    );
+  });
+
   test('ריק — אין מופעים בשום שורה', () {
     final spans = DivineNameSpansBuilder().build();
     expect(spans.isEmpty, isTrue);

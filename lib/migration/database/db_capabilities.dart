@@ -154,8 +154,7 @@ class DbCapabilities {
       hasLines &&
       hasColumn('line_divine_name', 'lineId') &&
       hasColumn('line_divine_name', 'charStart') &&
-      hasColumn('line_divine_name', 'charEnd') &&
-      hasColumn('line_divine_name', 'kind');
+      hasColumn('line_divine_name', 'span');
 
   /// הערות שוליים שהוצאו מתוכן השורה (סכמה 7); בלעדיה הן נשארות בשורה.
   bool get hasBookNotes =>
@@ -172,8 +171,7 @@ class DbCapabilities {
       hasColumn('line_note_divine_name', 'lineId') &&
       hasColumn('line_note_divine_name', 'noteIndex') &&
       hasColumn('line_note_divine_name', 'charStart') &&
-      hasColumn('line_note_divine_name', 'charEnd') &&
-      hasColumn('line_note_divine_name', 'kind');
+      hasColumn('line_note_divine_name', 'span');
   bool get hasLineBookIndex => hasIndex('idx_line_book_index');
   bool get hasAuthors => hasBooks && has('author') && has('book_author');
   bool get hasTopics => hasBooks && has('topic') && has('book_topic');

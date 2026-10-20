@@ -40,8 +40,7 @@ void main() {
 
   void createTable() => db.execute(
     'CREATE TABLE line_divine_name (lineId INTEGER NOT NULL, '
-    'charStart INTEGER NOT NULL, charEnd INTEGER NOT NULL, '
-    'kind INTEGER NOT NULL, source INTEGER NOT NULL, '
+    'charStart INTEGER NOT NULL, span INTEGER NOT NULL, '
     'PRIMARY KEY (lineId, charStart)) WITHOUT ROWID',
   );
 
@@ -65,6 +64,14 @@ void main() {
       db.execute('CREATE TABLE line_divine_name (lineId INTEGER)');
       expect(DbCapabilities.probe(db).hasDivineNames, isFalse);
     });
+
+    test('טיוטה בלי span (charEnd/kind/source נפרדים) — כבויה', () {
+      db.execute(
+        'CREATE TABLE line_divine_name (lineId INTEGER, charStart INTEGER, '
+        'charEnd INTEGER, kind INTEGER, source INTEGER)',
+      );
+      expect(DbCapabilities.probe(db).hasDivineNames, isFalse);
+    });
   });
 
   test('מסד ישן בלי הטבלה — אין מופעים, בלי שגיאה', () {
@@ -75,7 +82,7 @@ void main() {
     createTable();
     db.execute(
       'INSERT INTO line_divine_name VALUES '
-      '(11, 6, 11, 5, 2), (10, 11, 16, 5, 2), (20, 8, 13, 5, 2)',
+      '(11, 6, 677), (10, 11, 677), (20, 8, 677)', // אורך 5, מקור 2, סוג 5
     );
 
     final spans = load();

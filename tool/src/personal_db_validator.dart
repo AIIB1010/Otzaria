@@ -174,8 +174,7 @@ class _Caps {
           lines &&
           col('line_divine_name', 'lineId') &&
           col('line_divine_name', 'charStart') &&
-          col('line_divine_name', 'charEnd') &&
-          col('line_divine_name', 'kind'),
+          col('line_divine_name', 'span'),
       'hasBookNotes':
           lines &&
           col('line_note', 'lineId') &&
@@ -193,8 +192,7 @@ class _Caps {
           col('line_note_divine_name', 'lineId') &&
           col('line_note_divine_name', 'noteIndex') &&
           col('line_note_divine_name', 'charStart') &&
-          col('line_note_divine_name', 'charEnd') &&
-          col('line_note_divine_name', 'kind'),
+          col('line_note_divine_name', 'span'),
       'hasLineBookIndex': indexes.contains('idx_line_book_index'),
       'hasAuthors': books && has('author') && has('book_author'),
       'hasTopics': books && has('topic') && has('book_topic'),

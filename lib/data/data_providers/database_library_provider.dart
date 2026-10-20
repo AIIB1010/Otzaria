@@ -1286,7 +1286,7 @@ DivineNameSpans _loadDivineNamesInIsolate({
     final builder = DivineNameSpansBuilder();
     final rows = db.select(
       'SELECT l.lineIndex AS lineIndex, d.charStart AS charStart, '
-      'd.charEnd AS charEnd, d.kind AS kind '
+      'd.span AS span '
       'FROM line l JOIN line_divine_name d ON d.lineId = l.id '
       'WHERE l.bookId = ? ORDER BY l.lineIndex, d.charStart',
       [bookId],
@@ -1294,10 +1294,10 @@ DivineNameSpans _loadDivineNamesInIsolate({
     for (final row in rows) {
       final lineIndex = row['lineIndex'];
       final start = row['charStart'];
-      final end = row['charEnd'];
-      final kind = row['kind'];
-      if (lineIndex is int && start is int && end is int && kind is int) {
-        builder.add(lineIndex, start, end, kind);
+      final span = row['span'];
+      if (lineIndex is int && start is int && span is int) {
+        final name = decodeDivineNameSpan(start, span);
+        builder.add(lineIndex, start, name.end, name.kind);
       }
     }
     return builder.build();
@@ -1391,7 +1391,7 @@ BookNotes _loadBookNotesInIsolate({
     if (capabilities.hasBookNoteDivineNames) {
       final names = db.select(
         'SELECT l.lineIndex AS lineIndex, d.noteIndex AS noteIndex, '
-        'd.charStart AS charStart, d.charEnd AS charEnd, d.kind AS kind '
+        'd.charStart AS charStart, d.span AS span '
         'FROM line l JOIN line_note_divine_name d ON d.lineId = l.id '
         'WHERE l.bookId = ? ORDER BY l.lineIndex, d.noteIndex, d.charStart',
         [bookId],
@@ -1400,14 +1400,19 @@ BookNotes _loadBookNotesInIsolate({
         final lineIndex = row['lineIndex'];
         final noteIndex = row['noteIndex'];
         final start = row['charStart'];
-        final end = row['charEnd'];
-        final kind = row['kind'];
+        final span = row['span'];
         if (lineIndex is int &&
             noteIndex is int &&
             start is int &&
-            end is int &&
-            kind is int) {
-          builder.addDivineName(lineIndex, noteIndex, start, end, kind);
+            span is int) {
+          final name = decodeDivineNameSpan(start, span);
+          builder.addDivineName(
+            lineIndex,
+            noteIndex,
+            start,
+            name.end,
+            name.kind,
+          );
         }
       }
     }

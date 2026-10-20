@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-/// ערכי `kind` של טבלת `line_divine_name` במסד.
+/// ערכי `kind` של מופע שם במסד (ארוזים ב-`span`, ר' [decodeDivineNameSpan]).
 abstract final class DivineNameKind {
   static const int hvyh = 1;
   static const int adnut = 2;
@@ -16,6 +16,11 @@ abstract final class DivineNameKind {
 /// מופע שם אחד בשורה: [start, end) באופסט תווים גלויים של השורה השמורה, בלי
 /// גופי ההערות (`link_anchor` נמדד על השורה המלאה, איתם).
 typedef DivineNameSpan = ({int start, int end, int kind});
+
+/// פענוח `span` של `line_divine_name` ו-`line_note_divine_name`:
+/// אורך << 7 | מקור << 4 | סוג (DivineSpanCode ב-SeforimLibrary).
+({int end, int kind}) decodeDivineNameSpan(int start, int span) =>
+    (end: start + (span >> 7), kind: span & 0xF);
 
 /// מופעי השמות של ספר שלם, בצורה דחוסה: שורות ממוינות, ולכל שורה טווח
 /// במערך שלשות (start, end, kind). עובר ל-isolate וחזרה בלי המרה.

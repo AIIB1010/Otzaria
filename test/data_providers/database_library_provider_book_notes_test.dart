@@ -62,8 +62,7 @@ void main() {
   void createNamesTable() => db.execute(
     'CREATE TABLE line_note_divine_name (lineId INTEGER NOT NULL, '
     'noteIndex INTEGER NOT NULL, charStart INTEGER NOT NULL, '
-    'charEnd INTEGER NOT NULL, kind INTEGER NOT NULL, '
-    'source INTEGER NOT NULL, '
+    'span INTEGER NOT NULL, '
     'PRIMARY KEY (lineId, noteIndex, charStart)) WITHOUT ROWID',
   );
 
@@ -247,7 +246,7 @@ void main() {
     );
     db.execute(
       'INSERT INTO line_note_divine_name VALUES '
-      '(11, 0, 4, 9, 5, 2), (20, 0, 0, 5, 5, 2)',
+      '(11, 0, 4, 677), (20, 0, 0, 677)', // אורך 5, מקור 2, סוג 5
     );
 
     final notes = load();
