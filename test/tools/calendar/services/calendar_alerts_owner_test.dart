@@ -497,6 +497,65 @@ void main() {
       expect(pluginIds.ids['p'], isEmpty);
     });
 
+    for (final initialized in [true, false]) {
+      test('ביטול שנשלח אחרי תזמון בלי המתנה אינו עוקף אותו '
+          '(${initialized ? 'מאותחל' : 'ממתין לאתחול'})', () async {
+        if (initialized) {
+          await notifications.ensureInitialized();
+        } else {
+          notifications.initGate = Completer<void>();
+        }
+        final o = owner();
+
+        final scheduled = o.execute('pluginSchedule', scheduleArgs('p', 5));
+        final cancelled = o.execute('pluginCancel', {'pluginId': 'p', 'id': 5});
+        notifications.initGate?.complete();
+        final acks = await Future.wait([scheduled, cancelled]);
+
+        expect(acks.map((a) => a['ok']), [true, true]);
+        expect(notifications.present, isEmpty);
+        expect(pluginIds.ids['p'], isEmpty);
+      });
+    }
+
+    test('מזהה של התראת לוח השנה נדחה ואינו מבוטל', () async {
+      store.values[CalendarAlertsKeys.events] = jsonEncode([
+        futureEvent('a').toJson(),
+      ]);
+      final o = owner();
+      await o.restoreIfNeeded();
+      notifications.cancelled.clear();
+
+      final acks = [
+        await o.execute('pluginSchedule', scheduleArgs('p', reminderId('a'))),
+        await o.execute('pluginShow', {
+          'pluginId': 'p',
+          'id': reminderId('a'),
+          'title': 't',
+          'body': 'b',
+        }),
+      ];
+
+      for (final ack in acks) {
+        expect(ack['ok'], isFalse);
+        expect('${ack['error']}', startsWith('error.invalid_params'));
+      }
+      expect(notifications.counts[reminderId('a')], 1);
+      expect(notifications.cancelled, isNot(contains(reminderId('a'))));
+      expect(notifications.shown, isEmpty);
+      expect(pluginIds.ids['p'], isNull);
+    });
+
+    test('תזמון עם מזהה של תוסף אחר אינו מבטל את ההתראה שלו', () async {
+      final o = owner();
+      await o.execute('pluginSchedule', scheduleArgs('q', 9));
+
+      await o.execute('pluginSchedule', scheduleArgs('p', 9));
+
+      expect(notifications.cancelled, isNot(contains(9)));
+      expect(pluginIds.ids['q'], [9]);
+    });
+
     test('בלי הרשאה תוסף אינו מתזמן ואינו נרשם', () async {
       notifications.permissions = false;
       final o = owner();

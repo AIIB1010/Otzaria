@@ -122,6 +122,10 @@ class CalendarAlertsOwner {
   static CalendarAlertsOwner get instance =>
       _instance ??= CalendarAlertsOwner();
 
+  @visibleForTesting
+  static set instanceForTesting(CalendarAlertsOwner? owner) =>
+      _instance = owner;
+
   /// בקשת אפיק: פקודה מחלון משני. רק הבעלים עונה עליה.
   static const String requestCommand = 'calendarAlerts.command';
 
@@ -155,8 +159,10 @@ class CalendarAlertsOwner {
   int _revision = 0;
   int get revision => _revision;
 
-  Future<void>? _lane;
-  int _laneDepth = 0;
+  final _SerialLane _stateLane = _SerialLane();
+
+  /// פעולות התוספים בסדר ההגעה. נפרד מתור המצב, כי הוא ממתין לאתחול.
+  final _SerialLane _pluginLane = _SerialLane();
   bool _cleanedStoredEvents = false;
   bool _dedupedPending = false;
 
@@ -462,18 +468,7 @@ class CalendarAlertsOwner {
     return {'ok': true, ...update.toJson()};
   });
 
-  Future<T> _inLane<T>(Future<T> Function() body) {
-    // תור ריק אינו מחזיק Future שהושלם: זה היה מקשר את ההמשך ל-zone ישן.
-    final previous = _lane;
-    final result = previous == null
-        ? Future<T>.sync(body)
-        : previous.then((_) => body());
-    _laneDepth++;
-    _lane = result.then<void>((_) {}, onError: (Object _) {}).whenComplete(() {
-      if (--_laneDepth == 0) _lane = null;
-    });
-    return result;
-  }
+  Future<T> _inLane<T>(Future<T> Function() body) => _stateLane.run(body);
 
   CalendarAlertsUpdate _publish(
     Map<String, Object?> values, {
@@ -554,35 +549,36 @@ class CalendarAlertsOwner {
         : notifications.requestPermissions();
   }
 
-  // פעולות התראה של תוספים רצות בתור, כדי ששני תזמונים של אותו מזהה לא
-  // ישאירו שני מופעים ב-Windows. האתחול ממתין מחוץ לתור, ולא חוסם פקודות.
-  Future<Map<String, Object?>> _pluginShow(Map<String, Object?> args) async {
+  // התור נכנס לפני כל await: ביטול שנשלח אחרי תזמון לא יעקוף אותו, ושני
+  // תזמונים של אותו מזהה לא ישאירו שני מופעים ב-Windows.
+  Future<Map<String, Object?>> _pluginShow(Map<String, Object?> args) {
     final pluginId = _stringArg(args, 'pluginId');
     final id = _intArg(args, 'id');
     final title = _stringArg(args, 'title');
     final body = _stringArg(args, 'body');
-    final ready = await _pluginReady();
-    if (ready != null) return ready;
-    return _inLane(() async {
+    return _pluginLane.run(() async {
+      final refused = await _refusePluginId(pluginId, id);
+      if (refused != null) return refused;
       await _notifications.showNotification(id: id, title: title, body: body);
       await _updatePluginIds(pluginId, add: {id});
       return _valueAck({'id': id});
     });
   }
 
-  Future<Map<String, Object?>> _pluginSchedule(
-    Map<String, Object?> args,
-  ) async {
+  Future<Map<String, Object?>> _pluginSchedule(Map<String, Object?> args) {
     final pluginId = _stringArg(args, 'pluginId');
     final id = _intArg(args, 'id');
     final title = _stringArg(args, 'title');
     final body = _stringArg(args, 'body');
     final at = DateTime.tryParse(_stringArg(args, 'at'));
     if (at == null) throw const _InvalidCommand('at');
-    final ready = await _pluginReady();
-    if (ready != null) return ready;
-    return _inLane(() async {
-      await _notifications.cancelNotifications([id]);
+    return _pluginLane.run(() async {
+      final refused = await _refusePluginId(pluginId, id);
+      if (refused != null) return refused;
+      // רק מופע של התוסף עצמו מוחלף; מזהה אחר אינו מבוטל, כמו קודם.
+      if ((await _pluginIds.read(pluginId)).contains(id)) {
+        await _notifications.cancelNotifications([id]);
+      }
       await _notifications.scheduleNotification(
         id: id,
         title: title,
@@ -595,7 +591,8 @@ class CalendarAlertsOwner {
     });
   }
 
-  Future<Map<String, Object?>?> _pluginReady() async {
+  /// שגיאה כשאין שירות או הרשאה, או כשהמזהה של התראת לוח השנה.
+  Future<Map<String, Object?>?> _refusePluginId(String pluginId, int id) async {
     if (!await _notifications.ensureInitialized()) {
       return _errorAck(
         'error.unavailable: Notification service not initialized',
@@ -603,6 +600,11 @@ class CalendarAlertsOwner {
     }
     if (!_notifications.hasPermissions) {
       return _errorAck('error.forbidden: Notification permissions not granted');
+    }
+    primeLedger();
+    // בלי זה התוסף היה רושם את המזהה ואחר כך מבטל דרכו את התראת הלוח.
+    if (_ledger!.contains(id)) {
+      return _errorAck('error.invalid_params: id is in use');
     }
     return null;
   }
@@ -614,25 +616,22 @@ class CalendarAlertsOwner {
   Future<Map<String, Object?>> _cancelPluginIds(
     String pluginId, {
     int? only,
-  }) async {
-    Future<List<int>> owned() async => [
+  }) => _pluginLane.run(() async {
+    final ids = [
       for (final id in await _pluginIds.read(pluginId))
         if (only == null || id == only) id,
     ];
-    if ((await _inLane(owned)).isEmpty) return _valueAck(true);
+    if (ids.isEmpty) return _valueAck(true);
     if (!await _notifications.ensureReadyToCancel()) {
       return _errorAck(
         'error.unavailable: Notification service not initialized',
       );
     }
-    return _inLane(() async {
-      final ids = await owned();
-      // ביטול שנכשל משאיר את המזהים ברישום, כדי שאפשר יהיה לנסות שוב.
-      await _notifications.cancelNotifications(ids);
-      await _updatePluginIds(pluginId, remove: ids.toSet());
-      return _valueAck(true);
-    });
-  }
+    // ביטול שנכשל משאיר את המזהים ברישום, כדי שאפשר יהיה לנסות שוב.
+    await _notifications.cancelNotifications(ids);
+    await _updatePluginIds(pluginId, remove: ids.toSet());
+    return _valueAck(true);
+  });
 
   /// read-modify-write של רישום התוסף. רק מתוך התור.
   Future<void> _updatePluginIds(
@@ -952,6 +951,25 @@ class CalendarAlertsOwner {
     final value = args[name];
     if (value is! int) throw _InvalidCommand(name);
     return value;
+  }
+}
+
+/// תור סדרתי: כל גוף מתחיל אחרי שהקודם הסתיים, גם אם נכשל.
+class _SerialLane {
+  Future<void>? _tail;
+  int _depth = 0;
+
+  Future<T> run<T>(Future<T> Function() body) {
+    // תור ריק אינו מחזיק Future שהושלם: זה היה מקשר את ההמשך ל-zone ישן.
+    final previous = _tail;
+    final result = previous == null
+        ? Future<T>.sync(body)
+        : previous.then((_) => body());
+    _depth++;
+    _tail = result.then<void>((_) {}, onError: (Object _) {}).whenComplete(() {
+      if (--_depth == 0) _tail = null;
+    });
+    return result;
   }
 }
 
