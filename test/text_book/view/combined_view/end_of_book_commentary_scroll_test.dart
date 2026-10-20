@@ -33,6 +33,12 @@ final _content = <String>[
 
 final _lastIndex = _content.length - 1;
 
+// שורת סיום נמוכה: הכרטיס שנפתח מעליה דוחף אותה אל מתחת לקו ה-90%.
+final _shortEndContent = <String>[
+  ..._content.take(_lastIndex),
+  'פסקה$_lastIndex ${List.filled(6, 'מילה$_lastIndex').join(' ')}',
+];
+
 // פסקה 5 גבוהה מהמסך.
 final _tallContent = <String>[
   for (var i = 0; i < 12; i++)
@@ -207,6 +213,29 @@ void main() {
       expect(
         result.after[5]!.itemLeadingEdge,
         moreOrLessEquals(0.9, epsilon: 1e-3),
+      );
+    });
+
+    // הכרטיס כבר נפתח בבדיקה שאחרי 300ms ודחף את הפסקה הבאה אל מתחת לקו
+    // ה-90% — כמו במכשיר. סוף הספר עדיין חוזר לתחתית.
+    testWidgets('כרטיס שדחף את הפסקה הבאה מתחת לקו ה-90% — סוף הספר בתחתית', (
+      tester,
+    ) async {
+      final paragraph = _lastIndex - 1;
+      final result = await tapParagraph(
+        tester,
+        paragraph,
+        content: _shortEndContent,
+      );
+      double height(ItemPosition p) => p.itemTrailingEdge - p.itemLeadingEdge;
+      final card =
+          height(result.after[paragraph]!) - height(result.before[paragraph]!);
+      final nextLeading = result.before[_lastIndex]!.itemLeadingEdge;
+      expect(nextLeading, lessThan(0.9));
+      expect(nextLeading + card, greaterThan(0.9));
+      expect(
+        result.after[_lastIndex]!.itemTrailingEdge,
+        moreOrLessEquals(1.0, epsilon: 1e-3),
       );
     });
 

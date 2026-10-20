@@ -2643,24 +2643,26 @@ class _CombinedViewState extends State<CombinedView> {
         final next = lines.positionsListener.itemPositions.value
             .where((p) => p.index == index + 1)
             .firstOrNull;
-        // הגלילה רק חושפת את הכרטיס: טקסט הבא שכבר מעל קו ה-90%
-        // (בסוף הספר) היה נגרר אליו למטה, והרשימה קופצת אחורה.
-        if (tapped != null && next != null && next.itemLeadingEdge <= 0.9) {
-          // הכרטיס דחף את סוף הספר מתחת למסך; מחזירים אותו לתחתית.
-          if (atBookEnd && scroll.hasClients) {
-            scroll.position.animateTo(
-              scroll.position.maxScrollExtent,
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
-            );
-          }
-          return;
-        }
         // פסקה שלבדה אינה נכנסת מעל קו ה-90%: חשיפת הכרטיס הייתה מעלה את
         // תחילתה מעל המסך, ולכן תחילתה בראש המסך.
         final tooTall =
             tapped != null &&
             tapped.itemTrailingEdge - tapped.itemLeadingEdge > 0.9;
+        // הכרטיס דחף את סוף הספר מתחת למסך; מחזירים אותו לתחתית. לא תלוי
+        // במיקום הטקסט הבא, שאחרי 300ms כבר נדחף אל מתחת לקו ה-90%.
+        if (atBookEnd && !tooTall && scroll.hasClients) {
+          scroll.position.animateTo(
+            scroll.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+          return;
+        }
+        // הגלילה רק חושפת את הכרטיס: טקסט הבא שכבר מעל קו ה-90% היה נגרר
+        // אליו למטה, והרשימה קופצת אחורה.
+        if (tapped != null && next != null && next.itemLeadingEdge <= 0.9) {
+          return;
+        }
         lines.itemController.scrollTo(
           // לפסקה האחרונה אין טקסט הבא — מעלים אותה ככל שסוף הספר מאפשר.
           index: hasNext && !tooTall ? index + 1 : index,
