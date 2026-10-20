@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -81,6 +82,34 @@ void main() {
     notifications = WindowsLikeNotifications();
     pluginEvents = [];
     statuses = [];
+  });
+
+  test('השידור והאישור נשלחים בין isolate groups', () async {
+    // כל חלון הוא isolate group נפרד, ו-SendPort ביניהם דוחה UnmodifiableMapView.
+    bool sendable(Object? value) => switch (value) {
+      null || bool() || num() || String() => true,
+      UnmodifiableMapView() || UnmodifiableListView() => false,
+      Map() => value.entries.every((e) => sendable(e.key) && sendable(e.value)),
+      List() => value.every(sendable),
+      _ => false,
+    };
+    final broadcasts = <Map<String, Object?>>[];
+    final o = CalendarAlertsOwner(
+      store: store,
+      notifications: notifications,
+      pluginEvents: () async => pluginEvents,
+      now: () => now,
+      broadcast: broadcasts.add,
+      dedupeDuplicates: false,
+    );
+    addTearDown(o.dispose);
+
+    final ack = await o.execute('upsertEvent', eventArgs(futureEvent('a')));
+    await o.idle;
+    expect(ack['ok'], isTrue);
+    expect(sendable(ack), isTrue);
+    expect(broadcasts, isNotEmpty);
+    expect(broadcasts.every(sendable), isTrue);
   });
 
   test('תזכורת לאירוע חדש מתוזמנת, ומחיקה מבטלת אותה', () async {

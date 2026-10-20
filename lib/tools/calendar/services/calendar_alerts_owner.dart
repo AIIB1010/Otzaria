@@ -47,10 +47,11 @@ class CalendarAlertsUpdate {
     );
   }
 
+  // עותק רגיל: SendPort בין חלונות (isolate groups שונים) דוחה מפה בלתי ניתנת לשינוי.
   Map<String, Object?> toJson() => {
     'epoch': epoch,
     'revision': revision,
-    'values': values,
+    'values': {...values},
     if (pluginEventsChanged) 'pluginEventsChanged': true,
   };
 }
