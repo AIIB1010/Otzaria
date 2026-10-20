@@ -107,6 +107,7 @@ import 'package:otzaria/tools/shamor_zachor/models/book_model.dart';
 import 'package:otzaria/settings/services/per_book_settings_service.dart';
 import 'package:otzaria/widgets/misc/app_menu_exports.dart';
 import 'package:otzaria/widgets/misc/app_selection_area.dart';
+import 'package:otzaria/widgets/misc/ctrl_wheel_zoom.dart';
 import 'package:otzaria/widgets/misc/rtl_icon.dart';
 import 'package:otzaria/settings/services/nikud_display_service.dart';
 import 'package:otzaria/utils/link_helpers.dart';
@@ -2780,7 +2781,10 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
         host: _searchHost,
         child: _NavPanelTourTargetBuilder(child: _buildLeftPaneContent(state)),
       ),
-      mainContent: _buildHTMLViewer(state),
+      mainContent: CtrlWheelZoom(
+        onZoom: _zoomFromWheel,
+        child: _buildHTMLViewer(state),
+      ),
       isResizable: true,
       minPaneWidth: 200,
       maxPaneWidth: 600,
@@ -2798,6 +2802,12 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
       },
       autoHandleResponsiveVisibility: false,
     );
+  }
+
+  void _zoomFromWheel(bool zoomIn) {
+    final state = context.read<TextBookBloc>().state;
+    if (state is! TextBookLoaded) return;
+    unawaited(_stepFontSize(context, state, larger: zoomIn));
   }
 
   Widget _buildHTMLViewer(TextBookLoaded state) {
