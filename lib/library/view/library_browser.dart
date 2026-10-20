@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:otzaria_icons/otzaria_icons.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/plugins/models/plugin_search_field_action.dart';
 import 'package:otzaria/core/focus_repository.dart';
 import 'package:otzaria/core/messages/messages_exports.dart';
@@ -323,6 +324,14 @@ class LibraryBrowser extends StatefulWidget {
 
   @override
   State<LibraryBrowser> createState() => _LibraryBrowserState();
+}
+
+final _libraryBrowserKeys = Expando<GlobalKey<State<LibraryBrowser>>>();
+
+extension LibraryBrowserKeyX on AppWindowKeys {
+  /// מפתח הספרייה של החלון. נוצר בגישה הראשונה וקבוע לחיי ה-[AppWindowKeys].
+  GlobalKey<State<LibraryBrowser>> get libraryBrowser =>
+      _libraryBrowserKeys[this] ??= GlobalKey<State<LibraryBrowser>>();
 }
 
 class _LibraryBrowserState extends State<LibraryBrowser>
@@ -844,7 +853,9 @@ class _LibraryBrowserState extends State<LibraryBrowser>
     final focusRepository = context.read<FocusRepository>();
 
     final handled =
-        await mainWindowScreenKey.currentState?.handleInternalDeepLink(
+        await AppWindowKeys.of(
+          context,
+        ).mainWindowScreen.currentState?.handleInternalDeepLink(
           normalized.toString(),
         ) ??
         false;

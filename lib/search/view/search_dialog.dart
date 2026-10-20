@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/theme/app_surfaces.dart';
 import 'package:otzaria/theme/app_tokens.dart';
 import 'package:flutter/services.dart';
@@ -437,8 +438,11 @@ class _SearchDialogState extends State<SearchDialog> {
                 text: context.settingsText('הגדרות ספרייה'),
                 icon: FluentIcons.settings_24_regular,
                 onPressed: () {
+                  final mainScreen = AppWindowKeys.of(
+                    context,
+                  ).mainWindowScreen.currentState;
                   Navigator.of(context).pop();
-                  mainWindowScreenKey.currentState?.handleInternalDeepLink(
+                  mainScreen?.handleInternalDeepLink(
                     'otzaria://open/settings/library',
                   );
                 },
@@ -1677,7 +1681,7 @@ class _SearchDialogState extends State<SearchDialog> {
   /// היקף החיפוש ופקד המרווח/המרחק.
   Widget _buildQueryRow() {
     final searchField = EnhancedSearchField(
-      key: enhancedSearchFieldKey,
+      key: AppWindowKeys.of(context).enhancedSearchField,
       widget: _SearchDialogWrapper(tab: _searchTab),
       onSubmit: _performSearch,
       trailingAction: _buildHistoryButton(),

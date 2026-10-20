@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/app_runtime_reset.dart';
 import 'package:otzaria/core/error_log_file.dart';
 import 'package:otzaria/core/messages/window_messages.dart';
@@ -477,7 +478,8 @@ class _WindowBusHostState extends State<WindowBusHost> {
   /// של המארח, והוא היה פותח את הקישור גם אצלו.
   Future<Object?> _openUri(Object? uri) async {
     if (uri is! String || uri.trim().isEmpty) return false;
-    final screen = mainWindowScreenKey.currentState;
+    if (!mounted) return false;
+    final screen = AppWindowKeys.of(context).mainWindowScreen.currentState;
     if (screen == null) return false;
     unawaited(screen.handleInternalDeepLink(uri));
     return true;

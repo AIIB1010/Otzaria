@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
@@ -653,7 +654,9 @@ class PersonalNotesSidebarState extends State<PersonalNotesSidebar>
       default:
         // קישור עמוק (otzaria://open/... או zayit://) — מנותב למסך הראשי.
         final handled =
-            await mainWindowScreenKey.currentState?.handleInternalDeepLink(
+            await AppWindowKeys.of(
+              context,
+            ).mainWindowScreen.currentState?.handleInternalDeepLink(
               url,
             ) ??
             false;

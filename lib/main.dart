@@ -112,6 +112,7 @@ import 'package:otzaria/core/startup_timeline.dart';
 import 'package:otzaria/core/diagnostics/developer_diagnostics.dart';
 import 'package:otzaria/core/window_listener.dart';
 import 'package:otzaria/core/window_persistence.dart';
+import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
 import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/core/user_state/window_bounds.dart';
@@ -595,6 +596,7 @@ Future<void> _runAppBootstrap() async {
     AppWindowScope(
       controller: _appWindow,
       geometry: _appWindow,
+      keys: AppWindowKeys.current,
       child: SentryWidget(
         child: RestartWidget(
           child: const AppBootstrap(),
@@ -2180,6 +2182,7 @@ void secondaryWindowMain(List<String> args) async {
     AppWindowScope(
       controller: _appWindow,
       geometry: _appWindow,
+      keys: AppWindowKeys.current,
       child: SentryWidget(
         child: RestartWidget(
           child: const AppBootstrap(),
