@@ -301,7 +301,7 @@ class LibraryUpdateRepository implements LibraryUpdateService {
     bool Function()? isCancelled,
   }) async {
     final dbPath = dbPathProvider();
-    await _ensureDbDirectoryWritable(dbPath);
+    await _ensureDbWritable(dbPath);
     final cacheDir = Directory(
       p.join(await dataRootProvider(), 'library_update_cache'),
     );
@@ -603,12 +603,21 @@ class LibraryUpdateRepository implements LibraryUpdateService {
     } catch (_) {}
   }
 
-  /// בדיקת התיקייה מקדימה; הרשאות קובץ המסד נבדקות בעת ההחלה או ההחלפה.
-  Future<void> _ensureDbDirectoryWritable(String dbPath) async {
+  /// בדיקה מקדימה חלקית: ACL של קובץ המסד מתגלה רק בעת ההחלה או ההחלפה.
+  Future<void> _ensureDbWritable(String dbPath) async {
     final dir = p.dirname(dbPath);
-    if (!await isDirectoryWritable(dir)) {
+    if (!await isDirectoryWritable(dir) ||
+        _hasWindowsReadOnlyAttribute(dbPath)) {
       throw LibraryUpdateReadOnlyException(dir);
     }
+  }
+
+  // ב-Windows ביט הכתיבה נגזר רק ממאפיין "קריאה בלבד", שחוסם גם כתיבה
+  // לקובץ וגם מחיקה/החלפה שלו — ולכן כאן, בניגוד ל-POSIX, הוא אמין.
+  static bool _hasWindowsReadOnlyAttribute(String path) {
+    if (!Platform.isWindows) return false;
+    final stat = FileStat.statSync(path);
+    return stat.type == FileSystemEntityType.file && stat.mode & 0x80 == 0;
   }
 
   static bool _isPermissionError(FileSystemException error) =>
@@ -709,7 +718,7 @@ class LibraryUpdateRepository implements LibraryUpdateService {
       throw StateError('אין DB מלא בתוכנית');
     }
     final dbPath = dbPathProvider();
-    await _ensureDbDirectoryWritable(dbPath);
+    await _ensureDbWritable(dbPath);
     final cacheDir = Directory(
       p.join(await dataRootProvider(), 'library_update_cache'),
     );

@@ -1345,13 +1345,15 @@ void main() {
           sourceName: 'new',
         );
         if (beforeDownload) await _setReadOnly(dbPath, true);
+        var downloaded = false;
         final repository = LibraryUpdateRepository(
           discovery: _unusedDiscovery(),
           downloader: _LocalPatchDownloader(
             patchPath,
-            beforeReturn: beforeDownload
-                ? null
-                : () => _setReadOnly(dbPath, true),
+            beforeReturn: () async {
+              downloaded = true;
+              if (!beforeDownload) await _setReadOnly(dbPath, true);
+            },
           ),
           refreshService: _NoopRefreshService(),
           dbPathProvider: () => dbPath,
@@ -1378,9 +1380,13 @@ void main() {
               ),
             ),
           );
-          final log = ErrorLogFile.resolveFile().readAsStringSync();
-          expect(log, contains('journal_mode=WAL failed'));
-          expect(log, contains('readonly database'));
+          // מאפיין "קריאה בלבד" של Windows נעצר כבר לפני ההורדה.
+          expect(downloaded, !(beforeDownload && Platform.isWindows));
+          if (downloaded) {
+            final log = ErrorLogFile.resolveFile().readAsStringSync();
+            expect(log, contains('journal_mode=WAL failed'));
+            expect(log, contains('readonly database'));
+          }
           expect(const LocalDbVersionReader().read(dbPath).dbVersion, 1);
         } finally {
           await _setReadOnly(dbPath, false);
