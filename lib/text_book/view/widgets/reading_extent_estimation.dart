@@ -43,32 +43,68 @@ class ReadingExtentEstimation extends StatefulWidget {
 }
 
 class _ReadingExtentEstimationState extends State<ReadingExtentEstimation> {
-  late final _data = ReadingExtentEstimates(widget.segments);
+  ReadingExtentEstimates? _data;
+  ReadingExtentEstimates get _estimates =>
+      _data ??= ReadingExtentEstimates(widget.segments);
   ReadingExtentMetrics? _metrics;
   Object? _metricStyle;
   Object _estimationKey = Object();
   bool _refreshScheduled = false;
+  bool _enabled = true;
   double _availableWidth = 0;
   double _itemWidth = 0;
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _enabled = TickerMode.valuesOf(context).enabled;
+  }
+
+  @override
+  void dispose() {
+    _data?.dispose();
+    super.dispose();
+  }
+
+  @override
   void didUpdateWidget(ReadingExtentEstimation oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _data.update(widget.segments);
-    if (!oldWidget.segments.layout.hasSameStructure(widget.segments.layout) ||
+    final changedReader =
+        oldWidget.segments.readerIdentity != widget.segments.readerIdentity;
+    if (changedReader) {
+      _data?.dispose();
+      _data = null;
+      _refreshScheduled = false;
+    } else {
+      _data?.update(widget.segments);
+    }
+    if (changedReader ||
+        !oldWidget.segments.layout.hasSameStructure(widget.segments.layout) ||
         !identical(oldWidget.controller, widget.controller)) {
       _estimationKey = Object();
     }
   }
 
   void _scheduleRefresh() {
-    if (_refreshScheduled || !_data.needsRefresh) return;
+    if (!_enabled || _refreshScheduled) return;
+    final data = _estimates;
+    if (!data.needsRefresh) return;
     _refreshScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
-      final changes = await _data.refresh();
+      if (!mounted || !identical(_data, data)) return;
+      if (!_enabled) {
+        _refreshScheduled = false;
+        return;
+      }
+      final changes = await data.refresh(
+        shouldContinue: () => mounted && _enabled,
+      );
+      if (!mounted || !identical(_data, data)) return;
       _refreshScheduled = false;
-      if (!mounted) return;
+      if (!_enabled) {
+        _estimationKey = Object();
+        return;
+      }
       if (changes.full) {
         setState(() => _estimationKey = Object());
       } else if (changes.ranges.isNotEmpty && widget.controller.isAttached) {
@@ -111,7 +147,7 @@ class _ReadingExtentEstimationState extends State<ReadingExtentEstimation> {
   double _estimate(int index, double width) {
     _itemWidth = width;
     final textWidth = widget.textWidth?.call(width);
-    return _data.estimate(
+    return _estimates.estimate(
       index,
       textWidth != null && textWidth > 0 ? textWidth : width,
       _metrics!,

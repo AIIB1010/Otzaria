@@ -1,9 +1,9 @@
-import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:html/parser.dart' as html;
 import 'package:otzaria/text_book/utils/inline_notes_utils.dart' as notes;
+import 'package:otzaria/text_book/utils/reading_extent_worker_queue.dart';
 import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:positioned_sliver_list/positioned_list.dart';
 
@@ -24,13 +24,20 @@ class ReadingExtentMetrics {
 
 /// מונה תווים לכל שורת מקור; בחימום מעדכן רק טווחים ששונו.
 class ReadingExtentEstimates {
-  ReadingExtentEstimates(this.segments)
+  ReadingExtentEstimates(ReadingSegments segments)
+    : this.withWorkerQueue(segments, _countWorkers);
+
+  @visibleForTesting
+  ReadingExtentEstimates.withWorkerQueue(this.segments, this._workerQueue)
     : _counts = Int32List(segments.content.length) {
     _counts.fillRange(0, _counts.length, -1);
   }
 
   ReadingSegments segments;
+  final ReadingExtentWorkerQueue _workerQueue;
+  ReadingExtentWorkerJob<_CountResult>? _workerJob;
   Int32List _counts;
+  bool _disposed = false;
   // ממוצע קבוע מונע שינוי של כל הערכות הספר בכל מנת חימום.
   double _unloadedLineChars = 200;
   bool _fullRefresh = true;
@@ -44,6 +51,14 @@ class ReadingExtentEstimates {
 
   @visibleForTesting
   int get debugStorageBytes => _counts.lengthInBytes;
+
+  /// משחרר עבודה ממתינה; חישוב פעיל מסתיים בלי לפרסם תוצאה.
+  void dispose() {
+    _disposed = true;
+    _workerJob?.cancel();
+    _pendingRanges.clear();
+    _fullRefresh = false;
+  }
 
   void update(ReadingSegments next) {
     final changes = next.changedLinesSince(segments);
@@ -61,13 +76,20 @@ class ReadingExtentEstimates {
   }
 
   /// מדגם גדול נספר ב־isolate יחיד; עדכונים שמגיעים בינתיים מתמזגים אחריו.
-  Future<({bool full, List<ContentLineRange> ranges})> refresh() =>
-      _refreshing ??= _refresh().whenComplete(() => _refreshing = null);
+  Future<({bool full, List<ContentLineRange> ranges})> refresh({
+    bool Function()? shouldContinue,
+  }) => _refreshing ??= _refresh(
+    shouldContinue,
+  ).whenComplete(() => _refreshing = null);
 
-  Future<({bool full, List<ContentLineRange> ranges})> _refresh() async {
+  Future<({bool full, List<ContentLineRange> ranges})> _refresh(
+    bool Function()? shouldContinue,
+  ) async {
     var replacedAll = false;
     final applied = <ContentLineRange>[];
-    while (_fullRefresh || _pendingRanges.isNotEmpty) {
+    while (!_disposed &&
+        (_fullRefresh || _pendingRanges.isNotEmpty) &&
+        (shouldContinue?.call() ?? true)) {
       final full = _fullRefresh;
       _fullRefresh = false;
       final ranges = full
@@ -82,9 +104,23 @@ class ReadingExtentEstimates {
           chunks.fold<int>(0, (sum, chunk) => sum + chunk.lines.length) >=
               10000 ||
           _rawCharactersExceed(chunks, 1024 * 1024);
-      final result = costly
-          ? await _countInWorker(chunks)
-          : _countChunks(chunks);
+      _CountResult? result;
+      if (costly) {
+        final job = _workerQueue.enqueue(
+          () => compute(_countChunks, chunks, debugLabel: 'readingExtents'),
+        );
+        _workerJob = job;
+        try {
+          result = await job.result;
+        } finally {
+          _workerJob = null;
+        }
+      } else {
+        result = _countChunks(chunks);
+      }
+      if (_disposed || result == null) {
+        return (full: false, ranges: <ContentLineRange>[]);
+      }
       if (_fullRefresh) continue;
       var cursor = 0;
       for (final range in ranges) {
@@ -165,19 +201,7 @@ class ReadingExtentEstimates {
 typedef _CountChunk = ({List<String> lines, List<bool>? loaded});
 typedef _CountResult = ({Int32List counts, int chars, int loaded});
 
-Future<void> _countWorkerTail = Future<void>.value();
-
-Future<_CountResult> _countInWorker(List<_CountChunk> chunks) async {
-  final previous = _countWorkerTail;
-  final released = Completer<void>();
-  _countWorkerTail = released.future;
-  await previous;
-  try {
-    return await compute(_countChunks, chunks, debugLabel: 'readingExtents');
-  } finally {
-    released.complete();
-  }
-}
+final _countWorkers = ReadingExtentWorkerQueue();
 
 bool _rawCharactersExceed(List<_CountChunk> chunks, int limit) {
   var total = 0;

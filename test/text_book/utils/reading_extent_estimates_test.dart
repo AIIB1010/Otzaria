@@ -1,12 +1,74 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/text_book/utils/reading_extent_estimates.dart';
 import 'package:otzaria/text_book/utils/reading_segments.dart';
+import 'package:otzaria/text_book/utils/reading_extent_worker_queue.dart';
 import 'package:otzaria/text_book/view/widgets/reading_extent_estimation.dart';
 import 'package:positioned_sliver_list/positioned_list.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('סגירת ספר משחררת ספירה בתור ואינה מפעילה isolate מיותר', () async {
+    final queue = ReadingExtentWorkerQueue();
+    final running = Completer<int>();
+    final first = queue.enqueue(() => running.future);
+    await Future<void>.delayed(Duration.zero);
+    final data = ReadingExtentEstimates.withWorkerQueue(
+      _segments(List.filled(10000, 'טקסט של ספר שנסגר')),
+      queue,
+    );
+    final refresh = data.refresh();
+    data.dispose();
+    expect((await refresh).ranges, isEmpty);
+    expect(queue.debugStartedJobs, 1);
+    running.complete(1);
+    await first.result;
+    await Future<void>.delayed(Duration.zero);
+    expect(queue.debugStartedJobs, 1);
+    expect(data.debugCountedLines, 0);
+  });
+
+  test('השבתה בזמן ספירה דוחה מנת חימום נוספת עד לחזרה', () async {
+    final queue = _GatedWorkerQueue();
+    final identity = Object();
+    final data = ReadingExtentEstimates.withWorkerQueue(
+      _segments(List.filled(10000, 'אב'), identity: identity, version: 1),
+      queue,
+    );
+    addTearDown(data.dispose);
+    var enabled = true;
+    final refresh = data.refresh(shouldContinue: () => enabled);
+    await queue.started.future;
+    data.update(
+      _segments(
+        List.filled(10000, 'א' * 100),
+        identity: identity,
+        version: 2,
+        changes: ContentLineChanges(
+          fromVersion: 1,
+          ranges: [(first: 0, last: 9999)],
+        ),
+      ),
+    );
+    enabled = false;
+    queue.release.complete();
+    expect((await refresh).full, isTrue);
+    expect(queue.debugStartedJobs, 1);
+    expect(data.debugCountedLines, 10000);
+    expect(data.needsRefresh, isTrue);
+    expect((await data.refresh(shouldContinue: () => enabled)).ranges, isEmpty);
+    expect(queue.debugStartedJobs, 1);
+    enabled = true;
+    final resumed = await data.refresh(shouldContinue: () => enabled);
+    expect(resumed.full, isFalse);
+    expect(resumed.ranges, [(first: 0, last: 9999)]);
+    expect(queue.debugStartedJobs, 2);
+    expect(data.debugCountedLines, 20000);
+    expect(data.needsRefresh, isFalse);
+  });
 
   test('מסיר רק סימנים משולבים ומשאיר פיסוק עברי', () {
     expect(visibleReadingCharCount('אַ֑ב־ג׀ד׃ה׆ו'), 'אב־ג׀ד׃ה׆ו'.length);
@@ -234,6 +296,66 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets('טאב מושבת דוחה ספירה וחוזר לרענון יחיד כשהוא פעיל', (
+    tester,
+  ) async {
+    final segments = _segments(List.filled(100, 'א'));
+    final keys = <Object>{};
+    final controller = ItemScrollController();
+    var enabled = false;
+    var latestEstimate = 0.0;
+    late StateSetter rebuild;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (_, setState) {
+            rebuild = setState;
+            return TickerMode(
+              enabled: enabled,
+              child: ReadingExtentEstimation(
+                segments: segments,
+                controller: controller,
+                fontSize: 20,
+                builder: (estimate, key) {
+                  keys.add(key);
+                  latestEstimate = estimate(0, 100);
+                  return const SizedBox();
+                },
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final before = latestEstimate;
+    expect(keys, hasLength(1));
+    rebuild(() => enabled = true);
+    await tester.pumpAndSettle();
+    expect(keys, hasLength(2));
+    expect(latestEstimate, lessThan(before));
+    rebuild(() {});
+    await tester.pumpAndSettle();
+    expect(keys, hasLength(2));
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+}
+
+class _GatedWorkerQueue extends ReadingExtentWorkerQueue {
+  final started = Completer<void>();
+  final release = Completer<void>();
+
+  @override
+  ReadingExtentWorkerJob<T> enqueue<T>(Future<T> Function() work) =>
+      super.enqueue(() async {
+        if (!started.isCompleted) {
+          started.complete();
+          await release.future;
+        }
+        return work();
+      });
 }
 
 ReadingSegments _segments(
