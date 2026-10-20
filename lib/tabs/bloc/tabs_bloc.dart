@@ -413,6 +413,7 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
   Future<void> _onAddTab(AddTab event, Emitter<TabsState> emit) async {
     debugPrint('DEBUG: הוספת טאב חדש - ${event.tab.title}');
     final tab = await _withCompanion(event.tab);
+    _separateHistorySlots(tab);
     final newTabs = List<OpenedTab>.from(state.tabs);
     final newIndex = event.insertAdjacent
         ? min(state.currentTabIndex + 1, newTabs.length)
@@ -434,6 +435,22 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
       ),
     );
     _scheduleSave(newTabs, currentIndex);
+  }
+
+  /// ספר שכבר פתוח בטאב אחר (או שוכפל) נרשם כמקום נוסף בהיסטוריה, ולא
+  /// דורס את רשומת הטאב הפתוח.
+  void _separateHistorySlots(OpenedTab tab) {
+    final openPanes = state.tabs.expand(leafPanes).toList();
+    for (final pane in leafPanes(tab)) {
+      if (pane is! TextBookTab && pane is! PdfBookTab) continue;
+      if (openPanes.any(
+        (open) =>
+            open.historySlot == pane.historySlot && _isSameBook(open, pane),
+      )) {
+        pane.historySlot = OpenedTab.newHistorySlot();
+      }
+      openPanes.add(pane);
+    }
   }
 
   Future<void> _onOpenOrFocusTab(

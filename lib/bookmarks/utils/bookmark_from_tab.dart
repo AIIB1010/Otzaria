@@ -185,7 +185,7 @@ OpenedTab tabFromBookmark(Bookmark bookmark) {
     initialReadingAnchor: bookmark.readingAnchor,
     commentators: bookmark.commentatorsToShow,
     openLeftPane: openLeftPane,
-  );
+  )..historySlot = bookmark.historySlot;
 }
 
 /// מוצא את הכותרת המתאימה לעמוד מסוים ב-outline של PDF.

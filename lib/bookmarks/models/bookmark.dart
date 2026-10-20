@@ -86,12 +86,18 @@ class Bookmark {
   final DateTime? createdAt;
   final ReadingAnchor? readingAnchor;
 
-  /// A stable key for history management, unique per [bookIdentity].
+  /// [OpenedTab.historySlot] של הטאב שממנו נלכדה רשומת ההיסטוריה.
+  final String? historySlot;
+
+  /// A stable key for history management, unique per [bookIdentity] and
+  /// [historySlot] — two tabs of one book are two places in the history.
   ///
   /// ⚠️ חייב להתאים לזהות שלפיה פתיחת ספר משחזרת מיקום: מפתח גס ממנה מדיח
   /// את מיקום הקריאה של ספר אחר (למשל טקסט ו-PDF של אותה מסכת).
-  String get historyKey =>
-      isSearch ? ref : '${targetKind.name}:${bookIdentity(book)}';
+  String get historyKey => isSearch
+      ? ref
+      : '${targetKind.name}:${bookIdentity(book)}'
+            '${historySlot == null ? '' : '#$historySlot'}';
 
   /// מזהה יציב של סימנייה בתוך רשימת הסימניות.
   ///
@@ -125,6 +131,7 @@ class Bookmark {
     this.label,
     this.createdAt,
     this.readingAnchor,
+    this.historySlot,
   });
 
   /// מחזיר עותק עם שדות מעודכנים. [clearLabel] מאפס את [label] ל-null
@@ -132,6 +139,7 @@ class Bookmark {
   Bookmark copyWith({
     String? label,
     bool clearLabel = false,
+    String? historySlot,
   }) {
     return Bookmark(
       ref: ref,
@@ -156,6 +164,7 @@ class Bookmark {
       label: clearLabel ? null : (label ?? this.label),
       createdAt: createdAt,
       readingAnchor: readingAnchor,
+      historySlot: historySlot ?? this.historySlot,
     );
   }
 
@@ -237,6 +246,7 @@ class Bookmark {
       createdAt: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'] as String)
           : null,
+      historySlot: json['historySlot'] as String?,
     );
   }
 
@@ -288,6 +298,7 @@ class Bookmark {
       'targetKind': targetKind.name,
       'label': label,
       'createdAt': createdAt?.toIso8601String(),
+      'historySlot': ?historySlot,
     };
   }
 }

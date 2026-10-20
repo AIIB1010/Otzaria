@@ -124,11 +124,10 @@ class BookOpenCoordinator {
     // שונים עם אותה כותרת (id/נתיב שונה) מקבלים זהויות נפרדות, כך שפתיחת אחד
     // לא תקפוץ למיקום שנשמר עבור השני.
     final bookKey = bookIdentity(book);
-    final lastOpened = (ignoreHistory || hasAnyHighlight)
-        ? null
-        : historyState.history.firstWhereOrNull(
-            (b) => bookIdentity(b.book) == bookKey,
-          );
+    final latestEntry = historyState.history.firstWhereOrNull(
+      (b) => bookIdentity(b.book) == bookKey,
+    );
+    final lastOpened = (ignoreHistory || hasAnyHighlight) ? null : latestEntry;
     // ערך המיקום ההתחלתי ה"דיפולטי" תלוי בסוג הספר: בטקסט האינדקס מבוסס-0
     // (0 = "ללא מיקום ספציפי"), אבל ב-PDF העמודים מבוססי-1 (1 = העמוד הראשון).
     // הספרייה מעבירה את הדיפולט הזה. רק כשהמתקשר מעביר ערך שונה מהדיפולט מדובר
@@ -169,6 +168,7 @@ class BookOpenCoordinator {
     final String? effectivePinpoint =
         hasPinpoint && !hasMarkText && !markSection ? pinpointHighlight : null;
 
+    // ממשיך את המקום האחרון בספר; ספר שכבר פתוח מקבל מקום חדש ב-TabsBloc.
     return OpenedTab.fromBook(
       book,
       initialIndex,
@@ -188,6 +188,6 @@ class BookOpenCoordinator {
           : null,
       dedupeKey: dedupeKey,
       externalMatches: externalMatches,
-    );
+    )..historySlot = latestEntry?.historySlot;
   }
 }
