@@ -247,7 +247,8 @@ int visibleCharCount(String html) => _visibleOffsetAtRaw(html, html.length);
 /// מקרין עוגנים מהשורה המלאה — השורה השמורה ובה גוף כל הערה מ-[notes], בתווים
 /// הגלויים שלו, במקום ה-charPos שלה — לשורה השמורה ([note] null) או לגוף ההערה
 /// ה-[note] (מיקום ב-[notes]). עוגן-נקודה בתוך גוף שייך לגוף ובקצהו לשורה;
-/// טווח נשאר טווח אחד בשורה, וכל הערה שהוא נוגע בה מקבלת את חלקה.
+/// טווח נשאר טווח אחד בשורה, וכל הערה שהוא נוגע בה מקבלת את חלקה. הערה בלי
+/// מיקום (charPos -1) משאירה את השורה בלי מקום לעוגנים — אין חלק בשום מקום.
 List<LinkAnchorSpan> projectAnchorSpans(
   List<LinkAnchorSpan> spans,
   List<BookNote> notes, {
@@ -255,16 +256,12 @@ List<LinkAnchorSpan> projectAnchorSpans(
 }) {
   if (notes.isEmpty) return note == null ? spans : const [];
   if (note != null && (note < 0 || note >= notes.length)) return const [];
+  if (notes.any((n) => n.charPos < 0)) return const [];
   // גוף k תופס בשורה המלאה את [starts[k], ends[k]).
   final starts = List<int>.filled(notes.length, 0);
   final ends = List<int>.filled(notes.length, 0);
   var before = 0;
   for (var k = 0; k < notes.length; k++) {
-    // הערה בלי מיקום (charPos -1) אינה חלק מהשורה המלאה.
-    if (notes[k].charPos < 0) {
-      starts[k] = ends[k] = -1;
-      continue;
-    }
     starts[k] = notes[k].charPos + before;
     before += visibleCharCount(notes[k].body);
     ends[k] = notes[k].charPos + before;

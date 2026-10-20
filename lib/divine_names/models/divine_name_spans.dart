@@ -13,7 +13,8 @@ abstract final class DivineNameKind {
   static const int yah = 9;
 }
 
-/// מופע שם אחד בשורה: [start, end) באופסט תווים גלויים, כמו `link_anchor`.
+/// מופע שם אחד בשורה: [start, end) באופסט תווים גלויים של השורה השמורה, בלי
+/// גופי ההערות (`link_anchor` נמדד על השורה המלאה, איתם).
 typedef DivineNameSpan = ({int start, int end, int kind});
 
 /// מופעי השמות של ספר שלם, בצורה דחוסה: שורות ממוינות, ולכל שורה טווח

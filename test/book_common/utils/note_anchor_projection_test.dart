@@ -119,6 +119,13 @@ void main() {
       expect(_pairs(projectAnchorSpans(spans, stacked, note: 2)), [(0, 2)]);
     });
 
+    test('הערה בלי מיקום (charPos -1) — אין לעוגן חלק בשום מקום', () {
+      final unknown = [notes[0], _note(1, -1, 'זחט')];
+      final spans = [_range(1, 4), const LinkAnchorSpan(start: 2)];
+      expect(projectAnchorSpans(spans, unknown), isEmpty);
+      expect(projectAnchorSpans(spans, unknown, note: 0), isEmpty);
+    });
+
     test('השורה המלאה נבנית מחדש בדיוק מהחלקים, בשורות אקראיות', () {
       final random = Random(7);
       const alphabet = ['א', 'ב', ' ', '&amp;', '<b>', '</b>', 'ג'];
