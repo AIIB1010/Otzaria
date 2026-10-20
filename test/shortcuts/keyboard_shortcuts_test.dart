@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:bloc_test/bloc_test.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -25,6 +26,7 @@ import 'package:otzaria/navigation/bloc/navigation_bloc.dart';
 import 'package:otzaria/navigation/bloc/navigation_event.dart';
 import 'package:otzaria/navigation/bloc/navigation_state.dart';
 import 'package:otzaria/navigation/view/tab_search_menu.dart';
+import 'package:otzaria/personal_notes/widgets/personal_note_editor_dialog.dart';
 import 'package:otzaria/search/models/search_configuration.dart';
 import 'package:otzaria/search/view/search_dialog.dart';
 import 'package:otzaria/settings/engine/settings_bloc.dart';
@@ -1506,7 +1508,7 @@ void main() {
       await tester.pump();
 
       showDialog(
-        context: tester.element(find.byType(SizedBox)),
+        context: tester.element(find.byType(KeyboardShortcuts)),
         builder: (_) => blocked
             ? AppCustomContentDialog(
                 title: 'התקנה פעילה',
@@ -1659,6 +1661,267 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(AppReportDialog), findsOneWidget);
+      expect(blocs.navigationBloc.events, isEmpty);
+    });
+
+    Future<_StubNavigationBloc> pumpReportWithText(WidgetTester tester) async {
+      final blocs = await pumpWithDialog(tester);
+      Navigator.of(tester.element(find.byType(AlertDialog))).pop();
+      showAppReportDialog(
+        tester.element(find.byType(KeyboardShortcuts)),
+        createBloc: () => AppReportBloc(
+          trigger: AppReportTrigger.manual,
+          service: FakeAppReportService(),
+          collector: FakeAppReportCollector(),
+          redactor: AppReportRedactor(environment: const {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('app-report-description')),
+        'דיווח',
+      );
+      await tester.pump();
+      return blocs.navigationBloc;
+    }
+
+    /// שולח [key] כש-[modifiers] לחוצים ומחזיר אם האירוע סומן handled.
+    Future<bool> sendWith(
+      WidgetTester tester,
+      List<LogicalKeyboardKey> modifiers,
+      LogicalKeyboardKey key, {
+      String? character,
+    }) async {
+      for (final modifier in modifiers) {
+        await tester.sendKeyDownEvent(modifier);
+      }
+      final handled = await tester.sendKeyDownEvent(key, character: character);
+      await tester.sendKeyUpEvent(key);
+      for (final modifier in modifiers.reversed) {
+        await tester.sendKeyUpEvent(modifier);
+      }
+      await tester.pump();
+      return handled;
+    }
+
+    testWidgets('תווים מגיעים לשדה בדיאלוג שחוסם סגירה (#2323, #2599)', (
+      tester,
+    ) async {
+      final navigationBloc = await pumpReportWithText(tester);
+
+      // handled חוסם ב-Windows את התו מלהיכנס לשדה.
+      for (final key in [
+        LogicalKeyboardKey.keyA,
+        LogicalKeyboardKey.space,
+        LogicalKeyboardKey.digit8,
+      ]) {
+        expect(await tester.sendKeyEvent(key), isFalse, reason: '$key');
+      }
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      expect(await tester.sendKeyEvent(LogicalKeyboardKey.keyB), isFalse);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+
+      await sendCtrl(tester, LogicalKeyboardKey.keyL);
+      await sendCtrl(tester, LogicalKeyboardKey.keyO);
+      await tester.pumpAndSettle();
+      expect(find.byType(AppReportDialog), findsOneWidget);
+      expect(navigationBloc.events, isEmpty);
+    });
+
+    testWidgets('AltGr של Windows מקליד ₪ בדיאלוג שחוסם סגירה', (tester) async {
+      ShortcutHelper.isWindowsForTesting = true;
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        final navigationBloc = await pumpReportWithText(tester);
+        const altGr = [
+          LogicalKeyboardKey.controlLeft,
+          LogicalKeyboardKey.altRight,
+        ];
+        const ctrl = [LogicalKeyboardKey.controlLeft];
+
+        expect(
+          await sendWith(
+            tester,
+            altGr,
+            LogicalKeyboardKey.digit4,
+            character: '₪',
+          ),
+          isFalse,
+        );
+        // בלי תו זה קיצור, לא הקלדה.
+        expect(
+          await sendWith(tester, altGr, LogicalKeyboardKey.pageUp),
+          isTrue,
+        );
+        expect(
+          await sendWith(tester, const [
+            LogicalKeyboardKey.altLeft,
+          ], LogicalKeyboardKey.pageUp),
+          isTrue,
+        );
+        expect(
+          await sendWith(tester, ctrl, LogicalKeyboardKey.keyW, character: 'w'),
+          isTrue,
+        );
+        expect(
+          await sendWith(tester, ctrl, LogicalKeyboardKey.keyO, character: 'o'),
+          isTrue,
+        );
+        expect(
+          await sendWith(
+            tester,
+            const [],
+            LogicalKeyboardKey.escape,
+            character: '',
+          ),
+          isTrue,
+        );
+        await tester.pumpAndSettle();
+        expect(find.byType(AppReportDialog), findsOneWidget);
+        expect(navigationBloc.events, isEmpty);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    testWidgets('Option במק מקליד תו בדיאלוג שחוסם סגירה', (tester) async {
+      ShortcutHelper.isMacForTesting = true;
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      try {
+        final navigationBloc = await pumpReportWithText(tester);
+        const option = [LogicalKeyboardKey.altLeft];
+        const cmd = [LogicalKeyboardKey.metaLeft];
+
+        expect(
+          await sendWith(
+            tester,
+            option,
+            LogicalKeyboardKey.keyE,
+            character: '´',
+          ),
+          isFalse,
+        );
+        expect(
+          await sendWith(tester, cmd, LogicalKeyboardKey.keyW, character: 'w'),
+          isTrue,
+        );
+        expect(
+          await sendWith(tester, cmd, LogicalKeyboardKey.keyO, character: 'o'),
+          isTrue,
+        );
+        expect(
+          await sendWith(
+            tester,
+            [...cmd, ...option],
+            LogicalKeyboardKey.keyX,
+            character: '≈',
+          ),
+          isTrue,
+        );
+        await tester.pumpAndSettle();
+        expect(find.byType(AppReportDialog), findsOneWidget);
+        expect(navigationBloc.events, isEmpty);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    testWidgets('Ctrl+D/H של Cocoa מגיעים לשדה בדיאלוג שחוסם סגירה', (
+      tester,
+    ) async {
+      ShortcutHelper.isMacForTesting = true;
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      try {
+        final navigationBloc = await pumpReportWithText(tester);
+        for (final key in [LogicalKeyboardKey.keyD, LogicalKeyboardKey.keyH]) {
+          expect(
+            await sendWith(tester, const [LogicalKeyboardKey.controlLeft], key),
+            isFalse,
+            reason: '$key must reach Cocoa text editing',
+          );
+          for (final modifier in [
+            LogicalKeyboardKey.shiftLeft,
+            LogicalKeyboardKey.metaLeft,
+          ]) {
+            expect(
+              await sendWith(tester, [
+                LogicalKeyboardKey.controlLeft,
+                modifier,
+              ], key),
+              isTrue,
+            );
+          }
+        }
+        for (final key in [LogicalKeyboardKey.keyO, LogicalKeyboardKey.keyW]) {
+          expect(
+            await sendWith(tester, const [LogicalKeyboardKey.controlLeft], key),
+            isTrue,
+          );
+        }
+        expect(find.byType(AppReportDialog), findsOneWidget);
+        expect(navigationBloc.events, isEmpty);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    testWidgets(
+      'Ctrl+D/H נשארים חסומים בשדה מחוץ למק',
+      (tester) async {
+        final navigationBloc = await pumpReportWithText(tester);
+        for (final key in [LogicalKeyboardKey.keyD, LogicalKeyboardKey.keyH]) {
+          expect(
+            await sendWith(tester, const [LogicalKeyboardKey.controlLeft], key),
+            isTrue,
+          );
+        }
+        expect(navigationBloc.events, isEmpty);
+      },
+      variant: TargetPlatformVariant({
+        TargetPlatform.windows,
+        TargetPlatform.linux,
+      }),
+    );
+
+    testWidgets('Ctrl+D/H נשארים חסומים במק כשהפוקוס אינו בשדה', (
+      tester,
+    ) async {
+      ShortcutHelper.isMacForTesting = true;
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      try {
+        final blocs = await pumpWithDialog(tester, blocked: true);
+        expect(ShortcutHelper.isEditingText, isFalse);
+        for (final key in [LogicalKeyboardKey.keyD, LogicalKeyboardKey.keyH]) {
+          expect(
+            await sendWith(tester, const [LogicalKeyboardKey.controlLeft], key),
+            isTrue,
+          );
+        }
+        expect(find.byType(AppCustomContentDialog), findsOneWidget);
+        expect(blocs.navigationBloc.events, isEmpty);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    testWidgets('תווים מגיעים לעורך ההערות, שחוסם סגירה תמיד', (tester) async {
+      final blocs = await pumpWithDialog(tester);
+      Navigator.of(tester.element(find.byType(AlertDialog))).pop();
+      showDialog<void>(
+        context: tester.element(find.byType(SizedBox)),
+        builder: (_) => const PersonalNoteEditorDialog(),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(quill.QuillEditor), findsOneWidget);
+      expect(ShortcutHelper.isEditingText, isTrue);
+
+      for (final key in [LogicalKeyboardKey.keyA, LogicalKeyboardKey.space]) {
+        expect(await tester.sendKeyEvent(key), isFalse, reason: '$key');
+      }
+
+      await sendCtrl(tester, LogicalKeyboardKey.keyL);
+      await tester.pumpAndSettle();
+      expect(find.byType(PersonalNoteEditorDialog), findsOneWidget);
       expect(blocs.navigationBloc.events, isEmpty);
     });
 
