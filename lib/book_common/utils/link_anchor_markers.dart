@@ -7,8 +7,7 @@ import 'package:otzaria/models/link_types.dart';
 import 'package:otzaria/models/links.dart';
 import 'package:otzaria/personal_notes/utils/note_anchor_utils.dart';
 import 'package:otzaria/book_common/utils/link_anchor_variants.dart';
-import 'package:otzaria/utils/text/text_manipulation.dart'
-    show HolyNameStyle, isHeadingLine;
+import 'package:otzaria/utils/text/text_manipulation.dart' show isHeadingLine;
 
 /// סמני עוגן-מילה (טבלת link_anchor שבמסד): הזרקת אות סימון קטנה, למשל (א),
 /// בנקודה המדויקת בשורת המקור שבה יושבת הערת המפרש.
@@ -286,51 +285,6 @@ String injectDivineNameMarkers(
   DivineNameSpans names,
   int lineIndex,
 ) => names.isEmpty ? line : wrapDivineNameSpans(line, names.spansAt(lineIndex));
-
-/// מחיל על שורה [lineIndex] את מופעי השמות [names] ומחזיר אותה בלי סמנים —
-/// למסלולי ההדפסה והייצוא, שאינם עוברים ב-`TextRendererService`.
-/// [holyNameStyle] null משאיר את שם הוי"ה מהטבלה ככתבו (ה-regex רץ בנפרד).
-String applyDivineNamesToLine(
-  String line,
-  DivineNameSpans names,
-  int lineIndex, {
-  required bool substituteOtherNames,
-  HolyNameStyle? holyNameStyle,
-}) {
-  if (names.isEmpty || (!substituteOtherNames && holyNameStyle == null)) {
-    return line;
-  }
-  final marked = injectDivineNameMarkers(line, names, lineIndex);
-  if (identical(marked, line)) return line;
-  return resolveDivineNameMarkers(
-    marked,
-    substituteOtherNames: substituteOtherNames,
-    holyNameStyle: holyNameStyle,
-  );
-}
-
-/// [applyDivineNamesToLine] על תוכן ספר שלם — שורה לכל `lineIndex`.
-String applyDivineNamesToText(
-  String text,
-  DivineNameSpans names, {
-  required bool substituteOtherNames,
-  HolyNameStyle? holyNameStyle,
-}) {
-  if (names.isEmpty || (!substituteOtherNames && holyNameStyle == null)) {
-    return text;
-  }
-  final lines = text.split('\n');
-  for (var i = 0; i < lines.length; i++) {
-    lines[i] = applyDivineNamesToLine(
-      lines[i],
-      names,
-      i,
-      substituteOtherNames: substituteOtherNames,
-      holyNameStyle: holyNameStyle,
-    );
-  }
-  return lines.join('\n');
-}
 
 /// אינדקס גולמי של תחילת התו הגלוי מספר [visibleOffset] (אחרי תגים קודמים);
 /// אורך המחרוזת כשהאופסט מעבר לסוף.
