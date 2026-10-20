@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -218,6 +219,25 @@ void main() {
     expect(plain.length, greaterThan(100000));
     expect(plain, isNot(contains('<')));
     expect(plain, contains('מודגש בתוך השורה'));
+  });
+
+  testWidgets('שורה ארוכה שירדה מהעץ באמצע הבנייה אינה מעכבת ניווט', (
+    tester,
+  ) async {
+    // בלי פריים נוסף: המתנה שנשארה פתוחה הייתה מעכבת כל קפיצה בכל ספר.
+    Future<bool> builtWithoutFrame() async {
+      var done = false;
+      unawaited(longLinesBuilt().then((_) => done = true));
+      await tester.idle();
+      return done;
+    }
+
+    await tester.pumpWidget(
+      _host(SmartTextWidget(text: _syntheticLine(120000), settings: _settings)),
+    );
+    expect(await builtWithoutFrame(), isFalse);
+    await tester.pumpWidget(_host(const SizedBox()));
+    expect(await builtWithoutFrame(), isTrue);
   });
 
   testWidgets('בחירת הכול מעתיקה את טקסט השורה כולו, בלי תוספות בין מקטעים', (
