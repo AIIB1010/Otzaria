@@ -2280,6 +2280,30 @@ void main() {
       expect(platform.calls, ['start', 'stop']);
     });
 
+    test('עדכון אוטומטי בעלייה אינו מבקש הרשאת התראות', () async {
+      final bloc = build(_ChunkFloodService(deltaPlan));
+      addTearDown(bloc.close);
+      bloc.add(const StartLibraryUpdate(automatic: true));
+      await until(bloc, LibraryUpdateStatus.completed);
+      await foregroundWork.settled;
+      expect(platform.calls, ['start', 'stop']);
+      expect(platform.permissionRequests, [false]);
+    });
+
+    test('לחיצה על עדכון ואישור הורדה מלאה מבקשים הרשאה', () async {
+      final manual = build(_ChunkFloodService(deltaPlan));
+      addTearDown(manual.close);
+      manual.add(const StartLibraryUpdate());
+      await until(manual, LibraryUpdateStatus.completed);
+
+      final full = awaitingFull(_FakeService(fullPlan));
+      addTearDown(full.close);
+      full.add(const ConfirmFullDownload());
+      await until(full, LibraryUpdateStatus.completed);
+      await foregroundWork.settled;
+      expect(platform.permissionRequests, [true, true]);
+    });
+
     test('בדיקה שאין בה עדכון אינה מפעילה את השירות', () async {
       final bloc = build(_FakeService(nonePlan));
       addTearDown(bloc.close);
@@ -2426,10 +2450,16 @@ class _FakeForegroundPlatform implements ForegroundWorkPlatform {
     required void Function(String reason) onStartFailed,
   }) => _onTimeout = onTimeout;
 
+  final permissionRequests = <bool>[];
+
   @override
-  Future<void> start(ForegroundWorkNotice notice) async {
+  Future<void> start(
+    ForegroundWorkNotice notice, {
+    required bool requestPermission,
+  }) async {
     if (failStart) throw Exception('not allowed from background');
     calls.add('start');
+    permissionRequests.add(requestPermission);
   }
 
   @override

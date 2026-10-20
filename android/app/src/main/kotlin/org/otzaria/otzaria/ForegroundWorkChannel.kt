@@ -43,7 +43,7 @@ class ForegroundWorkChannel(private val context: Context, messenger: BinaryMesse
                 }
 
                 "stop" -> {
-                    context.stopService(ForegroundWorkService.intent(context))
+                    requestStop()
                     result.success(null)
                 }
 
@@ -57,7 +57,17 @@ class ForegroundWorkChannel(private val context: Context, messenger: BinaryMesse
         channel.setMethodCallHandler(null)
         ForegroundWorkService.timeoutListener = null
         ForegroundWorkService.startFailedListener = null
-        context.stopService(ForegroundWorkService.intent(context))
+        requestStop()
+    }
+
+    private fun requestStop() {
+        val stop = ForegroundWorkService.intent(context).setAction(ForegroundWorkService.ACTION_STOP)
+        try {
+            context.startService(stop)
+        } catch (e: IllegalStateException) {
+            // מרקע startService נחסם, ואז השירות כבר לא בחזית — עצירה ישירה בטוחה.
+            context.stopService(ForegroundWorkService.intent(context))
+        }
     }
 
     companion object {

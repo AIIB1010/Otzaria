@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -21,7 +22,11 @@ abstract interface class ForegroundWorkPlatform {
     required void Function(String reason) onStartFailed,
   });
 
-  Future<void> start(ForegroundWorkNotice notice);
+  /// [requestPermission] — לבקש הרשאת התראות; רק בפעולה שהמשתמש יזם.
+  Future<void> start(
+    ForegroundWorkNotice notice, {
+    required bool requestPermission,
+  });
 
   Future<void> stop();
 }
@@ -47,20 +52,33 @@ class ForegroundWork {
   final void Function(String stage, Object error, StackTrace? stackTrace)
   _logFailure;
 
-  final Map<Object, ({ForegroundWorkNotice notice, VoidCallback? onTimeout})>
+  final Map<
+    Object,
+    ({
+      ForegroundWorkNotice notice,
+      VoidCallback? onTimeout,
+      bool requestPermission,
+    })
+  >
   _owners = {};
   Future<void> _queue = Future.value();
   bool _running = false;
   bool _handlersSet = false;
 
   /// מוסיף את [owner] כבעלים; השירות עולה עם הבעלים הראשון.
+  /// [userInitiated] — רק אז מבקשים הרשאת התראות (לא בעדכון אוטומטי בעלייה).
   void acquire(
     Object owner, {
     required ForegroundWorkNotice notice,
     VoidCallback? onTimeout,
+    bool userInitiated = false,
   }) {
     if (!_isAndroid) return;
-    _owners[owner] = (notice: notice, onTimeout: onTimeout);
+    _owners[owner] = (
+      notice: notice,
+      onTimeout: onTimeout,
+      requestPermission: userInitiated,
+    );
     _schedule();
   }
 
@@ -97,7 +115,10 @@ class ForegroundWork {
       );
     }
     try {
-      await _platform.start(owners.first.notice);
+      await _platform.start(
+        owners.first.notice,
+        requestPermission: owners.any((o) => o.requestPermission),
+      );
       _running = true;
     } catch (e, st) {
       _logFailure('start', e, st);
@@ -150,17 +171,23 @@ class MethodChannelForegroundWorkPlatform implements ForegroundWorkPlatform {
   }
 
   @override
-  Future<void> start(ForegroundWorkNotice notice) async {
-    try {
-      await _requestNotificationPermission();
-    } catch (e) {
-      debugPrint('[ForegroundWork] notification permission request failed: $e');
-    }
+  Future<void> start(
+    ForegroundWorkNotice notice, {
+    required bool requestPermission,
+  }) async {
     await _channel.invokeMethod<void>('start', {
       'channelName': notice.channelName,
       'title': notice.title,
       'text': notice.text,
     });
+    // לא ממתינים לדיאלוג: תשובה שלא מגיעה הייתה תוקעת את תור ההפעלה/העצירה.
+    if (requestPermission) {
+      unawaited(
+        _requestNotificationPermission().catchError((Object e) {
+          debugPrint('[ForegroundWork] notification permission failed: $e');
+        }),
+      );
+    }
   }
 
   @override

@@ -53,6 +53,9 @@ class LibraryUpdateBloc extends Bloc<LibraryUpdateEvent, LibraryUpdateState> {
   // התוכנית של הריצה הפעילה — לבדיקת קובץ חלקי כשהמערכת עוצרת את השירות.
   LibraryUpdatePlan? _activePlan;
 
+  // הריצה הפעילה נפתחה בלחיצת משתמש — רק אז מבקשים הרשאת התראות.
+  bool _userInitiated = false;
+
   // מזהה הריצה הפעילה. כל התחלה/ביטול/איפוס מגדילים אותו, כך שריצה ישנה
   // (Future שעדיין לא הסתיים) מזוהה כמבוטלת ולא פולטת state או מחליפה DB.
   int _operationId = 0;
@@ -182,6 +185,7 @@ class LibraryUpdateBloc extends Bloc<LibraryUpdateEvent, LibraryUpdateState> {
       onTimeout: () {
         if (!isClosed) add(const _ForegroundWorkTimedOut());
       },
+      userInitiated: _userInitiated,
     );
   }
 
@@ -236,6 +240,7 @@ class LibraryUpdateBloc extends Bloc<LibraryUpdateEvent, LibraryUpdateState> {
 
     final opId = ++_operationId;
     _heavyDeltaNotice = false;
+    _userInitiated = !event.automatic;
     _resetProgressThrottle();
     emit(
       const LibraryUpdateState(
@@ -488,6 +493,7 @@ class LibraryUpdateBloc extends Bloc<LibraryUpdateEvent, LibraryUpdateState> {
     _heavyDeltaNotice = false;
     _fullDownloadDbReplaced = false;
     _activePlan = plan;
+    _userInitiated = true;
     _resetProgressThrottle();
     emit(
       state.copyWith(
@@ -563,6 +569,7 @@ class LibraryUpdateBloc extends Bloc<LibraryUpdateEvent, LibraryUpdateState> {
     }
     final opId = ++_operationId;
     _heavyDeltaNotice = plan.isHeavyDelta;
+    _userInitiated = true;
     _resetProgressThrottle();
     emit(
       state.copyWith(

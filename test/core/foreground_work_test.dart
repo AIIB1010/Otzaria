@@ -1,8 +1,14 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/foreground_work.dart';
 
 class _FakePlatform implements ForegroundWorkPlatform {
   final calls = <String>[];
+  final permissionRequests = <bool>[];
   bool failStart = false;
   late void Function() onTimeout;
   late void Function(String reason) onStartFailed;
@@ -17,9 +23,13 @@ class _FakePlatform implements ForegroundWorkPlatform {
   }
 
   @override
-  Future<void> start(ForegroundWorkNotice notice) async {
+  Future<void> start(
+    ForegroundWorkNotice notice, {
+    required bool requestPermission,
+  }) async {
     if (failStart) throw Exception('ForegroundServiceStartNotAllowedException');
     calls.add('start:${notice.title}');
+    permissionRequests.add(requestPermission);
   }
 
   @override
@@ -27,6 +37,8 @@ class _FakePlatform implements ForegroundWorkPlatform {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   const download = (channelName: 'c', title: 'download', text: 't');
   const indexing = (channelName: 'c', title: 'indexing', text: 't');
 
@@ -140,6 +152,60 @@ void main() {
     expect(platform.calls, ['start:download']);
   });
 
+  test('הרשאת התראות מתבקשת רק בפעולה שהמשתמש יזם', () async {
+    final automatic = build();
+    automatic.acquire('download', notice: download);
+    await automatic.settled;
+
+    final manual = build();
+    manual.acquire('download', notice: download, userInitiated: true);
+    await manual.settled;
+
+    expect(platform.permissionRequests, [false, true]);
+  });
+
+  group('MethodChannelForegroundWorkPlatform', () {
+    const channel = MethodChannel('otzaria/foreground_work');
+    late List<String> nativeCalls;
+    late _PendingPermissionAndroid android;
+
+    setUp(() {
+      nativeCalls = [];
+      android = _PendingPermissionAndroid();
+      FlutterLocalNotificationsPlatform.instance = android;
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            nativeCalls.add(call.method);
+            return null;
+          });
+    });
+    tearDown(() {
+      debugDefaultTargetPlatformOverride = null;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    test('דיאלוג הרשאה שלא נענה אינו מעכב את הפעלת השירות', () async {
+      await MethodChannelForegroundWorkPlatform()
+          .start(download, requestPermission: true)
+          .timeout(const Duration(seconds: 2));
+      await Future<void>.delayed(Duration.zero);
+      expect(nativeCalls, ['start']);
+      expect(android.requested, isTrue);
+    });
+
+    test('בלי פעולת משתמש אין בקשת הרשאה', () async {
+      await MethodChannelForegroundWorkPlatform().start(
+        download,
+        requestPermission: false,
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(nativeCalls, ['start']);
+      expect(android.requested, isFalse);
+    });
+  });
+
   test('מחוץ לאנדרואיד אינו נוגע בפלטפורמה', () async {
     final work = build(isAndroid: false);
     work.acquire('download', notice: download);
@@ -147,4 +213,18 @@ void main() {
     await work.settled;
     expect(platform.calls, isEmpty);
   });
+}
+
+/// מדמה דיאלוג הרשאה שהמשתמש לא ענה עליו.
+class _PendingPermissionAndroid extends AndroidFlutterLocalNotificationsPlugin {
+  bool requested = false;
+
+  @override
+  Future<bool?> areNotificationsEnabled() async => false;
+
+  @override
+  Future<bool?> requestNotificationsPermission() {
+    requested = true;
+    return Completer<bool?>().future;
+  }
 }

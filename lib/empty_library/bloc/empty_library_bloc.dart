@@ -6,6 +6,7 @@ import 'dart:isolate';
 import 'dart:math' as math;
 import 'package:bloc/bloc.dart';
 import 'package:otzaria/core/app_paths.dart';
+import 'package:otzaria/core/error_log_file.dart';
 import 'package:otzaria/core/foreground_work.dart';
 import 'package:otzaria/core/messages/library_messages.dart';
 import 'package:file_picker/file_picker.dart';
@@ -63,7 +64,9 @@ class EmptyLibraryBloc extends Bloc<EmptyLibraryEvent, EmptyLibraryState> {
     LibraryAccessGate? accessGate,
     LibraryPackageImporter? packageImporter,
     ForegroundWork? foregroundWork,
+    void Function(String title, Object error, StackTrace stackTrace)? logError,
   }) : _httpClient = httpClient ?? http.Client(),
+       _logError = logError ?? _appendToErrorLog,
        _foregroundWork = foregroundWork ?? ForegroundWork.instance,
        _accessGate = accessGate ?? LibraryAccessGate.instance,
        _packageImporter = packageImporter ?? LibraryPackageImporter(),
@@ -100,6 +103,17 @@ class EmptyLibraryBloc extends Bloc<EmptyLibraryEvent, EmptyLibraryState> {
 
   /// שירות החזית שמחזיק את ההורדה חיה כשהמסך כבוי (אנדרואיד).
   final ForegroundWork _foregroundWork;
+
+  /// רישום כשל הורדה ל-errors.txt — ההודעה למשתמש קצרה.
+  final void Function(String title, Object error, StackTrace stackTrace)
+  _logError;
+
+  static void _appendToErrorLog(String title, Object error, StackTrace st) {
+    debugPrint('[EmptyLibrary] $title: $error');
+    try {
+      ErrorLogFile.append(title: title, error: error, stackTrace: st);
+    } catch (_) {}
+  }
 
   /// המערכת עצרה את שירות החזית — ההורדה נעצרת כמו בביטול.
   bool _foregroundTimedOut = false;
@@ -505,7 +519,8 @@ class EmptyLibraryBloc extends Bloc<EmptyLibraryEvent, EmptyLibraryState> {
       } else if (backupDir != null) {
         await _restoreDatabaseFiles(backupDir, event.existingLibraryPath);
       }
-    } catch (e) {
+    } catch (e, st) {
+      _logError('Library Redownload Error', e, st);
       if (backupDir != null) {
         await _restoreDatabaseFiles(backupDir, event.existingLibraryPath);
       }
@@ -1051,7 +1066,8 @@ class EmptyLibraryBloc extends Bloc<EmptyLibraryEvent, EmptyLibraryState> {
           _defaultLibraryPathOverride ??
           await AppPaths.getDefaultLibraryPath();
       await _downloadLibrary(libraryPath, emit);
-    } catch (e) {
+    } catch (e, st) {
+      _logError('Library Download Error', e, st);
       // קבצי ה-temp נשמרים בכוונה — ישמשו ל-resume בניסיון הבא
       emit(
         EmptyLibraryError(
@@ -1101,6 +1117,7 @@ class EmptyLibraryBloc extends Bloc<EmptyLibraryEvent, EmptyLibraryState> {
         text: LibraryMessages.libraryDownloadNotificationText,
       ),
       onTimeout: () => _foregroundTimedOut = true,
+      userInitiated: true,
     );
     try {
       final latestAsset = await _fetchLatestDatabaseAsset();

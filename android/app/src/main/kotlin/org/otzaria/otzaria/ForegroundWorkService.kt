@@ -19,6 +19,13 @@ class ForegroundWorkService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // העצירה עוברת בתור הפקודות: stopService לפני onStartCommand של ההפעלה
+        // היה הורס את השירות לפני startForeground, והמערכת מקריסה את האפליקציה.
+        if (intent?.action == ACTION_STOP) {
+            removeForeground()
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
         val title = intent?.getStringExtra(EXTRA_TITLE).orEmpty()
         val text = intent?.getStringExtra(EXTRA_TEXT).orEmpty()
         val channelName = intent?.getStringExtra(EXTRA_CHANNEL_NAME) ?: title
@@ -48,13 +55,17 @@ class ForegroundWorkService : Service() {
 
     private fun handleTimeout() {
         timeoutListener?.invoke()
+        removeForeground()
+        stopSelf()
+    }
+
+    private fun removeForeground() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } else {
             @Suppress("DEPRECATION")
             stopForeground(true)
         }
-        stopSelf()
     }
 
     private fun buildNotification(channelName: String, title: String, text: String): Notification {
@@ -87,6 +98,7 @@ class ForegroundWorkService : Service() {
         const val EXTRA_TITLE = "title"
         const val EXTRA_TEXT = "text"
         const val EXTRA_CHANNEL_NAME = "channelName"
+        const val ACTION_STOP = "org.otzaria.otzaria.action.STOP_FOREGROUND_WORK"
         private const val CHANNEL_ID = "library_download"
         private const val NOTIFICATION_ID = 7301
 

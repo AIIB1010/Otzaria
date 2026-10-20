@@ -15,6 +15,7 @@ import 'package:otzaria/empty_library/bloc/empty_library_state.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
 import 'package:otzaria/search/magic_dictionary_downloader.dart';
 import 'package:path/path.dart' as path;
+import 'package:seforim_library_updater/seforim_library_updater.dart';
 
 import 'library_release_test_support.dart';
 
@@ -2600,6 +2601,7 @@ void main() {
       late Directory tempDir;
       late _FakeForegroundPlatform platform;
       late ForegroundWork foregroundWork;
+      late List<Object> loggedErrors;
 
       setUp(() async {
         tempDir = await Directory.systemTemp.createTemp('otzaria-fgs-');
@@ -2607,6 +2609,7 @@ void main() {
         await Settings.init(cacheProvider: _MemoryCacheProvider());
         await Settings.setValue<String>(SettingsRepository.keyLibraryPath, '');
         platform = _FakeForegroundPlatform();
+        loggedErrors = [];
         foregroundWork = ForegroundWork(
           platform: platform,
           isAndroid: true,
@@ -2673,6 +2676,7 @@ void main() {
           httpClient: client,
           defaultLibraryPathOverride: tempDir.path,
           foregroundWork: foregroundWork,
+          logError: (_, error, _) => loggedErrors.add(error),
           extractCompressedDatabase:
               (archivePath, outputPath, onProgress) async {
                 if (failExtract &&
@@ -2698,6 +2702,8 @@ void main() {
         await done.timeout(const Duration(seconds: 10));
         await foregroundWork.settled;
         expect(platform.calls, ['start', 'stop']);
+        expect(platform.permissionRequests, [true]);
+        expect(loggedErrors, isEmpty);
       });
 
       test('כשל שאינו קטיעה: נעצר, וההודעה אינה מבטיחה המשך', () async {
@@ -2743,6 +2749,11 @@ void main() {
             path.join(Directory.systemTemp.path, 'otzaria_seforim.db.zst'),
           );
           expect(temp.existsSync(), isTrue);
+          expect(
+            loggedErrors,
+            [isA<PatchDownloadCancelled>()],
+            reason: 'ההודעה הקצרה אינה מציגה את החריגה — היא חייבת להירשם',
+          );
           await foregroundWork.settled;
           expect(platform.calls, ['start'], reason: 'המערכת כבר עצרה אותו');
         },
@@ -2780,8 +2791,16 @@ class _FakeForegroundPlatform implements ForegroundWorkPlatform {
     required void Function(String reason) onStartFailed,
   }) => _onTimeout = onTimeout;
 
+  final permissionRequests = <bool>[];
+
   @override
-  Future<void> start(ForegroundWorkNotice notice) async => calls.add('start');
+  Future<void> start(
+    ForegroundWorkNotice notice, {
+    required bool requestPermission,
+  }) async {
+    calls.add('start');
+    permissionRequests.add(requestPermission);
+  }
 
   @override
   Future<void> stop() async => calls.add('stop');
