@@ -464,6 +464,50 @@ void main() {
       expect(notifications.present, {6});
       expect(pluginIds.ids['p'], [6]);
     });
+
+    test('ביטול שממתין לאתחול מבטל גם מזהה שנרשם בינתיים', () async {
+      pluginIds.ids['p'] = [1];
+      notifications.counts[1] = 1;
+      notifications.initGate = Completer<void>();
+      final o = owner();
+
+      final scheduled = o.execute('pluginSchedule', scheduleArgs('p', 2));
+      final cancelled = o.execute('pluginCancelAll', {'pluginId': 'p'});
+      await Future<void>.delayed(Duration.zero);
+      notifications.initGate!.complete();
+      await Future.wait([scheduled, cancelled]);
+
+      expect(notifications.present, isEmpty);
+      expect(pluginIds.ids['p'], isEmpty);
+    });
+
+    test('הצגה נרשמת לתוסף, ולכן ביטול שלה מגיע להתראה', () async {
+      final o = owner();
+      await o.execute('pluginShow', {
+        'pluginId': 'p',
+        'id': 7,
+        'title': 't',
+        'body': 'b',
+      });
+
+      await o.execute('pluginCancel', {'pluginId': 'p', 'id': 7});
+
+      expect(notifications.shown, [7]);
+      expect(notifications.cancelled, contains(7));
+      expect(pluginIds.ids['p'], isEmpty);
+    });
+
+    test('בלי הרשאה תוסף אינו מתזמן ואינו נרשם', () async {
+      notifications.permissions = false;
+      final o = owner();
+
+      final ack = await o.execute('pluginSchedule', scheduleArgs('p', 3));
+
+      expect(ack['ok'], isFalse);
+      expect('${ack['error']}', startsWith('error.forbidden'));
+      expect(notifications.scheduled, isEmpty);
+      expect(pluginIds.ids['p'], isNull);
+    });
   });
 
   test('לולאת פרסום של אירועי תוספים מייצרת שידור אחד', () async {
