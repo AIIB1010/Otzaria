@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/pdf_book/view/pdf_thumbnails_screen.dart';
 import 'package:pdfrx/pdfrx.dart';
+import '../test_helpers/pdf_document_dispose.dart';
 
 List<int> _blankPdf(int pageCount) {
   final objects = <String>[
@@ -105,6 +106,6 @@ void main() {
     expect(firstThumbnail(tester).image, isNotNull);
 
     await tester.pumpWidget(const SizedBox());
-    await tester.runAsync(() => document.dispose());
+    await disposePdfDocument(tester, document);
   });
 }

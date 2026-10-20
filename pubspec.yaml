@@ -45,9 +45,9 @@ dependencies:
   # RAM פיזי לגודל ה-cache של SQLite בעדכון הספרייה ב-mobile.
   device_info_plus: ^13.3.0
   html: ^0.15.7
-  pdfrx: ^2.6.5
+  pdfrx: ^2.9.0
   # FPDF_ImportNPagesToOne: הדפסת כמה עמודים בגיליון נשארת וקטורית.
-  pdfium_dart: ^0.3.1
+  pdfium_dart: ^0.4.0
   url_launcher: ^6.3.3
   # ליבה בלבד: החבילה המורחבת רושמת בעלייה plugins של וידאו/אודיו/WebView.
   flutter_widget_from_html_core: ^0.17.4
@@ -131,19 +131,17 @@ dependencies:
   wakelock_plus: ^1.8.1
 
 dependency_overrides:
-  # TODO: לחזור ל-pub.dev אחרי שחרור espresso3389/pdfrx#724, #729–#733, #740, #741,
-  # #743, #744 ושילוב תיקון שימור הבחירה מ-palmoni5/pdfrx#1.
-  # שתי החבילות מוצמדות לאותו קומיט.
-  # pdfrx_engine נדרש עבור Pdfrx.normalizeHebrewText ו-Pdfrx.runAsBackgroundWork.
+  # TODO: לחזור ל-pub.dev אחרי שחרור espresso3389/pdfrx#756 (בלעדיו שורות עם מספרים
+  # בספרים סרוקים נשארות הפוכות). עד אז 2.9.0 עם pdfrx_engine 0.7.4 והתיקון, באותו קומיט.
   pdfrx:
     git:
       url: https://github.com/palmoni5/pdfrx
-      ref: 3d9c8a5b3d5eca446542dcc8b81fef283441a214
+      ref: f97d79cb291b6417ea0c1bcd96d3e22ba596592b
       path: packages/pdfrx
   pdfrx_engine:
     git:
       url: https://github.com/palmoni5/pdfrx
-      ref: 3d9c8a5b3d5eca446542dcc8b81fef283441a214
+      ref: f97d79cb291b6417ea0c1bcd96d3e22ba596592b
       path: packages/pdfrx_engine
   # TODO: להחזיר ל-pub.dev כשיתמזג וישוחרר MaikuB/flutter_local_notifications#2826
   # (קריאות WinRT ב-thread ייעודי, כולל תיקון ה-deadlock ב-invoke). עד אז הפורק
