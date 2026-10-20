@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/indexing/repository/indexing_repository.dart';
+import 'package:otzaria/library/models/library.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/search/utils/facet_helper.dart';
 
@@ -146,4 +147,94 @@ void main() {
       expect(counts.containsKey('/תנ"ך, תורה'), isFalse);
     });
   });
+
+  group('FacetHelper.buildFacetCountsFromBookCounts — ספרים רבים בקטגוריה', () {
+    late _CountingCategory leaf;
+    late Map<String, int> bookCounts;
+    late Map<String, Book> booksByKey;
+
+    setUp(() {
+      Category category(String title, Category? parent) => Category(
+        title: title,
+        description: '',
+        shortDescription: '',
+        order: 0,
+        subCategories: [],
+        books: [],
+        parent: parent,
+      );
+      final root = category('ספריית אוצריא', null);
+      final talmud = category('תלמוד בבלי', root);
+      leaf = _CountingCategory(category('סדר מועד', talmud));
+      bookCounts = {};
+      booksByKey = {};
+      for (var i = 0; i < 40; i++) {
+        final book = TextBook(title: 'מסכת $i', id: 300 + i, category: leaf);
+        final key = IndexingRepository.buildIndexedBookFilePath(book);
+        bookCounts[key] = i + 1;
+        booksByKey[key] = book;
+      }
+      final loose = TextBook(title: 'ספר בלי קטגוריה', id: 900);
+      final looseKey = IndexingRepository.buildIndexedBookFilePath(loose);
+      bookCounts[looseKey] = 7;
+      booksByKey[looseKey] = loose;
+    });
+
+    test('נתיב הקטגוריה מחושב פעם אחת לקטגוריה ולא לכל ספר', () {
+      FacetHelper.buildFacetCountsFromBookCounts(bookCounts, booksByKey);
+      expect(leaf.pathReads, lessThanOrEqualTo(3));
+    });
+
+    test('הספירות זהות לחישוב ספר-ספר', () {
+      final expected = <String, int>{};
+      for (final MapEntry(:key, :value) in bookCounts.entries) {
+        final book = booksByKey[key]!;
+        final categoryPath = FacetHelper.resolveCategoryPath(book);
+        FacetHelper.incrementFacet(
+          expected,
+          FacetHelper.buildBookFacet(categoryPath, book),
+          value,
+        );
+        if (categoryPath != null && categoryPath.isNotEmpty) {
+          FacetHelper.incrementFacetWithAncestors(
+            expected,
+            categoryPath,
+            value,
+          );
+        } else {
+          FacetHelper.incrementFacet(expected, '/', value);
+        }
+      }
+
+      final counts = FacetHelper.buildFacetCountsFromBookCounts(
+        bookCounts,
+        booksByKey,
+      );
+
+      expect(counts, expected);
+      expect(counts['/'], 827);
+      expect(counts['/תלמוד בבלי/סדר מועד'], 820);
+    });
+  });
+}
+
+class _CountingCategory extends Category {
+  _CountingCategory(Category source)
+    : super(
+        title: source.title,
+        description: '',
+        shortDescription: '',
+        order: 0,
+        subCategories: [],
+        books: [],
+        parent: source.parent,
+      );
+
+  int pathReads = 0;
+
+  @override
+  String get path {
+    pathReads++;
+    return super.path;
+  }
 }
