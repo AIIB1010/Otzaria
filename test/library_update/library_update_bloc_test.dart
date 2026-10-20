@@ -2304,6 +2304,24 @@ void main() {
       expect(platform.permissionRequests, [true, true]);
     });
 
+    test('בחירת מסלול אחרי בדיקה אוטומטית מבקשת הרשאה', () async {
+      final heavy = build(_FakeService(heavyDeltaWithFullPlan));
+      addTearDown(heavy.close);
+      heavy.add(const StartLibraryUpdate(automatic: true));
+      await until(heavy, LibraryUpdateStatus.needsRouteChoice);
+      heavy.add(const ConfirmHeavyDelta());
+      await until(heavy, LibraryUpdateStatus.completed);
+
+      final full = build(_FakeService(fullPlan));
+      addTearDown(full.close);
+      full.add(const StartLibraryUpdate(automatic: true));
+      await until(full, LibraryUpdateStatus.needsFullConfirmation);
+      full.add(const ConfirmFullDownload());
+      await until(full, LibraryUpdateStatus.completed);
+      await foregroundWork.settled;
+      expect(platform.permissionRequests, [true, true]);
+    });
+
     test('בדיקה שאין בה עדכון אינה מפעילה את השירות', () async {
       final bloc = build(_FakeService(nonePlan));
       addTearDown(bloc.close);
