@@ -19,6 +19,7 @@ import 'package:otzaria/search/view/search_scope_menu.dart';
 import 'package:otzaria/indexing/bloc/indexing_bloc.dart';
 import 'package:otzaria/indexing/bloc/indexing_event.dart';
 import 'package:otzaria/indexing/bloc/indexing_state.dart';
+import 'package:otzaria/indexing/repository/indexing_repository.dart';
 import 'package:otzaria/navigation/view/main_window_screen.dart';
 import 'package:otzaria/widgets/layout/centered_scrollable_state.dart';
 import 'package:otzaria/search/bloc/search_bloc.dart';
@@ -357,6 +358,8 @@ class _SearchDialogState extends State<SearchDialog> {
     final isBuilding = indexingState is IndexingInProgress;
     final processed = indexingState.booksProcessed ?? 0;
     final total = indexingState.totalBooks ?? 0;
+    // אינדקס בסכמה ישנה אינו נפתח, ואינדוקס רגיל נדחה עליו עד שיאופס.
+    final rebuildRequired = TantivyDataProvider.instance.requiresManualReindex;
     return CenteredScrollableState(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),
@@ -372,6 +375,8 @@ class _SearchDialogState extends State<SearchDialog> {
             Text(
               isBuilding
                   ? context.settingsText('אינדקס החיפוש בבנייה')
+                  : rebuildRequired
+                  ? context.settingsText('אינדקס החיפוש דורש בנייה מחדש')
                   : context.settingsText('אינדקס החיפוש לא קיים'),
               style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
@@ -381,6 +386,10 @@ class _SearchDialogState extends State<SearchDialog> {
               isBuilding
                   ? context.settingsText(
                       'החיפוש יתאפשר כשבניית האינדקס תסתיים. ניתן להמשיך לעיין בספרים בינתיים.',
+                    )
+                  : rebuildRequired
+                  ? context.settingsText(
+                      'האינדקס הקיים נבנה בגרסה קודמת של מנוע החיפוש, ויש לבנות אותו מחדש כדי לחפש. הבנייה רצה ברקע, וניתן להמשיך לעיין בספרים בינתיים.',
                     )
                   : context.settingsText(
                       'כדי לחפש בתוכן הספרים יש לבנות תחילה את אינדקס החיפוש. הבנייה רצה ברקע, וניתן להמשיך לעיין בספרים בינתיים.',
@@ -420,10 +429,18 @@ class _SearchDialogState extends State<SearchDialog> {
                     : SizedBox(
                         width: double.infinity,
                         child: ActionButton.recommended(
-                          text: context.settingsText('בנה אינדקס'),
+                          text: rebuildRequired
+                              ? context.settingsText('אפס ובנה מחדש')
+                              : context.settingsText('בנה אינדקס'),
                           icon: FluentIcons.play_24_regular,
                           onPressed: () async {
                             final indexingBloc = context.read<IndexingBloc>();
+                            if (rebuildRequired &&
+                                !await IndexingRepository(
+                                  TantivyDataProvider.instance,
+                                ).clearIndex()) {
+                              return;
+                            }
                             // העץ המלא: העץ של LibraryBloc מסונן מהסתרות.
                             final library =
                                 await DataRepository.instance.library;
