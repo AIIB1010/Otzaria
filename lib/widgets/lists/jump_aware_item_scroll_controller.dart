@@ -32,9 +32,19 @@ class JumpAwareItemScrollController extends ItemScrollController {
   }
 
   @override
-  void jumpTo({required int index, double alignment = 0, double offset = 0}) {
+  Future<void> jumpToAsync({
+    required int index,
+    double alignment = 0,
+    double offset = 0,
+    TargetRectResolver? targetRectResolver,
+  }) {
     if (_silent == 0) notifyBeforeJump();
-    super.jumpTo(index: index, alignment: alignment, offset: offset);
+    return super.jumpToAsync(
+      index: index,
+      alignment: alignment,
+      offset: offset,
+      targetRectResolver: targetRectResolver,
+    );
   }
 
   @override
@@ -42,6 +52,7 @@ class JumpAwareItemScrollController extends ItemScrollController {
     required int index,
     double alignment = 0,
     double offset = 0,
+    TargetRectResolver? targetRectResolver,
     required Duration duration,
     Curve curve = Curves.linear,
     List<double> opacityAnimationWeights = const [40, 20, 40],
@@ -51,6 +62,7 @@ class JumpAwareItemScrollController extends ItemScrollController {
       index: index,
       alignment: alignment,
       offset: offset,
+      targetRectResolver: targetRectResolver,
       duration: duration,
       curve: curve,
     );

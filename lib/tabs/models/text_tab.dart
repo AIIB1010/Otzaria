@@ -5,7 +5,6 @@ import 'dart:async';
 import 'package:otzaria/plugins/services/plugin_correction_session_service.dart';
 import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/data/repository/text_book_repository.dart';
-// [EDITING DISABLED] import 'package:otzaria/text_book/editing/repository/local_overrides_repository.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/data/data_providers/file_system_data_provider.dart';
 import 'package:otzaria/models/books.dart';
@@ -19,6 +18,8 @@ import 'package:otzaria/search/models/search_configuration.dart';
 import 'package:otzaria/utils/text/ref_helper.dart';
 import 'package:otzaria/utils/ui/reading_left_pane_policy.dart';
 import 'package:otzaria/text_book/view/reading_viewport/line_scroll_controller.dart';
+import 'package:otzaria/text_book/utils/reading_segment_navigation.dart'
+    show initialReadingAlignment;
 
 /// כרטיסיית קורא טקסט; ה-BLoC שלה נוצר רק בגישה הראשונה אליו.
 class TextBookTab extends OpenedTab {
@@ -69,7 +70,11 @@ class TextBookTab extends OpenedTab {
   TextBookState get blocState => _bloc?.state ?? _initialState;
 
   /// גלילת הקורא ומיקומו, בשורות מקור.
-  final LineScrollController lines = LineScrollController();
+  late final LineScrollController lines;
+
+  ReadingAnchor get readingAnchor =>
+      lines.captureAnchor() ??
+      ReadingAnchor(line: index, alignment: initialReadingAlignment(index));
 
   /// הכותרת הנוכחית של המיקום בספר (למשל "בראשית פרק ד")
   final currentTitle = ValueNotifier<String>("");
@@ -132,6 +137,7 @@ class TextBookTab extends OpenedTab {
   TextBookTab({
     required this.book,
     required int index,
+    ReadingAnchor? initialReadingAnchor,
     this.searchText = '',
     this.highlightText = '',
     this.permanentHighlightLine,
@@ -152,12 +158,13 @@ class TextBookTab extends OpenedTab {
     this.pinpointHighlightSectionIndex,
     @visibleForTesting TextBookBloc? blocOverride,
     // מהדורה חלופית מקבלת כותרת טאב עם שם המהדורה, להבחנה מהנוסח הממוזג.
-  }) : _index = index,
+  }) : _index = initialReadingAnchor?.line ?? index,
        super(
          book.versionDisplayTitle == null
              ? book.title
              : '${book.title} (${book.versionDisplayTitle})',
        ) {
+    lines = LineScrollController(initialAnchor: initialReadingAnchor);
     // קביעת ברירת המחדל של splitedView מההגדרות אם לא סופק
     final bool effectiveSplitedView =
         splitedView ?? (Settings.getValue<bool>('key-splited-view') ?? true);
@@ -173,7 +180,7 @@ class TextBookTab extends OpenedTab {
 
     _initialState = TextBookInitial.named(
       book,
-      index,
+      _index,
       openLeftPane,
       commentators ?? [],
       searchText: searchText,
@@ -288,6 +295,7 @@ class TextBookTab extends OpenedTab {
 
     return TextBookTab(
       index: json['initalIndex'],
+      initialReadingAnchor: ReadingAnchor.tryFromJson(json['readingAnchor']),
       book: restoredBook,
       highlightText: json['highlightText'] is String
           ? json['highlightText'] as String
@@ -329,7 +337,8 @@ class TextReadingSnapshot {
     _book = tab.book;
     _persistedBook = state is TextBookLoaded ? state.book : tab.book;
     _title = tab.title;
-    _index = tab.index;
+    _readingAnchor = tab.readingAnchor;
+    _index = _readingAnchor.line;
     _isPinned = tab.isPinned;
     _dedupeKey = tab.dedupeKey;
     _showLeftPane = state.showLeftPane;
@@ -414,6 +423,7 @@ class TextReadingSnapshot {
   late final TextBook _persistedBook;
   late final String _title;
   late final int _index;
+  late final ReadingAnchor _readingAnchor;
   late final bool _isPinned;
   late final String? _dedupeKey;
   late final bool _showLeftPane;
@@ -435,6 +445,7 @@ class TextReadingSnapshot {
     return TextBookTab(
       book: _book,
       index: _index,
+      initialReadingAnchor: _readingAnchor,
       searchText: search.searchText,
       searchOptions: search.searchOptions,
       alternativeWords: search.alternativeWords,
@@ -463,6 +474,7 @@ class TextReadingSnapshot {
     'title': _title,
     'book': _persistedBook.toJson(),
     'initalIndex': _index,
+    'readingAnchor': _readingAnchor.toJson(),
     'commentators': _commentators ?? <String>[],
     'splitedView': _persistedSplitView,
     'showPageShapeView': _persistedPageShapeView,

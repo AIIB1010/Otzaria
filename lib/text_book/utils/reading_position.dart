@@ -76,6 +76,28 @@ class ReadingAnchor {
   final double intraLineFraction;
   final double alignment;
 
+  Map<String, Object> toJson() => {
+    'line': line,
+    'intraLineFraction': intraLineFraction,
+    'alignment': alignment,
+  };
+
+  static ReadingAnchor? tryFromJson(Object? value) {
+    if (value is! Map) return null;
+    final line = value['line'];
+    final fraction = value['intraLineFraction'];
+    final alignment = value['alignment'];
+    if (line is! int || line < 0 || fraction is! num || alignment is! num) {
+      return null;
+    }
+    if (!fraction.isFinite || !alignment.isFinite) return null;
+    return ReadingAnchor(
+      line: line,
+      intraLineFraction: fraction.toDouble().clamp(0, 1),
+      alignment: alignment.toDouble(),
+    );
+  }
+
   @override
   bool operator ==(Object other) =>
       other is ReadingAnchor &&

@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/widgets/lists/scroll_position_reanchor.dart';
+import 'package:otzaria/widgets/lists/jump_aware_item_scroll_controller.dart';
 import 'package:otzaria/widgets/misc/smooth_wheel_scroll.dart';
 import 'package:positioned_sliver_list/positioned_list.dart';
 
@@ -15,6 +16,7 @@ Widget _buildList({
   required ItemPositionsListener listener,
   required bool enabled,
   int? preferredIndex,
+  Map<int, GlobalKey>? boxes,
 }) {
   return MaterialApp(
     home: Directionality(
@@ -28,12 +30,17 @@ Widget _buildList({
             preferredIndex: preferredIndex,
             scrollController: controller,
             positionsListener: listener,
+            boxForIndex: (index) =>
+                boxes?[index]?.currentContext?.findRenderObject() as RenderBox?,
             child: ScrollablePositionedList.builder(
               itemScrollController: controller,
               itemPositionsListener: listener,
               itemCount: 200,
-              itemBuilder: (context, index) =>
-                  SizedBox(height: 30 * (600 / width), child: Text('$index')),
+              itemBuilder: (context, index) => SizedBox(
+                key: boxes?.putIfAbsent(index, GlobalKey.new),
+                height: 30 * (600 / width),
+                child: Text('$index'),
+              ),
             ),
           ),
         ),
@@ -220,6 +227,35 @@ class _ToggleState extends State<_Toggle> {
 
 void main() {
   group('ScrollPositionReanchor', () {
+    testWidgets('עיגון native שומר את הגובה בפריים הראשון בלי הודעת ניווט', (
+      tester,
+    ) async {
+      final controller = JumpAwareItemScrollController();
+      final listener = ItemPositionsListener.create();
+      final boxes = <int, GlobalKey>{};
+      var jumps = 0;
+      controller.addBeforeJumpListener(() => jumps++);
+      Widget list(double width) => _buildList(
+        width: width,
+        controller: controller,
+        listener: listener,
+        enabled: true,
+        preferredIndex: 60,
+        boxes: boxes,
+      );
+      await tester.pumpWidget(list(600));
+      controller.jumpTo(index: 60, alignment: 0.2);
+      await tester.pumpAndSettle();
+      final before = tester.getTopLeft(find.text('60')).dy;
+      jumps = 0;
+      await tester.pumpWidget(list(300));
+      expect(tester.getTopLeft(find.text('60')).dy, closeTo(before, 0.5));
+      expect(jumps, 0);
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(find.text('60')).dy, closeTo(before, 0.5));
+      expect(jumps, 0);
+    });
+
     testWidgets('המיקום נשמר כשרוחב התצוגה משתנה', (tester) async {
       expect(await _scrollAndResize(tester, enabled: true), 0);
     });
