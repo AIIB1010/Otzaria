@@ -1515,7 +1515,7 @@ class CommentaryListBaseState extends State<CommentaryListBase>
       if (!itemInRenderTree) {
         final flatIndex = _linkFlatIndex[linkKey];
         if (flatIndex != null && _itemScrollController.isAttached) {
-          // לא scrollTo: הוא בונה רשימה שנייה, ובשתיהן אותו GlobalKey (issue #1505).
+          // קפיצה ולא scrollTo: הפריט נבנה כבר בפריים הבא, והגלילה העדינה מכוונת אותו.
           _itemScrollController.jumpTo(index: flatIndex, alignment: 0.05);
         }
         await Future.delayed(const Duration(milliseconds: 350));

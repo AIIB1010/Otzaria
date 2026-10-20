@@ -1769,7 +1769,7 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
         // The index exists only after the expanded group was laid out.
         final flatIndex = _linkFlatIndex[linkKey];
         if (flatIndex != null && _itemScrollController.isAttached) {
-          // לא scrollTo: הוא בונה רשימה שנייה, ובשתיהן אותו GlobalKey (issue #1505).
+          // קפיצה ולא scrollTo: הפריט נבנה כבר בפריים הבא, והגלילה העדינה מכוונת אותו.
           _itemScrollController.jumpTo(index: flatIndex, alignment: 0.05);
           final reachedTarget = await _waitForItemPosition(
             flatIndex,
