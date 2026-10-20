@@ -90,7 +90,8 @@ class _KeyboardShortcutsState extends State<KeyboardShortcuts> {
         route.popDisposition == RoutePopDisposition.doNotPop) {
       // תו שמסומן handled לא נכנס לשדה ב-Windows; חוסמים רק קיצורים.
       return ShortcutHelper.shouldIgnoreWhileEditing(event) ||
-              _typesCharacterWithModifiers(event)
+              _typesCharacterWithModifiers(event) ||
+              _isMacControlEditingEvent(event)
           ? KeyEventResult.ignored
           : KeyEventResult.handled;
     }
@@ -103,6 +104,19 @@ class _KeyboardShortcutsState extends State<KeyboardShortcuts> {
       ShortcutHelper.isEditingText &&
       !ShortcutHelper.isPlainCtrlOrCmdPressed &&
       !HardwareKeyboard.instance.isMetaPressed;
+
+  // Cocoa מממש Ctrl+D/H רק אחרי שה-framework מחזיר ignored.
+  static bool _isMacControlEditingEvent(KeyEvent event) {
+    final keyboard = HardwareKeyboard.instance;
+    return ShortcutHelper.usesMacModifiers &&
+        ShortcutHelper.isEditingText &&
+        keyboard.isControlPressed &&
+        !keyboard.isMetaPressed &&
+        !keyboard.isAltPressed &&
+        !keyboard.isShiftPressed &&
+        (event.logicalKey == LogicalKeyboardKey.keyD ||
+            event.logicalKey == LogicalKeyboardKey.keyH);
+  }
 
   /// בעריכת טקסט השדה קודם, והקיצור הדינמי נבדק רק ב-late handler.
   KeyEventResult _handleEarlyKeyEvent(KeyEvent event) {
@@ -391,11 +405,7 @@ class _KeyboardShortcutsState extends State<KeyboardShortcuts> {
       return KeyEventResult.handled;
     }
 
-    // ⚠️ **אינו** מוגדר ל-`isReadingScreen`, בשונה משאר קיצורי הכרטיסיות.
-    //
-    // "שחזר את מה שסגרתי" תקף מכל מסך: משתמש שסגר חלון וחזר למסך הספרייה
-    // לחץ `Ctrl+Shift+T` ושום דבר לא קרה — הקיצור נחסם בדיוק בתרחיש
-    // שבשבילו הוא נוסף. שחזור כרטיסיה מנווט למסך הקריאה, כי שם היא נמצאת.
+    // שחזור כרטיסייה או חלון זמין מכל מסך ומחזיר למסך העיון.
     if (ShortcutHelper.matchesShortcut(event, restoreClosedTabShortcut)) {
       // כמו בדפדפן: קודם כרטיסיה שנסגרה, ורק אם אין כזו — חלון שנסגר.
       // הסדר חשוב, כי הכרטיסיה היא הפעולה השכיחה בהרבה.

@@ -1826,6 +1826,84 @@ void main() {
       }
     });
 
+    testWidgets('Ctrl+D/H של Cocoa מגיעים לשדה בדיאלוג שחוסם סגירה', (
+      tester,
+    ) async {
+      ShortcutHelper.isMacForTesting = true;
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      try {
+        final navigationBloc = await pumpReportWithText(tester);
+        for (final key in [LogicalKeyboardKey.keyD, LogicalKeyboardKey.keyH]) {
+          expect(
+            await sendWith(tester, const [LogicalKeyboardKey.controlLeft], key),
+            isFalse,
+            reason: '$key must reach Cocoa text editing',
+          );
+          for (final modifier in [
+            LogicalKeyboardKey.shiftLeft,
+            LogicalKeyboardKey.metaLeft,
+          ]) {
+            expect(
+              await sendWith(tester, [
+                LogicalKeyboardKey.controlLeft,
+                modifier,
+              ], key),
+              isTrue,
+            );
+          }
+        }
+        for (final key in [LogicalKeyboardKey.keyO, LogicalKeyboardKey.keyW]) {
+          expect(
+            await sendWith(tester, const [LogicalKeyboardKey.controlLeft], key),
+            isTrue,
+          );
+        }
+        expect(find.byType(AppReportDialog), findsOneWidget);
+        expect(navigationBloc.events, isEmpty);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    testWidgets(
+      'Ctrl+D/H נשארים חסומים בשדה מחוץ למק',
+      (tester) async {
+        final navigationBloc = await pumpReportWithText(tester);
+        for (final key in [LogicalKeyboardKey.keyD, LogicalKeyboardKey.keyH]) {
+          expect(
+            await sendWith(tester, const [LogicalKeyboardKey.controlLeft], key),
+            isTrue,
+          );
+        }
+        expect(navigationBloc.events, isEmpty);
+      },
+      variant: TargetPlatformVariant({
+        TargetPlatform.windows,
+        TargetPlatform.linux,
+      }),
+    );
+
+    testWidgets('Ctrl+D/H נשארים חסומים במק כשהפוקוס אינו בשדה', (
+      tester,
+    ) async {
+      ShortcutHelper.isMacForTesting = true;
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      try {
+        final blocs = await pumpWithDialog(tester, blocked: true);
+        expect(ShortcutHelper.isEditingText, isFalse);
+        for (final key in [LogicalKeyboardKey.keyD, LogicalKeyboardKey.keyH]) {
+          expect(
+            await sendWith(tester, const [LogicalKeyboardKey.controlLeft], key),
+            isTrue,
+          );
+        }
+        expect(find.byType(AppCustomContentDialog), findsOneWidget);
+        expect(blocs.navigationBloc.events, isEmpty);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
     testWidgets('תווים מגיעים לעורך ההערות, שחוסם סגירה תמיד', (tester) async {
       final blocs = await pumpWithDialog(tester);
       Navigator.of(tester.element(find.byType(AlertDialog))).pop();
