@@ -34,15 +34,11 @@ class TocViewer extends StatefulWidget {
   State<TocViewer> createState() => _TocViewerState();
 }
 
-/// סף שמעליו עוברים לרשימה וירטואלית שטוחה.
-const int _kTocFlattenThreshold = 500;
-
 class _TocDisplayData {
   final List<TocEntry> entries;
-  final int totalCount;
   final bool isSearching;
 
-  const _TocDisplayData(this.entries, this.totalCount, this.isSearching);
+  const _TocDisplayData(this.entries, this.isSearching);
 }
 
 class _TocViewerState extends State<TocViewer>
@@ -51,8 +47,6 @@ class _TocViewerState extends State<TocViewer>
   bool get wantKeepAlive => true;
 
   final TextEditingController searchController = TextEditingController();
-  final ScrollController _tocScrollController = ScrollController();
-  final Map<int, GlobalKey> _tocItemKeys = {};
   bool _isManuallyScrolling = false;
   int? _lastScrolledTocIndex;
   final Map<int, bool> _expanded = {};
@@ -79,7 +73,6 @@ class _TocViewerState extends State<TocViewer>
   // בשדה החיפוש, כמו ב"איתור". מתאפס בכל שינוי שאילתה.
   int? _highlightedEntryIndex;
 
-  // משמשים במסלול הוירטואלי בלבד: גלילה לפי אינדקס גם לשורה שטרם נבנתה.
   final ItemScrollController _virtualScrollController = ItemScrollController();
   final ItemPositionsListener _virtualPositionsListener =
       ItemPositionsListener.create();
@@ -99,7 +92,6 @@ class _TocViewerState extends State<TocViewer>
   @override
   void dispose() {
     _searchDebounce?.cancel();
-    _tocScrollController.dispose();
     searchController.dispose();
     super.dispose();
   }
@@ -151,7 +143,6 @@ class _TocViewerState extends State<TocViewer>
       _scrollEntryIntoView(
         targetIndex,
         display: current,
-        useFlat: current.totalCount > _kTocFlattenThreshold,
       );
     });
   }
@@ -251,14 +242,10 @@ class _TocViewerState extends State<TocViewer>
 
     SchedulerBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _isManuallyScrolling) return;
-      // ההחלטה וירטואלי/רקורסיבי נלקחת כאן ולא בזמן התזמון: ניקוי חיפוש
-      // בינתיים מחליף מסלול ומנתק את בקר הגלילה.
       final display = _displayDataFor(state);
-      final bool useFlat = display.totalCount > _kTocFlattenThreshold;
       if (_scrollEntryIntoView(
         activeIndex,
         display: display,
-        useFlat: useFlat,
       )) {
         _lastScrolledTocIndex = activeIndex;
       }
@@ -272,91 +259,45 @@ class _TocViewerState extends State<TocViewer>
   bool _scrollEntryIntoView(
     int targetIndex, {
     required _TocDisplayData display,
-    required bool useFlat,
   }) {
-    if (useFlat) {
-      // במסלול הוירטואלי הפריט עשוי לא להיות בעץ. גוללים לפי אינדקס ברשימה
-      // השטוחה דרך ItemScrollController, שמטפל בגלילה לפריטים שאינם מורכבים.
-      if (!_virtualScrollController.isAttached) return false;
-      final flat = _flatItemsFor(display);
-      final flatEntryIndex = flat.indexWhere(
-        (item) => item.entry.index == targetIndex,
-      );
-      if (flatEntryIndex < 0) return false;
-      // +1: פריט 0 ברשימה הוא הכותרת הראשית.
-      final flatIndex = flatEntryIndex + 1;
+    if (!_virtualScrollController.isAttached) return false;
+    final flat = _flatItemsFor(display);
+    final flatEntryIndex = flat.indexWhere(
+      (item) => item.entry.index == targetIndex,
+    );
+    if (flatEntryIndex < 0) return false;
+    // +1: פריט 0 ברשימה הוא הכותרת הראשית.
+    final flatIndex = flatEntryIndex + 1;
 
-      final positions = _virtualPositionsListener.itemPositions.value;
-      ItemPosition? current;
-      for (final p in positions) {
-        if (p.index == flatIndex) {
-          current = p;
-          break;
-        }
+    final positions = _virtualPositionsListener.itemPositions.value;
+    ItemPosition? current;
+    for (final p in positions) {
+      if (p.index == flatIndex) {
+        current = p;
+        break;
       }
-      // כבר גלוי במלואו - לא גוללים.
-      if (current != null &&
-          current.itemLeadingEdge >= 0 &&
-          current.itemTrailingEdge <= 1) {
-        return true;
-      }
-
-      // לא גלוי - מביאים לקצה הקרוב (עליון/תחתון), לא למרכז.
-      final bool below = current != null
-          ? current.itemLeadingEdge >= 1
-          : (positions.isNotEmpty &&
-                flatIndex >
-                    positions
-                        .map((p) => p.index)
-                        .reduce((a, b) => a > b ? a : b));
-      _virtualScrollController.scrollTo(
-        index: flatIndex,
-        alignment: below ? 0.85 : 0.0,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
-      return true;
     }
-
-    // מסלול רקורסיבי - הפריט תמיד בנוי בעץ, ניתן להשתמש ב-GlobalKey
-    final key = _tocItemKeys[targetIndex];
-    final itemContext = key?.currentContext;
-    if (itemContext == null) return false;
-
-    final itemRenderObject = itemContext.findRenderObject();
-    if (itemRenderObject is! RenderBox) return false;
-
-    final scrollableBox =
-        _tocScrollController.position.context.storageContext.findRenderObject()
-            as RenderBox;
-
-    final itemOffset = itemRenderObject
-        .localToGlobal(Offset.zero, ancestor: scrollableBox)
-        .dy;
-    final viewportHeight = scrollableBox.size.height;
-    final itemHeight = itemRenderObject.size.height;
-
-    final itemBottom = itemOffset + itemHeight;
     // כבר גלוי במלואו - לא גוללים.
-    if (itemOffset >= 0 && itemBottom <= viewportHeight) {
+    if (current != null &&
+        current.itemLeadingEdge >= 0 &&
+        current.itemTrailingEdge <= 1) {
       return true;
     }
 
-    // לא גלוי - גוללים לקצה הקרוב (עליון/תחתון), לא למרכז.
-    const double margin = 8.0;
-    final double target = itemOffset < 0
-        ? _tocScrollController.offset + itemOffset - margin
-        : _tocScrollController.offset + (itemBottom - viewportHeight) + margin;
-
-    _tocScrollController.animateTo(
-      target.clamp(
-        0.0,
-        _tocScrollController.position.maxScrollExtent,
-      ),
+    // לא גלוי - מביאים לקצה הקרוב (עליון/תחתון), לא למרכז.
+    final bool below = current != null
+        ? current.itemLeadingEdge >= 1
+        : (positions.isNotEmpty &&
+              flatIndex >
+                  positions
+                      .map((p) => p.index)
+                      .reduce((a, b) => a > b ? a : b));
+    _virtualScrollController.scrollTo(
+      index: flatIndex,
+      alignment: below ? 0.85 : 0.0,
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOut,
     );
-
     return true;
   }
 
@@ -388,11 +329,7 @@ class _TocViewerState extends State<TocViewer>
           : roots;
       _displaySource = tableOfContents;
       _displayQuery = query;
-      _displayResult = _TocDisplayData(
-        entries,
-        countAllTocEntries(entries),
-        isSearching,
-      );
+      _displayResult = _TocDisplayData(entries, isSearching);
       _flatDisplay = null;
       _flatResult = null;
       _flatExpandedRevision = -1;
@@ -414,9 +351,6 @@ class _TocViewerState extends State<TocViewer>
     return _flatResult!;
   }
 
-  /// בונה שורה יחידה של TOC ללא ילדיו. משמש בשני המסלולים:
-  /// 1. הרקורסיבי (`_buildTocItem`) - לספרים קטנים עם Column מקונן.
-  /// 2. השטוח (`_buildVirtualizedTocList`) - לספרים גדולים עם וירטואליזציה.
   Widget _buildTocRow(
     TocEntry entry, {
     bool showFullText = false,
@@ -424,7 +358,6 @@ class _TocViewerState extends State<TocViewer>
     required bool isExpanded,
     bool isGroupStart = false,
     bool isGroupEnd = false,
-    bool keyed = true,
   }) {
     void navigateToEntry() => _navigateToLine(entry.index);
 
@@ -458,14 +391,7 @@ class _TocViewerState extends State<TocViewer>
     return NavTreeGroupCard(
       isGroupStart: isGroupStart,
       isGroupEnd: isGroupEnd,
-      // ברשימה הוירטואלית הגלילה לפי אינדקס; GlobalKey לכל שורה שנבנית רק
-      // היה ממלא את המפה בלי שימוש.
-      child: keyed
-          ? KeyedSubtree(
-              key: _tocItemKeys.putIfAbsent(entry.index, () => GlobalKey()),
-              child: tile,
-            )
-          : tile,
+      child: tile,
     );
   }
 
@@ -545,63 +471,9 @@ class _TocViewerState extends State<TocViewer>
           isExpanded: item.isExpanded,
           isGroupStart: index == 1,
           isGroupEnd: index == flat.length,
-          keyed: false,
         );
       },
       padding: kNavTreeListPadding,
-    );
-  }
-
-  // אופטימיזציה: activeIndex מחושב פעם אחת ב-build הראשי ומועבר כפרמטר.
-  // לפני האופטימיזציה כל ערך עטף BlocBuilder<TextBookBloc> וקרא בעצמו
-  // ל-closestTocEntryIndex (O(n)), מה שיצר O(n²) בספרים עם אלפי ערכי TOC.
-  Widget _buildTocItem(
-    TocEntry entry, {
-    bool showFullText = false,
-    bool isFirstChild = false,
-    bool? defaultExpanded,
-    required int? activeIndex,
-    bool isGroupStart = false,
-    bool isGroupEnd = false,
-  }) {
-    if (entry.children.isEmpty) {
-      return _buildTocRow(
-        entry,
-        showFullText: showFullText,
-        activeIndex: activeIndex,
-        isExpanded: false,
-        isGroupStart: isGroupStart,
-        isGroupEnd: isGroupEnd,
-      );
-    }
-
-    final bool fallbackExpanded = entry.level == 1 || isFirstChild;
-    final bool isExpanded =
-        _expanded[entry.index] ?? (defaultExpanded ?? fallbackExpanded);
-
-    return Column(
-      children: [
-        _buildTocRow(
-          entry,
-          showFullText: showFullText,
-          activeIndex: activeIndex,
-          isExpanded: isExpanded,
-          isGroupStart: isGroupStart,
-          // הקבוצה נסגרת אצל הצאצא האחרון כשהערך פתוח.
-          isGroupEnd: isGroupEnd && !isExpanded,
-        ),
-        if (isExpanded)
-          ...entry.children.asMap().entries.map(
-            (e) => _buildTocItem(
-              e.value,
-              isFirstChild: isFirstChild && e.key == 0,
-              defaultExpanded: defaultExpanded,
-              showFullText: showFullText,
-              activeIndex: activeIndex,
-              isGroupEnd: isGroupEnd && e.key == entry.children.length - 1,
-            ),
-          ),
-      ],
     );
   }
 
@@ -648,9 +520,7 @@ class _TocViewerState extends State<TocViewer>
           // מחושב פעם אחת ומועבר לכל הפריטים, כדי שהבנייה לא תהיה O(n²).
           final int? activeIndex = _activeTocIndex(state);
 
-          // גם חיפוש עשוי להציג עשרות אלפי ערכים, ולכן הסף נגזר מהפלט.
           final display = _displayDataFor(state);
-          final bool useFlat = display.totalCount > _kTocFlattenThreshold;
 
           final delegate = NavPanelSearchDelegate(
             controller: searchController,
@@ -684,47 +554,13 @@ class _TocViewerState extends State<TocViewer>
                       return false;
                     },
                     child: NavTreeFocusGroup(
-                      child: useFlat
-                          ? _buildVirtualizedTocList(
-                              _flatItemsFor(display),
-                              activeIndex,
-                              isSearching: display.isSearching,
-                              title: state.book.title,
-                              display: display,
-                            )
-                          : SingleChildScrollView(
-                              controller: _tocScrollController,
-                              padding: kNavTreeListPadding,
-                              child: Column(
-                                children: [
-                                  _buildTreeHeader(state.book.title, display),
-                                  ListView.builder(
-                                    shrinkWrap: true,
-                                    physics:
-                                        const NeverScrollableScrollPhysics(),
-                                    itemCount: display.entries.length,
-                                    itemBuilder: (context, index) =>
-                                        _buildTocItem(
-                                          display.entries[index],
-                                          isFirstChild: index == 0,
-                                          isGroupStart: index == 0,
-                                          isGroupEnd:
-                                              index ==
-                                              display.entries.length - 1,
-                                          showFullText: display.isSearching,
-                                          defaultExpanded: display.isSearching
-                                              ? shouldExpandInSearch(
-                                                  _expanded[display
-                                                      .entries[index]
-                                                      .index],
-                                                )
-                                              : null,
-                                          activeIndex: activeIndex,
-                                        ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                      child: _buildVirtualizedTocList(
+                        _flatItemsFor(display),
+                        activeIndex,
+                        isSearching: display.isSearching,
+                        title: state.book.title,
+                        display: display,
+                      ),
                     ),
                   ),
           );
