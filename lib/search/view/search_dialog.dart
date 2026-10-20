@@ -1098,39 +1098,12 @@ class _SearchDialogState extends State<SearchDialog> {
       ),
     );
 
-    // העתקת כל ההגדרות מהטאב הנוכחי לטאב החדש
-    newSearchTab.searchOptions.addAll(
-      _searchTab.searchOptions.map(
-        (key, value) => MapEntry(key, Map<String, bool>.from(value)),
-      ),
+    _copyDialogParametersTo(
+      newSearchTab,
+      query: query,
+      negativeQuery: negativeQuery,
+      effectiveAlternatives: effectiveAlternatives,
     );
-    newSearchTab.globalSearchOptions.addAll(_searchTab.globalSearchOptions);
-    newSearchTab.useGlobalSearchOptions.value =
-        _searchTab.useGlobalSearchOptions.value;
-    newSearchTab.negativeQueryController.text = negativeQuery;
-    newSearchTab.negativeSearchOptions.addAll(
-      _searchTab.negativeSearchOptions.map(
-        (key, value) => MapEntry(key, Map<String, bool>.from(value)),
-      ),
-    );
-    newSearchTab.negativeGlobalSearchOptions.addAll(
-      _searchTab.negativeGlobalSearchOptions,
-    );
-    newSearchTab.useGlobalNegativeSearchOptions.value =
-        _searchTab.useGlobalNegativeSearchOptions.value;
-    // חלופות שמורות שמוזגו הופכות לחלק מהטאב — נשמרות ומשוחזרות איתו
-    newSearchTab.alternativeWords.addAll(
-      effectiveAlternatives.map(
-        (key, value) => MapEntry(key, List<String>.from(value)),
-      ),
-    );
-    newSearchTab.spacingValues.addAll(_searchTab.spacingValues);
-    newSearchTab.negativeAlternativeWords.addAll(
-      _searchTab.negativeAlternativeWords.map(
-        (key, value) => MapEntry(key, List<String>.from(value)),
-      ),
-    );
-    newSearchTab.negativeSpacingValues.addAll(_searchTab.negativeSpacingValues);
 
     // מעבירים את ה-scope במפורש להיסטוריה — SetFacetsWithoutSearch מעדכן את
     // state אסינכרונית, ובלי זה החיפוש היה נשמר בלי ה-scope שנבחר.
@@ -1364,20 +1337,15 @@ class _SearchDialogState extends State<SearchDialog> {
     for (final entry in values.entries) entry.key.toString(): entry.value,
   };
 
-  /// מחיל את פרמטרי הדיאלוג על טאב התוצאות הנערך ומריץ בו את החיפוש מחדש.
-  void _applyEditToTarget({
+  /// מעתיק ל-[target] את השאילתות ואת הגדרות המילים שנערכו בדיאלוג.
+  /// חלופות שמורות שמוזגו ([effectiveAlternatives]) הופכות לחלק מהטאב —
+  /// נשמרות ומשוחזרות איתו.
+  void _copyDialogParametersTo(
+    SearchingTab target, {
     required String query,
     required String negativeQuery,
-    required SearchMode mode,
-    required int distance,
-    required SearchConfiguration configuration,
-    required List<String> facetsToSearch,
     required Map<int, List<String>> effectiveAlternatives,
-    required SearchModeScopedParameters normalizedParameters,
-    required SearchModeScopedParameters normalizedNegativeParameters,
   }) {
-    final target = widget.editTab!;
-
     target.queryController.text = query;
     target.negativeQueryController.text = negativeQuery;
     target.searchOptions
@@ -1424,6 +1392,27 @@ class _SearchDialogState extends State<SearchDialog> {
     target.negativeSpacingValues
       ..clear()
       ..addAll(_searchTab.negativeSpacingValues);
+  }
+
+  /// מחיל את פרמטרי הדיאלוג על טאב התוצאות הנערך ומריץ בו את החיפוש מחדש.
+  void _applyEditToTarget({
+    required String query,
+    required String negativeQuery,
+    required SearchMode mode,
+    required int distance,
+    required SearchConfiguration configuration,
+    required List<String> facetsToSearch,
+    required Map<int, List<String>> effectiveAlternatives,
+    required SearchModeScopedParameters normalizedParameters,
+    required SearchModeScopedParameters normalizedNegativeParameters,
+  }) {
+    final target = widget.editTab!;
+    _copyDialogParametersTo(
+      target,
+      query: query,
+      negativeQuery: negativeQuery,
+      effectiveAlternatives: effectiveAlternatives,
+    );
     target.updateTitleFromAppliedQuery(query);
 
     target.searchBloc.add(SetSearchModeWithoutSearch(mode));
