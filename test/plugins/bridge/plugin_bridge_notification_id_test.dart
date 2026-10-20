@@ -1,4 +1,3 @@
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
 import 'package:otzaria/history/bloc/history_bloc.dart';
@@ -46,15 +45,23 @@ class _KvRepo extends Mock implements PluginRegistryRepository {
   ) async => kv['$pluginId/$namespace/$key'] = valueJson;
 }
 
-class _RecordingPlugin extends Mock implements FlutterLocalNotificationsPlugin {
+class _FakeNotifications extends Mock implements NotificationService {
+  final scheduledIds = <int>[];
   final shownIds = <int>[];
+
   @override
-  Future<void> show({
+  bool get isInitialized => true;
+  @override
+  bool get hasPermissions => true;
+  @override
+  Future<bool> ensureInitialized() async => true;
+  @override
+  Future<void> cancelNotifications(Iterable<int> ids) async {}
+  @override
+  Future<void> showNotification({
     required int id,
-    String? title,
-    String? body,
-    NotificationDetails? notificationDetails,
-    String? payload,
+    required String title,
+    required String body,
   }) async {
     // אותה בדיקה ש-validateId של flutter_local_notifications מריץ.
     if (id > 0x7FFFFFFF || id < -0x80000000) {
@@ -62,20 +69,7 @@ class _RecordingPlugin extends Mock implements FlutterLocalNotificationsPlugin {
     }
     shownIds.add(id);
   }
-}
 
-class _FakeNotifications extends Mock implements NotificationService {
-  final scheduledIds = <int>[];
-  final _plugin = _RecordingPlugin();
-  List<int> get shownIds => _plugin.shownIds;
-
-  @override
-  FlutterLocalNotificationsPlugin get flutterLocalNotificationsPlugin =>
-      _plugin;
-  @override
-  bool get isInitialized => true;
-  @override
-  bool get hasPermissions => true;
   @override
   Future<void> scheduleNotification({
     required int id,

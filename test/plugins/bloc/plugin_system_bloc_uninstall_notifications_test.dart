@@ -10,7 +10,12 @@ import 'package:otzaria/plugins/models/plugin_manifest.dart';
 import 'package:otzaria/plugins/models/plugin_permission_grant.dart';
 import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
 import 'package:otzaria/plugins/services/plugin_installer_service.dart';
+import 'package:otzaria/tools/calendar/services/calendar_alerts_client.dart';
+import 'package:otzaria/tools/calendar/services/calendar_alerts_owner.dart';
+import 'package:otzaria/tools/calendar/services/calendar_alerts_store.dart';
 import 'package:otzaria/tools/calendar/services/notification_service.dart';
+
+import '../../tools/calendar/support/calendar_alerts_fakes.dart';
 
 InstalledPlugin _plugin(String id) => InstalledPlugin(
   pluginId: id,
@@ -54,6 +59,16 @@ class _FakeRepo implements PluginRegistryRepository {
   @override
   Future<String?> getKV(String id, String ns, String key) async =>
       ns == '_internal' && key == 'notification_ids' ? ids[id] : null;
+  @override
+  Future<void> setKV(String id, String ns, String key, String value) async {
+    if (ns == '_internal' && key == 'notification_ids') ids[id] = value;
+  }
+
+  @override
+  Future<void> removeKV(String id, String ns, String key) async {
+    if (ns == '_internal' && key == 'notification_ids') ids.remove(id);
+  }
+
   @override
   Future<List<PluginPermissionGrant>> getPluginPermissions(String id) async =>
       [];
@@ -120,10 +135,23 @@ void main({bool initializeNotifications = true, bool resetFirst = false}) {
   });
 
   PluginSystemBloc blocFor(_FakeRepo repo) {
+    final owner = CalendarAlertsOwner(
+      store: MemoryAlertsStore(),
+      notifications: NotificationService(),
+      pluginIds: RegistryPluginNotificationIdStore(repo),
+      pluginEvents: () async => const [],
+      broadcast: (_) {},
+      dedupeDuplicates: false,
+    );
     final bloc = PluginSystemBloc(
       repository: repo,
       installerService: _StubInstaller(repo),
+      alertsClient: LocalCalendarAlertsClient(owner),
     );
+    addTearDown(() async {
+      await owner.idle;
+      owner.dispose();
+    });
     addTearDown(bloc.close);
     return bloc;
   }

@@ -16,7 +16,6 @@ import 'package:timezone/data/latest_all.dart' as tz_data;
 class _Settings implements SettingsRepository {
   int? lastSync;
   String savedEventsJson = '[]';
-  final firstEventsSaved = Completer<void>();
 
   @override
   Future<Map<String, dynamic>> loadSettings() async => {
@@ -39,7 +38,6 @@ class _Settings implements SettingsRepository {
   @override
   Future<void> updateCalendarEvents(String json) async {
     savedEventsJson = json;
-    if (!firstEventsSaved.isCompleted) firstEventsSaved.complete();
   }
 
   @override
@@ -211,7 +209,10 @@ void main() {
           },
         ),
       );
-      await settings.firstEventsSaved.future;
+      // הסנכרון הראשון בעלייה מסתיים בשמירת זמן הסנכרון.
+      while (settings.lastSync == null) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
       holdColors = true;
       final olderSync = cubit.syncGoogleCalendar(interactive: false);
       await colorsStarted.future;
