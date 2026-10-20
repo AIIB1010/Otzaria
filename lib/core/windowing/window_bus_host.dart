@@ -45,6 +45,7 @@ import 'package:otzaria/tabs/bloc/tabs_event.dart';
 import 'package:otzaria/tabs/models/tab.dart';
 import 'package:otzaria/tools/calendar/services/calendar_alerts_client.dart';
 import 'package:otzaria/tools/calendar/services/calendar_alerts_owner.dart';
+import 'package:otzaria/tools/calendar/services/notification_service.dart';
 
 /// מחבר את [WindowBus] לחלון שהוא יושב בו.
 ///
@@ -114,6 +115,19 @@ class _WindowBusHostState extends State<WindowBusHost> {
     // שנגזר ממנה עוד לא. בלי הטעינה מחדש המשתמש היה מחליף ערכת נושא
     // בחלון אחד ורואה שני חלונות של אותה תוכנה נראים שונה.
     _settingsChanged = SettingsSync.instance.changes.listen((key) {
+      // איפוס מחלון אחר מחק כאן גם את רישום ההתראות; הבעלים מבטל לפי הזיכרון.
+      if (key.isEmpty && !WindowRole.isSecondary) {
+        unawaited(
+          CalendarAlertsOwner.instance.handleSettingsReset().catchError(
+            (Object error, StackTrace stackTrace) =>
+                NotificationService.logFailure(
+                  'יישור ההתראות אחרי איפוס מחלון אחר נכשל',
+                  error,
+                  stackTrace,
+                ),
+          ),
+        );
+      }
       if (!mounted) return;
       context.read<SettingsBloc>().add(LoadSettings());
       if (key == HiddenLibraryStore.bookKeysSetting ||
