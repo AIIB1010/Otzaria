@@ -1084,6 +1084,14 @@ Future<void> _runDeferredAutoBackup() async {
   // ⚠️ פר-תהליך. הגיבוי קורא `Hive.box` ישירות — בחלון משני זהו שורש פרטי
   // בלי תורי הדיווחים — ומשדר `key-last-auto-backup` שדורס את מועד הבעלים.
   if (WindowRole.isSecondary) return;
+  // קריאות SQLite וקידוד ה-JSON רצים ב-main isolate ומתחרים בפריים הראשון.
+  try {
+    await _mainWindowRevealedCompleter.future.timeout(
+      const Duration(seconds: 20),
+    );
+  } on TimeoutException {
+    // ממשיכים בכל זאת — אחרת הגיבוי לא ירוץ כלל.
+  }
   try {
     if (await BackupService.shouldPerformAutoBackup()) {
       await BackupService.performAutoBackup();
