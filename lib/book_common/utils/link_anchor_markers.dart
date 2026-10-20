@@ -253,21 +253,22 @@ const _lt = 0x3C, _amp = 0x26;
 @visibleForTesting
 int debugVisibleScanCount = 0;
 
+/// מספר התווים שעבורם הוקצה מקום במפת הגבולות.
+@visibleForTesting
+int debugVisibleMapEntryCount = 0;
+
 /// עוטף את מופעי השמות [spans] של שורה בסמן שהרינדור ממיר לצורת התצוגה.
 /// האופסטים גלויים, ולכן מותר להזריק קודם רק תגים (קישורי inline), לא תוכן.
 /// מופע ששלדו אינו תואם את סוגו, או שחוצה תג, מושמט.
 String wrapDivineNameSpans(String rawLine, List<DivineNameSpan> spans) {
   if (spans.isEmpty || rawLine.isEmpty) return rawLine;
   final visibleLength = _visibleOffsetAtRaw(rawLine, rawLine.length);
-  // שורה ארוכה נושאת מאות שמות, וסריקה מתחילתה לכל מופע ריבועית.
-  _VisibleChars? chars;
-  if (spans.length > 1) {
-    var maxEnd = 0;
-    for (final span in spans) {
-      if (span.end <= visibleLength && span.end > maxEnd) maxEnd = span.end;
-    }
-    chars = _VisibleChars(rawLine, maxEnd);
-  }
+  final chars = spans.length > 1
+      ? _VisibleChars.forOffsets(rawLine, [
+          for (final span in spans)
+            if (span.end <= visibleLength) ...[span.start, span.end - 1],
+        ])
+      : null;
   final ranges = <HtmlWrapRange>[];
   for (final span in spans) {
     // מופע שחורג מסוף השורה מעיד על אופסטים שזזו.
@@ -304,10 +305,14 @@ String injectDivineNameMarkers(
 
 /// אינדקס גולמי של תחילת התו הגלוי מספר [visibleOffset] (אחרי תגים קודמים);
 /// אורך המחרוזת כשהאופסט מעבר לסוף.
-int _rawStartOfVisible(String html, int visibleOffset) {
-  debugVisibleScanCount++;
-  var visible = 0;
-  var i = 0;
+int _rawStartOfVisible(
+  String html,
+  int visibleOffset, {
+  ({int raw, int visible})? from,
+}) {
+  if (from == null) debugVisibleScanCount++;
+  var visible = from?.visible ?? 0;
+  var i = from?.raw ?? 0;
   final len = html.length;
   while (i < len) {
     if (html.codeUnitAt(i) == _lt) {
@@ -331,11 +336,15 @@ int _rawStartOfVisible(String html, int visibleOffset) {
 
 /// אינדקס גולמי מיד אחרי התו הגלוי מספר [visibleOffset]-1 — סוף טווח
 /// אקסקלוסיבי שאינו בולע תגים עוקבים.
-int _rawEndOfVisible(String html, int visibleOffset) {
+int _rawEndOfVisible(
+  String html,
+  int visibleOffset, {
+  ({int raw, int visible})? from,
+}) {
   if (visibleOffset <= 0) return 0;
-  debugVisibleScanCount++;
-  var visible = 0;
-  var i = 0;
+  if (from == null) debugVisibleScanCount++;
+  var visible = from?.visible ?? 0;
+  var i = from?.raw ?? 0;
   final len = html.length;
   while (i < len) {
     if (html.codeUnitAt(i) == _lt) {
@@ -357,21 +366,22 @@ int _rawEndOfVisible(String html, int visibleOffset) {
   return len;
 }
 
-/// גבולות גולמיים של התווים הגלויים הדרושים לטווחים, במעבר אחד:
-/// שורה ארוכה נושאת מאות עוגני טווח,
-/// וסריקה מתחילתה לכל טווח ריבועית. המפה נעצרת אחרי סוף הטווח הרחוק ביותר;
-/// תג לא סגור עוצר את הספירה.
+/// גבולות תווים גלויים במעבר אחד, עד התו הדרוש האחרון או תג לא סגור.
+/// [forOffsets] ממפה רק גבולות מבוקשים, בזיכרון לפי מספרם.
 class _VisibleChars {
   final int _length;
+  final List<int>? _offsets;
   final Int32List _starts;
   final Int32List _ends;
   int _count = 0;
 
   _VisibleChars(String html, int maxEnd)
     : _length = html.length,
+      _offsets = null,
       _starts = Int32List(maxEnd < html.length ? maxEnd : html.length),
       _ends = Int32List(maxEnd < html.length ? maxEnd : html.length) {
     debugVisibleScanCount++;
+    debugVisibleMapEntryCount += _starts.length;
     final len = html.length;
     var i = 0;
     while (i < len && _count < _starts.length) {
@@ -393,18 +403,64 @@ class _VisibleChars {
     }
   }
 
+  _VisibleChars._(this._length, List<int> offsets)
+    : _offsets = offsets,
+      _starts = Int32List(offsets.length),
+      _ends = Int32List(offsets.length);
+
+  factory _VisibleChars.forOffsets(String html, Iterable<int> offsets) {
+    final sorted =
+        offsets
+            .where((offset) => offset >= 0 && offset < html.length)
+            .toSet()
+            .toList()
+          ..sort();
+    final chars = _VisibleChars._(html.length, sorted);
+    debugVisibleScanCount++;
+    debugVisibleMapEntryCount += sorted.length;
+    var from = (raw: 0, visible: 0);
+    for (final offset in sorted) {
+      final start = _rawStartOfVisible(html, offset, from: from);
+      final end = _rawEndOfVisible(
+        html,
+        offset + 1,
+        from: (raw: start, visible: offset),
+      );
+      chars._starts[chars._count] = start;
+      chars._ends[chars._count++] = end;
+      from = (raw: end, visible: offset + 1);
+    }
+    return chars;
+  }
+
   /// אינדקס גולמי של תחילת התו הגלוי מספר [visibleOffset] (אחרי תגים קודמים);
   /// אורך המחרוזת כשהאופסט מעבר לסוף.
-  int rawStart(int visibleOffset) =>
-      visibleOffset >= 0 && visibleOffset < _count
-      ? _starts[visibleOffset]
-      : _length;
+  int rawStart(int visibleOffset) {
+    final index = _indexOf(visibleOffset);
+    return index < 0 ? _length : _starts[index];
+  }
 
   /// אינדקס גולמי מיד אחרי התו הגלוי מספר [visibleOffset]-1 — סוף טווח
   /// אקסקלוסיבי שאינו בולע תגים עוקבים.
   int rawEnd(int visibleOffset) {
     if (visibleOffset <= 0) return 0;
-    return visibleOffset <= _count ? _ends[visibleOffset - 1] : _length;
+    final index = _indexOf(visibleOffset - 1);
+    return index < 0 ? _length : _ends[index];
+  }
+
+  int _indexOf(int offset) {
+    if (_offsets == null) return offset >= 0 && offset < _count ? offset : -1;
+    var low = 0;
+    var high = _count;
+    while (low < high) {
+      final mid = (low + high) >> 1;
+      if (_offsets[mid] < offset) {
+        low = mid + 1;
+      } else {
+        high = mid;
+      }
+    }
+    return low < _count && _offsets[low] == offset ? low : -1;
   }
 }
 

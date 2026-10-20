@@ -378,6 +378,44 @@ void main() {
   });
 
   group('שורה עם מופעים רבים', () {
+    test('שני שמות רחוקים מקצים מפה לפי הגבולות המבוקשים', () {
+      final line = ' אל ${'טקסט ' * 200000} אל ';
+      final spans = [
+        (start: 1, end: 3, kind: DivineNameKind.el),
+        (start: line.length - 3, end: line.length - 1, kind: DivineNameKind.el),
+      ];
+      debugVisibleScanCount = 0;
+      debugVisibleMapEntryCount = 0;
+      expect(
+        wrapDivineNameSpans(line, spans),
+        ' ${divineNameMarkerOpen(DivineNameKind.el)}אל</span> '
+        '${'טקסט ' * 200000} '
+        '${divineNameMarkerOpen(DivineNameKind.el)}אל</span> ',
+      );
+      expect(debugVisibleScanCount, 1);
+      expect(debugVisibleMapEntryCount, lessThanOrEqualTo(4));
+    });
+
+    test('גבולות חוזרים, הפוכים וחריגים לצד תג לא סגור', () {
+      const line = '<b>אל</b>&amp; שדי 😀 יה<broken';
+      expect(
+        wrapDivineNameSpans(line, [
+          (start: 11, end: 13, kind: DivineNameKind.yah),
+          (start: -1, end: 2, kind: DivineNameKind.el),
+          (start: 4, end: 7, kind: DivineNameKind.shaddai),
+          (start: 0, end: 2, kind: DivineNameKind.el),
+          (start: 0, end: 2, kind: DivineNameKind.el),
+          (start: 12, end: 11, kind: DivineNameKind.yah),
+          (start: 1, end: -1, kind: DivineNameKind.el),
+          (start: 0, end: 7, kind: DivineNameKind.el),
+          (start: 11, end: 100, kind: DivineNameKind.yah),
+        ]),
+        '<b>${divineNameMarkerOpen(DivineNameKind.el)}אל</span></b>&amp; '
+        '${divineNameMarkerOpen(DivineNameKind.shaddai)}שדי</span> 😀 '
+        '${divineNameMarkerOpen(DivineNameKind.yah)}יה</span><broken',
+      );
+    });
+
     const names = [
       ('אלהים', DivineNameKind.elohim),
       ('אֱלֹהִים', DivineNameKind.elohim),
@@ -431,14 +469,21 @@ void main() {
         );
         expect(oneByOne, isNot(line));
         expect(wrapDivineNameSpans(line, spans), oneByOne, reason: '$seed');
+        expect(
+          wrapDivineNameSpans(line, spans.reversed.toList()),
+          oneByOne,
+          reason: 'reversed $seed',
+        );
       }
     });
 
     test('השורה אינה נסרקת מתחילתה לכל מופע', () {
       final (:line, :spans) = buildLine(1, 300);
       debugVisibleScanCount = 0;
+      debugVisibleMapEntryCount = 0;
       wrapDivineNameSpans(line, spans);
       expect(debugVisibleScanCount, lessThanOrEqualTo(1));
+      expect(debugVisibleMapEntryCount, lessThanOrEqualTo(spans.length * 2));
     });
   });
 }
