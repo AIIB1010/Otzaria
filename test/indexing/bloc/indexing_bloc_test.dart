@@ -627,6 +627,19 @@ void main() {
       },
     );
 
+    blocTest<IndexingBloc, IndexingState>(
+      'איפוס ובנייה מחדש נשלחים למארח כפעולה אחת ולא מתבצעים מקומית',
+      build: _FakeIndexingBloc.new,
+      act: (bloc) => bloc.add(ResetAndIndex(libraryWithBooks())),
+      wait: const Duration(milliseconds: 100),
+      expect: () => [IndexingInitial()],
+      verify: (bloc) {
+        expect(owner.receivedOps, [MultiWindowService.indexOpResetAndIndex]);
+        expect(repositoryOf(bloc).clearCalls, 0);
+        expect(repositoryOf(bloc).runs, isEmpty);
+      },
+    );
+
     // עבודת התחזוקה רצה במארח בכל טעינת ספרייה — העברה הייתה מכפילה אותה.
     blocTest<IndexingBloc, IndexingState>(
       'עבודת רקע אינה נשלחת למארח',
@@ -828,6 +841,30 @@ void main() {
       act: (bloc) => bloc.add(ClearIndex()),
       expect: () => [isA<IndexingInitial>()],
       verify: (bloc) => expect(repositoryOf(bloc).clearCalls, 1),
+    );
+
+    // אינדוקס שמתחיל לפני שהמחיקה הסתיימה כותב לאינדקס שעומד להימחק.
+    blocTest<IndexingBloc, IndexingState>(
+      'ResetAndIndex מוחק את האינדקס ורק אחריו מאנדקס את כל הספרייה',
+      build: () =>
+          _FakeIndexingBloc(_FakeIndexingRepository()..manualReindex = true),
+      act: (bloc) => bloc.add(ResetAndIndex(libraryWithBooks())),
+      verify: (bloc) {
+        final repository = repositoryOf(bloc);
+        expect(repository.clearCalls, 1);
+        expect(repository.runsAtClear, 0);
+        expect(repository.indexAllCalls, 1);
+      },
+    );
+
+    blocTest<IndexingBloc, IndexingState>(
+      'ResetAndIndex על אינדקס שכבר תקין אינו מוחק אותו',
+      build: _FakeIndexingBloc.new,
+      act: (bloc) => bloc.add(ResetAndIndex(libraryWithBooks())),
+      verify: (bloc) {
+        expect(repositoryOf(bloc).clearCalls, 0);
+        expect(repositoryOf(bloc).indexAllCalls, 1);
+      },
     );
 
     blocTest<IndexingBloc, IndexingState>(
@@ -1084,6 +1121,9 @@ class _FakeIndexingRepository extends IndexingRepository {
   /// דיווחי onScanProgress ששלב הבדיקה יפלוט לפני הסיום.
   List<(int, int)> scanProgressReports = const [];
   int clearCalls = 0;
+
+  /// מספר הריצות שכבר התחילו ברגע המחיקה האחרונה.
+  int? runsAtClear;
   int awaitReadyCalls = 0;
 
   Future<IndexingRunResult> _finish(
@@ -1212,6 +1252,8 @@ class _FakeIndexingRepository extends IndexingRepository {
   @override
   Future<bool> clearIndex() async {
     clearCalls++;
+    runsAtClear = runs.length;
+    manualReindex = false;
     return true;
   }
 }

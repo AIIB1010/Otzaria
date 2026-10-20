@@ -416,6 +416,11 @@ class _WindowBusHostState extends State<WindowBusHost> {
         if (!mounted) return false;
         indexing.add(StartIndexing(library));
         return true;
+      case MultiWindowService.indexOpResetAndIndex:
+        final library = await DataRepository.instance.library;
+        if (!mounted) return false;
+        indexing.add(ResetAndIndex(library));
+        return true;
       case MultiWindowService.indexOpVisibility:
         final bookKeys = request['bookKeys'];
         final categoryPaths = request['categoryPaths'];

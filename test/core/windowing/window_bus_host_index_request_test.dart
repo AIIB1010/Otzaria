@@ -106,6 +106,15 @@ void main() {
     verify(() => indexingBloc.add(any(that: isA<ClearIndex>()))).called(1);
   });
 
+  testWidgets('בקשת איפוס ובנייה נכנסת מפעילה ResetAndIndex', (tester) async {
+    final accepted = await sendIndexRequest(
+      tester,
+      MultiWindowService.indexOpResetAndIndex,
+    );
+    expect(accepted, isTrue);
+    verify(() => indexingBloc.add(ResetAndIndex(library))).called(1);
+  });
+
   testWidgets('פעולה לא מוכרת נדחית', (tester) async {
     final accepted = await sendIndexRequest(tester, 'הפעלה שאינה קיימת');
     expect(accepted, isFalse);

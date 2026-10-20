@@ -608,6 +608,9 @@ class MultiWindowService {
   /// פעולת אינדוקס בבקשת [requestIndex] — מחיקת האינדקס.
   static const String indexOpClear = 'clearIndex';
 
+  /// פעולת אינדוקס בבקשת [requestIndex] — מחיקת האינדקס ואחריה אינדוקס מלא.
+  static const String indexOpResetAndIndex = 'resetAndIndex';
+
   static const String indexOpVisibility = 'indexVisibility';
   static const String requestIndexVisibilityResult = 'indexVisibilityResult';
   static int _nextVisibilityRequest = 0;

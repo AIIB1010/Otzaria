@@ -19,7 +19,6 @@ import 'package:otzaria/search/view/search_scope_menu.dart';
 import 'package:otzaria/indexing/bloc/indexing_bloc.dart';
 import 'package:otzaria/indexing/bloc/indexing_event.dart';
 import 'package:otzaria/indexing/bloc/indexing_state.dart';
-import 'package:otzaria/indexing/repository/indexing_repository.dart';
 import 'package:otzaria/navigation/view/main_window_screen.dart';
 import 'package:otzaria/widgets/layout/centered_scrollable_state.dart';
 import 'package:otzaria/search/bloc/search_bloc.dart';
@@ -435,16 +434,14 @@ class _SearchDialogState extends State<SearchDialog> {
                           icon: FluentIcons.play_24_regular,
                           onPressed: () async {
                             final indexingBloc = context.read<IndexingBloc>();
-                            if (rebuildRequired &&
-                                !await IndexingRepository(
-                                  TantivyDataProvider.instance,
-                                ).clearIndex()) {
-                              return;
-                            }
                             // העץ המלא: העץ של LibraryBloc מסונן מהסתרות.
                             final library =
                                 await DataRepository.instance.library;
-                            indexingBloc.add(StartIndexing(library));
+                            indexingBloc.add(
+                              rebuildRequired
+                                  ? ResetAndIndex(library)
+                                  : StartIndexing(library),
+                            );
                           },
                         ),
                       ),
