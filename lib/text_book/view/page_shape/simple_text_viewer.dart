@@ -2851,11 +2851,13 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     ReadingSegments? segments,
     bool continuous,
   ) {
-    final anchor = _lines?.captureAnchor() ?? _initialAnchor;
+    final currentAnchor = _lines?.captureAnchor();
+    final anchor = currentAnchor ?? _initialAnchor;
     TargetRectResolver? initialResolver;
     if (segments != null &&
         anchor != null &&
-        (anchor.line != 0 ||
+        (currentAnchor != null ||
+            anchor.line != 0 ||
             anchor.intraLineFraction != 0 ||
             anchor.alignment != 0)) {
       initialResolver = readingAnchorTargetRectResolver(

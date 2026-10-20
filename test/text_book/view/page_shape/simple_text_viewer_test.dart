@@ -127,6 +127,32 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('עוגן מפורש בראש הטקסט מדלג על הבאנר כבר בפריים הראשון', (
+    tester,
+  ) async {
+    final lines = LineScrollController(
+      initialAnchor: const ReadingAnchor(line: 0, alignment: 0),
+    );
+    addTearDown(lines.dispose);
+    await _pumpMarkedViewer(
+      tester,
+      lines: ['${'מילה ' * 1500}סוף הפסקה', 'המשך הספר'],
+      lineScroll: lines,
+      protection: BookProtection(bannerText: 'קרדיט למקור הספר ' * 80),
+      settle: false,
+    );
+    final box = lines.itemBoxes.boxForItem(0)!;
+    final extent = lines.itemBoxes.lineExtent(0, 0)!;
+    expect(extent.top, greaterThan(0));
+    expect(
+      box.localToGlobal(Offset.zero).dy + box.size.height * extent.top,
+      closeTo(0, 0.1),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('תחילת ספר מציגה את באנר הקרדיט לפני הטקסט', (tester) async {
     final lines = LineScrollController();
     addTearDown(lines.dispose);
