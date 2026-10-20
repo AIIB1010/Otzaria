@@ -287,9 +287,6 @@ class CommentaryListBaseState extends State<CommentaryListBase>
   // שורות המקור שהרשימה מציגה כרגע — לזיהוי מעבר לקטע אחר.
   List<int>? _sectionIndexes;
   bool _scrollToTopScheduled = false;
-  // bucket מקומי: ScrollablePositionedList משחזר מיקום מ-PageStorage ודורס בכך
-  // את initialScrollIndex, כך שקטע חדש נפתח על היסט הקטע הקודם (issue #846).
-  final PageStorageBucket _listStorageBucket = PageStorageBucket();
   // מצב גלובלי של פתיחה/סגירה של כל המפרשים — חשוף ככ-ValueListenable כדי
   // שצרכנים חיצוניים (למשל CommentatorsTabScreen) יוכלו להאזין ולעדכן UI.
   final ValueNotifier<bool> _allExpandedNotifier = ValueNotifier<bool>(true);
@@ -2144,12 +2141,9 @@ class CommentaryListBaseState extends State<CommentaryListBase>
                                   itemPositionsListener: _itemPositionsListener,
                                   itemCount: flatItems.length,
                                   child: SmoothWheelScroll(
-                                    child: PageStorage(
-                                      bucket: _listStorageBucket,
-                                      child: constrainToContentWidth(
-                                        listView,
-                                        widget.contentMaxWidth,
-                                      ),
+                                    child: constrainToContentWidth(
+                                      listView,
+                                      widget.contentMaxWidth,
                                     ),
                                   ),
                                 ),
