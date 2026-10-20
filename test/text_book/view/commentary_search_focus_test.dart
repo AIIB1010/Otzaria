@@ -348,6 +348,38 @@ Future<void> main() async {
       );
     }
 
+    testWidgets('שאילתה פנימית גוברת על highlight וחוזרת אליו כשמתרוקנת', (
+      tester,
+    ) async {
+      final controller = TextEditingController();
+      final highlight = ValueNotifier<String>('');
+      addTearDown(controller.dispose);
+      addTearDown(highlight.dispose);
+      await _pumpWidget(
+        tester,
+        textBookBloc: textBookBloc,
+        settingsBloc: settingsBloc,
+        externalSearchController: controller,
+        highlightQueryListenable: highlight,
+      );
+      final list = tester.state<CommentaryListBaseState>(
+        find.byType(CommentaryListBase),
+      );
+      controller.text = 'עמק';
+      await _pumpSearchCounts(tester);
+      expect(list.totalSearchResultsNotifier.value, 80);
+
+      highlight.value = 'יין';
+      await _pumpSearchCounts(tester);
+      expect(list.totalSearchResultsNotifier.value, 80);
+      controller.clear();
+      await _pumpSearchCounts(tester);
+      expect(list.totalSearchResultsNotifier.value, 40);
+      highlight.value = '';
+      await _pumpSearchCounts(tester);
+      expect(list.totalSearchResultsNotifier.value, 0);
+    }, skip: !engineReady);
+
     testWidgets('שאילתה חיצונית חדשה: התוצאה הבאה היא הראשונה (#2606)', (
       tester,
     ) async {

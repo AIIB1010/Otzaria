@@ -1,3 +1,4 @@
+import 'package:otzaria/book_common/bloc/commentary_search_bloc.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:otzaria/widgets/smart_text/render_settings.dart';
@@ -422,10 +423,7 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
   final Map<String, bool> _expansionStates = {};
 
   // Anti-jitter search stats
-  final Map<String, int> _searchResultsPerLink = {};
-
-  /// קטע התצוגה של תוצאת החיפוש בכל מפרש (link key → snippet).
-  final Map<String, String> _searchSnippetsPerLink = {};
+  Map<String, int> get _searchResultsPerLink => _searchBloc.state.counts;
 
   /// הטקסט המרונדר של כל מפרש מוצג — לשחזור מעברי שורה בהעתקה רב-שורתית,
   /// ש-Flutter מחזיר שטוחה.
@@ -438,13 +436,6 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
   /// המפרש שנלחץ לאחרונה. ל-SelectionArea היחיד אין מידע על המפרש הספציפי,
   /// והוא נדרש לייחוס כותרת המקור בהעתקה.
   Link? _lastSelectedLink;
-  Timer? _searchUpdateDebounce;
-  final Map<String, int> _pendingCounts = {};
-  // חישוב ספירות חיפוש ברקע על כל הקישורים — הרשימה וירטואלית ופריטים שלא
-  // נבנו אינם מדווחים, לכן אסור להסתמך על ה-widgets לספירה.
-  Timer? _searchComputeDebounce;
-  int _searchComputeGen = 0;
-  int _lastLinksSignature = 0;
 
   // Scroll support
   final ItemScrollController _itemScrollController = ItemScrollController();
@@ -550,22 +541,21 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
   }
 
   void _clearSearchAndCloseField() {
-    _searchComputeDebounce?.cancel();
     _searchController.clear();
     setState(() {
       _searchQuery = '';
       _currentSearchIndex = 0;
       _totalSearchResults = 0;
-      _searchResultsPerLink.clear();
-      _searchSnippetsPerLink.clear();
+
       _showSearchField = false;
     });
-    _publishSearchSnippets();
+    _scheduleSearchCompute();
   }
 
   @override
   void initState() {
     super.initState();
+    _searchSubscription = _searchBloc.stream.listen(_applySearchState);
     _tabController = TabController(
       length: 3, // מפרשים, קישורים, הערות
       vsync: this,
@@ -599,8 +589,6 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
       _searchQuery = text;
       _currentSearchIndex = -1;
       if (text.isEmpty) {
-        _searchResultsPerLink.clear();
-        _searchSnippetsPerLink.clear();
         _totalSearchResults = 0;
       }
     });
@@ -771,11 +759,12 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
 
   @override
   void dispose() {
+    unawaited(_searchSubscription?.cancel());
+    unawaited(_searchBloc.close());
     _cancelPendingItemPositionWait();
     _commentarySelectionDelegate.dispose();
     _hiddenSelectionSubscription?.cancel();
-    _searchUpdateDebounce?.cancel();
-    _searchComputeDebounce?.cancel();
+
     _tabController.removeListener(_tabControllerListener);
     widget.openFilterRequest?.removeListener(_handleOpenFilterRequest);
     widget.openFilterNotifier?.removeListener(_onOpenFilterRequest);
@@ -820,19 +809,14 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
     _scrolledRangeKey = rangeKey;
     _searchScopeKey = scopeKey;
     if (isFirstRange) return;
-    _searchComputeGen++;
     _searchScrollGeneration++;
-    _searchComputeDebounce?.cancel();
-    _searchUpdateDebounce?.cancel();
-    _lastLinksSignature = 0;
+
     _orderedLinks = [];
     _orderedGroups = [];
     _cancelPendingItemPositionWait();
     _totalSearchResults = 0;
     _currentSearchIndex = -1;
-    _searchResultsPerLink.clear();
-    _searchSnippetsPerLink.clear();
-    _pendingCounts.clear();
+    _scheduleSearchCompute();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _searchScopeKey != scopeKey) return;
       widget.externalTotalResultsNotifier?.value = _totalSearchResults;
@@ -913,122 +897,52 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
     return top < _flatItems.length ? _flatItems[top].group.bookTitle : null;
   }
 
+  late final CommentarySearchBloc _searchBloc = CommentarySearchBloc(
+    keyOf: _getLinkKey,
+  );
+  StreamSubscription<CommentarySearchState>? _searchSubscription;
+
   void _scheduleSearchCompute() {
-    _searchComputeDebounce?.cancel();
-    // כשאין קישורים אין מה לחשב — טעינתם תפעיל תזמון מחדש (לפי חתימה).
-    if (_orderedLinks.isEmpty) return;
-    _searchComputeDebounce = Timer(
-      const Duration(milliseconds: 250),
-      _computeSearchCounts,
-    );
-  }
-
-  /// עובר על כל הקישורים ומזין את משפך העדכון של ספירות החיפוש, במקביל
-  /// לדיווח (הזהה) מה-widgets שנבנו בפועל.
-  Future<void> _computeSearchCounts() async {
-    if (!mounted || _searchQuery.isEmpty) return;
-    final query = _searchQuery;
-    final links = List<Link>.from(_orderedLinks);
-    if (links.isEmpty) return;
-    final gen = ++_searchComputeGen;
-
-    for (final link in links) {
-      String data;
-      try {
-        data = await link.content;
-      } catch (_) {
-        data = '';
-      }
-      if (!mounted || gen != _searchComputeGen || _searchQuery != query) {
-        return;
-      }
-      final count = countCommentarySearchMatches(
-        content: data,
-        query: query,
+    _searchBloc.add(
+      CommentarySearchRequested(
+        links: _orderedLinks,
+        query: _searchQuery,
         displayProfile: widget.displayProfile,
-        // התוכן מרונדר ב-CommentaryContent עם partialWordHighlight: true.
-        partialWordMatch: true,
-      );
-      // גזירה באותו מעבר שכבר טען את התוכן — כך הרשימה שלמה גם לפריטים
-      // שהרשימה הווירטואלית לא בנתה.
-      if (count > 0) {
-        _searchSnippetsPerLink[_getLinkKey(
-          link,
-        )] = buildCommentarySearchSnippet(
-          content: data,
-          query: query,
-          displayProfile: widget.displayProfile,
-        );
-      } else {
-        _searchSnippetsPerLink.remove(_getLinkKey(link));
-      }
-      _updateSearchResultsCount(link, count);
-    }
-  }
-
-  /// מפרסם את רשימת קטעי החיפוש להורה, בסדר התצוגה ועם ה-globalIndex שממנו
-  /// הניווט 'תוצאה הבאה' יודע לאיזה מפרש לגלול.
-  void _publishSearchSnippets() {
-    final notifier = widget.externalSearchSnippetsNotifier;
-    if (notifier == null || !mounted) return;
-    notifier.value = orderCommentarySearchSnippets<Link>(
-      items: _orderedLinks,
-      keyOf: _getLinkKey,
-      pathOf: (link) => link.path2,
-      countsByKey: _searchResultsPerLink,
-      snippetsOf: (key, count) {
-        final snippet = _searchSnippetsPerLink[key];
-        return snippet != null && count > 0 ? [snippet] : const [];
-      },
+        includeSnippets: widget.externalSearchSnippetsNotifier != null,
+      ),
     );
   }
 
-  void _updateSearchResultsCount(Link link, int count) {
+  void _applySearchState(CommentarySearchState state) {
     if (!mounted) return;
-
-    final key = _getLinkKey(link);
-    final currentValue = _searchResultsPerLink[key];
-    final pendingValue = _pendingCounts[key];
-    if (currentValue == count && pendingValue == count) {
-      return;
-    }
-
-    _pendingCounts[key] = count;
-
-    if (_searchUpdateDebounce?.isActive ?? false) return;
-
-    _searchUpdateDebounce = Timer(const Duration(milliseconds: 150), () {
-      if (!mounted) return;
-      final bool hasActualChange = _pendingCounts.entries.any(
-        (entry) => _searchResultsPerLink[entry.key] != entry.value,
-      );
-
-      if (!hasActualChange) {
-        _pendingCounts.clear();
-        // ספירות זהות עדיין יכולות לשאת קטעים חדשים (שאילתה אחרת, אותו מספר
-        // התאמות), ולכן הפרסום נדרש גם כאן.
-        _publishSearchSnippets();
-        return;
+    setState(() {
+      _searchResultOffsets = null;
+      _totalSearchResults = state.total;
+      if (_currentSearchIndex >= state.total && state.total > 0) {
+        _currentSearchIndex = 0;
       }
-
-      setState(() {
-        _searchResultsPerLink.addAll(_pendingCounts);
-        _pendingCounts.clear();
-        _totalSearchResults = totalCommentarySearchResults(
-          _searchResultsPerLink,
-        );
-
-        // Reset current index if out of bounds
-        if (_currentSearchIndex >= _totalSearchResults) {
-          _currentSearchIndex = 0;
-        }
-        widget.externalTotalResultsNotifier?.value = _totalSearchResults;
-        widget.externalCurrentIndexNotifier?.value = _currentSearchIndex;
-      });
-      // חובה כאן: הקטעים נגזרים מהספירות, והן נכנסות רק בתוך ה-flush הזה.
-      // פרסום מחוץ לו מייצר רשימה לפי ספירות של השאילתה הקודמת.
-      _publishSearchSnippets();
     });
+    widget.externalTotalResultsNotifier?.value = state.total;
+    widget.externalCurrentIndexNotifier?.value = _currentSearchIndex;
+    _publishSearchSnippets();
+  }
+
+  void _publishSearchSnippets() {
+    widget.externalSearchSnippetsNotifier?.value =
+        _searchQuery.isEmpty || _orderedLinks.isEmpty
+        ? []
+        : _searchBloc.state.snippets;
+  }
+
+  void _updateSearchResultsCount(Link link, int count, int generation) {
+    if (!mounted) return;
+    _searchBloc.add(
+      CommentarySearchReported(
+        generation: generation,
+        key: _getLinkKey(link),
+        count: count,
+      ),
+    );
   }
 
   /// משחזר מעברי שורה בבחירה רב-שורתית לפי הטקסט המרונדר של המפרשים המוצגים.
@@ -1479,8 +1393,6 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
           // No current match until the first Enter, so it lands on the first.
           _currentSearchIndex = -1;
           if (value.isEmpty) {
-            _searchResultsPerLink.clear();
-            _searchSnippetsPerLink.clear();
             _totalSearchResults = 0;
           }
         });
@@ -1611,6 +1523,8 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
     }
 
     if (visibleContent.commentaryLinks.isEmpty) {
+      _orderedLinks = [];
+      _scheduleSearchCompute();
       _invalidateFullSelection();
       _cancelPendingItemPositionWait();
       if (widget.linksLoading) {
@@ -1716,13 +1630,8 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
         }
         _cancelPendingWaitIfItemChanged();
 
-        // Rebuild _orderedLinks based on groups
         final orderedLinks = <Link>[];
         for (final group in currentGroups ?? const <CommentaryGroup>[]) {
-          // We need to verify link order inside group.
-          // In _buildCommentariesView, relevantLinks are sorted by title then index.
-          // _groupConsecutiveLinks groups them.
-          // So the links inside group.links should already be in order.
           orderedLinks.addAll(group.links);
         }
         if (currentGroups != null) _orderedLinks = orderedLinks;
@@ -1732,13 +1641,7 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
             .map((l) => _getLinkKey(l))
             .toSet();
 
-        // קישורים חדשים (טעינה/מעבר קטע) — חישוב ספירות חיפוש מחדש אם יש
-        // שאילתה פעילה.
-        final linksSignature = Object.hashAll(currentLinkKeys);
-        if (linksSignature != _lastLinksSignature) {
-          _lastLinksSignature = linksSignature;
-          _scheduleSearchCompute();
-        }
+        _scheduleSearchCompute();
         _itemKeys.removeWhere((key, value) => !currentLinkKeys.contains(key));
         for (final key in currentLinkKeys) {
           if (!_itemKeys.containsKey(key)) {
@@ -1748,36 +1651,6 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
         _renderedTextByKey.removeWhere(
           (key, value) => !currentLinkKeys.contains(key),
         );
-
-        // ניקוי ספירות חיפוש מקישורים שאינם בקטע הנוכחי
-        final staleSearchKeys = _searchResultsPerLink.keys
-            .where((key) => !currentLinkKeys.contains(key))
-            .toList();
-        if (staleSearchKeys.isNotEmpty) {
-          for (final key in staleSearchKeys) {
-            _searchResultsPerLink.remove(key);
-            _searchSnippetsPerLink.remove(key);
-          }
-          _pendingCounts.removeWhere(
-            (key, _) => !currentLinkKeys.contains(key),
-          );
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) return;
-            final newTotal = _searchResultsPerLink.values.fold(
-              0,
-              (sum, c) => sum + c,
-            );
-            if (_totalSearchResults != newTotal ||
-                _currentSearchIndex >= newTotal) {
-              setState(() {
-                _totalSearchResults = newTotal;
-                if (_currentSearchIndex >= newTotal) {
-                  _currentSearchIndex = 0;
-                }
-              });
-            }
-          });
-        }
 
         return SelectionContainer(
           delegate: _commentarySelectionDelegate,
@@ -2021,6 +1894,7 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
             }),
           );
         } else {
+          final generation = _searchBloc.generation;
           child = _PdfCommentaryLinkItem(
             link: link,
             settingsState: settingsState,
@@ -2029,7 +1903,8 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
             buildContextMenu: _buildCommentaryContextMenuEntries,
             getSavedSelectedText: () => _currentSelectedText,
             searchQuery: _searchQuery,
-            onSearchResultsCountUpdate: _updateSearchResultsCount,
+            onSearchResultsCountUpdate: (link, count) =>
+                _updateSearchResultsCount(link, count, generation),
             getKeyForLink: _getLinkKeyObject,
             getItemSearchIndex: _getItemSearchIndex,
             displayProfile: widget.displayProfile,
