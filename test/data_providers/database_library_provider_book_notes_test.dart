@@ -108,6 +108,16 @@ void main() {
       expect(DbCapabilities.probe(db).hasBookNoteDivineNames, isTrue);
     });
 
+    test('שמות בגוף ההערות בצורה הישנה (charEnd/kind/source) — כבויה', () {
+      createTable();
+      db.execute(
+        'CREATE TABLE line_note_divine_name (lineId INTEGER, '
+        'noteIndex INTEGER, charStart INTEGER, charEnd INTEGER, '
+        'kind INTEGER, source INTEGER)',
+      );
+      expect(DbCapabilities.probe(db).hasBookNoteDivineNames, isFalse);
+    });
+
     test('טבלה חסרת עמודות — כבויה', () {
       db.execute('CREATE TABLE line_note (lineId INTEGER, body TEXT)');
       expect(DbCapabilities.probe(db).hasBookNotes, isFalse);

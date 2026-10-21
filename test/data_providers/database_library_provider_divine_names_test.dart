@@ -92,4 +92,12 @@ void main() {
     expect(spans.spansAt(2), isEmpty);
     expect(load('ספר שאינו קיים').isEmpty, isTrue);
   });
+
+  test('span פגום — הטעינה נכשלת בקול (ונרשמת ביומן), בלי מופעים חלקיים', () {
+    createTable();
+    db.execute(
+      'INSERT INTO line_divine_name VALUES (10, 11, 677), (11, 6, 5)', // אורך 0
+    );
+    expect(load, throwsFormatException);
+  });
 }
