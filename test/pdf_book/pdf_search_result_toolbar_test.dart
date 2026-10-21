@@ -51,16 +51,16 @@ class _FakeReadyController extends PdfViewerController {
 }
 
 /// מצב סריקה והתאמות נשלטים מהבדיקה; פעולות הניווט נרשמות.
-class _ControlledSearcher extends PdfTextSearcher {
+class _ControlledSearcher extends PdfTextSearchSession {
   _ControlledSearcher(super.controller);
 
-  List<PdfPageTextRange> current = const [];
+  List<PdfTextSearchResult> current = const [];
   bool scanning = false;
   int? index;
   final actions = <String>[];
 
   @override
-  List<PdfPageTextRange> get matches => current;
+  List<PdfTextSearchResult> get matches => current;
 
   @override
   bool get isSearching => scanning;
@@ -100,15 +100,17 @@ class _ControlledSearcher extends PdfTextSearcher {
   void stopTextSearch() => actions.add('stop');
 }
 
-PdfPageTextRange _match(int page) => PdfPageTextRange(
-  pageText: PdfPageText(
-    pageNumber: page,
-    fullText: 'שלום עולם',
-    charRects: const [],
-    fragments: const [],
+PdfTextSearchResult _match(int page) => PdfTextSearchResult.fromRange(
+  PdfPageTextRange(
+    pageText: PdfPageText(
+      pageNumber: page,
+      fullText: 'שלום עולם',
+      charRects: List.filled(9, const PdfRect(0, 1, 1, 0)),
+      fragments: const [],
+    ),
+    start: 0,
+    end: 4,
   ),
-  start: 0,
-  end: 4,
 );
 
 Future<_ControlledSearcher> _pump(WidgetTester tester) async {

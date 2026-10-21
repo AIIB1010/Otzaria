@@ -307,7 +307,7 @@ class UpdateSearchOptions extends PdfBookEvent {
 
 /// Update search results
 class UpdateSearchResults extends PdfBookEvent {
-  final List<PdfPageTextRange>? matches;
+  final List<PdfTextSearchResult>? matches;
   final int? currentMatchIndex;
 
   const UpdateSearchResults({

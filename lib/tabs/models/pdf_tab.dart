@@ -46,7 +46,7 @@ class PdfBookTab extends OpenedTab {
   /// טווח הקרבה ומצב התאמת המילים שבהם נמצאה התוצאה — ראו [SearchMatchPolicy].
   SearchMatchPolicy matchPolicy;
 
-  List<PdfPageTextRange>? pdfSearchMatches;
+  List<PdfTextSearchResult>? pdfSearchMatches;
   int? pdfSearchCurrentMatchIndex;
 
   /// תצורת חיפוש חיצונית שממתינה להחלה בחלונית החיפוש.

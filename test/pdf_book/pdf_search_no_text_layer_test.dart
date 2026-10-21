@@ -29,7 +29,7 @@ class _FakeDocument extends Fake implements PdfDocument {
   Stream<PdfDocumentEvent> get events => const Stream.empty();
 }
 
-/// קונטרולר "מוכן" בלי PdfViewer אמיתי — [PdfTextSearcher] דורש מסמך חי
+/// קונטרולר "מוכן" בלי PdfViewer אמיתי — [PdfTextSearchSession] דורש מסמך חי
 /// בבנייה, ו-useDocument מוחזר null כדי שהחיפוש לא יגע ב-pdfium.
 class _FakeReadyController extends PdfViewerController {
   _FakeReadyController({this.visiblePage});
@@ -57,7 +57,7 @@ class _FakeReadyController extends PdfViewerController {
 }
 
 /// מחזיר שכבת טקסט קבועה לכל עמוד, במקום לטעון מ-pdfium.
-class _FakeTextSearcher extends PdfTextSearcher {
+class _FakeTextSearcher extends PdfTextSearchSession {
   _FakeTextSearcher(super.controller, this.pageFullText);
 
   final String pageFullText;
@@ -95,7 +95,7 @@ PdfBookLoaded _loadedState() => PdfBookLoaded(
 
 Future<void> _pumpSearchView(
   WidgetTester tester,
-  PdfTextSearcher textSearcher,
+  PdfTextSearchSession textSearcher,
   TextEditingController searchController,
   FocusNode focusNode,
 ) async {

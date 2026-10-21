@@ -67,7 +67,7 @@ class PdfBookSearchView extends StatefulWidget {
     super.key,
   });
 
-  final PdfTextSearcher textSearcher;
+  final PdfTextSearchSession textSearcher;
   final TextEditingController searchController;
   final FocusNode focusNode;
   final List<PdfOutlineNode>? outline;
@@ -165,35 +165,39 @@ class PdfBookSearchView extends StatefulWidget {
 
   /// שורת ההקשר של ההתאמה, מוגבלת גם כששכבת הטקסט חסרה ירידות שורה.
   @visibleForTesting
-  static String matchLineSnippet(PdfPageTextRange match, String fallback) {
-    final text = match.pageText.fullText;
-    if (match.start < 0 || match.end < match.start || match.end > text.length) {
-      return fallback;
-    }
+  static String matchLineSnippet(PdfTextSearchResult match, String fallback) {
+    final text = match.contextText;
+    final start = match.start - match.contextStart;
+    final end = match.end - match.contextStart;
+    if (start < 0 || end < start || end > text.length) return fallback;
     const maxChars = 240;
-    final leftLimit = (match.start - 80).clamp(0, text.length);
+    final leftLimit = (start - 80).clamp(0, text.length);
     final rightLimit = (leftLimit + maxChars).clamp(0, text.length);
-    var lineStart = match.start;
+    var lineStart = start;
     while (lineStart > leftLimit && text.codeUnitAt(lineStart - 1) != 10) {
       lineStart--;
     }
-    var lineEnd = match.end.clamp(lineStart, rightLimit);
+    var lineEnd = end.clamp(lineStart, rightLimit);
     while (lineEnd < rightLimit && text.codeUnitAt(lineEnd) != 10) {
       lineEnd++;
     }
     final line = text.substring(lineStart, lineEnd).trim();
     if (line.isEmpty) return fallback;
-    final before = lineStart > 0 && text.codeUnitAt(lineStart - 1) != 10;
-    final after = lineEnd < text.length && text.codeUnitAt(lineEnd) != 10;
+    final before = lineStart > 0
+        ? text.codeUnitAt(lineStart - 1) != 10
+        : match.contextStart > 0;
+    final after = lineEnd < text.length
+        ? text.codeUnitAt(lineEnd) != 10
+        : match.contextStart + lineEnd < match.pageTextLength;
     return '${before ? '…' : ''}$line${after ? '…' : ''}';
   }
 
-  /// כמה מ-[previous] נשארות בראש [matches]: ה-searcher מודיע אחרי כל עמוד
-  /// עם רשימה מצטברת חדשה, ולכן ממפים רק את מה שנוסף; חיפוש חדש מחזיר 0.
+  /// כמה מ-[previous] נשארות בראש [matches]: ה-searcher מפרסם תמונות מצב
+  /// מצטברות, ולכן ממפים רק את מה שנוסף; חיפוש חדש מחזיר 0.
   @visibleForTesting
   static int keptMatchCount(
-    List<PdfPageTextRange> previous,
-    List<PdfPageTextRange> matches,
+    List<PdfTextSearchResult> previous,
+    List<PdfTextSearchResult> matches,
   ) {
     if (previous.isEmpty || matches.length < previous.length) return 0;
     final extendsPrevious =
@@ -274,7 +278,7 @@ class PdfBookSearchViewState extends State<PdfBookSearchView> {
 
   /// Whether the engine found more results than the pane shows.
   bool _resultsTruncated = false;
-  List<PdfPageTextRange> _mappedMatches = const [];
+  List<PdfTextSearchResult> _mappedMatches = const [];
   List<SearchResult>? _groupedSource;
   final List<dynamic> _groupedItems = [];
   int _groupedCount = 0;

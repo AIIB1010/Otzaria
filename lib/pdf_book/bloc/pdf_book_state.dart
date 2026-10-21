@@ -176,7 +176,7 @@ class PdfBookLoaded extends PdfBookState {
   final SearchMode searchMode;
   final int searchDistance;
   final SearchMatchPolicy matchPolicy;
-  final List<PdfPageTextRange>? searchMatches;
+  final List<PdfTextSearchResult>? searchMatches;
   final int? currentSearchMatchIndex;
 
   // Commentary/Links
@@ -248,7 +248,7 @@ class PdfBookLoaded extends PdfBookState {
     SearchMode? searchMode,
     int? searchDistance,
     SearchMatchPolicy? matchPolicy,
-    List<PdfPageTextRange>? searchMatches,
+    List<PdfTextSearchResult>? searchMatches,
     int? currentSearchMatchIndex,
     PdfHeadings? pdfHeadings,
     List<Link>? links,

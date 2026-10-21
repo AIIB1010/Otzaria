@@ -133,17 +133,16 @@ dependencies:
   wakelock_plus: ^1.8.1
 
 dependency_overrides:
-  # TODO: לחזור ל-pub.dev רק לאחר שנרמול העברית ישמר את החיפוש ומיפוי התווים הקיימים בספרים סרוקים.
-  # שתי החבילות מוצמדות יחד; המנרמל הקיים נשמר, כולל מגבלותיו בטקסט מעורב ובפיסוק מספרים.
+  # TODO: לחזור ל-pub.dev לאחר שחרור תיקוני העברית, תעדוף הרינדור והמטמונים מהפורק.
   pdfrx:
     git:
-      url: https://github.com/Y-PLONI/pdfrx
-      ref: 6f5fec0c44a5db00a1ea3c2f26cb01862e02fef1
+      url: https://github.com/palmoni5/pdfrx
+      ref: 6e41fa1714bf8b70ac89b8f3be5465d568394e81
       path: packages/pdfrx
   pdfrx_engine:
     git:
-      url: https://github.com/Y-PLONI/pdfrx
-      ref: 6f5fec0c44a5db00a1ea3c2f26cb01862e02fef1
+      url: https://github.com/palmoni5/pdfrx
+      ref: 6e41fa1714bf8b70ac89b8f3be5465d568394e81
       path: packages/pdfrx_engine
   # TODO: להחזיר ל-pub.dev כשיתמזג וישוחרר MaikuB/flutter_local_notifications#2826
   # (קריאות WinRT ב-thread ייעודי, כולל תיקון ה-deadlock ב-invoke). עד אז הפורק
