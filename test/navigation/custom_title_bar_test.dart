@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:otzaria_icons/otzaria_icons.dart';
-import 'package:window_manager/window_manager.dart';
+import 'package:otzaria/core/windowing/app_window_caption.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
 import 'package:otzaria/core/windowing/window_manager_app_window_controller.dart';
 import 'package:otzaria/models/books.dart';
@@ -2416,11 +2416,11 @@ void main() {
   });
 
   group('לחיצה כפולה: על טאב נבלעת, על האזור הריק עושה maximize', () {
-    // DragToMoveArea (window_manager) עושה maximize/restore ב-onDoubleTap דרך
+    // AppDragToMoveArea עושה maximize/restore ב-onDoubleTap, וכברירת מחדל דרך
     // ה-MethodChannel 'window_manager' (isMaximized → maximize/unmaximize).
     // תופסים את הקריאות כדי לוודא שלחיצה כפולה על טאב אינה מגיעה לשם.
     // אוספים רק את פעולות שינוי-הגודל (maximize/unmaximize). את isMaximized
-    // מתעלמים: WindowCaption (כפתורי החלון) קורא לו בכל build לבחירת האייקון,
+    // מתעלמים: AppWindowCaption (כפתורי החלון) קורא לו בכל build לבחירת האייקון,
     // והוא אינו מעיד על לחיצה כפולה.
     late List<String> resizeCalls;
 
@@ -2488,7 +2488,7 @@ void main() {
     testWidgets('לחיצה כפולה על האזור הריק שבשורת הטאבים עושה maximize', (
       tester,
     ) async {
-      // טאב יחיד קצר ברוחב גדול → אזור ריק נרחב בשורת הטאבים, שבו ה-DragToMoveArea
+      // טאב יחיד קצר ברוחב גדול → אזור ריק נרחב בשורת הטאבים, שבו ה-AppDragToMoveArea
       // צריך לפעול כרגיל (maximize/restore).
       final tab = _makeTextTab('ספר א');
       final tabsBloc = _TestTabsBloc(
@@ -2712,12 +2712,12 @@ void main() {
       settingsBloc: settingsBloc,
     );
 
-    expect(find.byType(WindowCaption), findsOneWidget);
+    expect(find.byType(AppWindowCaption), findsOneWidget);
   });
 }
 
 /// לחיצה כפולה במיקום נתון: שתי הקשות עם השהיה תקפה ל-double-tap, ואז המתנה
-/// להשלמת ה-onDoubleTap (שהוא async ב-DragToMoveArea).
+/// להשלמת ה-onDoubleTap (שהוא async ב-AppDragToMoveArea).
 Future<void> _doubleTapAt(WidgetTester tester, Offset pos) async {
   await tester.tapAt(pos);
   await tester.pump(const Duration(milliseconds: 100));

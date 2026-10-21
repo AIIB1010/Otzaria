@@ -3,6 +3,8 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:otzaria/plugins/view/safe_mode_controls.dart';
+import 'package:otzaria/core/windowing/app_drag_to_move_area.dart';
+import 'package:otzaria/core/windowing/app_window_caption.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
 import 'package:otzaria/theme/app_tokens.dart';
 import 'package:flutter/foundation.dart';
@@ -13,7 +15,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:otzaria_icons/otzaria_icons.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
-import 'package:window_manager/window_manager.dart';
 import 'package:otzaria/navigation/bloc/navigation_bloc.dart';
 import 'package:otzaria/shortcuts/shortcut_helper.dart';
 import 'package:otzaria/shortcuts/shortcut_validator.dart';
@@ -324,7 +325,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
                                   SizedBox(
                                     width: _kWindowCaptionButtonsWidth,
                                     height: 50,
-                                    child: WindowCaption(
+                                    child: AppWindowCaption(
                                       brightness: Theme.of(context).brightness,
                                       backgroundColor: Colors.transparent,
                                     ),
@@ -367,7 +368,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
       width: _kAppBarControlsWidth,
       child: Stack(
         children: [
-          const DragToMoveArea(child: SizedBox.expand()),
+          const AppDragToMoveArea(child: SizedBox.expand()),
           Center(
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -415,7 +416,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
           children: [
             // במצב "בצד" כפתור חיפוש הכרטיסיות יושב בראש העמודה עצמה.
             if (stacked) TabSearchButton(style: _kIconButtonStyle),
-            const Expanded(child: DragToMoveArea(child: SizedBox.expand())),
+            const Expanded(child: AppDragToMoveArea(child: SizedBox.expand())),
             _buildReadingSettingsButton(context),
           ],
         );
@@ -473,7 +474,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
     return Row(
       children: [
         Expanded(
-          child: DragToMoveArea(
+          child: AppDragToMoveArea(
             child: Center(
               child: Text(
                 subtitle != null ? '$title: $subtitle' : title,
@@ -499,7 +500,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
       buildWhen: _tabStripChanged,
       builder: (context, state) {
         if (!state.hasOpenTabs) {
-          return DragToMoveArea(
+          return AppDragToMoveArea(
             child: Center(
               child: Text(
                 context.settingsText('עיון'),
@@ -687,7 +688,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
   }
 
   Widget _buildReadingSettingsButton(BuildContext context) {
-    return DragToMoveArea(
+    return AppDragToMoveArea(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4.0),
         child: IconButton(

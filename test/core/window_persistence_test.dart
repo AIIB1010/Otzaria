@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart' show Listenable;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/core/user_state/window_bounds.dart';
@@ -211,6 +212,8 @@ class _RecordingWindow implements AppWindowController, AppWindowGeometry {
   Future<Rect> getBounds() async => bounds;
   @override
   Future<bool> isFullScreen() async => false;
+  @override
+  Listenable get stateChanges => Listenable.merge(const []);
   @override
   Future<bool> isMaximized() async => false;
   @override
