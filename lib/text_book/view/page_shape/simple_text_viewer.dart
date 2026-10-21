@@ -55,6 +55,7 @@ import 'package:otzaria/utils/ui/context_menu_utils.dart' show ContextMenuUtils;
 import 'package:otzaria/core/messages/text_book_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/personal_notes/personal_notes_system.dart';
+import 'package:otzaria/personal_notes/widgets/personal_notes_sidebar.dart';
 import 'package:otzaria/personal_notes/utils/personal_note_source_selection.dart';
 import 'package:otzaria/personal_notes/storage/personal_notes_changes.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
@@ -818,8 +819,16 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
         context,
         globalPosition: globalPosition,
         hoverMode: hoverMode,
-        contentBuilder: (_) =>
-            PersonalNotesListView(notes: notes, maxHeight: 220),
+        contentBuilder: (_) => PersonalNotesListView(
+          notes: notes,
+          maxHeight: 220,
+          onLinkTap: (url) => openNoteLink(
+            context,
+            url,
+            notes.first.bookId,
+            (line, {note}) => _lines?.scrollToLine(line - 1),
+          ),
+        ),
       );
       return;
     }
