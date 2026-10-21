@@ -15,6 +15,7 @@ import 'dart:collection';
 import 'package:path/path.dart' as p;
 import 'package:otzaria/core/messages/plugin_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
+import 'package:otzaria/plugins/services/plugin_fonts.dart';
 import 'package:otzaria/plugins/services/plugin_page_launcher.dart';
 import 'package:otzaria/plugins/services/plugin_process_recovery.dart';
 import 'package:otzaria/plugins/services/plugin_restore_state_store.dart';
@@ -43,6 +44,7 @@ import 'package:otzaria/plugins/view/plugin_webrtc_block_script.dart';
 import 'package:otzaria/plugins/view/plugin_sdk_scripts.dart';
 import 'package:otzaria/plugins/view/plugin_webview_host.dart';
 import 'package:otzaria/plugins/view/plugin_linkify_script.dart';
+import 'package:otzaria/plugins/view/plugin_load_generation.dart';
 import 'package:otzaria/plugins/view/widgets/plugin_webview_focus_restorer.dart';
 import 'package:otzaria/plugins/services/plugin_download_handler.dart';
 import 'package:otzaria/plugins/services/plugin_webview_permission_gate.dart';
@@ -197,6 +199,7 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
 
   /// רק לפתיחה הראשונה: בטעינה מחדש הדף הקודם נשאר מוצג עד שהחדש מצויר.
   bool _awaitingFirstBoot = true;
+  final _loadGeneration = PluginLoadGeneration();
   bool _hasError = false;
   String? _devErrorMessage;
 
@@ -722,7 +725,10 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
           ),
       shouldInterceptRequest: (controller, request) =>
           interceptPluginRequest(request),
+      onLoadStart: (controller, url) => _loadGeneration.invalidate(),
       onLoadStop: (controller, url) async {
+        final generation = _loadGeneration.begin();
+        bool stale() => !mounted || !_loadGeneration.isCurrent(generation);
         // טעינה מחדש של הדף מאפסת את מצב ה-JS, ואיתו את הדגל שהוא הרים.
         PluginUnsavedChangesRegistry.instance.removeInstance((
           pluginId: widget.plugin.pluginId,
@@ -732,19 +738,26 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
           // לוכד theme לפני ה-await (context חייב להישמר synchronously)
           final theme = buildThemePayload(context);
 
-          // כל הגופנים חייבים להירשם לפני boot, כדי שתוספים יוכלו לטעון
-          // ולמדוד אותם מתוך plugin.ready בלי ליפול לגופן חלופי.
-          final fontFaceJson = await buildPluginFontFaceJson();
-          if (!mounted) return;
+          final fontFaceCss = await buildPluginFontFaceCss();
+          if (stale()) return;
 
           // Use cached PackageInfo — avoids async gap crossing a dispose
           final packageInfo =
               PluginWebViewHost.cachedPackageInfo ??
               await PackageInfo.fromPlatform();
-          if (!mounted) return;
+          if (stale()) return;
           final permissions = await pluginRegistryRepository
               .getGrantedPermissionNames(widget.plugin.pluginId);
-          if (!mounted) return;
+          if (stale()) return;
+          // הגופנים נרשמים, וגופני ברירת המחדל נטענים, לפני ה-boot: תוסף מודד
+          // טקסט מתוך plugin.ready. ה-boot חייב להישאר סינכרוני (ה-Dispatcher).
+          final fontsInstalled = await installPluginFonts(
+            controller,
+            css: fontFaceCss,
+            targets: pluginFontLoadTargets(theme),
+          );
+          // דף שנטען מחדש בזמן ההמתנה מקבל boot מהזרימה שלו בלבד.
+          if (stale()) return;
           // Real SDK — injected after load, calls _boot() which re-plays queued
           // Otzaria.on() calls and then fires plugin.boot
           await controller.evaluateJavascript(
@@ -762,9 +775,12 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
                 instanceId: widget.instanceId,
                 firstBoot: !_bootedOnce,
               ),
-              fontFaceJson: fontFaceJson,
+              fontFaceJson: fontsInstalled
+                  ? null
+                  : pluginFontFaceJson(fontFaceCss),
             ),
           );
+          if (stale()) return;
           await _pushHostShortcuts(controller);
           _bootedOnce = true;
           // הטעינה הצליחה עד הסוף (גם ה-stub וגם ה-boot payload הוזרקו).

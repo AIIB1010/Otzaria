@@ -28,6 +28,7 @@ import 'package:otzaria/plugins/services/plugin_asset_scheme.dart';
 import 'package:otzaria/plugins/services/plugin_content_blockers.dart';
 import 'package:otzaria/plugins/services/plugin_content_security_policy.dart';
 import 'package:otzaria/plugins/services/plugin_file_server.dart';
+import 'package:otzaria/plugins/services/plugin_fonts.dart';
 import 'package:otzaria/plugins/services/plugin_headless_shell.dart';
 import 'package:otzaria/plugins/services/plugin_network_gate.dart';
 import 'package:otzaria/plugins/services/plugin_network_policy.dart';
@@ -612,6 +613,8 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
       }
       if (_isDevServerRequest(uri)) return null; // dev server + HMR
       if (uri.scheme == 'http' && PluginFileServer.instance.isServerUri(uri)) {
+        final font = await pluginFontResponse(request);
+        if (font != null) return font;
         // גם נתיב ההעלאה (/w/) של התוסף: בלי ההחרגה ה-PUT של
         // fs.beginBinaryWrite נחסם כאן, וכל שמירה בינארית נופלת ב-"Failed to
         // fetch" (נמדד בווינדוס, שבו ה-fork של אוצריא מפעיל shouldInterceptRequest).

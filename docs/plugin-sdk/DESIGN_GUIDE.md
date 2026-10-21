@@ -86,7 +86,15 @@ applyTheme(theme);
 
 > **גופן ממשק ≠ גופן קריאה — אל תערבב:** `fontFamily` הוא הגופן שהמשתמש בחר ל**קריאת ספרים** — גופן עם תגיות, מצויר ל-25px. החלתו על כפתור או תפריט בן 11-12px מולידה טקסט מטושטש ומרוח. לממשק יש `uiFontFamily` — sans שנשאר חד בקטן. שני משתנים נפרדים, ולא אחד: `--font-ui` לכפתורים/תפריטים/שדות, ו-`--font-main` רק לטקסט הספר עצמו.
 
-> **הגופנים זמינים אוטומטית ב-WebView:** כל הגופנים המובנים של אוצריא (`FrankRuhlCLM`, `TaameyDavidCLM`, `Shofar`, `NotoRashiHebrew`, `KeterYG`, `NotoSerifHebrew`, `Tinos`, `Rubik`, `TaameyAshkenaz`) מוזרקים כ-`@font-face` עוד לפני ה-`plugin.boot`, ואיתם גם גופן מערכת שהמשתמש בחר בהגדרות. אין צורך לארוז קבצי גופן בתוסף — מספיק `font-family: 'FrankRuhlCLM', 'David', serif;` ב-CSS. כל משפחה נשלחת עם ה-face הבולד האמיתי שלה (או עם טווח משקלים בגופן משתנה), כך ש-`font-weight: bold` מקבל ציור אות אמיתי ולא עיבוי מלאכותי.
+> **הגופנים זמינים אוטומטית ב-WebView:** כל הגופנים המובנים של אוצריא (`FrankRuhlCLM`, `TaameyDavidCLM`, `Shofar`, `NotoRashiHebrew`, `KeterYG`, `NotoSerifHebrew`, `Tinos`, `Rubik`, `TaameyAshkenaz`) רשומים כ-`@font-face` עוד לפני ה-`plugin.boot`, ואיתם גם גופן מערכת שהמשתמש בחר בהגדרות. אין צורך לארוז קבצי גופן בתוסף — מספיק `font-family: 'FrankRuhlCLM', 'David', serif;` ב-CSS. כל משפחה נשלחת עם ה-face הבולד האמיתי שלה (או עם טווח משקלים בגופן משתנה), כך ש-`font-weight: bold` מקבל ציור אות אמיתי ולא עיבוי מלאכותי.
+>
+> **מתי הגופן מוכן למדידה:** לפני `plugin.boot` אוצריא ממתינה **עד 1.5 שניות** לטעינת המשפחות שב-`typography` — `fontFamily` ו-`commentatorsFontFamily` (רגיל ובולד) ו-`uiFontFamily`. בדרך כלל זה מספיק כדי שמדידת טקסט (canvas, `getBoundingClientRect`) מתוך `plugin.ready` תקבל את הגופן האמיתי — אבל זו אינה הבטחה: ב-iOS, ובמסלול החלופי כשההמתנה לא התאפשרה, אין המתנה כלל. שאר המשפחות נטענות בשימוש הראשון. תוסף שצריך ודאות ממתין בעצמו לפני המדידה:
+>
+> ```javascript
+> await document.fonts.load("16px 'FrankRuhlCLM'");
+> ```
+>
+> **הכללים האוטומטיים:** אוצריא מוסיפה לדף `<style data-otzaria-fonts>` עם כללי `@font-face` שה-`src` שלהם הוא כתובת מקומית (`http://127.0.0.1:<port>/fonts/…`; ב-iOS — `data:`). הכתובת תקפה **רק להרצה הנוכחית** — אל תעתיקו אותה לקובץ שנשמר או מיוצא. תוסף שמגדיר `<meta http-equiv="Content-Security-Policy">` משלו צריך להתיר את המקור (`font-src http://127.0.0.1:*`), אחרת הגופנים ייחסמו.
 
 ---
 
