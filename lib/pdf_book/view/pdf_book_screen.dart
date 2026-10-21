@@ -692,6 +692,9 @@ class _PdfBookScreenState extends State<PdfBookScreen>
   bool _leftPaneUsesPushLayout = false;
   final _scrollPhysicsProvider = StoppablePdfScrollPhysicsProvider();
   bool _rightPaneUsesPushLayout = false;
+  // הרוחב החי מצויר בחלונית עצמה; ה-bloc מתעדכן רק בסוף הגרירה.
+  double? _draggedLeftPaneWidth;
+  double? _draggedRightPaneWidth;
 
   /// מצב יד — גרירת עכבר גוללת את הדף במקום לסמן טקסט (issue #916).
   bool _isHandMode =
@@ -4337,13 +4340,18 @@ class _PdfBookScreenState extends State<PdfBookScreen>
                         _leftPaneUsesPushLayout = usesPushLayout;
                       },
                       onPaneWidthChanged: (nextWidth) {
-                        _bloc.add(pdf_events.UpdateSidebarWidth(nextWidth));
+                        _draggedLeftPaneWidth = nextWidth;
                       },
                       onPaneResizeEnd: () {
                         final current = _bloc.state;
+                        final width = _draggedLeftPaneWidth;
+                        _draggedLeftPaneWidth = null;
+                        if (width != null) {
+                          _bloc.add(pdf_events.UpdateSidebarWidth(width));
+                        }
                         if (current is PdfBookLoaded) {
                           context.read<SettingsBloc>().add(
-                            UpdateSidebarWidth(current.sidebarWidth),
+                            UpdateSidebarWidth(width ?? current.sidebarWidth),
                           );
                         }
                       },
@@ -4362,13 +4370,20 @@ class _PdfBookScreenState extends State<PdfBookScreen>
                           _rightPaneUsesPushLayout = usesPushLayout;
                         },
                         onPaneWidthChanged: (nextWidth) {
-                          _bloc.add(pdf_events.UpdateRightPaneWidth(nextWidth));
+                          _draggedRightPaneWidth = nextWidth;
                         },
                         onPaneResizeEnd: () {
                           final current = _bloc.state;
+                          final width = _draggedRightPaneWidth;
+                          _draggedRightPaneWidth = null;
+                          if (width != null) {
+                            _bloc.add(pdf_events.UpdateRightPaneWidth(width));
+                          }
                           if (current is PdfBookLoaded) {
                             context.read<SettingsBloc>().add(
-                              UpdateCommentaryPaneWidth(current.rightPaneWidth),
+                              UpdateCommentaryPaneWidth(
+                                width ?? current.rightPaneWidth,
+                              ),
                             );
                           }
                         },
