@@ -14,7 +14,7 @@ import 'package:otzaria/core/window_persistence.dart';
 import 'package:otzaria/core/windowing/app_window_controller.dart';
 import 'package:otzaria/core/windowing/app_window_id.dart';
 import 'package:otzaria/core/windowing/window_manager_app_window_controller.dart';
-import 'package:otzaria/core/windowing/last_active_window.dart';
+import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/core/windowing/window_bus.dart';
@@ -654,7 +654,7 @@ class AppWindowListener extends WindowListener {
         ),
       );
     }
-    LastActiveWindow.markActive(windowId);
+    AppWindowKeys.activateWindow(windowId);
     // חלון שהוחזר מהסתרה מקבל פוקוס — זה האות שהוא מוצג שוב.
     PluginRuntimeDispatcher.instance.setWindowShown(true);
   }

@@ -150,6 +150,9 @@ class SearchDialog extends StatefulWidget {
 }
 
 class _SearchDialogState extends State<SearchDialog> {
+  /// מאגר הפוקוס של החלון; נשמר כאן כי ב-dispose אסור לחפש ב-context.
+  late final FocusRepository _focus;
+
   late SearchingTab _searchTab;
   FocusRestorer? _focusRestorer;
   bool _indexInProgressWarningDismissed = false;
@@ -234,6 +237,7 @@ class _SearchDialogState extends State<SearchDialog> {
   @override
   void initState() {
     super.initState();
+    _focus = FocusRepository.of(context);
     _pluginSearchDialogRegistry =
         widget.pluginSearchDialogRegistry ??
         PluginSearchDialogRegistry.instance;
@@ -330,7 +334,7 @@ class _SearchDialogState extends State<SearchDialog> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _searchTab.searchFieldFocusNode.requestFocus();
-        _focusRestorer = FocusRepository().registerActiveRestorer(
+        _focusRestorer = _focus.registerActiveRestorer(
           restore: () {
             if (mounted) _searchTab.searchFieldFocusNode.requestFocus();
           },
@@ -840,7 +844,7 @@ class _SearchDialogState extends State<SearchDialog> {
   @override
   void dispose() {
     final restorer = _focusRestorer;
-    if (restorer != null) FocusRepository().unregisterActiveRestorer(restorer);
+    if (restorer != null) _focus.unregisterActiveRestorer(restorer);
     _searchTab.queryController.removeListener(_queryListener);
     _advancedControlsHasFocus.dispose();
     _semanticBloc?.close();

@@ -348,6 +348,9 @@ class _ParagraphStateKey extends GlobalKey {
 }
 
 class _CombinedViewState extends State<CombinedView> {
+  /// מאגר הפוקוס של החלון; נשמר כאן כי ב-dispose אסור לחפש ב-context.
+  late final FocusRepository _focus;
+
   PageStorageBucket _commentaryStorage = PageStorageBucket();
   bool _localCorrectionActive = false;
   bool _anchorHandledCurrentTap = false;
@@ -863,6 +866,7 @@ class _CombinedViewState extends State<CombinedView> {
   void initState() {
     super.initState();
     _previewWindow = AppWindowKeys.of(context);
+    _focus = FocusRepository.of(context);
     _localCorrectionActive = _hasLocalCorrections;
     PluginCorrectionSessionService.instance.addListener(
       _onLocalCorrectionChanged,
@@ -936,7 +940,7 @@ class _CombinedViewState extends State<CombinedView> {
     lines.attach(_viewportBinding);
     view.tab.dynamicCopyRequestNotifier.addListener(_onDynamicCopyRequest);
     if (!view.isPreviewMode) {
-      FocusRepository().registerTabContentFocusRequester(view.tab, () {
+      _focus.registerTabContentFocusRequester(view.tab, () {
         if (_focusNode.canRequestFocus) _focusNode.requestFocus();
       });
     }
@@ -951,7 +955,7 @@ class _CombinedViewState extends State<CombinedView> {
     lines.detach(_viewportBinding);
     view.tab.dynamicCopyRequestNotifier.removeListener(_onDynamicCopyRequest);
     if (!view.isPreviewMode) {
-      FocusRepository().unregisterTabContentFocusRequester(view.tab);
+      _focus.unregisterTabContentFocusRequester(view.tab);
     }
   }
 

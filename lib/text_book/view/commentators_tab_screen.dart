@@ -304,6 +304,9 @@ class CommentatorsTabScreen extends StatefulWidget {
 
 class _CommentatorsTabScreenState extends State<CommentatorsTabScreen>
     with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+  /// מאגר הפוקוס של החלון; נשמר כאן כי ב-dispose אסור לחפש ב-context.
+  late final FocusRepository _focus;
+
   // שומר את ה-State חי כשהטאב יוצא מתחום ה-PageView, כדי שבחירת הפרק/קטע
   // (_selectedChapter / _selectedVerseIdx) לא תאבד במעבר לטאב אחר וחזרה.
   @override
@@ -443,6 +446,7 @@ class _CommentatorsTabScreenState extends State<CommentatorsTabScreen>
   @override
   void initState() {
     super.initState();
+    _focus = FocusRepository.of(context);
     _navTabController = TabController(length: 3, vsync: this);
     _navTabController.addListener(() {
       _searchHost.activeTab = _navTabController.index;
@@ -478,7 +482,7 @@ class _CommentatorsTabScreenState extends State<CommentatorsTabScreen>
 
     // ממקד את חלונית המפרשים כשהטאב הופך פעיל (מעבר טאב) כדי שגלילה עם
     // החיצים תעבוד מיד בלי לחיצה.
-    FocusRepository().registerTabContentFocusRequester(
+    _focus.registerTabContentFocusRequester(
       widget.tab,
       () => _commentaryKey.currentState?.requestScrollFocus(),
     );
@@ -486,7 +490,7 @@ class _CommentatorsTabScreenState extends State<CommentatorsTabScreen>
 
   @override
   void dispose() {
-    FocusRepository().unregisterTabContentFocusRequester(widget.tab);
+    _focus.unregisterTabContentFocusRequester(widget.tab);
     _navTabController.dispose();
     _searchHost.dispose();
     _typeSelection.dispose();
