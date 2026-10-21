@@ -620,6 +620,69 @@ Future<void> main() async {
     skip: !engineReady,
   );
 
+  testWidgets(
+    'גלילה בתוך אותה כותרת אינה בונה מחדש את שורות העץ, ומעבר כותרת מעדכן את הסימון',
+    (tester) async {
+      final toc = [
+        TocEntry(text: 'first', index: 0, level: 1),
+        TocEntry(text: 'second', index: 5, level: 1),
+        TocEntry(text: 'third', index: 10, level: 1),
+      ];
+      final bloc = _TestTextBookBloc(
+        _loadedState(toc: toc, visibleIndices: const [5]),
+      );
+      addTearDown(bloc.close);
+      final focusNode = FocusNode();
+      addTearDown(focusNode.dispose);
+
+      await tester.pumpWidget(
+        _wrap(
+          TocViewer(
+            lines: LineScrollController(),
+            closeLeftPaneCallback: () {},
+            focusNode: focusNode,
+          ),
+          bloc,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      String? selectedTitle() => tester
+          .widgetList<NavTreeTile>(find.byType(NavTreeTile))
+          .where((tile) => tile.isSelected)
+          .map((tile) => tile.title)
+          .singleOrNull;
+      expect(selectedTitle(), 'second');
+
+      var tileRebuilds = 0;
+      debugOnRebuildDirtyWidget = (element, builtOnce) {
+        if (element.widget is NavTreeTile) tileRebuilds++;
+      };
+      addTearDown(() => debugOnRebuildDirtyWidget = null);
+
+      // שורות 6-9 שייכות כולן ל-second.
+      for (var line = 6; line < 10; line++) {
+        bloc.emitState(
+          (bloc.state as TextBookLoaded).copyWith(visibleIndices: [line]),
+        );
+        await tester.pumpAndSettle();
+      }
+      bloc.emitState(
+        (bloc.state as TextBookLoaded).copyWith(selectedIndex: 8),
+      );
+      await tester.pumpAndSettle();
+      expect(tileRebuilds, 0);
+      expect(selectedTitle(), 'second');
+
+      bloc.emitState(
+        (bloc.state as TextBookLoaded).copyWith(selectedIndex: 12),
+      );
+      await tester.pumpAndSettle();
+      expect(tileRebuilds, greaterThan(0));
+      expect(selectedTitle(), 'third');
+    },
+  );
+
   testWidgets('שינוי visibleIndices מעדכן את ה-active highlight בלי קריסה', (
     tester,
   ) async {
