@@ -924,8 +924,16 @@ bool FlutterWindow::OnCreate() {
           if (const auto* args =
                   std::get_if<flutter::EncodableMap>(call.arguments())) {
             const auto it = args->find(flutter::EncodableValue("hwnd"));
+            // `LongValue` זורק על ערך שאינו מספר; חריגה כאן מפילה את התהליך.
+            int64_t hwnd = 0;
             if (it != args->end()) {
-              const int64_t hwnd = it->second.LongValue();
+              if (const auto* wide = std::get_if<int64_t>(&it->second)) {
+                hwnd = *wide;
+              } else if (const auto* narrow = std::get_if<int>(&it->second)) {
+                hwnd = *narrow;
+              }
+            }
+            if (hwnd != 0) {
               installed = InstallDartViewHooks(
                   reinterpret_cast<HWND>(static_cast<intptr_t>(hwnd)));
             }
