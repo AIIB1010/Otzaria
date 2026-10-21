@@ -2163,6 +2163,12 @@ class _CombinedViewState extends State<CombinedView> {
                                         PersonalNotesBloc,
                                         PersonalNotesState
                                       >(
+                                        // שאר שדות ה-bloc (חיפוש, טיוטה) משתנים
+                                        // בכל הקשה, והבנייה קוראת רק את אלה.
+                                        buildWhen: (previous, current) =>
+                                            previous.bookId != current.bookId ||
+                                            previous.locatedNotes !=
+                                                current.locatedNotes,
                                         builder: (context, notesState) {
                                           final noteMap =
                                               <int, List<PersonalNote>>{};
