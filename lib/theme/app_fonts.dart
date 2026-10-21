@@ -234,9 +234,7 @@ class AppFonts {
       for (final family in _earlySystemFamilies.values)
         family.family.toLowerCase(): family.supportsTaamim,
     };
-    final system = _systemFontsHebrewCache;
-    if (system == null) return map;
-    for (final font in system) {
+    for (final font in _systemFontsHebrewCache ?? const <FontInfo>[]) {
       map[font.value.toLowerCase()] = font.supportsTaamim;
     }
     return _taamimSupportByFamily = map;
@@ -764,6 +762,7 @@ class AppFonts {
             if (candidate != null && candidate.regularWeight == 400) {
               family = candidate;
               _earlySystemFamilies[fontFamily] = candidate;
+              _taamimSupportByFamily = null;
             }
           }
         }
@@ -787,6 +786,7 @@ class AppFonts {
         // אם הטעינה נכשלה, מסירים מהקאש כדי לאפשר ניסיון חוזר בעתיד.
         _loadingSystemFonts.remove(fontFamily);
         _earlySystemFamilies.remove(fontFamily);
+        _taamimSupportByFamily = null;
         return;
       }
       await _augmentSystemFontWeights(fontFamily);
@@ -1044,6 +1044,10 @@ class AppFonts {
   @visibleForTesting
   static List<FontInfo>? get debugSystemFontsHebrewCache =>
       _systemFontsHebrewCache;
+
+  @visibleForTesting
+  static Map<String, bool>? get debugTaamimSupportCache =>
+      _taamimSupportByFamily;
 
   @visibleForTesting
   static set debugSystemFontsHebrewCache(List<FontInfo>? cache) {
