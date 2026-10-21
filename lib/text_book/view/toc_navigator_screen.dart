@@ -633,21 +633,16 @@ class _TocViewerState extends State<TocViewer>
       },
       child: BlocBuilder<TextBookBloc, TextBookState>(
         bloc: context.read<TextBookBloc>(),
-        // אופטימיזציה: build רק כש-activeIndex עשוי להשתנות. בלי buildWhen
-        // הבנייה הייתה רצה בכל emit של ה-bloc (גם בגלילה רגילה),
-        // ובספרים עם אלפי ערכי TOC זה יצר frames של 5+ שניות.
+        // build רק כשהכותרת הפעילה או העץ משתנים: בניית העץ בכל שורה של
+        // גלילה יוצרת frames ארוכים בספרים עם אלפי כותרות.
         buildWhen: (previous, current) {
           if (current is! TextBookLoaded) return true;
           if (previous is! TextBookLoaded) return true;
-          final prevFirst = previous.visibleIndices.isNotEmpty
-              ? previous.visibleIndices.first
-              : -1;
-          final currFirst = current.visibleIndices.isNotEmpty
-              ? current.visibleIndices.first
-              : -1;
-          return previous.selectedIndex != current.selectedIndex ||
-              prevFirst != currFirst ||
-              !identical(previous.tableOfContents, current.tableOfContents);
+          return !identical(
+                previous.tableOfContents,
+                current.tableOfContents,
+              ) ||
+              _activeTocIndex(previous) != _activeTocIndex(current);
         },
         builder: (context, state) {
           if (state is! TextBookLoaded) return const Center();
