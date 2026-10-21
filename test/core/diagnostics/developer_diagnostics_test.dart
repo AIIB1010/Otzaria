@@ -9,6 +9,7 @@ import 'package:flutter/rendering.dart';
 import 'package:otzaria/core/error_log_file.dart';
 import 'package:otzaria/core/diagnostics/developer_diagnostics.dart';
 import 'package:otzaria/core/diagnostics/process_tree_sampler.dart';
+import 'package:otzaria/core/diagnostics/smart_text_render_stats.dart';
 import 'package:otzaria/core/startup_timeline.dart';
 import 'package:positioned_sliver_list/positioned_list.dart';
 
@@ -226,6 +227,22 @@ void main() {
       await diagnostics.snapshot();
       final types = records().map((r) => r['type']).toList();
       expect(types, ['session', 'snapshot']);
+    });
+
+    test('stats records carry the smartText counters', () async {
+      diagnostics.toggle();
+      expect(SmartTextRenderStats.enabled, isTrue);
+      SmartTextRenderStats.fastLine(heading: false);
+      SmartTextRenderStats.fullLine(columnMode: true);
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      await diagnostics.snapshot();
+
+      final stats = records().firstWhere((r) => r['type'] == 'stats');
+      expect(stats['smartText'], containsPair('fastInline', 1));
+      expect(stats['smartText'], containsPair('fullHtml', 1));
+
+      diagnostics.toggle();
+      expect(SmartTextRenderStats.enabled, isFalse);
     });
 
     test('toggling off a launch request stops collecting', () {

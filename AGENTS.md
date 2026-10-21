@@ -269,7 +269,7 @@ OTZARIA_DEV_DIAGNOSTICS=log flutter run -d windows --profile          # env var 
 | `session` | collection starts | version, buildMode, os, cores, pid, launchMode |
 | `startup` | once, after the window is revealed | revealMs, phases, marks |
 | `context` | the screen or current tab changed | screen, tabs, currentTab, currentTitle |
-| `stats` | every second with frames, rebuilds or estimate refreshes, and every 5 s with a process sample | fps, build/raster avg and max ms, slowInWindow, slowTotal, rssMb, peakRssMb, rebuilds (debug), processes, estimates (reader lists' estimate refreshes in that second: count, totalMs when each list refreshed once, items, deferred, skipped; only when one of them is non-zero) |
+| `stats` | every second with frames, rebuilds, estimate refreshes or rendered lines, and every 5 s with a process sample | fps, build/raster avg and max ms, slowInWindow, slowTotal, rssMb, peakRssMb, rebuilds (debug), processes, estimates (reader lists' estimate refreshes in that second: count, totalMs when each list refreshed once, items, deferred, skipped; only when one of them is non-zero), smartText (SmartTextWidget lines per path, full-path reasons, processText cache, fwfh subtree build ms) |
 | `slow_frame` | a frame took 100 ms or more | buildMs, rasterMs, totalMs, context |
 | `snapshot` | the panel's camera button | stats + processes + context + startup (also written to errors.txt) |
 
