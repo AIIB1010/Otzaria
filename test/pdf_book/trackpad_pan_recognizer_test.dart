@@ -228,6 +228,20 @@ void main() {
     expect(forwardedEvents.last, isA<PointerPanZoomEndEvent>());
   });
 
+  testWidgets('פירוק בזמן pan מאפס את נעילת הציר פעם אחת', (tester) async {
+    await tester.pumpWidget(buildHarness());
+    final gesture = await tester.createGesture(
+      kind: PointerDeviceKind.trackpad,
+    );
+    const center = Offset(400, 300);
+    await gesture.panZoomStart(center);
+    await gesture.panZoomUpdate(center, pan: const Offset(0, 8));
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(panEnds, 1);
+    await gesture.panZoomEnd();
+    expect(panEnds, 1);
+  });
+
   testWidgets('פירוק בזמן pinch שהתחיל כ-pan מבטל את המחווה המקורית', (
     tester,
   ) async {

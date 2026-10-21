@@ -139,8 +139,9 @@ class TrackpadPanRecognizer extends OneSequenceGestureRecognizer {
 
   @override
   void dispose() {
-    if (_claim == _PanClaim.scaling) {
-      _claim = _PanClaim.rejected;
+    final claim = _claim;
+    _claim = _PanClaim.rejected;
+    if (claim == _PanClaim.scaling) {
       final last = _lastUpdate;
       onPanZoomEvent?.call(
         PointerPanZoomEndEvent(
@@ -150,6 +151,8 @@ class TrackpadPanRecognizer extends OneSequenceGestureRecognizer {
           position: last?.position ?? Offset.zero,
         ),
       );
+    }
+    if (claim == _PanClaim.accepted || claim == _PanClaim.scaling) {
       onPanEnd();
     }
     super.dispose();

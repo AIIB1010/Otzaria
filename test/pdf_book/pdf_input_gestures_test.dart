@@ -374,45 +374,62 @@ void main() {
     await finish(tester);
   });
 
-  testWidgets('מחוות trackpad חדשה אחרי resume אינה יורשת נעילת ציר ישנה', (
-    tester,
-  ) async {
-    await pumpScreen(tester);
-    final controller = tab.pdfViewerController;
-    await controller.setZoom(
-      controller.centerPosition,
-      controller.currentZoom * 2,
-      duration: Duration.zero,
+  for (final interruptedScale in [1.0, 1.2]) {
+    testWidgets(
+      'מחוות trackpad חדשה אחרי resume אינה יורשת נעילת ציר ישנה: scale=$interruptedScale',
+      (
+        tester,
+      ) async {
+        await pumpScreen(tester);
+        final controller = tab.pdfViewerController;
+        await controller.setZoom(
+          controller.centerPosition,
+          controller.currentZoom * 2,
+          duration: Duration.zero,
+        );
+        await tester.pump();
+        final center = tester.getCenter(find.byType(PdfViewer));
+        final interrupted = await tester.createGesture(
+          pointer: 21,
+          kind: PointerDeviceKind.trackpad,
+        );
+        final next = await tester.createGesture(
+          pointer: 22,
+          kind: PointerDeviceKind.trackpad,
+        );
+        try {
+          await interrupted.panZoomStart(center);
+          await interrupted.panZoomUpdate(center, pan: const Offset(80, 0));
+          await tester.pump(const Duration(milliseconds: 300));
+          if (interruptedScale != 1) {
+            await interrupted.panZoomUpdate(
+              center,
+              pan: const Offset(80, 0),
+              scale: interruptedScale,
+            );
+            await tester.pump();
+          }
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.hidden,
+          );
+          await tester.pump(const Duration(hours: 8));
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.resumed,
+          );
+          await tester.pump();
+          final top = controller.visibleRect.top;
+          await next.panZoomStart(center);
+          await next.panZoomUpdate(center, pan: const Offset(0, -80));
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(controller.visibleRect.top, greaterThan(top));
+        } finally {
+          await next.panZoomEnd();
+          await interrupted.panZoomEnd();
+          await finish(tester);
+        }
+      },
     );
-    await tester.pump();
-    final center = tester.getCenter(find.byType(PdfViewer));
-    final interrupted = await tester.createGesture(
-      pointer: 21,
-      kind: PointerDeviceKind.trackpad,
-    );
-    final next = await tester.createGesture(
-      pointer: 22,
-      kind: PointerDeviceKind.trackpad,
-    );
-    try {
-      await interrupted.panZoomStart(center);
-      await interrupted.panZoomUpdate(center, pan: const Offset(80, 0));
-      await tester.pump(const Duration(milliseconds: 300));
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
-      await tester.pump(const Duration(hours: 8));
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-      await tester.pump();
-      final top = controller.visibleRect.top;
-      await next.panZoomStart(center);
-      await next.panZoomUpdate(center, pan: const Offset(0, -80));
-      await tester.pump(const Duration(milliseconds: 300));
-      expect(controller.visibleRect.top, greaterThan(top));
-    } finally {
-      await next.panZoomEnd();
-      await interrupted.panZoomEnd();
-      await finish(tester);
-    }
-  });
+  }
 }
 
 class _TabsRepository implements TabsRepository {
