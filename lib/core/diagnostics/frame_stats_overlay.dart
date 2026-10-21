@@ -248,6 +248,15 @@ String formatFrameStats(FrameStats stats) {
       '(${DeveloperDiagnostics.window.inSeconds}s)  total ${stats.slowTotal}',
     )
     ..write('memory    ${stats.rssMb} MB  peak ${stats.peakRssMb} MB');
+  final processes = stats.processes;
+  if (processes?.hostPrivMb case final priv?) buffer.write('  priv $priv MB');
+  if (processes != null && processes.webview.isNotEmpty) {
+    final count = processes.webview.values.fold(0, (n, k) => n + k.count);
+    buffer.write('\nwebview   ${processes.webviewPrivMb} MB  $count proc');
+    if (processes.renderers case final r?) {
+      buffer.write('  ${r.count} rend ${r.privMb} MB (max ${r.eachMb.first})');
+    }
+  }
   for (final entry in stats.topRebuilds.take(5)) {
     buffer.write('\nrebuild   ${entry.value}x ${entry.key}');
   }

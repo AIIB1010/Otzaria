@@ -33,6 +33,7 @@ import 'package:otzaria/plugins/services/plugin_network_gate.dart';
 import 'package:otzaria/plugins/services/plugin_network_policy.dart';
 import 'package:otzaria/plugins/services/plugin_ref_line_resolver.dart';
 import 'package:otzaria/plugins/services/plugin_runtime_dispatcher.dart';
+import 'package:otzaria/plugins/services/plugin_webview_diagnostics.dart';
 import 'package:otzaria/plugins/services/plugin_webview_failure_log.dart';
 import 'package:otzaria/plugins/storage/plugin_system_database.dart';
 import 'package:otzaria/plugins/view/plugin_sdk_scripts.dart';
@@ -455,6 +456,7 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
   ]) {
     try {
       webViewController = controller;
+      registerPluginWebViewDiagnostics();
       PluginRuntimeDispatcher.instance.registerController(
         plugin.pluginId,
         controller,
