@@ -8,6 +8,7 @@ Map<ShortcutActivator, VoidCallback> pdfReadingShortcutBindings({
   required VoidCallback zoomOut,
   required VoidCallback resetZoom,
   required VoidCallback fitView,
+  required VoidCallback previousLocation,
   required VoidCallback nextMatch,
   required VoidCallback previousMatch,
 }) {
@@ -16,6 +17,7 @@ Map<ShortcutActivator, VoidCallback> pdfReadingShortcutBindings({
     ShortcutValidator.zoomOutKey: zoomOut,
     ShortcutValidator.zoomResetKey: resetZoom,
     ShortcutValidator.fitPdfViewKey: fitView,
+    ShortcutValidator.previousPdfLocationKey: previousLocation,
     ShortcutValidator.findNextKey: nextMatch,
     ShortcutValidator.findPreviousKey: previousMatch,
   };

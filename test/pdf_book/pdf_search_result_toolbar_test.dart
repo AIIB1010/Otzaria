@@ -113,7 +113,10 @@ PdfTextSearchResult _match(int page) => PdfTextSearchResult.fromRange(
   ),
 );
 
-Future<_ControlledSearcher> _pump(WidgetTester tester) async {
+Future<_ControlledSearcher> _pump(
+  WidgetTester tester, {
+  ValueChanged<int>? onNavigationStarted,
+}) async {
   final settingsBloc = _MockSettingsBloc();
   whenListen(
     settingsBloc,
@@ -155,6 +158,7 @@ Future<_ControlledSearcher> _pump(WidgetTester tester) async {
               searchController: searchController,
               focusNode: focusNode,
               pdfFilePath: '/nonexistent/test.pdf',
+              onNavigationStarted: onNavigationStarted,
             ),
           ),
         ),
@@ -180,6 +184,25 @@ Future<void> main() async {
   });
 
   group('סרגל התוצאות בחיפוש הפשוט', () {
+    testWidgets('נקודת החזרה נשמרת לפני ניווט לתוצאה הבאה', (tester) async {
+      late _ControlledSearcher searcher;
+      final targets = <int>[];
+      searcher = await _pump(
+        tester,
+        onNavigationStarted: (page) {
+          expect(searcher.actions, isEmpty);
+          targets.add(page);
+        },
+      );
+      searcher
+        ..current = [_match(2), _match(3), _match(5)]
+        ..index = 0;
+      await _notify(tester, searcher);
+      await tester.tap(find.byTooltip('התוצאה הבאה'));
+      expect(targets, [3]);
+      expect(searcher.actions, ['next']);
+    });
+
     testWidgets('בזמן סריקה — כפתור עצירה שעוצר את ה-searcher', (tester) async {
       final searcher = await _pump(tester);
       searcher

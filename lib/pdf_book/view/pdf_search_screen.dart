@@ -63,6 +63,7 @@ class PdfBookSearchView extends StatefulWidget {
     this.initialMatchPolicy = SearchMatchPolicy.standard,
     this.incomingSearchConfiguration,
     this.onSearchResultNavigated,
+    this.onNavigationStarted,
     this.searchRepository = const SearchRepository(),
     super.key,
   });
@@ -99,6 +100,7 @@ class PdfBookSearchView extends StatefulWidget {
   final ValueNotifier<ReadingTabSearchState?>? incomingSearchConfiguration;
 
   final VoidCallback? onSearchResultNavigated;
+  final ValueChanged<int>? onNavigationStarted;
 
   /// מנוע החיפוש המתקדם. נחלף בבדיקות במימוש שלא נוגע במנוע ה-Rust.
   final SearchRepository searchRepository;
@@ -644,7 +646,7 @@ class PdfBookSearchViewState extends State<PdfBookSearchView> {
           icon: FluentIcons.chevron_up_24_regular,
           tooltip: 'התוצאה הקודמת',
           onPressed: hasResults && (current ?? 0) > 0
-              ? () => unawaited(searcher.goToPrevMatch())
+              ? () => _navigateSearchMatch(forward: false)
               : null,
         ),
         const SizedBox(width: 4),
@@ -654,7 +656,7 @@ class PdfBookSearchViewState extends State<PdfBookSearchView> {
           onPressed:
               hasResults &&
                   (current == null || current < _searchResults.length - 1)
-              ? () => unawaited(searcher.goToNextMatch())
+              ? () => _navigateSearchMatch(forward: true)
               : null,
         ),
       ],
@@ -671,6 +673,17 @@ class PdfBookSearchViewState extends State<PdfBookSearchView> {
       return 'מוצגות ${_searchResults.length} התוצאות הראשונות';
     }
     return 'נמצאו ${_searchResults.length} תוצאות';
+  }
+
+  void _navigateSearchMatch({required bool forward}) {
+    final searcher = widget.textSearcher;
+    final index = forward
+        ? (searcher.currentIndex ?? -1) + 1
+        : (searcher.currentIndex ?? searcher.matches.length) - 1;
+    if (index >= 0 && index < searcher.matches.length) {
+      widget.onNavigationStarted?.call(searcher.matches[index].pageNumber);
+    }
+    unawaited(forward ? searcher.goToNextMatch() : searcher.goToPrevMatch());
   }
 
   /// currentPageNumber ב-state נקבע בפתיחה בלבד; העמוד המוצג בפועל נמצא בקונטרולר.
@@ -986,6 +999,7 @@ class PdfBookSearchViewState extends State<PdfBookSearchView> {
                 result: result,
                 onTap: () async {
                   final pageNumber = _getPdfPageNumber(result);
+                  widget.onNavigationStarted?.call(pageNumber);
                   final controller = widget.textSearcher.controller;
                   final matchIndex = result.id.toInt();
                   if (_isSimpleSearch &&

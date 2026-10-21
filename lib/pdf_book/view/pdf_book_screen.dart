@@ -121,6 +121,8 @@ import 'package:otzaria/printing/printing_helpers.dart';
 import 'package:otzaria/printing/view/printing_screen.dart';
 import 'package:otzaria/shortcuts/shortcut_helper.dart';
 import 'package:otzaria/pdf_book/utils/pdf_shortcut_bindings.dart';
+import 'package:otzaria/pdf_book/models/pdf_reading_location.dart';
+import 'package:otzaria/pdf_book/view/widgets/pdf_navigation_back_scope.dart';
 import 'package:otzaria/shortcuts/shortcut_validator.dart';
 import 'package:otzaria/utils/link_helpers.dart';
 import 'package:otzaria/widgets/navigation/panel_tab_header.dart';
@@ -1735,6 +1737,12 @@ class _PdfBookScreenState extends State<PdfBookScreen>
         return false;
       },
       onKey: (params, key, isRealKeyPress) {
+        final keyboard = HardwareKeyboard.instance;
+        if (keyboard.isAltPressed ||
+            keyboard.isControlPressed ||
+            keyboard.isMetaPressed) {
+          return false;
+        }
         if (key == LogicalKeyboardKey.arrowLeft) {
           if (isRealKeyPress) {
             _goNextPage();
@@ -1926,6 +1934,7 @@ class _PdfBookScreenState extends State<PdfBookScreen>
     if (link.url != null) {
       navigateToUrl(link.url!);
     } else if (link.dest != null) {
+      _preparePdfJump(link.dest!.pageNumber);
       widget.tab.pdfViewerController.goToDest(link.dest);
     }
   }
@@ -1981,6 +1990,17 @@ class _PdfBookScreenState extends State<PdfBookScreen>
           focusNode: _pdfViewFocusNode,
           autofocus: false,
           onKeyEvent: (FocusNode node, KeyEvent event) {
+            if ((event is KeyDownEvent || event is KeyRepeatEvent) &&
+                ShortcutHelper.matchesShortcut(
+                  event,
+                  ShortcutValidator.getShortcutValue(
+                        ShortcutValidator.previousPdfLocationKey,
+                      ) ??
+                      '',
+                )) {
+              if (event is KeyDownEvent) _returnToPreviousLocation();
+              return KeyEventResult.handled;
+            }
             if (event is KeyDownEvent) {
               final printShortcut =
                   ShortcutValidator.getShortcutValue(
@@ -4387,13 +4407,14 @@ class _PdfBookScreenState extends State<PdfBookScreen>
     );
   }
 
-  Widget _buildContent(BuildContext context) {
-    // מאזין לקיצורים כדי שהזום יתעדכן מיד עם שינוי ההגדרה, בלי לפתוח מחדש את הטאב.
-    return BlocBuilder<SettingsBloc, SettingsState>(
+  Widget _buildContent(BuildContext context) => PdfNavigationBackScope(
+    bloc: _bloc,
+    onBack: _returnToPreviousLocation,
+    child: BlocBuilder<SettingsBloc, SettingsState>(
       buildWhen: (previous, current) => previous.shortcuts != current.shortcuts,
       builder: (context, _) => _buildShortcutScope(context),
-    );
-  }
+    ),
+  );
 
   Widget _buildShortcutScope(BuildContext context) {
     return CallbackShortcuts(
@@ -4434,6 +4455,24 @@ class _PdfBookScreenState extends State<PdfBookScreen>
                         ),
                       ),
                     ),
+                  AppTopBarItem(
+                    widget: BlocSelector<PdfBookBloc, PdfBookState, bool>(
+                      bloc: _bloc,
+                      selector: (state) =>
+                          state is PdfBookLoaded && state.canReturnToLocation,
+                      builder: (context, available) => BarButton.icon(
+                        key: const ValueKey('pdf-back-location'),
+                        tooltip: context.settingsText('חזרה למיקום הקודם'),
+                        icon: FluentIcons.arrow_left_24_regular,
+                        flipInRtl: true,
+                        compact: context
+                            .read<SettingsBloc>()
+                            .state
+                            .compactMenuMode,
+                        onPressed: available ? _returnToPreviousLocation : null,
+                      ),
+                    ),
+                  ),
                 ],
                 center: _buildPdfCenter(context),
                 trailingItems: [
@@ -4447,7 +4486,7 @@ class _PdfBookScreenState extends State<PdfBookScreen>
             // עמודי התאמה ממנוע חיפוש חיצוני (תוסף): סרגל ניווט בין המופעים.
             PdfExternalMatchesBar(
               tab: widget.tab,
-              onNavigateToPage: _goToPageWithSpreadLock,
+              onNavigateToPage: _jumpToPage,
               onProviderSearch: _externalMatchesProviderSearch(),
             ),
             Expanded(
@@ -4714,6 +4753,7 @@ class _PdfBookScreenState extends State<PdfBookScreen>
                       thumbMinSize: 50.0,
                       scrollBoundsBuilder: _currentVerticalScrollbarBounds,
                       freezeThumb: _pageTurnTransition != null,
+                      onNavigationStarted: _rememberPdfLocation,
                       outline: outline,
                       bookTitle: widget.tab.book.title,
                     ),
@@ -4727,6 +4767,7 @@ class _PdfBookScreenState extends State<PdfBookScreen>
                 child: RepaintBoundary(
                   child: PdfHorizontalScrollbar(
                     controller: widget.tab.pdfViewerController,
+                    onNavigationStarted: _rememberPdfLocation,
                     trackThickness: _horizontalScrollbarGutter,
                   ),
                 ),
@@ -4823,7 +4864,7 @@ class _PdfBookScreenState extends State<PdfBookScreen>
                       controller: widget.tab.pdfViewerController,
                       focusNode: _navigationFieldFocusNode,
                       isPaneOpen: showLeftPane,
-                      onNavigateToPage: _goToPageWithSpreadLock,
+                      onNavigateToPage: _jumpToPage,
                     ),
                   ),
                 ),
@@ -4857,6 +4898,7 @@ class _PdfBookScreenState extends State<PdfBookScreen>
                             incomingSearchConfiguration:
                                 widget.tab.incomingSearchConfiguration,
                             onSearchResultNavigated: _ensureSearchTabIsActive,
+                            onNavigationStarted: _preparePdfJump,
                           )
                         : const Center(child: CircularProgressIndicator()),
                   ),
@@ -4869,7 +4911,7 @@ class _PdfBookScreenState extends State<PdfBookScreen>
                     child: ThumbnailsView(
                       documentRef: widget.tab.documentRef.value,
                       controller: widget.tab.pdfViewerController,
-                      onNavigateToPage: _goToPageWithSpreadLock,
+                      onNavigateToPage: _jumpToPage,
                       shownPagesFor: _spreadPageRangeFor,
                       thumbnailCache: _thumbnailCache,
                       isPaneOpen:
@@ -4946,9 +4988,47 @@ class _PdfBookScreenState extends State<PdfBookScreen>
         zoomOut: _zoomOut,
         resetZoom: _resetZoom,
         fitView: _toggleFitMode,
-        nextMatch: () => unawaited(textSearcher?.goToNextMatch()),
-        previousMatch: () => unawaited(textSearcher?.goToPrevMatch()),
+        previousLocation: _returnToPreviousLocation,
+        nextMatch: () => _navigateSearchMatch(forward: true),
+        previousMatch: () => _navigateSearchMatch(forward: false),
       );
+
+  void _rememberPdfLocation() {
+    final location = PdfReadingLocation.capture(widget.tab.pdfViewerController);
+    if (location != null) _bloc.add(pdf_events.RememberPdfLocation(location));
+  }
+
+  void _preparePdfJump(int pageNumber) {
+    _rememberPdfLocation();
+    if (_isBookViewModeActive()) {
+      _lockedSpreadStartPage = _spreadStartPageFor(pageNumber);
+    }
+  }
+
+  Future<void> _jumpToPage(int pageNumber) {
+    _rememberPdfLocation();
+    return _goToPageWithSpreadLock(pageNumber);
+  }
+
+  void _navigateSearchMatch({required bool forward}) {
+    final searcher = textSearcher;
+    if (searcher == null) return;
+    final index = forward
+        ? (searcher.currentIndex ?? -1) + 1
+        : (searcher.currentIndex ?? searcher.matches.length) - 1;
+    if (index < 0 || index >= searcher.matches.length) return;
+    _preparePdfJump(searcher.matches[index].pageNumber);
+    unawaited(searcher.goToMatchOfIndex(index));
+  }
+
+  void _returnToPreviousLocation() {
+    final location = widget.tab.navigationHistory.last;
+    if (location == null || _isPageTurnInProgress) return;
+    _pendingPageTurns.clear();
+    _lastInitiatedTargetPage = location.pageNumber;
+    _lockedSpreadStartPage = _spreadStartPageFor(location.pageNumber);
+    _bloc.add(const pdf_events.ReturnToPreviousPdfLocation());
+  }
 
   void _zoomIn() {
     _bloc.add(const pdf_events.ZoomIn());
@@ -5489,7 +5569,7 @@ class _PdfBookScreenState extends State<PdfBookScreen>
         widget: const SizedBox.shrink(),
         tooltip:
             'תחילת הספר (${ShortcutHelper.formatShortcutForDisplay('ctrl+home')})',
-        onPressed: () => _goToPageWithSpreadLock(1),
+        onPressed: () => _jumpToPage(1),
       ),
       previousAction: buildBookViewPreviousNavigationAction(
         widget: const SizedBox.shrink(),
@@ -5505,8 +5585,7 @@ class _PdfBookScreenState extends State<PdfBookScreen>
         widget: const SizedBox.shrink(),
         tooltip:
             'סוף הספר (${ShortcutHelper.formatShortcutForDisplay('ctrl+end')})',
-        onPressed: () =>
-            _goToPageWithSpreadLock(widget.tab.pdfViewerController.pageCount),
+        onPressed: () => _jumpToPage(widget.tab.pdfViewerController.pageCount),
       ),
     );
   }
@@ -5546,15 +5625,14 @@ class _PdfBookScreenState extends State<PdfBookScreen>
           'סוף הספר (${ShortcutHelper.formatShortcutForDisplay('ctrl+end')})',
       prevMajorIcon: FluentIcons.arrow_previous_24_filled,
       nextMajorIcon: FluentIcons.arrow_next_24_filled,
-      onPrevMajor: () => _goToPageWithSpreadLock(1),
+      onPrevMajor: () => _jumpToPage(1),
       onPrevMinor: _goPreviousPage,
       onNextMinor: _goNextPage,
-      onNextMajor: () =>
-          _goToPageWithSpreadLock(widget.tab.pdfViewerController.pageCount),
+      onNextMajor: () => _jumpToPage(widget.tab.pdfViewerController.pageCount),
       afterTitle: PageNumberDisplay(
         controller: widget.tab.pdfViewerController,
         pageNumberNotifier: _pageNumberNotifier,
-        onNavigateToPage: _goToPageWithSpreadLock,
+        onNavigateToPage: _jumpToPage,
       ),
     );
   }

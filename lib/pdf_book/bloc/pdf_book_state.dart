@@ -153,6 +153,7 @@ class PdfBookLoaded extends PdfBookState {
   final int currentPageNumber;
   final int totalPages;
   final String currentTitle;
+  final bool canReturnToLocation;
 
   // Zoom
   final double zoom;
@@ -196,6 +197,7 @@ class PdfBookLoaded extends PdfBookState {
     required this.currentPageNumber,
     this.totalPages = 1,
     this.currentTitle = '',
+    this.canReturnToLocation = false,
     this.zoom = 1.0,
     this.showZoomBar = false,
     this.layoutMode = PdfLayoutMode.regularView,
@@ -231,6 +233,7 @@ class PdfBookLoaded extends PdfBookState {
     int? currentPageNumber,
     int? totalPages,
     String? currentTitle,
+    bool? canReturnToLocation,
     double? zoom,
     bool? showZoomBar,
     PdfLayoutMode? layoutMode,
@@ -271,6 +274,7 @@ class PdfBookLoaded extends PdfBookState {
       currentPageNumber: currentPageNumber ?? this.currentPageNumber,
       totalPages: totalPages ?? this.totalPages,
       currentTitle: currentTitle ?? this.currentTitle,
+      canReturnToLocation: canReturnToLocation ?? this.canReturnToLocation,
       zoom: zoom ?? this.zoom,
       showZoomBar: showZoomBar ?? this.showZoomBar,
       layoutMode: layoutMode ?? this.layoutMode,
@@ -311,6 +315,7 @@ class PdfBookLoaded extends PdfBookState {
     book.title,
     currentPageNumber,
     currentTitle,
+    canReturnToLocation,
     zoom,
     showZoomBar,
     layoutMode,

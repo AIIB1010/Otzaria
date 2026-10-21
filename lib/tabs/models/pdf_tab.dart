@@ -7,6 +7,7 @@ import 'package:otzaria/tabs/models/reading_tab_search_state.dart';
 import 'package:otzaria/tabs/models/tab.dart';
 import 'package:otzaria/utils/text/text_manipulation.dart';
 import 'package:pdfrx/pdfrx.dart';
+import 'package:otzaria/pdf_book/models/pdf_reading_location.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:otzaria/search/models/search_configuration.dart';
 import 'package:otzaria/settings/services/per_book_settings_service.dart';
@@ -22,6 +23,7 @@ class PdfBookTab extends OpenedTab {
 
   /// The pdf viewer controller.
   PdfViewerController pdfViewerController = PdfViewerController();
+  final navigationHistory = PdfLocationHistory();
 
   /// האם הדף רחב מהתצוגה (זום מוגדל), כך שיש לאן לגלול לרוחב.
   bool get canPanHorizontally {

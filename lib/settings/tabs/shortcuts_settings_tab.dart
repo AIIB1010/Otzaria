@@ -822,6 +822,12 @@ class ShortcutsSettingsTab extends StatelessWidget {
               allShortcuts: _shortcutsList,
             ),
             _ShortcutTile(
+              settingKey: ShortcutValidator.previousPdfLocationKey,
+              label: context.settingsText('חזרה למיקום הקודם (PDF)'),
+              icon: FluentIcons.arrow_left_24_regular,
+              allShortcuts: _shortcutsList,
+            ),
+            _ShortcutTile(
               settingKey: ShortcutValidator.findNextKey,
               label: context.settingsText('תוצאת החיפוש הבאה (PDF)'),
               icon: FluentIcons.chevron_down_24_regular,

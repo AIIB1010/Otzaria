@@ -47,20 +47,38 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     expect(fits, 1);
   });
+
+  testWidgets('Alt+Left חוזר למיקום הקודם וניתן להגדרה אישית', (tester) async {
+    var backs = 0;
+    await tester.pumpWidget(_scope(onFit: () {}, onBack: () => backs++));
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+    expect(backs, 1);
+    await Settings.setValue(ShortcutValidator.previousPdfLocationKey, 'f7');
+    await tester.pumpWidget(_scope(onFit: () {}, onBack: () => backs++));
+    await tester.sendKeyEvent(LogicalKeyboardKey.f7);
+    expect(backs, 2);
+  });
 }
 
-Widget _scope({required VoidCallback onFit, VoidCallback? onReset}) =>
-    Directionality(
-      textDirection: TextDirection.rtl,
-      child: CallbackShortcuts(
-        bindings: pdfReadingShortcutBindings(
-          zoomIn: () {},
-          zoomOut: () {},
-          resetZoom: onReset ?? () {},
-          fitView: onFit,
-          nextMatch: () {},
-          previousMatch: () {},
-        ),
-        child: const Focus(autofocus: true, child: SizedBox()),
-      ),
-    );
+Widget _scope({
+  required VoidCallback onFit,
+  VoidCallback? onReset,
+  VoidCallback? onBack,
+}) => Directionality(
+  textDirection: TextDirection.rtl,
+  child: CallbackShortcuts(
+    bindings: pdfReadingShortcutBindings(
+      zoomIn: () {},
+      zoomOut: () {},
+      resetZoom: onReset ?? () {},
+      fitView: onFit,
+      previousLocation: onBack ?? () {},
+      nextMatch: () {},
+      previousMatch: () {},
+    ),
+    child: const Focus(autofocus: true, child: SizedBox()),
+  ),
+);
