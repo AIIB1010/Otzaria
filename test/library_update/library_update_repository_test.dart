@@ -1217,7 +1217,7 @@ void main() {
     );
   }
 
-  test('הורדה מלאה מחליפה קובץ קריאה בלבד ב-POSIX', () async {
+  test('הורדה מלאה מחליפה קובץ קריאה בלבד בתיקייה ניתנת לכתיבה', () async {
     final dbPath = p.join(tmp.path, DatabaseConstants.databaseFileName);
     _writeDb(dbPath, version: 1, marker: 'old');
     await _setReadOnly(dbPath, true);
@@ -1228,10 +1228,19 @@ void main() {
         refreshService: _NoopRefreshService(),
       ).applyFullDownload(_localFullDownloadPlan());
       expect(_readMarker(dbPath), 'new');
+      expect(const LocalDbVersionReader().read(dbPath).dbVersion, 2);
+      expect(
+        File(
+          const LibraryDbRecoveryService().markerPathFor(dbPath),
+        ).existsSync(),
+        isFalse,
+      );
     } finally {
       await _setReadOnly(dbPath, false);
+      final backupPath = const LibraryDbRecoveryService().backupPathFor(dbPath);
+      if (File(backupPath).existsSync()) await _setReadOnly(backupPath, false);
     }
-  }, skip: Platform.isWindows);
+  });
 
   for (final full in [true, false]) {
     test('בדיקת ${full ? 'מלאה' : 'דלתא'} אינה יוצרת מסד חסר', () async {

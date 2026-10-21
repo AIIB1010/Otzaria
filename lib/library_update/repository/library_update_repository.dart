@@ -301,7 +301,10 @@ class LibraryUpdateRepository implements LibraryUpdateService {
     bool Function()? isCancelled,
   }) async {
     final dbPath = dbPathProvider();
-    await _ensureDbWritable(dbPath);
+    await _ensureDbDirectoryWritable(dbPath);
+    if (_hasWindowsReadOnlyAttribute(dbPath)) {
+      throw LibraryUpdateReadOnlyException(p.dirname(dbPath));
+    }
     final cacheDir = Directory(
       p.join(await dataRootProvider(), 'library_update_cache'),
     );
@@ -604,16 +607,15 @@ class LibraryUpdateRepository implements LibraryUpdateService {
   }
 
   /// בדיקה מקדימה חלקית: ACL של קובץ המסד מתגלה רק בעת ההחלה או ההחלפה.
-  Future<void> _ensureDbWritable(String dbPath) async {
+  Future<void> _ensureDbDirectoryWritable(String dbPath) async {
     final dir = p.dirname(dbPath);
-    if (!await isDirectoryWritable(dir) ||
-        _hasWindowsReadOnlyAttribute(dbPath)) {
+    if (!await isDirectoryWritable(dir)) {
       throw LibraryUpdateReadOnlyException(dir);
     }
   }
 
-  // ב-Windows ביט הכתיבה נגזר רק ממאפיין "קריאה בלבד", שחוסם גם כתיבה
-  // לקובץ וגם מחיקה/החלפה שלו — ולכן כאן, בניגוד ל-POSIX, הוא אמין.
+  // ב-Windows ביט הכתיבה משקף את מאפיין "קריאה בלבד" שחוסם דלתא.
+  // החלפה מלאה מזיזה את הקובץ לגיבוי ב-rename, שמותר גם כשהמאפיין מוגדר.
   static bool _hasWindowsReadOnlyAttribute(String path) {
     if (!Platform.isWindows) return false;
     final stat = FileStat.statSync(path);
@@ -718,7 +720,7 @@ class LibraryUpdateRepository implements LibraryUpdateService {
       throw StateError('אין DB מלא בתוכנית');
     }
     final dbPath = dbPathProvider();
-    await _ensureDbWritable(dbPath);
+    await _ensureDbDirectoryWritable(dbPath);
     final cacheDir = Directory(
       p.join(await dataRootProvider(), 'library_update_cache'),
     );
@@ -950,8 +952,7 @@ class LibraryUpdateRepository implements LibraryUpdateService {
               toVersion: plan.targetVersion ?? 0,
               timestamp: nowTimestamp(),
             );
-            // beginApply מעתיק DB של כמה GB ועשוי להימשך דקות. זו בדיקת הביטול
-            // האחרונה; מכאן עד ה-rename אין await ולכן אין חלון race נוסף.
+            // מכאן עד ה-rename אין await, ולכן ביטול נבדק מיד אחרי יצירת הגיבוי.
             _throwIfCancelled(isCancelled);
             _deleteDbWithSidecarsQuietly(dbPath);
             File(newDbPath).renameSync(dbPath);
