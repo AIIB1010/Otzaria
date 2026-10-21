@@ -1678,6 +1678,9 @@ Future<void> _runDeferredRestoreWindows() async {
   if (WindowRole.isSecondary || _windowSlotsToRestore.isEmpty) return;
   final slots = _windowSlotsToRestore;
   _windowSlotsToRestore = const [];
+  // חלון שנפתח בזמן ההמתנה היה מוחק את השורה של משבצת פנויה.
+  final opener = WindowOpener.current;
+  if (opener is ViewWindowOpener) opener.reserveForRestore(slots);
   try {
     await _mainWindowRevealedCompleter.future.timeout(
       const Duration(seconds: 20),

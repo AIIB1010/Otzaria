@@ -69,7 +69,12 @@ class ViewWindowCloseFlow {
       await opener.rememberClosed(entry.slot);
       // סגירה מכוונת מוחקת את הסשן; קודם endSession, ששמירה באמצע לא תחזיר אותו.
       entry.endSession();
-      await _discardSession(entry.slot);
+      try {
+        await _discardSession(entry.slot);
+      } catch (e) {
+        // השורה תאומץ בהפעלה הבאה; החלון נסגר בכל מקרה.
+        debugPrint('view window close: discard failed: $e');
+      }
       entry.handle.destroy();
       return true;
     } finally {

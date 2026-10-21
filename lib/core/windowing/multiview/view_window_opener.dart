@@ -82,8 +82,12 @@ class ViewWindowOpener implements WindowOpener {
   }
 
   /// פתיחה אחת בכל רגע: משבצת פנויה ומחיקת השארית שלה אינן מתנגשות.
-  Future<T> _serialized<T>(Future<T> Function() body) {
-    final result = _queue.then((_) => body());
+  /// כשל הוא false, כמו במודל הקודם: הקוראים אינם מצפים לחריגה.
+  Future<bool> _serialized(Future<bool> Function() body) {
+    final result = _queue.then((_) => body()).catchError((Object e) {
+      debugPrint('ViewWindowOpener failed: $e');
+      return false;
+    });
     _queue = result.then<void>((_) {}, onError: (_) {});
     return result;
   }
@@ -99,7 +103,13 @@ class ViewWindowOpener implements WindowOpener {
     final slot = registry.freeSlot(excluding: _pendingRestore);
     // שארית מקריסה במשבצת הזו אינה שייכת לחלון החדש.
     await _store.delete(slot);
-    return _open(slot: slot, tab: tab, origin: origin, bounds: bounds);
+    return _open(
+      slot: slot,
+      tab: tab,
+      origin: origin,
+      bounds: bounds,
+      deleteRowOnTimeout: true,
+    );
   });
 
   @override
@@ -113,10 +123,13 @@ class ViewWindowOpener implements WindowOpener {
     return opened;
   }
 
+  /// שומר את [slots] לשחזור עוד לפני שהוא מתחיל, כדי שחלון חדש לא ימחק אותן.
+  void reserveForRestore(Iterable<int> slots) => _pendingRestore.addAll(slots);
+
   /// "שחזר את כל החלונות": חלון לכל משבצת, עם הסשן והגבולות שלה. משבצת
   /// שנכשלה נשארת שמורה, כדי שהסשן שלה יאומץ בהפעלה הבאה ולא יימחק.
   Future<void> restoreAllWindows(List<int> slots) async {
-    _pendingRestore.addAll(slots);
+    reserveForRestore(slots);
     for (final slot in slots) {
       if (!await _serialized(() => _openSession(slot))) {
         debugPrint('שחזור חלונות נעצר: פתיחת חלון למשבצת $slot נכשלה');
@@ -167,7 +180,11 @@ class ViewWindowOpener implements WindowOpener {
       if (session.boundsJson != null) {
         await _store.saveBounds(slot, session.boundsJson);
       }
-      return _openSession(slot);
+      if (await _openSession(slot)) return true;
+      // נכשל: השורה שנכתבה כאן אינה של אף חלון, והחלון נשאר לניסיון חוזר.
+      await _store.delete(slot);
+      _closed.add(closed);
+      return false;
     }
     return false;
   });
@@ -199,6 +216,7 @@ class ViewWindowOpener implements WindowOpener {
     ({int x, int y})? origin,
     PhysicalBounds? bounds,
     bool maximized = false,
+    bool deleteRowOnTimeout = false,
   }) async {
     final entry = registry.open(
       size: _defaultSize(),
@@ -213,7 +231,8 @@ class ViewWindowOpener implements WindowOpener {
       // הקורא לא יסיר את הכרטיסיה מהמקור, ולכן החלון לא יוצג אחר כך עם עותק.
       entry.endSession();
       entry.handle.destroy();
-      await _store.delete(slot);
+      // סשן משוחזר נשאר: הוא יאומץ בהפעלה הבאה.
+      if (deleteRowOnTimeout) await _store.delete(slot);
       return false;
     }
     if (maximized) entry.handle.setMaximized(true);
@@ -231,15 +250,17 @@ class ViewWindowOpener implements WindowOpener {
     if (bounds != null &&
         bounds.width >= minBoundsWidth &&
         bounds.height >= minBoundsHeight) {
-      _native.setWindowRect(
-        hwnd,
-        Rect.fromLTWH(
-          bounds.left.toDouble(),
-          bounds.top.toDouble(),
-          bounds.width.toDouble(),
-          bounds.height.toDouble(),
-        ),
+      final target = Rect.fromLTWH(
+        bounds.left.toDouble(),
+        bounds.top.toDouble(),
+        bounds.width.toDouble(),
+        bounds.height.toDouble(),
       );
+      _native.setWindowRect(hwnd, target);
+      // מסך עם DPI אחר משנה את הגודל ב-WM_DPICHANGED; שם כבר אין שינוי.
+      if (_native.windowRect(hwnd) != target) {
+        _native.setWindowRect(hwnd, target);
+      }
       return;
     }
     if (origin == null) return;

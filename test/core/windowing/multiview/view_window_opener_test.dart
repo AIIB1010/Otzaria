@@ -71,6 +71,25 @@ class _MemorySessions extends WindowSessionStore {
   Future<void> delete(int slot) async => rows.remove(slot);
 }
 
+/// מסך עם DPI אחר: ההזזה הראשונה מגדילה את החלון, כמו WM_DPICHANGED.
+class _DpiChangeNative extends FakeViewWindowNative {
+  final Set<int> _moved = {};
+
+  @override
+  void setWindowRect(int hwnd, Rect rect) => super.setWindowRect(
+    hwnd,
+    _moved.add(hwnd)
+        ? Rect.fromLTWH(rect.left, rect.top, rect.width * 1.5, rect.height)
+        : rect,
+  );
+}
+
+/// מסד שהמחיקה בו נכשלת (נעול, למשל).
+class _FailingDeleteSessions extends _MemorySessions {
+  @override
+  Future<void> delete(int slot) async => throw StateError('locked');
+}
+
 void main() {
   setUp(() => MultiViewMode.debugOverride = true);
 
@@ -85,14 +104,19 @@ void main() {
   late bool mainVisible;
   late int mainRestores;
 
-  ViewWindowOpener makeOpener(WidgetTester tester, {Duration? timeout}) {
+  ViewWindowOpener makeOpener(
+    WidgetTester tester, {
+    Duration? timeout,
+    FakeViewWindowNative? native,
+    _MemorySessions? store,
+  }) {
     windows = FakeViewWindows(tester);
-    sessions = _MemorySessions();
+    sessions = store ?? _MemorySessions();
     mainVisible = true;
     mainRestores = 0;
     return ViewWindowOpener(
       registry: windows.registry,
-      native: windows.native,
+      native: native ?? windows.native,
       sessions: sessions,
       isMainWindowVisible: () async => mainVisible,
       restoreMainWindow: () async {
@@ -354,5 +378,106 @@ void main() {
     expect(sessions.boundsWrites, isEmpty);
     expect(sessions.rows[entry.slot], isNull);
     binding.dispose();
+  });
+  testWidgets('שחזור שפריים ראשון לא הגיע אליו: הסשן נשאר והמשבצת שמורה', (
+    tester,
+  ) async {
+    final opener = makeOpener(tester, timeout: const Duration(seconds: 1));
+    await tester.pumpWidget(const SizedBox());
+    sessions.rows[2] = const WindowSession(
+      slot: 2,
+      tabsJson: '["kept"]',
+      currentIndex: 0,
+    );
+    final restore = opener.restoreAllWindows([2]);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+    await restore;
+    expect(windows.registry.windows, isEmpty);
+    expect(sessions.rows[2]!.tabsJson, '["kept"]');
+    expect(opener.pendingRestoreForTest, {2});
+  });
+
+  testWidgets('Ctrl+Shift+T שנכשל: השורה נמחקת והחלון נשאר לניסיון חוזר', (
+    tester,
+  ) async {
+    final opener = makeOpener(tester, timeout: const Duration(seconds: 1));
+    await pumpHost(tester);
+    expect(await settle(tester, opener.openWindow()), isTrue);
+    final entry = windows.registry.windows.single;
+    await sessions.save(2, tabsJson: '["a"]', currentIndex: 0);
+    final flow = ViewWindowCloseFlow(
+      entry: entry,
+      flush: () async {},
+      discardSession: sessions.delete,
+      opener: opener,
+    );
+    expect(await settle(tester, flow.run()), isTrue);
+    await tester.pump();
+
+    // בלי MultiViewHost החלון המשוחזר אינו מצייר.
+    await tester.pumpWidget(const SizedBox());
+    final restore = opener.restoreLastClosedWindow();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+    expect(await restore, isFalse);
+    expect(sessions.rows[2], isNull);
+    expect(opener.closedCountForTest, 1);
+  });
+
+  testWidgets('מסגרת במסך עם DPI אחר: הגודל מוחל שוב אחרי שינוי ה-DPI', (
+    tester,
+  ) async {
+    final native = _DpiChangeNative();
+    final opener = makeOpener(tester, native: native);
+    await pumpHost(tester);
+    expect(
+      await settle(
+        tester,
+        opener.openWindow(bounds: (left: 0, top: 0, width: 800, height: 600)),
+      ),
+      isTrue,
+    );
+    expect(native.rects[100], const Rect.fromLTWH(0, 0, 800, 600));
+  });
+
+  testWidgets('כשל במסד: openWindow מחזיר false ולא זורק', (tester) async {
+    final opener = makeOpener(tester, store: _FailingDeleteSessions());
+    await pumpHost(tester);
+    expect(await settle(tester, opener.openWindow()), isFalse);
+    expect(windows.registry.windows, isEmpty);
+    // התור לא נתקע אחרי הכשל.
+    expect(await settle(tester, opener.restoreLastClosedWindow()), isFalse);
+  });
+
+  testWidgets('משבצת שמורה לשחזור לפני תחילתו אינה נמחקת בפתיחה חדשה', (
+    tester,
+  ) async {
+    final opener = makeOpener(tester);
+    await pumpHost(tester);
+    sessions.rows[2] = const WindowSession(
+      slot: 2,
+      tabsJson: '["pending"]',
+      currentIndex: 0,
+    );
+    opener.reserveForRestore([2]);
+    expect(await settle(tester, opener.openWindow()), isTrue);
+    expect(windows.registry.windows.single.slot, 3);
+    expect(sessions.rows[2]!.tabsJson, '["pending"]');
+  });
+
+  testWidgets('מחיקת הסשן נכשלה: החלון נסגר בכל זאת', (tester) async {
+    final opener = makeOpener(tester);
+    await pumpHost(tester);
+    expect(await settle(tester, opener.openWindow()), isTrue);
+    final entry = windows.registry.windows.single;
+    final flow = ViewWindowCloseFlow(
+      entry: entry,
+      flush: () async {},
+      discardSession: (_) async => throw StateError('locked'),
+      opener: opener,
+    );
+    expect(await settle(tester, flow.run()), isTrue);
+    expect(windows.stubOf(entry).destroyed, isTrue);
   });
 }
