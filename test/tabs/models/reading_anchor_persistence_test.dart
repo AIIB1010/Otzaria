@@ -81,6 +81,21 @@ void main() {
     expect(bookmark.readingAnchor, anchor);
   });
 
+  test('סימנייה לטאב שלא נמדד שומרת את מיקום השורה בלי עוגן מלאכותי', () async {
+    final book = _DelayedBook()..ready.complete([]);
+    final tab = TextBookTab(book: book, index: 0);
+    addTearDown(tab.dispose);
+    final bookmark = (await bookmarkFromReadingTab(
+      tab,
+      useStoredPositionFallback: true,
+    ))!;
+    expect(bookmark.index, 0);
+    expect(bookmark.readingAnchor, isNull);
+    final restored = tabFromBookmark(bookmark) as TextBookTab;
+    addTearDown(restored.dispose);
+    expect(restored.lines.captureAnchor(), isNull);
+  });
+
   test('JSON ישן או עוגן פגום ממשיכים להיפתח לפי מספר השורה', () {
     for (final value in [
       null,

@@ -34,7 +34,7 @@ Future<Bookmark?> bookmarkFromReadingTab(
   bool useStoredPositionFallback = false,
 }) async {
   if (tab is CommentatorsTab) {
-    final blocState = tab.bloc.state;
+    final blocState = tab.blocState;
     if (blocState is TextBookLoaded && blocState.visibleIndices.isNotEmpty) {
       final index = tab.currentIndex;
       final ref = await _lineRef(
@@ -70,9 +70,9 @@ Future<Bookmark?> bookmarkFromReadingTab(
   }
 
   if (tab is TextBookTab) {
-    final blocState = tab.bloc.state;
-    final anchor = tab.readingAnchor;
-    final index = anchor.line;
+    final blocState = tab.blocState;
+    final anchor = tab.lines.captureAnchor();
+    final index = anchor?.line ?? tab.index;
     if (blocState is TextBookLoaded && blocState.visibleIndices.isNotEmpty) {
       final ref = await _lineRef(
         blocState.book,

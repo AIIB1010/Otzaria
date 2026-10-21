@@ -337,8 +337,8 @@ class TextReadingSnapshot {
     _book = tab.book;
     _persistedBook = state is TextBookLoaded ? state.book : tab.book;
     _title = tab.title;
-    _readingAnchor = tab.readingAnchor;
-    _index = _readingAnchor.line;
+    _readingAnchor = tab.lines.captureAnchor();
+    _index = _readingAnchor?.line ?? tab.index;
     _isPinned = tab.isPinned;
     _dedupeKey = tab.dedupeKey;
     _showLeftPane = state.showLeftPane;
@@ -423,7 +423,7 @@ class TextReadingSnapshot {
   late final TextBook _persistedBook;
   late final String _title;
   late final int _index;
-  late final ReadingAnchor _readingAnchor;
+  late final ReadingAnchor? _readingAnchor;
   late final bool _isPinned;
   late final String? _dedupeKey;
   late final bool _showLeftPane;
@@ -474,7 +474,7 @@ class TextReadingSnapshot {
     'title': _title,
     'book': _persistedBook.toJson(),
     'initalIndex': _index,
-    'readingAnchor': _readingAnchor.toJson(),
+    if (_readingAnchor != null) 'readingAnchor': _readingAnchor.toJson(),
     'commentators': _commentators ?? <String>[],
     'splitedView': _persistedSplitView,
     'showPageShapeView': _persistedPageShapeView,
