@@ -21,13 +21,15 @@ class ViewWindowScope extends StatefulWidget {
   const ViewWindowScope({
     super.key,
     required this.entry,
-    required this.historyRepository,
+    this.historyRepository,
     this.closeFlow = _defaultCloseFlow,
     required this.child,
   });
 
   final ViewWindowEntry entry;
-  final HistoryRepository historyRepository;
+
+  /// `null` — מופע משל החלון: לפיו ה-HistoryBloc מסנן רק את הכתיבות שלו.
+  final HistoryRepository? historyRepository;
   final ViewWindowCloseFlowFactory closeFlow;
   final Widget child;
 
@@ -48,6 +50,8 @@ class _ViewWindowScopeState extends State<ViewWindowScope> {
   late final ViewWindowEntry _entry = widget.entry;
   late final OpenedTab? _initialTab;
   late final ViewWindowCloseFlow _closeFlow = widget.closeFlow(_entry);
+  late final HistoryRepository _history =
+      widget.historyRepository ?? HistoryRepository();
   late final WindowTitleSync _titleSync = WindowTitleSync(
     setTitle: (title) async => _entry.handle.setTitle(title),
   );
@@ -97,7 +101,7 @@ class _ViewWindowScopeState extends State<ViewWindowScope> {
     keys: _entry.keys,
     role: AppWindowRole.view(openedWithTab: _entry.openedWithTab),
     child: WindowScopeProviders(
-      historyRepository: widget.historyRepository,
+      historyRepository: _history,
       initialTab: _initialTab,
       tabsSession: _entry.tabsSession,
       duties: ViewWindowScope.duties,

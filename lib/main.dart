@@ -1622,11 +1622,8 @@ class _AppBootstrapState extends State<AppBootstrap> {
         // בלי הדגל הענף נגזם מהבנייה, יחד עם כל קוד חלונות ה-Dart.
         child: MultiViewMode.enabled
             ? MultiViewHost(
-                contentBuilder: (context, entry) => ViewWindowScope(
-                  entry: entry,
-                  historyRepository: historyRepository,
-                  child: const App(),
-                ),
+                contentBuilder: (context, entry) =>
+                    ViewWindowScope(entry: entry, child: const App()),
                 child: mainWindow,
               )
             : mainWindow,

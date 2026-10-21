@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -24,11 +25,17 @@ import 'package:otzaria/core/windowing/multiview/view_window_scope.dart';
 import 'package:otzaria/core/windowing/window_title_sync.dart';
 import 'package:otzaria/core/windowing/window_fullscreen_cubit.dart';
 import 'package:otzaria/history/history_repository.dart';
+import 'package:otzaria/history/bloc/history_bloc.dart';
+import 'package:otzaria/history/bloc/history_event.dart';
+import 'package:otzaria/history/bloc/history_state.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
 import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
 import 'package:otzaria/tabs/models/tab.dart';
 import 'package:otzaria/tabs/models/tool_tab.dart';
+import 'package:otzaria/workspaces/bloc/workspace_bloc.dart';
+import 'package:otzaria/workspaces/workspace.dart';
+import 'package:otzaria/workspaces/workspace_repository.dart';
 
 import '../../../helpers/memory_settings_cache.dart';
 import '../../../test_helpers/fake_view_window.dart';
@@ -74,7 +81,6 @@ void main() {
           registry: registry,
           contentBuilder: (context, entry) => ViewWindowScope(
             entry: entry,
-            historyRepository: HistoryRepository(),
             closeFlow:
                 closeFlow ?? (entry) => ViewWindowCloseFlow(entry: entry),
             child: Builder(
@@ -249,6 +255,46 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('היסטוריה ושולחנות שנכתבו בחלון אחד נטענים מחדש בשני', (
+    tester,
+  ) async {
+    final windows = FakeViewWindows(tester);
+    final (contexts, _) = await pumpHost(tester, windows.registry);
+    final a = windows.registry.open(size: const Size(800, 600))!;
+    final b = windows.registry.open(size: const Size(800, 600))!;
+    await tester.pump();
+    final historyA = contexts[a.slot]!.read<HistoryBloc>();
+    final historyB = contexts[b.slot]!.read<HistoryBloc>();
+    final workspacesA = contexts[a.slot]!.read<WorkspaceBloc>();
+    final workspacesB = contexts[b.slot]!.read<WorkspaceBloc>();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    final beforeB = historyB.state;
+    historyA.add(ClearHistory());
+    await tester.pump(const Duration(milliseconds: 200));
+    // החלון השני טען מחדש (מצב חדש), אף שהוא עצמו לא שינה דבר.
+    expect(historyA.state, isA<HistoryLoaded>());
+    expect(historyB.state, isA<HistoryLoaded>());
+    expect(identical(historyB.state, beforeB), isFalse);
+
+    // כתיבה שאינה של אף חלון (שחזור גיבוי) מגיעה לשניהם.
+    // בלי await: ההמתנה נעשית ב-pump, שמריץ את המשימות של אזור הבדיקה.
+    unawaited(
+      WorkspaceRepository().mutateWorkspaces(
+        (current) => [
+          ...current,
+          Workspace(name: 'עיון', tabs: const [], activeTabIndex: 0),
+        ],
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(workspacesA.state.workspaces.map((w) => w.name), contains('עיון'));
+    expect(workspacesB.state.workspaces.map((w) => w.name), contains('עיון'));
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 200));
   });
 
   testWidgets('הגבולות נשמרים למשבצת החלון לפי ה-DPR של התצוגה שלו', (
