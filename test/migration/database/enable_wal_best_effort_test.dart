@@ -134,57 +134,62 @@ void main() {
     expect(_synchronous(db), 2, reason: 'FULL');
   });
 
-  group('shm שאינו נפתח (תיקייה במקום הקובץ)', () {
-    late Directory dir;
-    late String path;
+  group(
+    'shm שאינו נפתח (תיקייה במקום הקובץ)',
+    // ב-unix SQLite פותח תיקייה כ-shm לקריאה בלבד, ו-WAL "עובר" עד הכתיבה.
+    skip: Platform.isWindows ? false : 'shm חסום מדומה רק ב-Windows',
+    () {
+      late Directory dir;
+      late String path;
 
-    setUp(() {
-      dir = Directory.systemTemp.createTempSync('wal_shm_blocked');
-      path = p.join(dir.path, 'cache.db');
-    });
-    tearDown(() => dir.deleteSync(recursive: true));
+      setUp(() {
+        dir = Directory.systemTemp.createTempSync('wal_shm_blocked');
+        path = p.join(dir.path, 'cache.db');
+      });
+      tearDown(() => dir.deleteSync(recursive: true));
 
-    void blockShm() => Directory('$path-shm').createSync();
+      void blockShm() => Directory('$path-shm').createSync();
 
-    void expectRollbackJournal(CommonDatabase db) {
-      expect(db.select('PRAGMA journal_mode').first.values.first, 'delete');
-      expect(db.select('PRAGMA locking_mode').first.values.first, 'normal');
-      expect(_synchronous(db), 2, reason: 'FULL');
-    }
+      void expectRollbackJournal(CommonDatabase db) {
+        expect(db.select('PRAGMA journal_mode').first.values.first, 'delete');
+        expect(db.select('PRAGMA locking_mode').first.values.first, 'normal');
+        expect(_synchronous(db), 2, reason: 'FULL');
+      }
 
-    test('מסד שכבר ב-WAL חוזר ל-journal רגיל ושמיש', () {
-      final seed = sqlite3.open(path)
-        ..execute('PRAGMA journal_mode=WAL')
-        ..execute('CREATE TABLE t(x)');
-      seed.close();
-      blockShm();
+      test('מסד שכבר ב-WAL חוזר ל-journal רגיל ושמיש', () {
+        final seed = sqlite3.open(path)
+          ..execute('PRAGMA journal_mode=WAL')
+          ..execute('CREATE TABLE t(x)');
+        seed.close();
+        blockShm();
 
-      final db = openWritableDatabase(path, 'test');
-      addTearDown(db.close);
+        final db = openWritableDatabase(path, 'test');
+        addTearDown(db.close);
 
-      expectRollbackJournal(db);
-      db.execute('INSERT INTO t VALUES (1)');
-    });
+        expectRollbackJournal(db);
+        db.execute('INSERT INTO t VALUES (1)');
+      });
 
-    test('שני חיבורים לאותו מסד שמישים גם אחרי שהראשון נסגר', () {
-      sqlite3.open(path)
-        ..execute('CREATE TABLE t(x)')
-        ..close();
-      blockShm();
+      test('שני חיבורים לאותו מסד שמישים גם אחרי שהראשון נסגר', () {
+        sqlite3.open(path)
+          ..execute('CREATE TABLE t(x)')
+          ..close();
+        blockShm();
 
-      final first = openWritableDatabase(path, 'first');
-      final stopwatch = Stopwatch()..start();
-      final second = openWritableDatabase(path, 'second');
-      addTearDown(second.close);
-      expect(stopwatch.elapsed, lessThan(const Duration(seconds: 2)));
-      first.execute('INSERT INTO t VALUES (1)');
-      first.close();
+        final first = openWritableDatabase(path, 'first');
+        final stopwatch = Stopwatch()..start();
+        final second = openWritableDatabase(path, 'second');
+        addTearDown(second.close);
+        expect(stopwatch.elapsed, lessThan(const Duration(seconds: 2)));
+        first.execute('INSERT INTO t VALUES (1)');
+        first.close();
 
-      expectRollbackJournal(second);
-      second.execute('INSERT INTO t VALUES (2)');
-      expect(second.select('SELECT count(*) FROM t').first.values.first, 2);
-    });
-  });
+        expectRollbackJournal(second);
+        second.execute('INSERT INTO t VALUES (2)');
+        expect(second.select('SELECT count(*) FROM t').first.values.first, 2);
+      });
+    },
+  );
 
   test('closeWithCheckpoint ממזג את ה-WAL גם כשחיבור אחר פתוח', () {
     final dir = Directory.systemTemp.createTempSync('close_checkpoint');
@@ -212,6 +217,16 @@ void main() {
     );
 
     expect(enableWalBestEffort(db, 'test'), isFalse);
+  });
+
+  test('כשל שאינו של האחסון אינו מחייב פתיחה מחדש', () {
+    // SQLITE_PROTOCOL (15) — מרוץ חולף על נעילות ה-WAL; ה-WAL עצמו תקין.
+    final db = _FakeDatabase(
+      failOn: (sql) => sql.contains('sqlite_schema'),
+      extendedResultCode: 15,
+    );
+
+    expect(enableWalBestEffort(db, 'test'), isTrue);
   });
 
   test('BUSY בבדיקת ה-WAL אינו מחייב פתיחה מחדש ב-journal רגיל', () {

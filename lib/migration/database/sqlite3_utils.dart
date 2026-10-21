@@ -69,8 +69,11 @@ bool enableWalBestEffort(Database db, String label) {
     _probeWalWriteWithoutWaiting(db);
   } catch (e) {
     debugPrint('[$label] journal_mode=WAL failed: $e');
-    // BUSY הוא נעילה של חיבור אחר, לא WAL פגום.
-    return e is SqliteException && e.resultCode == SqlError.SQLITE_BUSY;
+    // רק כשל של האחסון מעיד על WAL שאינו שמיש. BUSY וכשלים חולפים לא, ופתיחה
+    // מחדש בגללם הייתה נתקעת בנעילה של חיבור אחר ונשארת ב-EXCLUSIVE.
+    if (e is! SqliteException) return true;
+    return e.resultCode != SqlError.SQLITE_IOERR &&
+        e.resultCode != SqlError.SQLITE_CANTOPEN;
   }
   _relaxSyncIfWal(db, label);
   return true;
