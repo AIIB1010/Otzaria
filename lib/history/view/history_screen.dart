@@ -169,7 +169,13 @@ class _HistoryViewState extends State<HistoryView> {
     final tab = tabFromBookmark(bookmark);
 
     context.read<TabsBloc>().add(
-      OpenOrFocusTab(tab, targetTitle: targetTitle),
+      OpenOrFocusTab(
+        tab,
+        targetTitle: targetTitle,
+        matchHistorySlot:
+            !bookmark.isSearch &&
+            bookmark.targetKind == BookmarkTargetKind.book,
+      ),
     );
     context.read<NavigationBloc>().add(const NavigateToScreen(Screen.reading));
     // Close the dialog if this view is displayed inside one

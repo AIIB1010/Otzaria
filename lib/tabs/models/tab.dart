@@ -17,7 +17,18 @@ abstract class OpenedTab {
   String title;
   bool isPinned;
   final String? dedupeKey;
+
+  /// מזהה רשומת ההיסטוריה שהטאב מעדכן, כדי ששני טאבים של אותו ספר יישמרו
+  /// כשני מקומות. null = הרשומה היחידה של הספר (כמו ברשומות ישנות).
+  String? historySlot;
+
   OpenedTab(this.title, {this.isPinned = false, this.dedupeKey});
+
+  static int _historySlotCounter = 0;
+
+  static String newHistorySlot() =>
+      '${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}'
+      '-${(_historySlotCounter++).toRadixString(36)}';
 
   /// Called when the tab is being disposed.
   /// Override this method to perform cleanup.
