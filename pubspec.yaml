@@ -131,17 +131,17 @@ dependencies:
   wakelock_plus: ^1.8.1
 
 dependency_overrides:
-  # TODO: לחזור ל-pub.dev אחרי שחרור espresso3389/pdfrx#756 (בלעדיו שורות עם מספרים
-  # בספרים סרוקים נשארות הפוכות). עד אז 2.9.0 עם pdfrx_engine 0.7.4 והתיקון, באותו קומיט.
+  # TODO: לחזור ל-pub.dev רק לאחר שנרמול העברית ישמר את החיפוש ומיפוי התווים הקיימים בספרים סרוקים.
+  # שתי החבילות מוצמדות יחד; המנרמל הקיים נשמר, כולל מגבלותיו בטקסט מעורב ובפיסוק מספרים.
   pdfrx:
     git:
-      url: https://github.com/palmoni5/pdfrx
-      ref: 83e737ee1ffaaa9c162b02e3ef88ed2b9acb1f9d
+      url: https://github.com/Y-PLONI/pdfrx
+      ref: 6f5fec0c44a5db00a1ea3c2f26cb01862e02fef1
       path: packages/pdfrx
   pdfrx_engine:
     git:
-      url: https://github.com/palmoni5/pdfrx
-      ref: 83e737ee1ffaaa9c162b02e3ef88ed2b9acb1f9d
+      url: https://github.com/Y-PLONI/pdfrx
+      ref: 6f5fec0c44a5db00a1ea3c2f26cb01862e02fef1
       path: packages/pdfrx_engine
   # TODO: להחזיר ל-pub.dev כשיתמזג וישוחרר MaikuB/flutter_local_notifications#2826
   # (קריאות WinRT ב-thread ייעודי, כולל תיקון ה-deadlock ב-invoke). עד אז הפורק
