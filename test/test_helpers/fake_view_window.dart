@@ -97,6 +97,22 @@ class FakeViewWindowNative implements ViewWindowNative {
   final List<int> frameless = [];
   final List<(int, ResizeEdge)> resized = [];
   final List<int> maximizedVertically = [];
+  int? foreground;
+  int dpi = 96;
+  final Set<int> maximizedWindows = {};
+
+  @override
+  int? foregroundWindow() => foreground;
+  @override
+  ({Rect normal, bool maximized, int dpi})? placement(int hwnd) {
+    final rect = rects[hwnd];
+    if (rect == null) return null;
+    return (
+      normal: rect,
+      maximized: maximizedWindows.contains(hwnd),
+      dpi: dpi,
+    );
+  }
 
   @override
   Rect? windowRect(int hwnd) => rects[hwnd];

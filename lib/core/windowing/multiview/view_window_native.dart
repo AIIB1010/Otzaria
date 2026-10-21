@@ -28,6 +28,12 @@ abstract interface class ViewWindowNative {
   /// אזור העבודה של המסך שהחלון עליו.
   Rect? workArea(int hwnd);
 
+  /// החלון שבחזית; null כשאין.
+  int? foregroundWindow();
+
+  /// המסגרת הרגילה (גם כשהחלון ממוקסם), המיקסום וה-DPI; null כשאינם זמינים.
+  ({Rect normal, bool maximized, int dpi})? placement(int hwnd);
+
   /// תיקוני הקלט של ה-runner (#1441, #1645) לתצוגה של החלון.
   Future<void> installViewHooks(int hwnd);
 
@@ -137,6 +143,43 @@ class Win32ViewWindowNative implements ViewWindowNative {
       if (!GetMonitorInfo(monitor, info)) return null;
       return _rect(info.ref.rcWork);
     } finally {
+      calloc.free(info);
+    }
+  }
+
+  @override
+  int? foregroundWindow() {
+    final hwnd = GetForegroundWindow().address;
+    return hwnd == 0 ? null : hwnd;
+  }
+
+  @override
+  ({Rect normal, bool maximized, int dpi})? placement(int hwnd) {
+    final h = _h(hwnd);
+    final placement = calloc<WINDOWPLACEMENT>()
+      ..ref.length = sizeOf<WINDOWPLACEMENT>();
+    final info = calloc<MONITORINFO>()..ref.cbSize = sizeOf<MONITORINFO>();
+    try {
+      if (!GetWindowPlacement(h, placement).value) return null;
+      final maximized = IsZoomed(h);
+      var normal = windowRect(hwnd);
+      if (maximized || IsIconic(h)) {
+        // כמו ב-runner: rcNormalPosition יחסית לאזור העבודה, לא למסך.
+        normal = _rect(placement.ref.rcNormalPosition);
+        final style = GetWindowLongPtr(h, GWL_EXSTYLE).value;
+        final monitor = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
+        if (style & WS_EX_TOOLWINDOW == 0 && GetMonitorInfo(monitor, info)) {
+          normal = normal.translate(
+            (info.ref.rcWork.left - info.ref.rcMonitor.left).toDouble(),
+            (info.ref.rcWork.top - info.ref.rcMonitor.top).toDouble(),
+          );
+        }
+      }
+      if (normal == null) return null;
+      final dpi = GetDpiForWindow(h);
+      return (normal: normal, maximized: maximized, dpi: dpi > 0 ? dpi : 96);
+    } finally {
+      calloc.free(placement);
       calloc.free(info);
     }
   }
