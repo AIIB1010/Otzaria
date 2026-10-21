@@ -18,8 +18,10 @@ import 'package:otzaria/search/models/search_configuration.dart';
 import 'package:otzaria/search/utils/cross_line_result.dart';
 import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/text_book/view/combined_view/combined_book_screen.dart';
+import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
+import 'package:otzaria/text_book/utils/reader_build_policy.dart';
 import 'package:otzaria/settings/settings_exports.dart' hide UpdateFontSize;
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:pdfrx/pdfrx.dart';
@@ -560,8 +562,10 @@ class _BookPreviewPanelState extends State<BookPreviewPanel> {
               onDoubleTap: _openCurrentPreviewInReader,
               child: BlocProvider.value(
                 value: _currentTextTab!.bloc,
-                child: BlocBuilder(
+                child: BlocBuilder<TextBookBloc, TextBookState>(
                   bloc: _currentTextTab!.bloc,
+                  // גלילה משדרת visibleIndices; בלי הסינון כל הקורא נבנה מחדש.
+                  buildWhen: shouldRebuildReader,
                   builder: (context, state) {
                     if (state is TextBookInitial) {
                       _currentTextTab!.bloc.add(
