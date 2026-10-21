@@ -33,6 +33,7 @@ import 'package:otzaria/tabs/bloc/tabs_event.dart';
 import 'package:otzaria/tabs/models/tab.dart';
 import 'package:otzaria/tabs/tabs_repository.dart';
 import 'package:otzaria/utils/navigation/book_open_coordinator.dart';
+import 'package:otzaria/utils/ui/reading_left_pane_policy.dart';
 import 'package:otzaria/widgets/misc/link_preview_overlay.dart';
 import 'package:otzaria/work_status/work_status_cubit.dart';
 import 'package:otzaria/workspaces/bloc/workspace_bloc.dart';
@@ -251,6 +252,7 @@ PluginSystemBloc _createPluginSystemBloc(BuildContext context) {
     tabsBloc: tabsBloc,
     historyBloc: context.read<HistoryBloc>(),
     navigationBloc: context.read<NavigationBloc>(),
+    layoutWidth: readingLayoutWidthResolverOf(context),
   );
   final bookAccess = DeclarativeLibraryBookAccess.otzaria(
     coordinator,

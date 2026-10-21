@@ -23,6 +23,7 @@ import 'package:otzaria_search_engine/otzaria_search_engine.dart';
 import 'package:otzaria/widgets/dialogs/app_dialogs.dart';
 import 'package:otzaria/widgets/lists/items_list_view.dart';
 import 'package:otzaria/utils/ui/book_format_icon.dart';
+import 'package:otzaria/utils/ui/reading_left_pane_policy.dart';
 
 /// משחזר אפשרויות חיפוש שההיסטוריה שומרת תמיד פר-מילה. אפשרויות אחידות
 /// מוחזרות למצב הגלובלי — אחרת הצ'יפים בדיאלוג העריכה מוצגים כבויים למרות
@@ -166,7 +167,10 @@ class _HistoryViewState extends State<HistoryView> {
     Bookmark bookmark, {
     String? targetTitle,
   }) {
-    final tab = tabFromBookmark(bookmark);
+    final tab = tabFromBookmark(
+      bookmark,
+      screenWidth: readingLayoutWidthOf(context),
+    );
 
     context.read<TabsBloc>().add(
       OpenOrFocusTab(

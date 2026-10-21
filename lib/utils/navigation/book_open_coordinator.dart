@@ -19,10 +19,15 @@ class BookOpenCoordinator {
   final HistoryBloc historyBloc;
   final NavigationBloc navigationBloc;
 
+  /// רוחב החלון שהטאבים נפתחים בו, נקרא בכל פתיחה (ראה
+  /// [readingLayoutWidthResolverOf]); null — ברירת המחדל של המדיניות.
+  final double? Function()? layoutWidth;
+
   const BookOpenCoordinator({
     required this.tabsBloc,
     required this.historyBloc,
     required this.navigationBloc,
+    this.layoutWidth,
   });
 
   void openBook(
@@ -148,7 +153,9 @@ class BookOpenCoordinator {
     final resolvedCommentators =
         initialCommentators ?? lastOpened?.commentatorsToShow;
 
-    final shouldOpenLeftPane = shouldAutoOpenReadingLeftPane();
+    final shouldOpenLeftPane = shouldAutoOpenReadingLeftPane(
+      screenWidth: layoutWidth?.call(),
+    );
     final savedViewMode = PageShapeSettingsManager.getViewModePreference(
       book.title,
     );

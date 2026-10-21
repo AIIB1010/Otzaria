@@ -811,6 +811,7 @@ class _FindRefDialogState extends State<FindRefDialog> {
             final tabsBloc = context.read<TabsBloc>();
             final navigationBloc = context.read<NavigationBloc>();
             final historyBloc = context.read<HistoryBloc>();
+            final layoutWidth = readingLayoutWidthResolverOf(context);
             Navigator.of(context).pop();
             // כמו ב-BookOpenCoordinator.openBook: שמירת מיקום הקריאה של הטאב
             // הנוכחי להיסטוריה לפני שהטאב הדחוי תופס את המוקד.
@@ -819,11 +820,14 @@ class _FindRefDialogState extends State<FindRefDialog> {
                 CaptureStateForHistory(tabsBloc.state.currentTab!),
               );
             }
-            final openLeftPane = shouldAutoOpenReadingLeftPane();
+            final openLeftPane = shouldAutoOpenReadingLeftPane(
+              screenWidth: layoutWidth(),
+            );
             final coordinator = BookOpenCoordinator(
               tabsBloc: tabsBloc,
               historyBloc: historyBloc,
               navigationBloc: navigationBloc,
+              layoutWidth: layoutWidth,
             );
             final resolvingTab = buildTalmudBavliResolvingTab(
               target: target,

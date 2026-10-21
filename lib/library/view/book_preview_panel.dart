@@ -33,6 +33,7 @@ import 'package:otzaria/pdf_book/utils/pdf_image_budget.dart';
 import 'package:otzaria/pdf_book/view/pdf_scrollbar.dart';
 import 'package:otzaria/widgets/misc/app_menu_exports.dart';
 import 'package:otzaria/widgets/widgets_exports.dart';
+import 'package:otzaria/utils/ui/reading_left_pane_policy.dart';
 
 /// פאנל תצוגה מקדימה של ספר בספרייה
 /// מציג את תוכן הספר בלי כרטיסיות, בדומה לחלון העיון
@@ -583,6 +584,7 @@ class _BookPreviewPanelState extends State<BookPreviewPanel> {
                           showSplitView: false,
                           removeNikud: settingsState.defaultRemoveNikud,
                           loadCommentators: false,
+                          screenWidth: readingLayoutWidthOf(context),
                         ),
                       );
                       return _buildSkeletonLoading();

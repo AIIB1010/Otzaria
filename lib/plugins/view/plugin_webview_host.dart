@@ -54,6 +54,7 @@ import 'package:otzaria/widgets/dialogs/dialogs_exports.dart';
 import 'package:otzaria/workspaces/bloc/workspace_bloc.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
+import 'package:otzaria/utils/ui/reading_left_pane_policy.dart';
 
 // Restricts localhost access to the exact dev server origin (host + scheme + port).
 bool isPluginDevServerUri(Uri uri, String? devRootPath) {
@@ -203,6 +204,7 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
         tabsBloc: tabsBloc,
         historyBloc: historyBloc,
         navigationBloc: navigationBloc,
+        layoutWidth: readingLayoutWidthResolverOf(context),
       ),
       resolveReference: buildPluginReferenceResolver(findRefRepository),
       resolveRefToLine: (book, ref) =>

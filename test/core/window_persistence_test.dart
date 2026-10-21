@@ -11,6 +11,8 @@ import 'package:otzaria/core/windowing/app_window_controller.dart';
 import 'package:otzaria/core/windowing/app_window_id.dart';
 import 'package:window_manager/window_manager.dart' show TitleBarStyle;
 
+import '../test_helpers/second_test_view.dart';
+
 void main() {
   // מסך ראשי 1920x1080 ומסך משני משמאלו, בפיקסלים פיזיים.
   const primary = Rect.fromLTWH(0, 0, 1920, 1040);
@@ -180,6 +182,32 @@ void main() {
           WindowBounds.decode(session?.boundsJson)?.dpr;
       expect(savedDpr(await sessions.load(1)), 1.5);
       expect(savedDpr(await sessions.load(2)), 2);
+    });
+
+    test('ה-DPR נקרא מהתצוגה של החלון בכל שמירה', () async {
+      final binding = TestWidgetsFlutterBinding.ensureInitialized();
+      final view = SecondTestView(binding.platformDispatcher.views.first)
+        ..devicePixelRatio = 1.75;
+      final window = _RecordingWindow(
+        visible: true,
+        bounds: const Rect.fromLTWH(10, 20, 800, 600),
+      );
+      final persistence = WindowPersistenceBinding(
+        controller: window,
+        geometry: window,
+        slot: () => 1,
+        sessions: sessions,
+        view: view,
+      );
+      Future<double?> saveAndReadDpr() async {
+        persistence.scheduleSave();
+        await Future<void>.delayed(const Duration(milliseconds: 600));
+        return WindowBounds.decode((await sessions.load(1))?.boundsJson)?.dpr;
+      }
+
+      expect(await saveAndReadDpr(), 1.75);
+      view.devicePixelRatio = 1.25;
+      expect(await saveAndReadDpr(), 1.25);
     });
   });
 }
