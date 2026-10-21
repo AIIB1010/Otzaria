@@ -30,4 +30,15 @@ void main() {
       '[b](v/aZ09.-*_%7E%2B%20%27%F0%9F%93%96)',
     );
   });
+
+  test(
+    'surrogate בודד מקודד כ-%3F בקישור ונשאר כלשונו מחוצה לו — כמו ב-Java',
+    () {
+      const title = 'a\uD800b\uDC00c\uD83D\uDCD6';
+      expect(
+        expandBannerTitle('{title} [x](u/{title})', title),
+        '$title [x](u/a%3Fb%3Fc%F0%9F%93%96)',
+      );
+    },
+  );
 }
