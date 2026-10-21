@@ -48,6 +48,7 @@ import 'package:otzaria/utils/navigation/talmud_bavli_open_format.dart';
 import 'package:otzaria/utils/text/text_manipulation.dart' as utils;
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/personal_notes/personal_notes_system.dart';
+import 'package:otzaria/personal_notes/widgets/personal_notes_sidebar.dart';
 import 'package:otzaria/personal_notes/utils/personal_note_source_selection.dart';
 import 'package:otzaria/bookmarks/utils/section_bookmark.dart';
 import 'package:otzaria/core/messages/text_book_messages.dart';
@@ -705,8 +706,16 @@ class _CombinedViewState extends State<CombinedView> {
         context,
         globalPosition: globalPosition,
         hoverMode: hoverMode,
-        contentBuilder: (_) =>
-            PersonalNotesListView(notes: notes, maxHeight: 220),
+        contentBuilder: (_) => PersonalNotesListView(
+          notes: notes,
+          maxHeight: 220,
+          onLinkTap: (url) => openNoteLink(
+            context,
+            url,
+            notes.first.bookId,
+            (line, {note}) => widget.tab.lines.scrollToLine(line - 1),
+          ),
+        ),
       );
       return;
     }
