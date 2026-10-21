@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
+import 'package:otzaria/core/windowing/window_fullscreen_cubit.dart';
 import 'package:otzaria/core/windowing/window_manager_app_window_controller.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/navigation/bloc/navigation_bloc.dart';
@@ -66,6 +67,12 @@ void main() {
             BlocProvider<TabsBloc>.value(value: tabsBloc),
             BlocProvider<NavigationBloc>.value(value: navigationBloc),
             BlocProvider<SettingsBloc>.value(value: settingsBloc),
+            BlocProvider<WindowFullscreenCubit>(
+              create: (_) => WindowFullscreenCubit(
+                initial: false,
+                persist: (_) async {},
+              ),
+            ),
           ],
           child: MaterialApp(
             home: Scaffold(

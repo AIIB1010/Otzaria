@@ -131,6 +131,55 @@ void main() {
     );
 
     testWidgets(
+      'לחצן היציאה עוקב אחרי קוביט החלון, ובלעדיו הסרגל נבנה כלא-מסך-מלא',
+      (tester) async {
+        final settingsBloc = _TestSettingsBloc(SettingsState.initial());
+        addTearDown(settingsBloc.close);
+        final cubit = WindowFullscreenCubit(
+          initial: false,
+          persist: (_) async {},
+        );
+        addTearDown(cubit.close);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: MultiBlocProvider(
+                providers: [
+                  BlocProvider<SettingsBloc>.value(value: settingsBloc),
+                  BlocProvider<WindowFullscreenCubit>.value(value: cubit),
+                ],
+                child: const Column(children: [AppTopBar()]),
+              ),
+            ),
+          ),
+        );
+        expect(find.byTooltip('צא ממסך מלא'), findsNothing);
+
+        await cubit.set(true);
+        await tester.pump();
+        expect(find.byTooltip('צא ממסך מלא'), findsOneWidget);
+
+        await cubit.set(false);
+        await tester.pump();
+        expect(find.byTooltip('צא ממסך מלא'), findsNothing);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: BlocProvider<SettingsBloc>.value(
+                value: settingsBloc,
+                child: const Column(children: [AppTopBar()]),
+              ),
+            ),
+          ),
+        );
+        expect(tester.takeException(), isNull);
+        expect(find.byTooltip('צא ממסך מלא'), findsNothing);
+      },
+    );
+
+    testWidgets(
       'בתוך scope פעיל של חלונית מפוצלת מוזרקת ידית גרירה',
       (tester) async {
         final settingsBloc = _TestSettingsBloc(SettingsState.initial());
