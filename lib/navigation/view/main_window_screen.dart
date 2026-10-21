@@ -11,6 +11,7 @@ import 'package:otzaria_icons/otzaria_icons.dart';
 import 'package:otzaria/app_report/view/app_report_dialog.dart';
 import 'package:otzaria/app_scope/process_duties.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
+import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
 import 'package:otzaria/core/startup_timeline.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
@@ -635,6 +636,14 @@ class MainWindowScreenState extends State<MainWindowScreen>
   /// ב-`initState` שלו כשנכנסים אליו, ולכן שום דבר לא אובד.
   bool get _skipsEagerLibraryLoad =>
       !_role.isPrimaryView && _role.openedWithTab;
+
+  /// עבודה של bloc ברמת התהליך: עם חלונות Dart כל המסכים מאזינים לו.
+  bool get _ownsSharedLibraryUpdate =>
+      !MultiViewMode.enabled || _duties.isProcessOwner;
+
+  /// דיאלוג שנולד מ-bloc משותף מוצג רק בחלון שהמשתמש עובד בו.
+  bool get _showsSharedPrompts =>
+      !MultiViewMode.enabled || identical(AppWindowKeys.current, _windowKeys);
 
   /// תפקיד החלון והעבודה פר-תהליך שלו; נקראים פעם אחת, ב-[initState].
   late final AppWindowRole _role;
@@ -2912,6 +2921,9 @@ class MainWindowScreenState extends State<MainWindowScreen>
               if ((state.status == LibraryUpdateStatus.completed ||
                       state.status == LibraryUpdateStatus.error) &&
                   state.hasUpdate) {
+                // ה-bloc משותף לחלונות ה-Dart: הבעלים מרענן ומאנדקס פעם אחת,
+                // והשאר מקבלים את העץ מ-LibraryChangedInOtherWindow.
+                if (!_ownsSharedLibraryUpdate) return;
                 final requestId = _nextIndexRequestId++;
                 _startupRefreshWait.attachRequest(requestId);
                 _pendingIndexRequests[requestId] = (
@@ -2939,7 +2951,8 @@ class MainWindowScreenState extends State<MainWindowScreen>
                   );
                 }
               } else if (state.status ==
-                  LibraryUpdateStatus.needsFullConfirmation) {
+                      LibraryUpdateStatus.needsFullConfirmation &&
+                  _showsSharedPrompts) {
                 _promptFullDownload(context, state);
               }
             },
