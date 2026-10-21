@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:otzaria/plugins/bridge/plugin_bridge_adapter.dart';
@@ -59,6 +61,38 @@ void main() {
           .toList();
       expect(rules, hasLength(1));
       expect(rules.single, contains('font-weight:400'));
+    });
+  });
+
+  group('buildPluginFontFaceJson', () {
+    setUp(debugClearFontFaceCssCache);
+
+    test('זהה לקידוד JSON של buildPluginFontFaceCss', () async {
+      expect(
+        await buildPluginFontFaceJson(),
+        jsonEncode(await buildPluginFontFaceCss()),
+      );
+    });
+
+    test('הקידוד (~2MB) מחושב פעם אחת לאותן משפחות', () async {
+      final first = await buildPluginFontFaceJson();
+      expect(identical(await buildPluginFontFaceJson(), first), isTrue);
+    });
+
+    test('גופן שלא נטען אינו נשמר, ושינוי בהגדרות נקלט', () async {
+      await Settings.setValue<String>(
+        SettingsRepository.keyFontFamily,
+        'No Such Font For Test',
+      );
+      addTearDown(
+        () => Settings.setValue<String>(
+          SettingsRepository.keyFontFamily,
+          AppFonts.defaultFont,
+        ),
+      );
+      final first = await buildPluginFontFaceJson();
+      expect(identical(await buildPluginFontFaceJson(), first), isFalse);
+      expect(first, jsonEncode(await buildPluginFontFaceCss()));
     });
   });
 
