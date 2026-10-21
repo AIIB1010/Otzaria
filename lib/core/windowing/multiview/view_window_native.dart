@@ -106,7 +106,7 @@ class Win32ViewWindowNative implements ViewWindowNative {
     ResizeEdge.bottomRight: HTBOTTOMRIGHT,
   };
 
-  // הודעת קליינט-שאינו-לקוח במיקום הסמן, כמו ב-window_manager.
+  // הודעת WM_NC* (מחוץ לאזור הלקוח) במיקום הסמן, כמו ב-window_manager.
   static void _postAtCursor(int hwnd, int message, int hitTest) {
     final point = calloc<POINT>();
     try {
