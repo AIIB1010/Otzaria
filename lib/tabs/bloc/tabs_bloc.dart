@@ -447,10 +447,17 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
       );
       return;
     }
-    final targetTitle = await _resolveTabLocationTitle(
-      event.tab,
-      explicitTitle: event.targetTitle,
-    );
+    // הכותרת משמשת רק להשוואה מול חלונית של אותו ספר; בלעדיה נחסכת טעינת
+    // תוכן העניינים לפני הוספת הטאב, והקורא טוען אותו ממילא.
+    final hasSameBook = state.tabs
+        .expand(leafPanes)
+        .any((open) => _isSameBook(open, event.tab));
+    final targetTitle = hasSameBook
+        ? await _resolveTabLocationTitle(
+            event.tab,
+            explicitTitle: event.targetTitle,
+          )
+        : null;
     final matchingIndex = await _findMatchingTopLevelTabIndex(
       event.tab,
       targetTitle,
