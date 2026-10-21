@@ -180,6 +180,71 @@ void main() {
     await tester.pump();
   });
 
+  testWidgets('גרירת הגלגל אינה גוררת במקביל את התוכן ב-scale recognizer', (
+    tester,
+  ) async {
+    var panUpdates = 0;
+    var scrollDistance = 0.0;
+    await tester.pumpWidget(
+      buildApp(
+        child: Listener(
+          onPointerSignal: (event) {
+            if (event is PointerScrollEvent) {
+              scrollDistance += event.scrollDelta.dy;
+            }
+          },
+          child: GestureDetector(
+            onScaleUpdate: (_) => panUpdates++,
+            behavior: HitTestBehavior.opaque,
+            child: const SizedBox.expand(),
+          ),
+        ),
+      ),
+    );
+    final center = tester.getCenter(find.byType(GestureDetector).last);
+    final gesture = await middleClick(tester, center);
+    await gesture.moveTo(center + const Offset(0, 120));
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(const Duration(milliseconds: 16));
+    await gesture.up();
+
+    expect(scrollDistance, greaterThan(0));
+    expect(panUpdates, 0);
+  });
+
+  testWidgets('ילד שכבר תפס את המחווה שומר את לחיצת הגלגל לעצמו', (
+    tester,
+  ) async {
+    var scrollEvents = 0;
+    await tester.pumpWidget(
+      buildApp(
+        child: Listener(
+          onPointerSignal: (_) => scrollEvents++,
+          child: RawGestureDetector(
+            behavior: HitTestBehavior.opaque,
+            gestures: {
+              EagerGestureRecognizer:
+                  GestureRecognizerFactoryWithHandlers<EagerGestureRecognizer>(
+                    EagerGestureRecognizer.new,
+                    (_) {},
+                  ),
+            },
+            child: const SizedBox.expand(),
+          ),
+        ),
+      ),
+    );
+    final center = tester.getCenter(find.byType(RawGestureDetector).last);
+    final gesture = await middleClick(tester, center);
+    await gesture.moveTo(center + const Offset(0, 120));
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(const Duration(milliseconds: 16));
+    await gesture.up();
+
+    expect(scrollEvents, 0);
+    expect(anchor(), findsNothing);
+  });
+
   testWidgets('שחרור במקום נועל את הגלילה, ולחיצה נוספת מסיימת', (
     tester,
   ) async {

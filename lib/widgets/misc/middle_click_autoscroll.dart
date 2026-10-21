@@ -36,7 +36,8 @@ class MiddleClickAutoScroll extends StatefulWidget {
 }
 
 class _MiddleClickAutoScrollState extends State<MiddleClickAutoScroll>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver
+    implements GestureArenaMember {
   /// רדיוס האזור סביב העוגן שבו אין גלילה, כדי שרעד יד לא יזיז.
   static const double _deadZone = 16.0;
 
@@ -117,6 +118,9 @@ class _MiddleClickAutoScrollState extends State<MiddleClickAutoScroll>
     final target = _resolveTarget(result);
     if (target == null) return;
 
+    // הגרירה שולטת בגלילה האוטומטית, ואסור שתזיז גם את התוכן שמתחתיה.
+    final entry = GestureBinding.instance.gestureArena.add(event.pointer, this);
+
     final box = context.findRenderObject();
     _origin = box is RenderBox && box.hasSize
         ? box.localToGlobal(Offset.zero)
@@ -133,11 +137,20 @@ class _MiddleClickAutoScrollState extends State<MiddleClickAutoScroll>
       _anchor = event.position;
       _axis = target.axis;
     });
+    entry.resolve(GestureDisposition.accepted);
   }
 
   void _onPointerMove(PointerMoveEvent event) {
     if (!_isActive || event.pointer != _pointerId) return;
     _pointer = event.position;
+  }
+
+  @override
+  void acceptGesture(int pointer) {}
+
+  @override
+  void rejectGesture(int pointer) {
+    if (pointer == _pointerId) _stop();
   }
 
   void _onPointerUp(PointerUpEvent event) {
