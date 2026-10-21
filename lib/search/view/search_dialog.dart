@@ -177,8 +177,10 @@ class _SearchDialogState extends State<SearchDialog> {
   late final Map<String, bool> _persistedPluginSelections;
 
   bool _semanticSelected = false;
-  bool _semanticIncludeLexical = true;
-  bool _semanticGroupIdentical = true;
+  bool _semanticIncludeLexical =
+      SearchDefaults.initialSemanticIncludeLexicalForNewSearch();
+  bool _semanticGroupIdentical =
+      SearchDefaults.initialSemanticGroupIdenticalForNewSearch();
   bool _semanticSubmitted = false;
   SemanticSearchBloc? _semanticBloc;
   TabsBloc? _tabsBloc;
@@ -1250,11 +1252,20 @@ class _SearchDialogState extends State<SearchDialog> {
       scopeSelection: _scopeSelection,
       onScopeChanged: _onScopeChanged,
       includeLexical: _semanticIncludeLexical,
-      onIncludeLexicalChanged: (value) =>
-          setState(() => _semanticIncludeLexical = value),
+      onIncludeLexicalChanged: (value) {
+        setState(() => _semanticIncludeLexical = value);
+        // עריכת כרטיסייה קיימת אינה משנה את ברירת המחדל לחיפוש חדש.
+        if (widget.editTab == null) {
+          SearchDefaults.saveSemanticIncludeLexicalDefault(value);
+        }
+      },
       groupIdenticalText: _semanticGroupIdentical,
-      onGroupIdenticalTextChanged: (value) =>
-          setState(() => _semanticGroupIdentical = value),
+      onGroupIdenticalTextChanged: (value) {
+        setState(() => _semanticGroupIdentical = value);
+        if (widget.editTab == null) {
+          SearchDefaults.saveSemanticGroupIdenticalDefault(value);
+        }
+      },
       onSubmit: _performSearch,
       onGrantConsent: _grantSemanticConsent,
       onDeclineConsent: _declineSemanticConsent,
