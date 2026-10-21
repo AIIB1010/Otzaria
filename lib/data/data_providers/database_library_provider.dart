@@ -1952,6 +1952,16 @@ class DatabaseLibraryProvider implements LibraryProvider, LinkLinesProvider {
   bool _isUserBooksCategoryId(int categoryId) =>
       _userBooksCategoryIds.contains(categoryId);
 
+  /// מקור הקריאה בפועל לפי אותו ניתוב שמשמש את הטקסט ותוכן העניינים.
+  BookSource? resolvedSourceForBook(TextBook book) => book.categoryId == null
+      ? null
+      : _resolveSource(
+          title: book.title,
+          categoryId: book.categoryId!,
+          fileType: book.fileType ?? 'txt',
+          preferSource: book.source,
+        );
+
   /// המסד שממנו לקרוא ספר שידוע רק לפי כותרת+קטגוריה+סוג: [preferSource]
   /// כשאינו רשמי, אחרת אישי רק כשהמטמון או הקטגוריה מעידים על כך.
   BookSource _resolveSource({
