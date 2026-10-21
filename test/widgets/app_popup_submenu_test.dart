@@ -177,6 +177,166 @@ void main() {
     expect(find.text('אפשרויות'), findsOneWidget);
   });
 
+  for (final direction in TextDirection.values) {
+    for (final leaveFromChild in [false, true]) {
+      for (final outside in [false, true]) {
+        testWidgets(
+          'יציאה מתת-תפריט סוגרת רק את הילד: $direction, '
+          'child=$leaveFromChild, outside=$outside',
+          (tester) async {
+            final log = await _pumpMenu(tester, direction: direction);
+            final mouse = await _mouseOver(tester, find.text('אפשרויות'));
+            await tester.pump(const Duration(milliseconds: 600));
+            await tester.pumpAndSettle();
+            if (leaveFromChild) {
+              await mouse.moveTo(tester.getCenter(find.text('פעולה פנימית')));
+              await tester.pump();
+            }
+            await mouse.moveTo(
+              outside ? Offset.zero : tester.getCenter(find.text('פעולה אחרת')),
+            );
+            await tester.pump(const Duration(milliseconds: 600));
+            await tester.pumpAndSettle();
+
+            expect(find.text('פעולה פנימית'), findsNothing);
+            expect(find.text('אפשרויות'), findsOneWidget);
+            expect(log.selections, isEmpty);
+            expect(log.closed, 0);
+          },
+        );
+      }
+    }
+
+    testWidgets('גרירת עכבר החוצה סוגרת את הילד: $direction', (tester) async {
+      await _pumpMenu(tester, direction: direction);
+      final mouse = await _mouseOver(tester, find.text('אפשרויות'));
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      await mouse.down(tester.getCenter(find.text('אפשרויות')));
+      await mouse.moveTo(Offset.zero);
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      expect(find.text('פעולה פנימית'), findsNothing);
+      await mouse.up();
+    });
+
+    testWidgets('יציאת העכבר מהחלון סוגרת את הילד: $direction', (tester) async {
+      await _pumpMenu(tester, direction: direction);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      await mouse.moveTo(tester.getCenter(find.text('אפשרויות')));
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      expect(find.text('פעולה פנימית'), findsOneWidget);
+      await mouse.removePointer();
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      expect(find.text('פעולה פנימית'), findsNothing);
+    });
+
+    testWidgets('תנועות בחלון אחר אינן משנות את סגירת הילד: $direction', (
+      tester,
+    ) async {
+      await _pumpMenu(tester, direction: direction);
+      final mouse = await _mouseOver(tester, find.text('אפשרויות'));
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      final router = GestureBinding.instance.pointerRouter;
+      router.route(
+        PointerHoverEvent(
+          viewId: tester.view.viewId + 1,
+          position: Offset.zero,
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      expect(find.text('פעולה פנימית'), findsOneWidget);
+
+      await mouse.moveTo(Offset.zero);
+      router.route(
+        PointerHoverEvent(
+          viewId: tester.view.viewId + 1,
+          position: tester.getCenter(find.text('אפשרויות')),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      expect(find.text('פעולה פנימית'), findsNothing);
+    });
+
+    testWidgets('ריפוד הפאנל שומר ילד פתוח ומעבר החוצה סוגר: $direction', (
+      tester,
+    ) async {
+      final log = await _pumpMenu(tester, direction: direction);
+      final mouse = await _mouseOver(tester, find.text('אפשרויות'));
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      Rect? panel;
+      final item = find.ancestor(
+        of: find.text('פעולה פנימית'),
+        matching: find.byType(MenuItemButton),
+      );
+      tester.element(item).visitAncestorElements((
+        element,
+      ) {
+        if (element.widget is! Material) return true;
+        final box = element.findRenderObject()! as RenderBox;
+        panel = box.localToGlobal(Offset.zero) & box.size;
+        return false;
+      });
+      final padding = Offset(panel!.center.dx, panel!.top + 2);
+      expect(
+        padding.dy,
+        lessThan(tester.getRect(item).top),
+      );
+      await mouse.moveTo(padding);
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      expect(find.text('פעולה פנימית'), findsOneWidget);
+
+      await mouse.moveTo(Offset.zero);
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      expect(find.text('פעולה פנימית'), findsNothing);
+      expect(find.text('אפשרויות'), findsOneWidget);
+      expect(log.closed, 0);
+    });
+
+    testWidgets('ניווט במקלדת מפעיל ילד פעם אחת: $direction', (tester) async {
+      final log = await _pumpMenu(tester, direction: direction);
+      await tester.tap(find.text('אפשרויות'));
+      await tester.pumpAndSettle();
+      final parent = tester.getCenter(find.text('אפשרויות'));
+      final child = tester.getCenter(find.text('פעולה פנימית'));
+      await tester.sendKeyEvent(
+        child.dx > parent.dx
+            ? LogicalKeyboardKey.arrowRight
+            : LogicalKeyboardKey.arrowLeft,
+      );
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+
+      expect(log.selections, ['child']);
+      expect(log.closed, 1);
+      expect(find.text('אפשרויות'), findsNothing);
+    });
+
+    testWidgets('חזרה לאב מבטלת סגירת תת-תפריט: $direction', (tester) async {
+      await _pumpMenu(tester, direction: direction);
+      final mouse = await _mouseOver(tester, find.text('אפשרויות'));
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      await mouse.moveTo(tester.getCenter(find.text('פעולה אחרת')));
+      await tester.pump(const Duration(milliseconds: 100));
+      await mouse.moveTo(tester.getCenter(find.text('אפשרויות')));
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+
+      expect(find.text('פעולה פנימית'), findsOneWidget);
+    });
+  }
+
   testWidgets('לחיצה אחת על אח פועלת גם כאשר תת-תפריט פתוח', (tester) async {
     final log = await _pumpMenu(tester);
     await tester.tap(find.text('אפשרויות'));

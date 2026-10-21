@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import 'menu_presentation.dart';
@@ -44,20 +45,41 @@ class _AppSubmenuButtonState extends State<AppSubmenuButton> {
     debugLabel: 'AppSubmenuButton',
     canRequestFocus: !widget.preserveFocus,
   );
+  final _menuChildKey = GlobalKey();
   Timer? _hoverTimer;
   bool? _openToRight;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!widget.preserveFocus) {
+      GestureBinding.instance.pointerRouter.addGlobalRoute(_handlePointerEvent);
+    }
+  }
 
   @override
   void didUpdateWidget(AppSubmenuButton oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.preserveFocus != widget.preserveFocus) {
+      _cancelOpen();
       _focusNode.canRequestFocus = !widget.preserveFocus;
+      final router = GestureBinding.instance.pointerRouter;
+      if (widget.preserveFocus) {
+        router.removeGlobalRoute(_handlePointerEvent);
+      } else {
+        router.addGlobalRoute(_handlePointerEvent);
+      }
     }
   }
 
   @override
   void dispose() {
     _hoverTimer?.cancel();
+    if (!widget.preserveFocus) {
+      GestureBinding.instance.pointerRouter.removeGlobalRoute(
+        _handlePointerEvent,
+      );
+    }
     _focusNode.dispose();
     super.dispose();
   }
@@ -85,7 +107,7 @@ class _AppSubmenuButtonState extends State<AppSubmenuButton> {
   }
 
   void _scheduleOpen() {
-    _hoverTimer?.cancel();
+    _cancelOpen();
     if (!widget.preserveFocus || widget.menuChildren.isEmpty) return;
     // Focus-disabled buttons cannot use Flutter's hover-to-focus opening.
     _hoverTimer = Timer(_hoverDelay, () {
@@ -96,6 +118,44 @@ class _AppSubmenuButtonState extends State<AppSubmenuButton> {
   void _cancelOpen() {
     _hoverTimer?.cancel();
     _hoverTimer = null;
+  }
+
+  bool _containsPointer(BuildContext context, Offset position) {
+    final box = context.findRenderObject();
+    return box is RenderBox &&
+        box.hasSize &&
+        MatrixUtils.transformRect(
+          box.getTransformTo(null),
+          Offset.zero & box.size,
+        ).contains(position);
+  }
+
+  void _handlePointerEvent(PointerEvent event) {
+    if (!widget.controller.isOpen ||
+        event is PointerSignalEvent ||
+        (event.kind != PointerDeviceKind.mouse &&
+            event.kind != PointerDeviceKind.stylus) ||
+        event.viewId != View.of(context).viewId) {
+      return;
+    }
+    var inside =
+        event is! PointerRemovedEvent &&
+        _containsPointer(context, event.position);
+    if (!inside && event is! PointerRemovedEvent) {
+      // The Material surface includes padding around the child rows.
+      _menuChildKey.currentContext?.visitAncestorElements((element) {
+        if (element.widget is! Material) return true;
+        inside = _containsPointer(element, event.position);
+        return false;
+      });
+    }
+    if (inside) {
+      _cancelOpen();
+    } else {
+      _hoverTimer ??= Timer(const Duration(milliseconds: 400), () {
+        widget.controller.close();
+      });
+    }
   }
 
   @override
@@ -110,7 +170,9 @@ class _AppSubmenuButtonState extends State<AppSubmenuButton> {
       textDirection: openToRight ? TextDirection.ltr : TextDirection.rtl,
       child: MouseRegion(
         onEnter: (_) => _scheduleOpen(),
-        onExit: (_) => _cancelOpen(),
+        onExit: (_) {
+          if (widget.preserveFocus) _cancelOpen();
+        },
         child: SubmenuButton(
           controller: widget.controller,
           focusNode: _focusNode,
@@ -120,7 +182,10 @@ class _AppSubmenuButtonState extends State<AppSubmenuButton> {
             if (_openToRight != side) setState(() => _openToRight = side);
             widget.onOpen?.call();
           },
-          onClose: widget.onClose,
+          onClose: () {
+            _cancelOpen();
+            widget.onClose?.call();
+          },
           submenuIcon: const WidgetStatePropertyAll<Widget?>(SizedBox.shrink()),
           style:
               widget.style ??
@@ -133,8 +198,12 @@ class _AppSubmenuButtonState extends State<AppSubmenuButton> {
             alignment: openToRight ? Alignment.topRight : Alignment.topLeft,
           ),
           menuChildren: [
-            for (final child in widget.menuChildren)
-              Directionality(textDirection: direction, child: child),
+            for (final (index, child) in widget.menuChildren.indexed)
+              Directionality(
+                key: index == 0 ? _menuChildKey : null,
+                textDirection: direction,
+                child: child,
+              ),
           ],
           child: Directionality(
             textDirection: direction,

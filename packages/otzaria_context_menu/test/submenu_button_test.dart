@@ -18,6 +18,7 @@ MenuPresentation _presentation() => MenuPresentation(
 Widget _host({
   required MenuController controller,
   FocusNode? focus,
+  bool preserveFocus = true,
 }) => MaterialApp(
   home: Scaffold(
     body: Focus(
@@ -25,6 +26,7 @@ Widget _host({
       child: Center(
         child: AppSubmenuButton(
           controller: controller,
+          preserveFocus: preserveFocus,
           presentation: _presentation(),
           maxWidth: 200,
           menuChildren: [
@@ -41,6 +43,29 @@ Widget _host({
 );
 
 void main() {
+  testWidgets(
+    'hover tracking follows focus policy and is removed on disposal',
+    (
+      tester,
+    ) async {
+      final controller = MenuController();
+      final router = GestureBinding.instance.pointerRouter;
+      final routes = router.debugGlobalRouteCount;
+      await tester.pumpWidget(
+        _host(controller: controller, preserveFocus: false),
+      );
+      expect(router.debugGlobalRouteCount, routes + 1);
+      await tester.pumpWidget(_host(controller: controller));
+      expect(router.debugGlobalRouteCount, routes);
+      await tester.pumpWidget(
+        _host(controller: controller, preserveFocus: false),
+      );
+      expect(router.debugGlobalRouteCount, routes + 1);
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(router.debugGlobalRouteCount, routes);
+    },
+  );
+
   testWidgets('shared submenu delays hover without stealing the source focus', (
     tester,
   ) async {
