@@ -33,7 +33,7 @@ class CommentatorsListView extends StatefulWidget {
 }
 
 class CommentatorsListViewState extends State<CommentatorsListView> {
-  TextBookLoaded? _lineRelevantFor;
+  WeakReference<TextBookLoaded>? _lineRelevantFor;
   Set<String> _lineRelevant = const {};
 
   @override
@@ -69,7 +69,9 @@ class CommentatorsListViewState extends State<CommentatorsListView> {
   // גלילה בקורא משדרת מצב בכל שורה; הרשימה נבנית מחדש רק כשקלט שלה השתנה.
   bool _shouldRebuild(TextBookState previous, TextBookState current) {
     if (previous is! TextBookLoaded || current is! TextBookLoaded) return true;
-    return !identical(previous.book, current.book) ||
+    // BlocBuilder מחזיק את המצב שנבנה; פינוי תוכן חייב לשחרר את הגוף הקודם.
+    return !identical(previous.content, current.content) ||
+        !identical(previous.book, current.book) ||
         !identical(previous.links, current.links) ||
         previous.commentatorGroups != current.commentatorGroups ||
         !listEquals(previous.activeCommentators, current.activeCommentators) ||
@@ -85,7 +87,7 @@ class CommentatorsListViewState extends State<CommentatorsListView> {
   Set<String> _lineRelevantCommentators(TextBookLoaded state) {
     if (state.rareCommentators.isEmpty) return const {};
     // ה-build משתמש בסט שכבר חושב עבור אותו מצב ב-buildWhen.
-    if (identical(state, _lineRelevantFor)) return _lineRelevant;
+    if (identical(state, _lineRelevantFor?.target)) return _lineRelevant;
     final indexes = state.selectedIndices.isNotEmpty
         ? state.selectedIndices
         : (state.visibleIndices.isNotEmpty
@@ -93,7 +95,7 @@ class CommentatorsListViewState extends State<CommentatorsListView> {
               : (state.selectedIndex != null
                     ? [state.selectedIndex!]
                     : const <int>[]));
-    _lineRelevantFor = state;
+    _lineRelevantFor = WeakReference(state);
     return _lineRelevant = lineRelevantRareCommentators(
       rareCommentators: state.rareCommentators,
       currentIndexes: indexes,

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/book_common/models/commentator_group.dart';
+import 'package:otzaria/data/data_providers/file_system_data_provider.dart';
+import 'package:otzaria/data/repository/text_book_repository.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/models/links.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
@@ -25,6 +27,17 @@ class _FakeTextBookBloc extends Bloc<TextBookEvent, TextBookState>
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _RangeRepository extends TextBookRepository {
+  _RangeRepository() : super(fileSystem: FileSystemData.instance);
+
+  @override
+  Future<BookContentRange?> getBookContentRange(
+    TextBook book, {
+    required int startLine,
+    required int endLine,
+  }) async => null;
 }
 
 void main() {
@@ -112,6 +125,78 @@ void main() {
 
   CommentatorsSelectionPanel panel(WidgetTester tester) =>
       tester.widget(find.byType(CommentatorsSelectionPanel));
+
+  Future<TextBookBloc> pumpRealList(WidgetTester tester) async {
+    final book = TextBook(title: 'ספר בדיקה');
+    final bloc = TextBookBloc(
+      repository: _RangeRepository(),
+      initialState: TextBookInitial.named(book, 1000, true, const []),
+    );
+    addTearDown(bloc.close);
+    // ignore: invalid_use_of_visible_for_testing_member
+    bloc.emit(
+      TextBookLoaded(
+        book: book,
+        showLeftPane: true,
+        content: List.generate(3000, (i) => 'שורה $i'),
+        fontSize: 18,
+        showSplitView: false,
+        activeCommentators: const [],
+        commentatorGroups: const [],
+        availableCommentators: const [],
+        links: const [],
+        linksByLine: const {},
+        tableOfContents: const [],
+        visibleIndices: const [1000],
+        pinLeftPane: false,
+        searchText: '',
+      ),
+    );
+    final applied = bloc.stream.first;
+    bloc.add(
+      ApplyBookContentRanges(
+        bookTitle: book.title,
+        ranges: const [
+          (startLine: 1000, totalLines: 3000, lines: ['שורה 1000']),
+        ],
+      ),
+    );
+    await applied;
+    await tester.pumpWidget(
+      BlocProvider<TextBookBloc>.value(
+        value: bloc,
+        child: const MaterialApp(home: Scaffold(body: CommentatorsListView())),
+      ),
+    );
+    await tester.pumpAndSettle();
+    return bloc;
+  }
+
+  testWidgets('אירועי גלילה אמיתיים אינם בונים את רשימת המפרשים', (
+    tester,
+  ) async {
+    final bloc = await pumpRealList(tester);
+    final before = panel(tester);
+    for (var i = 1001; i <= 1010; i++) {
+      bloc.add(UpdateVisibleIndecies([i]));
+      await tester.pumpAndSettle();
+      expect((bloc.state as TextBookLoaded).visibleIndices, [i]);
+      expect(panel(tester), same(before));
+    }
+  });
+
+  testWidgets('פינוי גוף הספר מעדכן גם את המצב שמחזיקה רשימת המפרשים', (
+    tester,
+  ) async {
+    final bloc = await pumpRealList(tester);
+    final before = panel(tester);
+    bloc.add(const SetTabVisibility(false));
+    await tester.pumpAndSettle();
+    final state = bloc.state as TextBookLoaded;
+    expect(state.content[0], isEmpty);
+    expect(state.content[1000], 'שורה 1000');
+    expect(panel(tester), isNot(same(before)));
+  });
 
   testWidgets('גלילה שאינה משנה את המפרשים המוצגים אינה בונה את הרשימה', (
     tester,
