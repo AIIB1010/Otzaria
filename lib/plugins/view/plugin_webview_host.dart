@@ -685,6 +685,13 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
 
   final Map<String, DateTime> _processFailureLoggedAt = {};
 
+  /// רישום מה-callback הייעודי לנפילה. ב-Windows אותה נפילה כבר נרשמת דרך
+  /// onProcessFailed, עם קוד היציאה.
+  void logPluginWebViewGoneOnce(String kind) {
+    if (Platform.isWindows) return;
+    logPluginWebViewGone(kind);
+  }
+
   /// רושם נפילה של תהליך — פעם אחת לכל סוג בכל 10 דקות, כי "לא מגיב"
   /// חוזר כל כמה שניות.
   void logPluginWebViewGone(

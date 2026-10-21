@@ -826,7 +826,20 @@ class PluginRuntimeDispatcher {
     try {
       switch (suspendMode) {
         case PluginSuspendMode.nativePause:
-          suspended ? await controller.pause() : await controller.resume();
+          if (suspended) {
+            // LOW לפני ההקפאה: renderer שכבר הוקפא אינו מקצץ את ה-working set.
+            await _setWindowsMemoryTarget(
+              controller,
+              MemoryUsageTargetLevel.LOW,
+            );
+            await controller.pause();
+          } else {
+            await controller.resume();
+            await _setWindowsMemoryTarget(
+              controller,
+              MemoryUsageTargetLevel.NORMAL,
+            );
+          }
         case PluginSuspendMode.visibility:
           await controller.setVisible(visible: !suspended);
         case PluginSuspendMode.eventOnly:
@@ -845,6 +858,19 @@ class PluginRuntimeDispatcher {
         'PluginRuntimeDispatcher: ${suspended ? 'pause' : 'resume'} failed '
         'for ${key.pluginId}: $e',
       );
+    }
+  }
+
+  /// כשל ביעד הזיכרון לא יעצור את ה-pause/resume שסביבו.
+  static Future<void> _setWindowsMemoryTarget(
+    InAppWebViewController controller,
+    MemoryUsageTargetLevel level,
+  ) async {
+    if (defaultTargetPlatform != TargetPlatform.windows) return;
+    try {
+      await controller.setMemoryUsageTargetLevel(level);
+    } catch (e) {
+      debugPrint('PluginRuntimeDispatcher: memory target failed: $e');
     }
   }
 

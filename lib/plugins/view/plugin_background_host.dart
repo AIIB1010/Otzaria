@@ -373,7 +373,7 @@ class _BackgroundPluginRunnerState extends State<_BackgroundPluginRunner>
   /// יעיר אותו מחדש.
   void _onProcessGone(InAppWebViewController controller, String kind) {
     if (!isCurrentWebView(controller)) return;
-    logPluginWebViewGone(kind);
+    logPluginWebViewGoneOnce(kind);
     PluginLazyActivationService.instance.onBackgroundProcessGone(
       widget.plugin.pluginId,
       generation: widget.activationGeneration,

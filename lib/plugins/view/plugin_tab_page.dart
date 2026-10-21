@@ -292,7 +292,7 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
   /// התהליך שמריץ את ה-WebView נפל. [kind] — לרישום בלבד.
   void _onWebViewGone(InAppWebViewController controller, String kind) {
     if (!mounted || !isCurrentWebView(controller)) return;
-    logPluginWebViewGone(kind);
+    logPluginWebViewGoneOnce(kind);
     final pluginId = widget.plugin.pluginId;
     final instanceId = widget.instanceId;
     final key = (pluginId: pluginId, instanceId: instanceId);

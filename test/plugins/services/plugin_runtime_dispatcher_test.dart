@@ -856,9 +856,12 @@ void main() {
       expect(a.pauseCalls, 1);
       expect(a.jsEvents, contains(contains('plugin.suspended')));
       expect(b.resumeCalls, 1);
-      // TrySuspend כבר מוריד את יעד הזיכרון; קריאה נוספת לא חסכה כלום.
-      expect(a.memoryLevels, isEmpty);
-      expect(b.memoryLevels, isEmpty);
+      // LOW אחרי ההשהיה מקצץ את ה-working set של ה-renderer המוקפא.
+      expect(a.memoryLevels, [
+        MemoryUsageTargetLevel.NORMAL,
+        MemoryUsageTargetLevel.LOW,
+      ]);
+      expect(b.memoryLevels, [MemoryUsageTargetLevel.NORMAL]);
     });
 
     test('בפלטפורמה ללא pause native נשלחים רק אירועי lifecycle', () async {

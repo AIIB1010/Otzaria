@@ -51,7 +51,7 @@ class _Controller extends Fake implements InAppWebViewController {
 
   @override
   Future<void> setMemoryUsageTargetLevel(MemoryUsageTargetLevel level) async =>
-      calls.add('memory');
+      calls.add('memory:${level.name()}');
 
   @override
   Future<dynamic> evaluateJavascript({
@@ -321,14 +321,14 @@ void main() {
   });
 
   group('השהיה לפי פלטפורמה', () {
-    test('Windows: pause/resume בלבד, בלי יעד זיכרון', () async {
+    test('Windows: LOW לפני pause, ו-NORMAL אחרי resume', () async {
       final c = _Controller();
       _d.registerController(_pid, c, instanceId: 'a');
       _d.setVisiblePluginInstances({_key()});
       await pumpEventQueue();
       _d.setVisiblePluginInstances(const {});
       await pumpEventQueue();
-      expect(c.calls, ['resume', 'pause']);
+      expect(c.calls, ['resume', 'memory:NORMAL', 'memory:LOW', 'pause']);
     });
 
     test('Linux: setVisible ועצירת מדיה', () async {
