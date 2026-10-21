@@ -1173,6 +1173,13 @@ packages:
       url: "https://github.com/palmoni5/otzaria-ashurit.git"
     source: git
     version: "1.0.5"
+  otzaria_context_menu:
+    dependency: "direct main"
+    description:
+      path: "packages/otzaria_context_menu"
+      relative: true
+    source: path
+    version: "0.1.0"
   otzaria_icons:
     dependency: "direct main"
     description:

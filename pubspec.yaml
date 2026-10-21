@@ -32,6 +32,8 @@ dependencies:
   sentry_flutter: ^9.30.1
   flutter:
     sdk: flutter
+  otzaria_context_menu:
+    path: packages/otzaria_context_menu
   flutter_bloc: ^9.1.1
   bloc: ^9.2.1
   bloc_concurrency: ^0.3.0
