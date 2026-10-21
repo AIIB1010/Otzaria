@@ -26,6 +26,7 @@ import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
+import 'package:otzaria/text_book/view/commentary_list_base.dart';
 import 'package:otzaria/text_book/view/splited_view/splited_view_screen.dart';
 import 'package:otzaria/tour/bloc/tour_cubit.dart';
 import 'package:otzaria/tour/bloc/tour_state.dart';
@@ -63,51 +64,7 @@ void main() {
 
   testWidgets('גלילה כשהחלונית סגורה אינה טוענת מפרשים, ופתיחתה מציגה '
       'את מפרשי הקטע הנוכחי', (tester) async {
-    tester.view.physicalSize = const Size(1400, 900);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
-
-    final bloc = _TestTextBookBloc(_state(0));
-    final settings = _TestSettingsBloc(SettingsState.initial());
-    final notes = _TestPersonalNotesBloc(const PersonalNotesState.initial());
-    final tab = TextBookTab(book: _book, index: 0, blocOverride: bloc);
-    final tabs = _TestTabsBloc(TabsState(tabs: [tab], currentTabIndex: 0));
-    final tour = _TestTourCubit();
-    addTearDown(() async {
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
-      await bloc.close();
-      await settings.close();
-      await notes.close();
-      await tabs.close();
-      await tour.close();
-      tab.dispose();
-    });
-
-    await tester.pumpWidget(
-      MultiBlocProvider(
-        providers: [
-          BlocProvider<TextBookBloc>.value(value: bloc),
-          BlocProvider<SettingsBloc>.value(value: settings),
-          BlocProvider<PersonalNotesBloc>.value(value: notes),
-          BlocProvider<TabsBloc>.value(value: tabs),
-          BlocProvider<TourCubit>.value(value: tour),
-        ],
-        child: MaterialApp(
-          home: Scaffold(
-            body: SplitedViewScreen(
-              content: _content,
-              openBookCallback: (_) {},
-              searchTextController: TextEditingValue.empty,
-              openLeftPaneTab: (_, {searchText}) {},
-              tab: tab,
-              showSplitView: true,
-            ),
-          ),
-        ),
-      ),
-    );
-    await _settle(tester);
+    final (bloc, tab) = await _pumpScreen(tester);
 
     tab.toggleCommentatorsPaneNotifier.value++;
     await _settle(tester);
@@ -133,6 +90,103 @@ void main() {
       findsNothing,
     );
   });
+
+  testWidgets('מעבר קטע כשהחלונית סגורה אינו מתזמן קפיצה ברשימה הישנה', (
+    tester,
+  ) async {
+    final (bloc, tab) = await _pumpScreen(tester);
+    final pane = find.descendant(
+      of: find.byType(CommentaryListBase, skipOffstage: false),
+      matching: find.byWidgetPredicate((_) => true, skipOffstage: false),
+      skipOffstage: false,
+    );
+    Iterable<RenderObject> paneRenderObjects() =>
+        pane.evaluate().map((e) => e.renderObject).nonNulls;
+    bool hasList() => paneRenderObjects().any(
+      (r) => r.runtimeType.toString() == 'RenderSuperSliverList',
+    );
+
+    tab.toggleCommentatorsPaneNotifier.value++;
+    for (var i = 0; i < 50 && !hasList(); i++) {
+      await _settle(tester);
+    }
+    expect(hasList(), isTrue);
+    tab.toggleCommentatorsPaneNotifier.value++;
+    await _settle(tester);
+
+    // קפיצה ברשימה מסמנת אותה לפריסה מחדש בפריים שאחרי מעבר הקטע.
+    var jumps = 0;
+    for (var i = 1; i <= 6; i++) {
+      bloc.emitState(_state(i % _content.length));
+      for (var frame = 0; frame < 4; frame++) {
+        await tester.pump();
+        if (paneRenderObjects().any((r) => r.debugNeedsLayout)) jumps++;
+      }
+      await _settle(tester);
+    }
+    expect(jumps, 0);
+
+    tab.toggleCommentatorsPaneNotifier.value++;
+    final current = find.textContaining(
+      'תוכן לשורה ${6 % _content.length + 1}',
+      findRichText: true,
+    );
+    for (var i = 0; i < 50 && current.evaluate().isEmpty; i++) {
+      await _settle(tester);
+    }
+    expect(current, findsWidgets);
+  });
+}
+
+Future<(_TestTextBookBloc, TextBookTab)> _pumpScreen(
+  WidgetTester tester,
+) async {
+  tester.view.physicalSize = const Size(1400, 900);
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.reset);
+
+  final bloc = _TestTextBookBloc(_state(0));
+  final settings = _TestSettingsBloc(SettingsState.initial());
+  final notes = _TestPersonalNotesBloc(const PersonalNotesState.initial());
+  final tab = TextBookTab(book: _book, index: 0, blocOverride: bloc);
+  final tabs = _TestTabsBloc(TabsState(tabs: [tab], currentTabIndex: 0));
+  final tour = _TestTourCubit();
+  addTearDown(() async {
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await bloc.close();
+    await settings.close();
+    await notes.close();
+    await tabs.close();
+    await tour.close();
+    tab.dispose();
+  });
+
+  await tester.pumpWidget(
+    MultiBlocProvider(
+      providers: [
+        BlocProvider<TextBookBloc>.value(value: bloc),
+        BlocProvider<SettingsBloc>.value(value: settings),
+        BlocProvider<PersonalNotesBloc>.value(value: notes),
+        BlocProvider<TabsBloc>.value(value: tabs),
+        BlocProvider<TourCubit>.value(value: tour),
+      ],
+      child: MaterialApp(
+        home: Scaffold(
+          body: SplitedViewScreen(
+            content: _content,
+            openBookCallback: (_) {},
+            searchTextController: TextEditingValue.empty,
+            openLeftPaneTab: (_, {searchText}) {},
+            tab: tab,
+            showSplitView: true,
+          ),
+        ),
+      ),
+    ),
+  );
+  await _settle(tester);
+  return (bloc, tab);
 }
 
 Future<void> _settle(WidgetTester tester) async {
