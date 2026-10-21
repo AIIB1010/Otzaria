@@ -181,14 +181,14 @@ class _Caps {
           col('line_note', 'lineId') &&
           col('line_note', 'noteIndex') &&
           col('line_note', 'charPos') &&
-          col('line_note', 'marker') &&
+          col('line_note', 'hasMarker') &&
           col('line_note', 'body'),
       'hasBookNoteDivineNames':
           lines &&
           col('line_note', 'lineId') &&
           col('line_note', 'noteIndex') &&
           col('line_note', 'charPos') &&
-          col('line_note', 'marker') &&
+          col('line_note', 'hasMarker') &&
           col('line_note', 'body') &&
           col('line_note_divine_name', 'lineId') &&
           col('line_note_divine_name', 'noteIndex') &&

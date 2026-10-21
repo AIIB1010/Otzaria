@@ -1193,11 +1193,11 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "v5.0.0"
-      resolved-ref: "0d7a33fc8c7a843ae05c0606c4fdf06782252477"
+      ref: "9b24c45e6bd08e137cbfdb88b10eced10adce557"
+      resolved-ref: "9b24c45e6bd08e137cbfdb88b10eced10adce557"
       url: "https://github.com/Otzaria/otzaria_search_engine.git"
     source: git
-    version: "5.0.0"
+    version: "5.0.1"
   package_config:
     dependency: transitive
     description:

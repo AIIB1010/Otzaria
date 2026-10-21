@@ -66,7 +66,7 @@ void main() {
         CREATE TABLE author(id INTEGER);
         CREATE TABLE book_version(id INTEGER);
         CREATE TABLE line_dh(bookId INTEGER, dhDisplay TEXT);
-        CREATE TABLE line_note(lineId INTEGER, noteIndex INTEGER, charPos INTEGER, marker TEXT, body TEXT);
+        CREATE TABLE line_note(lineId INTEGER, noteIndex INTEGER, charPos INTEGER, hasMarker INTEGER NOT NULL, body TEXT);
         CREATE TABLE line_note_divine_name(lineId INTEGER, noteIndex INTEGER, charStart INTEGER, charEnd INTEGER, kind INTEGER);
         CREATE VIEW connection_type AS SELECT 1 AS id;
         CREATE TABLE external_link(sourceBookId INTEGER, sourceLineIndex INTEGER, targetTitle TEXT);

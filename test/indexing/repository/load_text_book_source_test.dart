@@ -73,18 +73,19 @@ void main() {
     }
     db.execute(
       'CREATE TABLE line_note (lineId INTEGER NOT NULL, '
-      'noteIndex INTEGER NOT NULL, charPos INTEGER NOT NULL, marker TEXT, '
+      'noteIndex INTEGER NOT NULL, charPos INTEGER NOT NULL, '
+      'hasMarker INTEGER NOT NULL, '
       'body TEXT NOT NULL, PRIMARY KEY (lineId, noteIndex)) WITHOUT ROWID',
     );
     db.execute(
-      'INSERT INTO line_note (lineId, noteIndex, charPos, marker, body) '
-      "SELECT id, 0, 4, 'א', 'מילה_בהערה מילתנסיוןנדירה' FROM line "
+      'INSERT INTO line_note (lineId, noteIndex, charPos, hasMarker, body) '
+      "SELECT id, 0, 4, 1, 'מילה_בהערה מילתנסיוןנדירה' FROM line "
       'WHERE bookId = 305 AND lineIndex = 0',
     );
     // מסגרת zstd במסד בלי zstd_dict: גוף שאי אפשר לפענח.
     db.execute(
-      'INSERT INTO line_note (lineId, noteIndex, charPos, marker, body) '
-      "SELECT id, 0, 4, 'א', X'28B52FFD00' FROM line "
+      'INSERT INTO line_note (lineId, noteIndex, charPos, hasMarker, body) '
+      "SELECT id, 0, 4, 0, X'28B52FFD00' FROM line "
       'WHERE bookId = 306 AND lineIndex = 0',
     );
     database.close();

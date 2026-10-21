@@ -37,6 +37,16 @@ List<Match> _strippedMarkers(String html) => [
     if (_footnoteBodyStartRegExp.matchAsPrefix(html, match.end) == null) match,
 ];
 
+/// ה-inner HTML של [_strippedMarkers], לפי הסדר: הסימן של ההערה ה-k-ית שיש לה
+/// `line_note.hasMarker` (המחולל מוודא שהוא זהה לסימן המקורי).
+List<String> bookNoteMarkers(String html) => [
+  for (final match in _strippedMarkers(html))
+    match[0]!.substring(
+      match[0]!.indexOf('>') + 1,
+      match[0]!.length - _supCloseTag.length,
+    ),
+];
+
 final _supRegExp = RegExp(
   r'<sup\b[^>]*>.*?</sup>',
   caseSensitive: false,

@@ -163,7 +163,7 @@ class DbCapabilities {
       hasColumn('line_note', 'lineId') &&
       hasColumn('line_note', 'noteIndex') &&
       hasColumn('line_note', 'charPos') &&
-      hasColumn('line_note', 'marker') &&
+      hasColumn('line_note', 'hasMarker') &&
       hasColumn('line_note', 'body');
 
   /// מופעי שמות הקודש בגוף הערות השוליים; בלי הטבלה הגוף מוצג ככתבו.

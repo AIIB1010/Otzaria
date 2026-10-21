@@ -42,6 +42,8 @@ import 'package:otzaria/models/books.dart';
 import 'package:otzaria/models/links.dart';
 import 'package:otzaria/models/link_types.dart';
 import 'package:otzaria/library/models/library.dart';
+import 'package:otzaria/text_book/utils/inline_notes_utils.dart'
+    show bookNoteMarkers;
 import 'package:otzaria/text_book/utils/inline_section_markers.dart';
 import 'package:otzaria/migration/models/category.dart' as db_models;
 import 'package:otzaria/migration/models/book.dart' as db_models;
@@ -1328,27 +1330,62 @@ BookNotes _loadBookNotesInIsolate({
 
     final builder = BookNotesBuilder();
     final codec = LineContentCodec.of(db);
+    // הסימן לא נשמר: ה-<sup> ה-k-י שבשורה הוא הסימן של ההערה ה-k-ית שיש לה hasMarker.
+    final split = capabilities.hasSplitLineContent;
+    final markersByLine = <int, List<String>>{
+      for (final row in db.select(
+        'SELECT l.id AS lineId, ${split ? 'lc.content' : 'l.content'} AS content '
+        'FROM line l ${split ? 'LEFT JOIN line_content lc ON lc.id = l.id ' : ''}'
+        'WHERE l.bookId = ? AND EXISTS (SELECT 1 FROM line_note n '
+        'WHERE n.lineId = l.id AND n.hasMarker = 1)',
+        [bookId],
+      ))
+        row['lineId'] as int: bookNoteMarkers(codec.text(row['content']) ?? ''),
+    };
+    final markersTaken = <int, int>{};
     final rows = db.select(
-      'SELECT l.lineIndex AS lineIndex, n.noteIndex AS noteIndex, '
-      'n.charPos AS charPos, n.marker AS marker, n.body AS body '
+      'SELECT l.id AS lineId, l.lineIndex AS lineIndex, n.noteIndex AS noteIndex, '
+      'n.charPos AS charPos, n.hasMarker AS hasMarker, n.body AS body '
       'FROM line l JOIN line_note n ON n.lineId = l.id '
       'WHERE l.bookId = ? ORDER BY l.lineIndex, n.noteIndex',
       [bookId],
     );
     for (final row in rows) {
+      final lineId = row['lineId'] as int;
       final lineIndex = row['lineIndex'];
       final noteIndex = row['noteIndex'];
       final charPos = row['charPos'];
-      final marker = row['marker'];
+      final String? marker;
+      switch (row['hasMarker']) {
+        case 0:
+          marker = null;
+        case 1:
+          final markers = markersByLine[lineId]!;
+          final taken = markersTaken[lineId] ?? 0;
+          if (taken == markers.length) {
+            throw FormatException('בשורה $lineId יש פחות סימני הערה מהערות');
+          }
+          marker = markers[taken];
+          markersTaken[lineId] = taken + 1;
+        case final other:
+          throw FormatException(
+            'line_note.hasMarker של שורה $lineId הוא $other',
+          );
+      }
       final body = codec.text(row['body']);
       if (lineIndex is int && noteIndex is int && body is String) {
         builder.add(
           lineIndex,
           noteIndex,
-          marker is String ? marker : null,
+          marker,
           body,
           charPos: charPos is int ? charPos : -1,
         );
+      }
+    }
+    for (final MapEntry(key: lineId, value: markers) in markersByLine.entries) {
+      if (markersTaken[lineId] != markers.length) {
+        throw FormatException('בשורה $lineId יש יותר סימני הערה מהערות');
       }
     }
     if (capabilities.hasBookNoteDivineNames) {
