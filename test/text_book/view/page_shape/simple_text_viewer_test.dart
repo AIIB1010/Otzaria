@@ -274,6 +274,136 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  for (final action in ['navigate', 'tap', 'hover', 'numberedHover']) {
+    testWidgets('החלפת Bloc בלבד משתמשת בספר החדש action=$action', (
+      tester,
+    ) async {
+      final navigate = action == 'navigate';
+      final hover = action == 'hover';
+      final numberedHover = action == 'numberedHover';
+      addTearDown(LinkPreviewOverlay.dismiss);
+      final noteGate = Completer<void>();
+      final noteLink = Link(
+        heRef: 'הערות על ספר לפני החלפה, א',
+        index1: 1,
+        path2: 'הערות על ספר לפני החלפה',
+        index2: 1,
+        connectionType: 'commentary',
+      );
+      if (numberedHover) {
+        LibraryProviderManager.instance.seedMappingsForTesting(
+          mapping: const {},
+          providers: [_GatedContentProvider(noteGate, '(9) ההערה הישנה')],
+        );
+        addTearDown(LibraryProviderManager.instance.resetForTesting);
+      }
+      final lines = LineScrollController();
+      addTearDown(lines.dispose);
+      final oldSuffix = hover
+          ? '<sup class="footnote-marker">א</sup><i class="footnote">הערה ישנה</i>'
+          : numberedHover
+          ? ' (9)'
+          : '';
+      final newSuffix = hover
+          ? '<sup class="footnote-marker">א</sup><i class="footnote">הערה חדשה</i>'
+          : '';
+      final firstContent = [
+        for (var i = 0; i < (navigate ? 20 : 500); i++)
+          'ישן שורה $i${i == 0 ? oldSuffix : ''}',
+      ];
+      final secondContent = [
+        for (var i = 0; i < 500; i++) 'חדש שורה $i${i == 0 ? newSuffix : ''}',
+      ];
+      final first = _RecordingTextBookBloc(
+        _loadedState().copyWith(
+          content: firstContent,
+          clearSelectedIndex: true,
+          links: [if (numberedHover) noteLink],
+          linksByLine: {
+            if (numberedHover) 1: [noteLink],
+          },
+        ),
+      );
+      final second = _RecordingTextBookBloc(
+        _loadedState().copyWith(
+          content: secondContent,
+          clearSelectedIndex: true,
+        ),
+      );
+      addTearDown(first.close);
+      addTearDown(second.close);
+      Widget view(TextBookBloc bloc, List<String> content) => MultiBlocProvider(
+        providers: [
+          BlocProvider<TextBookBloc>.value(value: bloc),
+          BlocProvider<PersonalNotesBloc>(
+            create: (_) => _TestPersonalNotesBloc(
+              const PersonalNotesState.initial(),
+            ),
+          ),
+          BlocProvider<SettingsBloc>(
+            create: (_) => _TestSettingsBloc(SettingsState.initial()),
+          ),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: SimpleTextViewer(
+              content: content,
+              fontSize: 18,
+              openBookCallback: (_) {},
+              isMainText: true,
+              lines: lines,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpWidget(view(first, firstContent));
+      await tester.pumpAndSettle();
+      final state = tester.state(find.byType(SimpleTextViewer));
+      if (numberedHover) {
+        tester
+            .widgetList<SmartTextWidget>(find.byType(SmartTextWidget))
+            .firstWhere((text) => text.text.contains('otzaria://note-marker'))
+            .onAnchorHover!(
+          'otzaria://note-marker?line=0&num=9',
+          const Offset(100, 100),
+        );
+        await tester.pump(const Duration(milliseconds: 300));
+      } else if (hover) {
+        tester
+            .widgetList<SmartTextWidget>(find.byType(SmartTextWidget))
+            .firstWhere((text) => text.text.contains('otzaria://book-note'))
+            .onAnchorHover!(
+          'otzaria://book-note?line=0&note=0',
+          const Offset(100, 100),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+      } else if (!navigate) {
+        await tester.tapAt(_wordBox(tester, 'ישן שורה 0').center);
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      await tester.pumpWidget(view(second, secondContent));
+      expect(tester.state(find.byType(SimpleTextViewer)), same(state));
+      if (navigate) {
+        final navigation = lines.jumpToLine(400, intraLineFraction: 0.3);
+        await tester.pumpAndSettle();
+        await navigation;
+        expect(lines.position.value!.topLine, 400);
+      } else if (numberedHover) {
+        noteGate.complete();
+        await tester.pumpAndSettle();
+        expect(find.byType(LinkHoverPreviewContent), findsNothing);
+      } else if (hover) {
+        await tester.pump(const Duration(milliseconds: 350));
+        expect(find.byType(InlineBookNotePreviewContent), findsNothing);
+      } else {
+        await tester.pump(const Duration(milliseconds: 350));
+        expect(second.events.whereType<UpdateSelectedIndex>(), isEmpty);
+      }
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
   testWidgets('סימון הערה inline מוזרק לטקסט ולחיצתו פותחת את טאב ההערות', (
     tester,
   ) async {

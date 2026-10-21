@@ -696,7 +696,8 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     LinkPreviewOverlay.cancelScheduledHide();
     _cancelPendingPreview();
     final line = noteMarkerLineFromUrl(url);
-    final state = context.read<TextBookBloc>().state;
+    final bloc = context.read<TextBookBloc>();
+    final state = bloc.state;
     if (line == null || state is! TextBookLoaded) return;
     final links = state.linksByLine[line + 1] ?? const <Link>[];
     final generation = _previewHoverGeneration;
@@ -704,7 +705,10 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     _previewHoverTimer = Timer(delay, () async {
       final link = await numberedNoteLinkFromUrl(url, links);
       if (!mounted || link == null) return;
-      if (generation != _previewHoverGeneration) return;
+      if (generation != _previewHoverGeneration ||
+          !identical(context.read<TextBookBloc>(), bloc)) {
+        return;
+      }
       LinkPreviewOverlay.show(
         context,
         link: link,
@@ -738,7 +742,8 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     }
     LinkPreviewOverlay.cancelScheduledHide();
     _cancelPendingPreview();
-    final currentState = context.read<TextBookBloc>().state;
+    final bloc = context.read<TextBookBloc>();
+    final currentState = bloc.state;
     if (currentState is TextBookLoaded) {
       // סימון העוגן מחליף את MouseRegion ויוצר exit/enter מלאכותיים.
       // הסגירה כבר בוטלה לעיל; אין לתזמן פתיחה מחדש לאותו עוגן.
@@ -752,7 +757,9 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
       if (previewLink != null) prefetchLinkPreview(previewLink);
     }
     _previewHoverTimer = Timer(const Duration(milliseconds: 280), () {
-      if (mounted) _showUrlPreview(url, globalPosition, hoverMode: true);
+      if (mounted && identical(context.read<TextBookBloc>(), bloc)) {
+        _showUrlPreview(url, globalPosition, hoverMode: true);
+      }
     });
   }
 
@@ -1373,10 +1380,9 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
   void _attachViewport() {
     final lines = _lines;
     if (lines == null) return;
-    final bloc = context.read<TextBookBloc>();
     final binding = ReadingViewportBinding(
       segments: () {
-        final state = bloc.state;
+        final state = context.read<TextBookBloc>().state;
         return state is TextBookLoaded ? readingSegmentsOf(state) : null;
       },
       viewportExtent: _viewportExtent,
@@ -2870,7 +2876,11 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     }
     Widget buildList(ItemExtentEstimator? estimate, Object? estimationKey) =>
         ScrollablePositionedList.builder(
-          key: ValueKey((_scrollController, continuous)),
+          key: ValueKey((
+            _scrollController,
+            context.read<TextBookBloc>(),
+            continuous,
+          )),
           itemScrollController: _scrollController,
           itemPositionsListener: _positionsListener,
           scrollOffsetController: _offsetController,
