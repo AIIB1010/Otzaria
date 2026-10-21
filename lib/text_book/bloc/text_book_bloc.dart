@@ -264,8 +264,8 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
     }
   }
 
-  /// הקישורים מצטברים לאורך הגלילה; בטאב רקע נשארים רק החלון והשורות
-  /// הנבחרות, ושאר הקישורים נטענים שוב כשמגיעים לחלון שלהם.
+  /// מפנה הפניות מחוץ לחלון; מפרשים וקישורי מקור נשמרים, כי הסנכרון
+  /// משתמש גם בקישורים רחוקים מהמיקום הנוכחי.
   void _releaseLinksOutsideWindow(
     TextBookLoaded current,
     Emitter<TextBookState> emit,
@@ -275,7 +275,9 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
     final end = max(window.end, _loadedLinksEnd ?? window.end) + 1;
     final kept = [
       for (final link in current.links)
-        if (link.overlapsSourceLines(start, end) ||
+        if (LinkTypes.isDependentTextLink(link.connectionType) ||
+            LinkTypes.isVirtualSource(link.connectionType) ||
+            link.overlapsSourceLines(start, end) ||
             current.selectedIndices.any(
               (i) => link.overlapsSourceLines(i + 1, i + 1),
             ))

@@ -11,6 +11,8 @@ import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/data/repository/text_book_repository.dart';
 import 'package:otzaria/text_book/utils/link_processing.dart';
 import 'package:otzaria/text_book/utils/reading_segments.dart';
+import 'package:otzaria/models/link_types.dart';
+import 'package:otzaria/text_book/view/page_shape/utils/commentary_sync_helper.dart';
 import '../../test_helpers/memory_cache_provider.dart';
 
 class _FakeTextBookRepository extends TextBookRepository {
@@ -252,6 +254,65 @@ void main() {
         ),
       ],
     );
+
+    test('הסתרה שומרת סנכרון מפרש דליל גם מחוץ לחלון', () async {
+      // הקישורים של אדרת אליהו בבראשית מקיפים חלון שאין בו קישור קודם.
+      final previous = Link(
+        heRef: 'אדרת אליהו, בראשית, מב, ט, א',
+        index1: 1309,
+        index2: 355,
+        path2: 'אדרת אליהו',
+        connectionType: LinkTypes.commentary,
+      );
+      final next = Link(
+        heRef: 'אדרת אליהו, בראשית, מח, יד, א',
+        index1: 1515,
+        index2: 358,
+        path2: 'אדרת אליהו',
+        connectionType: LinkTypes.commentary,
+      );
+      final links = [previous, next];
+      final seeded = buildLoadedState(
+        content: List.filled(1584, 'תוכן'),
+        visibleIndices: const [1459],
+      ).copyWith(links: links, linksByLine: buildLinksByLineMap(links));
+      bloc.emit(seeded);
+      bloc.add(const SetTabVisibility(false));
+      await pumpEventQueue();
+      final released = bloc.state as TextBookLoaded;
+      expect(
+        CommentarySyncHelper.getCommentaryTargetIndex(
+          linksForCommentary: released.links,
+          logicalMainIndex: 1459,
+        ),
+        354,
+      );
+      expect(released.links, links);
+    });
+
+    test('הסתרה שומרת את כל סוגי קישורי הסנכרון והמקור', () async {
+      final links = [
+        for (final type in [...LinkTypes.dependentTextTypes, LinkTypes.source])
+          Link(
+            heRef: type,
+            index1: 1,
+            index2: 10,
+            path2: 'ספר $type',
+            connectionType: type.toLowerCase(),
+          ),
+      ];
+      bloc.emit(
+        buildLoadedState(
+          content: longContent,
+          visibleIndices: const [1000],
+        ).copyWith(links: links, linksByLine: buildLinksByLineMap(links)),
+      );
+      bloc.add(const SetTabVisibility(false));
+      await pumpEventQueue();
+      final released = bloc.state as TextBookLoaded;
+      expect(released.links, links);
+      expect(released.linksByLine[1], links);
+    });
 
     test('הסתרת טאב משחררת קישורים שנצברו בגלילה מחוץ לחלון', () async {
       Link linkAt(int index1, {int? index1End}) => Link(
