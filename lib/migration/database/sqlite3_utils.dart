@@ -61,8 +61,8 @@ void _setBusyTimeout(Database db, String label, int busyTimeoutMs) {
   }
 }
 
-/// מפעיל WAL כשאפשר, בלי להפיל את הפתיחה כשלא. `false` כשהחיבור צריך
-/// להיפתח מחדש ב-journal רגיל (shm שאינו נפתח, journal שאינו נקטם).
+/// מנסה להפעיל WAL; מחזיר `false` כשכשל באחסון מצריך ניסיון פתיחה
+/// מחדש ב-journal רגיל. כשל חולף אינו משנה את החיבור.
 bool enableWalBestEffort(Database db, String label) {
   try {
     db.execute('PRAGMA journal_mode=WAL');
@@ -73,7 +73,8 @@ bool enableWalBestEffort(Database db, String label) {
     // מחדש בגללם הייתה נתקעת בנעילה של חיבור אחר ונשארת ב-EXCLUSIVE.
     if (e is! SqliteException) return true;
     return e.resultCode != SqlError.SQLITE_IOERR &&
-        e.resultCode != SqlError.SQLITE_CANTOPEN;
+        e.resultCode != SqlError.SQLITE_CANTOPEN &&
+        e.resultCode != SqlError.SQLITE_READONLY;
   }
   _relaxSyncIfWal(db, label);
   return true;
@@ -127,6 +128,11 @@ Database _openInRollbackJournal(String path, String label, int busyTimeoutMs) {
     db.execute('SELECT count(*) FROM sqlite_schema');
   } catch (e) {
     debugPrint('[$label] fallback to rollback journal failed: $e');
+    // המרה שנכשלה אינה מתירה להשאיר חיבור שעלול לנעול את שאר הקוראים.
+    db.close();
+    final normal = sqlite3.open(path);
+    _setBusyTimeout(normal, label, busyTimeoutMs);
+    return normal;
   }
   return db;
 }

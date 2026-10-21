@@ -118,9 +118,6 @@ void main() {
           expect(db.select('SELECT value FROM existing').first['value'], 7);
         }
       },
-      skip: Platform.isWindows
-          ? 'כשל SHM ב-Windows דורש פתיחה מחדש (#2981)'
-          : false,
     );
   }
 
@@ -136,8 +133,6 @@ void main() {
 
   group(
     'shm שאינו נפתח (תיקייה במקום הקובץ)',
-    // ב-unix SQLite פותח תיקייה כ-shm לקריאה בלבד, ו-WAL "עובר" עד הכתיבה.
-    skip: Platform.isWindows ? false : 'shm חסום מדומה רק ב-Windows',
     () {
       late Directory dir;
       late String path;
@@ -222,7 +217,7 @@ void main() {
   test('כשל שאינו של האחסון אינו מחייב פתיחה מחדש', () {
     // SQLITE_PROTOCOL (15) — מרוץ חולף על נעילות ה-WAL; ה-WAL עצמו תקין.
     final db = _FakeDatabase(
-      failOn: (sql) => sql.contains('sqlite_schema'),
+      failOn: (sql) => sql == 'BEGIN IMMEDIATE',
       extendedResultCode: 15,
     );
 
@@ -241,6 +236,18 @@ void main() {
     expect(db.statements, isNot(contains('PRAGMA journal_mode=DELETE')));
     expect(db.statements.last, 'PRAGMA busy_timeout=1400');
   });
+
+  for (final error in [8, 264, 1288]) {
+    test('SHM שאינו כתיב מחייב פתיחה מחדש ($error)', () {
+      final db = _FakeDatabase(
+        failOn: (sql) => sql == 'BEGIN IMMEDIATE',
+        extendedResultCode: error,
+      );
+
+      expect(enableWalBestEffort(db, 'test'), isFalse);
+      expect(db.statements.last, 'PRAGMA busy_timeout=1400');
+    });
+  }
 
   test('WAL שאינו שמיש במערכת הקבצים מחייב פתיחה מחדש', () {
     // SQLITE_IOERR_SHMOPEN (4618) — כרטיס SD ב-Android: ה-PRAGMA עובר,
