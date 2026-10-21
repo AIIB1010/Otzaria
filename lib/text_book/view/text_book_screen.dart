@@ -244,6 +244,8 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
   // בדיקת הכותרות החלופיות מסתיימת אחרי הבנייה ומשנה את מספר הלשוניות; בלי
   // מפתח גלובלי לשונית החיפוש נבנית מאפס ומה שהוקלד בה עד אז אובד (issue #1263).
   final GlobalKey _searchTabKey = GlobalKey();
+  Object? _searchViewInputs;
+  TextBookSearchView? _searchView;
 
   // בקשה לפתיחת דיאלוג הגדרות צורת הדף מתוך PageShapeScreen (עדכון חי)
   final ValueNotifier<int> _pageShapeOpenSettingsNotifier = ValueNotifier<int>(
@@ -2946,7 +2948,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
                           LogicalKeyboardKey.keyF,
                         ): openSearch,
                       },
-                      child: _buildSearchView(context, state),
+                      child: _buildSearchView(state),
                     ),
                   );
                 },
@@ -2958,12 +2960,28 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
     );
   }
 
-  Widget _buildSearchView(BuildContext context, TextBookLoaded state) {
+  Widget _buildSearchView(TextBookLoaded state) {
     final repository = context.read<TextBookBloc>().repository;
-    return TextBookSearchView(
+    final book = state.book;
+    final inputs = (
+      book,
+      repository,
+      widget.tab.lines,
+      state.searchText,
+      state.searchOptions,
+      state.alternativeWords,
+      state.spacingValues,
+      state.searchMode,
+      state.searchDistance,
+      state.matchPolicy,
+    );
+    // אירועי בחירה והדגשה ממשיכים לבנות את הקורא, אך אינם משנים את החיפוש.
+    if (_searchViewInputs == inputs) return _searchView!;
+    _searchViewInputs = inputs;
+    return _searchView = TextBookSearchView(
       focusNode: textSearchFocusNode,
       contentLoader: () async =>
-          splitContentLines(await repository.getBookContent(state.book)),
+          splitContentLines(await repository.getBookContent(book)),
       lines: widget.tab.lines,
       // הוא מעביר את טקסט החיפוש מה-state הנוכחי אל תוך רכיב החיפוש
       initialQuery: state.searchText,
