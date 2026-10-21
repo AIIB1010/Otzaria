@@ -5,6 +5,7 @@ import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:otzaria/app_scope/external_activation_service.dart';
 import 'package:otzaria/attached_libraries/models/attached_library.dart';
 import 'package:otzaria/attached_libraries/repository/attached_library_registry.dart';
 import 'package:otzaria/models/book_source.dart';
@@ -283,6 +284,10 @@ void main() {
                       ),
                       ChangeNotifierProvider<ShamorZachorProgressProvider>(
                         create: (_) => _ShamorProgress(),
+                      ),
+                      Provider<ExternalActivationService>(
+                        create: (_) => ExternalActivationService(),
+                        dispose: (_, service) => service.dispose(),
                       ),
                     ],
                     child: const MaterialApp(home: MainWindowScreen()),
