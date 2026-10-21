@@ -1785,7 +1785,9 @@ class CommentaryListBaseState extends State<CommentaryListBase>
               current.availableCommentators,
             ) ||
             previous.links != current.links || // השוואת רפרנס לביצועים
-            !listEquals(previous.visibleIndices, current.visibleIndices) ||
+            // שורות קבועות (מפרש מתחת לשורה) אינן תלויות בגלילה.
+            (widget.indexes == null &&
+                !listEquals(previous.visibleIndices, current.visibleIndices)) ||
             previous.selectedIndex != current.selectedIndex ||
             !setEquals(previous.selectedIndices, current.selectedIndices) ||
             previous.fontSize != current.fontSize ||
