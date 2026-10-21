@@ -461,6 +461,7 @@ class _SplitedViewScreenState extends State<SplitedViewScreen> {
                     notesCategoryIdOverride: _notesCategoryIdOverride,
                     notesFocusLineNumber: _notesFocusLineNumber,
                     commentaryScrollTarget: _commentaryScrollTarget,
+                    isPaneOpen: _paneOpen,
                     onTabChanged: (index) {
                       debugPrint(
                         'DEBUG: Tab changed to $index, showSplitView: ${widget.showSplitView}',
