@@ -52,6 +52,9 @@ class BookPreviewPanel extends StatefulWidget {
   /// הביטוי שבתוצאה נמשך מ-[initialTextIndex] אל השורה הבאה.
   final bool initialTextContinuesToNextLine;
 
+  /// האם [initialTextIndex] הוא התאמה מילולית; כבוי בתוצאה לפי עניין בלבד.
+  final bool initialTextIsSearchResult;
+
   /// עמוד פתיחה בספר PDF (1-based) — לתצוגה מקדימה של תוצאת חיפוש.
   final int? initialPdfPage;
 
@@ -76,6 +79,7 @@ class BookPreviewPanel extends StatefulWidget {
     this.onOpenInReader,
     this.initialTextIndex,
     this.initialTextContinuesToNextLine = false,
+    this.initialTextIsSearchResult = true,
     this.initialPdfPage,
     this.searchText,
     this.searchOptions = const {},
@@ -118,6 +122,7 @@ TextBookTab buildPreviewTextTab({
   required TextBook book,
   required int? targetIndex,
   bool continuesToNextLine = false,
+  bool markResultLine = true,
   String? searchText,
   Map<String, Map<String, bool>> searchOptions = const {},
   Map<int, List<String>> alternativeWords = const {},
@@ -137,7 +142,7 @@ TextBookTab buildPreviewTextTab({
     searchMode: hasTarget ? searchMode : SearchMode.exact,
     searchDistance: hasTarget ? searchDistance : 0,
     matchPolicy: hasTarget ? matchPolicy : SearchMatchPolicy.standard,
-    initialSearchResultLines: hasTarget
+    initialSearchResultLines: hasTarget && markResultLine
         ? searchResultLinesFor(
             targetIndex,
             continuesToNextLine: continuesToNextLine,
@@ -190,7 +195,9 @@ class _BookPreviewPanelState extends State<BookPreviewPanel> {
     // בלי לבנות את הספר מחדש.
     if ((widget.initialTextIndex != oldWidget.initialTextIndex ||
             widget.initialTextContinuesToNextLine !=
-                oldWidget.initialTextContinuesToNextLine) &&
+                oldWidget.initialTextContinuesToNextLine ||
+            widget.initialTextIsSearchResult !=
+                oldWidget.initialTextIsSearchResult) &&
         widget.initialTextIndex != null) {
       if (_currentTextTab != null) {
         _scrollPreviewToIndex(widget.initialTextIndex!);
@@ -219,10 +226,12 @@ class _BookPreviewPanelState extends State<BookPreviewPanel> {
     }
     tab.bloc.add(
       UpdateSearchResultLines(
-        searchResultLinesFor(
-          index,
-          continuesToNextLine: widget.initialTextContinuesToNextLine,
-        ),
+        widget.initialTextIsSearchResult
+            ? searchResultLinesFor(
+                index,
+                continuesToNextLine: widget.initialTextContinuesToNextLine,
+              )
+            : const {},
       ),
     );
     unawaited(
@@ -304,6 +313,7 @@ class _BookPreviewPanelState extends State<BookPreviewPanel> {
         book: textBook,
         targetIndex: widget.initialTextIndex,
         continuesToNextLine: widget.initialTextContinuesToNextLine,
+        markResultLine: widget.initialTextIsSearchResult,
         searchText: widget.searchText,
         searchOptions: widget.searchOptions,
         alternativeWords: widget.alternativeWords,
