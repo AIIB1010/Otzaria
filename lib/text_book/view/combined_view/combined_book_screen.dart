@@ -2273,7 +2273,7 @@ class _CombinedViewState extends State<CombinedView> {
         child: _trackReadingScroll(
           _withReadingExtentEstimation(
             state,
-            builder: (estimateExtent, estimationKey) =>
+            builder: (estimateExtent, estimationKey, _) =>
                 ScrollablePositionedList.builder(
                   key: ValueKey((widget.tab, _textBookBloc)),
                   initialScrollIndex: clampedInitial,
@@ -2331,9 +2331,15 @@ class _CombinedViewState extends State<CombinedView> {
     );
   }
 
+  /// [builder] מקבל גם את רוחב עמודת הטקסט לפי רוחב הפריט (null בתצוגה מקדימה).
   Widget _withReadingExtentEstimation(
     TextBookLoaded state, {
-    required Widget Function(ItemExtentEstimator, Object) builder,
+    required Widget Function(
+      ItemExtentEstimator,
+      Object,
+      double Function(double)? columnWidth,
+    )
+    builder,
   }) => Builder(
     builder: (context) {
       final metrics = context.select(
@@ -2349,6 +2355,17 @@ class _CombinedViewState extends State<CombinedView> {
           ? null
           : ReadingAreaWidth.maybeOf(context);
       final setting = metrics.textMaxWidth;
+      // בלי הגבלה (0) כל הפריט ברוחב מלא, כולל כרטיס המפרשים — אז העמודה היא הרוחב.
+      double columnWidth(double width) {
+        final column = resolveTextColumnMaxWidth(
+          setting: setting,
+          availableWidth: width,
+          baseWidth: baseWidth ?? width,
+        );
+        return column > 0 ? column : width;
+      }
+
+      final columnWidthOrNull = widget.isPreviewMode ? null : columnWidth;
       return ReadingExtentEstimation(
         segments: readingSegmentsOf(state),
         controller: widget.tab.lines.itemController,
@@ -2361,14 +2378,9 @@ class _CombinedViewState extends State<CombinedView> {
         ),
         lineHeight: metrics.lineHeight,
         styleKey: (setting, setting < 0 ? baseWidth : null),
-        textWidth: widget.isPreviewMode
-            ? null
-            : (availableWidth) => resolveTextColumnMaxWidth(
-                setting: setting,
-                availableWidth: availableWidth,
-                baseWidth: baseWidth ?? availableWidth,
-              ),
-        builder: builder,
+        textWidth: columnWidthOrNull,
+        builder: (estimator, estimationKey) =>
+            builder(estimator, estimationKey, columnWidthOrNull),
       );
     },
   );
@@ -2400,7 +2412,7 @@ class _CombinedViewState extends State<CombinedView> {
     // כבר מצויר ב-initialScrollIndex הנכון — בלי הבזק של מיקום שגוי.
     final list = _withReadingExtentEstimation(
       state,
-      builder: (estimateExtent, estimationKey) =>
+      builder: (estimateExtent, estimationKey, columnWidth) =>
           ScrollablePositionedList.builder(
             key: ValueKey(
               (widget.tab, _textBookBloc, state.continuousReadingMode),
@@ -2416,6 +2428,8 @@ class _CombinedViewState extends State<CombinedView> {
                 : 0,
             estimateExtent: estimateExtent,
             estimationKey: estimationKey,
+            // הגבהים תלויים ברוחב העמודה בלבד; הבאנר שבפריט 0 פרוס ברוחב המלא.
+            crossAxisLayoutKey: state.protection.hasBanner ? null : columnWidth,
             // מרווח ברוחב המסילה בקצה הנגדי ממרכז את הטקסט; הוא בתוך הרשימה ולא
             // סביבה, כדי שטעם שבולט אחרי המילה האחרונה בשורה לא ייחתך בגבול שלה.
             padding: const EdgeInsetsDirectional.only(
