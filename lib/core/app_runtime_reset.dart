@@ -2,6 +2,7 @@ import 'package:otzaria/attached_libraries/repository/attached_library_registry.
 import 'package:otzaria/attached_libraries/repository/external_link_repository.dart';
 import 'package:otzaria/core/app_paths.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/library/hidden/hidden_library_store.dart';
 import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/data/cache/acronyms_cache.dart';
@@ -26,6 +27,9 @@ import 'package:otzaria/plugins/services/plugin_runtime_dispatcher.dart';
 import 'package:otzaria/plugins/services/plugin_correction_session_service.dart';
 import 'package:otzaria/services/commentary_service.dart';
 import 'package:otzaria/services/target_line_links_service.dart';
+import 'package:otzaria/tools/calendar/services/calendar_alerts_client.dart';
+import 'package:otzaria/tools/calendar/services/calendar_alerts_owner.dart';
+import 'package:otzaria/tools/calendar/services/notification_service.dart';
 
 /// מאפס מצב runtime מקומי כדי שהאפליקציה תוכל להיבנות מחדש בלי סגירת תהליך.
 Future<void> resetRuntimeStateForAppRestart({
@@ -88,7 +92,21 @@ void _invalidateLibraryRuntimeCaches() {
   BookNotesRepository.instance.clear();
 }
 
-/// תאימות לשם הישן במסלול איפוס הגדרות.
+/// אחרי איפוס הגדרות או שחזור גיבוי: בעל ההתראות מתיישר עם הערכים השמורים,
+/// וחלון משני מקבל ממנו מחדש את המצב שנמחק אצלו.
 Future<void> resetRuntimeStateAfterSettingsReset() async {
   await resetRuntimeStateForAppRestart();
+  if (WindowRole.isSecondary) {
+    RemoteCalendarAlertsClient.instance.forgetAppliedRevision();
+    return;
+  }
+  try {
+    await CalendarAlertsOwner.instance.handleSettingsReset();
+  } catch (error, stackTrace) {
+    NotificationService.logFailure(
+      'יישור ההתראות אחרי איפוס נכשל',
+      error,
+      stackTrace,
+    );
+  }
 }
