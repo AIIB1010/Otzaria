@@ -2336,6 +2336,7 @@ class _CombinedViewState extends State<CombinedView> {
   /// [builder] מקבל גם את רוחב עמודת הטקסט לפי רוחב הפריט (null בתצוגה מקדימה).
   Widget _withReadingExtentEstimation(
     TextBookLoaded state, {
+    double crossAxisPadding = 0,
     required Widget Function(
       ItemExtentEstimator,
       Object,
@@ -2381,6 +2382,7 @@ class _CombinedViewState extends State<CombinedView> {
         lineHeight: metrics.lineHeight,
         styleKey: (setting, setting < 0 ? baseWidth : null),
         textWidth: columnWidthOrNull,
+        crossAxisPadding: crossAxisPadding,
         builder: (estimator, estimationKey) =>
             builder(estimator, estimationKey, columnWidthOrNull),
       );
@@ -2410,10 +2412,16 @@ class _CombinedViewState extends State<CombinedView> {
         ? 0
         : initialIndex.clamp(0, itemCount - 1);
 
+    // מרווח ברוחב המסילה בקצה הנגדי ממרכז את הטקסט; הוא בתוך הרשימה ולא
+    // סביבה, כדי שטעם שבולט אחרי המילה האחרונה בשורה לא ייחתך בגבול שלה.
+    final padding = const EdgeInsetsDirectional.only(
+      end: ScrollablePositionedListScrollbar.trackWidth,
+    ).resolve(Directionality.of(context));
     // המצב ב-key מאלץ יצירת רשימה חדשה בהחלפת מצב רציף, כך שהפריים הראשון
     // כבר מצויר ב-initialScrollIndex הנכון — בלי הבזק של מיקום שגוי.
     final list = _withReadingExtentEstimation(
       state,
+      crossAxisPadding: padding.horizontal,
       builder: (estimateExtent, estimationKey, columnWidth) =>
           ScrollablePositionedList.builder(
             key: ValueKey(
@@ -2432,11 +2440,7 @@ class _CombinedViewState extends State<CombinedView> {
             estimationKey: estimationKey,
             // הגבהים תלויים ברוחב העמודה בלבד; הבאנר שבפריט 0 פרוס ברוחב המלא.
             crossAxisLayoutKey: state.protection.hasBanner ? null : columnWidth,
-            // מרווח ברוחב המסילה בקצה הנגדי ממרכז את הטקסט; הוא בתוך הרשימה ולא
-            // סביבה, כדי שטעם שבולט אחרי המילה האחרונה בשורה לא ייחתך בגבול שלה.
-            padding: const EdgeInsetsDirectional.only(
-              end: ScrollablePositionedListScrollbar.trackWidth,
-            ).resolve(Directionality.of(context)),
+            padding: padding,
             itemPositionsListener: widget.tab.lines.positionsListener,
             notifyPositionsOnRebuild:
                 widget.tab.lines.needsPositionsAfterRebuild,

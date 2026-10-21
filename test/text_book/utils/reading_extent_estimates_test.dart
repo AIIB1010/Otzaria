@@ -303,6 +303,7 @@ void main() {
                     controller: controller,
                     fontSize: 20,
                     textWidth: textWidth,
+                    crossAxisPadding: 34,
                     builder: (estimator, key) {
                       latestKey = key;
                       latestEstimator = estimator;
@@ -358,6 +359,104 @@ void main() {
       },
     );
   }
+
+  testWidgets(
+    'חימום בפריים האחרון של שינוי רוחב רציף ברשימה גדולה מוערך ברוחב החדש',
+    (tester) async {
+      const count = 5000;
+      const target = 4000;
+      const padding = EdgeInsets.symmetric(horizontal: 17);
+      final identity = Object();
+      final controller = ItemScrollController();
+      final width = ValueNotifier(400.0);
+      addTearDown(width.dispose);
+      final content = List<String>.filled(count, '');
+      var snapshot = _segments(
+        content,
+        flags: List<bool>.generate(count, (i) => i != target),
+        identity: identity,
+        version: 1,
+      );
+      late StateSetter rebuild;
+      late ItemExtentEstimator latestEstimator;
+      double? nativeWidth;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: StatefulBuilder(
+            builder: (_, setState) {
+              rebuild = setState;
+              return Align(
+                alignment: Alignment.topLeft,
+                child: ValueListenableBuilder(
+                  valueListenable: width,
+                  builder: (_, w, child) =>
+                      SizedBox(width: w, height: 600, child: child),
+                  child: ReadingExtentEstimation(
+                    segments: snapshot,
+                    controller: controller,
+                    fontSize: 20,
+                    crossAxisPadding: padding.horizontal,
+                    builder: (estimator, key) {
+                      latestEstimator = estimator;
+                      return ScrollablePositionedList.builder(
+                        itemCount: count,
+                        itemScrollController: controller,
+                        estimateExtent: (index, width) {
+                          nativeWidth = width;
+                          return estimator(index, width);
+                        },
+                        estimationKey: key,
+                        padding: padding,
+                        itemBuilder: (_, index) =>
+                            SizedBox(key: ValueKey(index), height: 100),
+                      );
+                    },
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      for (var w = 380.0; w >= 200; w -= 20) {
+        width.value = w;
+        if (w == 200) {
+          // הטעינה מגיעה בפריים האחרון, בזמן שהרשימה עוד דוחה את הרענון.
+          rebuild(() {
+            final next = List<String>.of(content)..[target] = 'א' * 3000;
+            snapshot = _segments(
+              next,
+              flags: List<bool>.filled(count, true),
+              identity: identity,
+              version: 2,
+              changes: ContentLineChanges(
+                fromVersion: 1,
+                ranges: [(first: target, last: target)],
+              ),
+            );
+          });
+        }
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await tester.pumpAndSettle();
+
+      final stats = controller.listController!.estimateRefreshStats!;
+      expect(stats.deferredResizeCount, greaterThan(0));
+      final newWidth = 200 - padding.horizontal;
+      final oldWidth = 400 - padding.horizontal;
+      expect(nativeWidth, newWidth);
+      final expected = latestEstimator(target, newWidth);
+      expect(expected, greaterThan(latestEstimator(target, oldWidth) * 1.5));
+      expect(
+        controller.listController!.extentForIndex(target).$1,
+        closeTo(expected, 0.001),
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 
   testWidgets('רוחב הטקסט מחושב פעם אחת לכל רוחב ולא לכל פריט', (tester) async {
     final content = List<String>.generate(5000, (i) => 'אבגד' * (i % 40));
