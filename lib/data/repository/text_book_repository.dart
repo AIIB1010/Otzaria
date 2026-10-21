@@ -363,8 +363,17 @@ class TextBookRepository {
     return const [];
   }
 
-  Future<List<TocEntry>> getTableOfContents(TextBook book) =>
-      loadBookToc(book, sqliteProvider: _sqliteProvider);
+  ({TextBook book, List<TocEntry> toc})? _lastToc;
+
+  Future<List<TocEntry>> getTableOfContents(TextBook book) async {
+    // מתג תצוגה טוען מחדש כל טאב עם התוכן הקיים; בלי זה כל טאב שולף שוב את
+    // ה-TOC. ריק אינו נשמר: הוא עשוי להיות כשל זמני בעלייה.
+    final last = _lastToc;
+    if (last != null && identical(last.book, book)) return last.toc;
+    final toc = await loadBookToc(book, sqliteProvider: _sqliteProvider);
+    if (toc.isNotEmpty) _lastToc = (book: book, toc: toc);
+    return toc;
+  }
 
   /// מחזיר רשימת פרשנים זמינים לספר מה-DB
   Future<List<String>> getAvailableCommentators(TextBook book) async {
