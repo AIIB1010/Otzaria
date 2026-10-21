@@ -609,6 +609,8 @@ class PluginHighlightRegistry extends ChangeNotifier {
     final previous = records[record.highlightId];
     if (previous != null) _removeFromSection(ownerKey, previous);
     records[record.highlightId] = record;
+    // הדגשה חשופה שהועברה לקטע אחר: סיום החשיפה חייב לבנות מחדש את הקטע החדש.
+    if (_revealed?.highlightId == record.highlightId) _revealed = record;
     final recordKey = (
       ownerPluginId: ownerKey.pluginId,
       ownerInstanceId: ownerKey.instanceId,

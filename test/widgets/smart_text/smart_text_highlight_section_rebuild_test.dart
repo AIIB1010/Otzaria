@@ -141,6 +141,28 @@ void main() {
     expect(_takeRebuilt(), {3});
   });
 
+  testWidgets('סיום חשיפה של הדגשה שהועברה בונה מחדש את הקטע החדש', (
+    tester,
+  ) async {
+    final highlight = PluginHighlightRegistry.instance.setHighlight(
+      ownerPluginId: _pluginId,
+      payload: _payload(id: 'h1', section: 1),
+    );
+    await tester.pumpWidget(_lines(5));
+    await tester.pumpAndSettle();
+    PluginHighlightRevealService.instance.reveal(highlight);
+    PluginHighlightRegistry.instance.setHighlight(
+      ownerPluginId: _pluginId,
+      payload: _payload(id: 'h1', section: 3),
+    );
+    await tester.pumpAndSettle();
+    _takeRebuilt();
+
+    PluginHighlightRevealService.instance.clear();
+    await tester.pump();
+    expect(_takeRebuilt(), contains(3));
+  });
+
   testWidgets('שורה שהוסרה מהעץ אינה נשארת רשומה לקטע', (tester) async {
     await tester.pumpWidget(_lines(3));
     await tester.pumpAndSettle();
