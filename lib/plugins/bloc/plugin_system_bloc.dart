@@ -940,7 +940,9 @@ class PluginSystemBloc extends Bloc<PluginSystemEvent, PluginSystemState> {
       final grantedPermissions = await repository.getGrantedPermissionNames(
         event.pluginId,
       );
-      PluginRuntimeDispatcher.instance.dispatchEvent(
+      // ההרשאות של התוסף הזה בלבד — לתוספים אחרים אין מה לדעת עליהן.
+      PluginRuntimeDispatcher.instance.dispatchStateEventToPlugin(
+        event.pluginId,
         'plugin.permissions_changed',
         {'permissions': grantedPermissions},
       );

@@ -111,6 +111,11 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
   BuildContext? get dialogContext;
 
   InAppWebViewController? webViewController;
+
+  /// האם [controller] שהגיע ב-callback שייך ל-WebView הנוכחי. כל callback
+  /// מקבל עטיפה חדשה, ולכן משווים את המימוש שמתחתיה.
+  bool isCurrentWebView(InAppWebViewController controller) =>
+      identical(controller.platform, webViewController?.platform);
   late final PluginBridgeHandler bridge;
   late final PluginBridgeAdapter adapter;
   late final PluginRegistryRepository pluginRegistryRepository;
@@ -400,6 +405,13 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
     final pluginId = plugin.pluginId;
     final id = instanceId;
     final controller = webViewController;
+    final dispatcher = PluginRuntimeDispatcher.instance;
+    // WebView שפונה אינו רשום כ-controller, אבל הדף הזה עדיין בעל המופע.
+    final ownsReleased = dispatcher.isReleasedBy(
+      pluginId,
+      instanceId: id,
+      token: this,
+    );
     // העץ נעול בזמן dispose וניקוי הרישומים מודיע ל-ListenableBuilders
     // (הדגשות, סרגל כלים) — לכן נדחה למיקרוטסק, אחרי שחרור הנעילה.
     scheduleMicrotask(() {
@@ -408,18 +420,13 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
       // ביטול הרישום רק אם הדף הזה עדיין הבעלים. עדכון תוסף משנה את ה-key,
       // ו-initState של הדף החדש רץ *לפני* ה-dispose של הישן — בלי הבדיקה
       // הישן היה מוחק את הרישום של החדש ומשתיק אותו.
-      if (PluginRuntimeDispatcher.instance.ownsController(
-        pluginId,
-        controller,
-        instanceId: id,
-      )) {
+      if (ownsReleased ||
+          dispatcher.ownsController(pluginId, controller, instanceId: id)) {
         onOwnerClosed?.call();
-        PluginRuntimeDispatcher.instance.unregisterController(
-          pluginId,
-          instanceId: id,
-        );
+        dispatcher.unregisterController(pluginId, instanceId: id);
       }
-      PluginRuntimeDispatcher.instance.unregisterReloadCallback(
+      dispatcher.unregisterInstanceHost(pluginId, instanceId: id, token: this);
+      dispatcher.unregisterReloadCallback(
         pluginId,
         instanceId: id,
         token: this,
@@ -643,6 +650,7 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
     required List<String> permissions,
     required Map<String, dynamic> theme,
     Map<String, dynamic>? reader,
+    Map<String, dynamic>? restore,
     String? fontFaceJson,
   }) {
     final bootPayload = {
@@ -666,6 +674,7 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
       'theme': theme,
       'permissions': permissions,
       'reader': ?reader,
+      'restore': ?restore,
     };
     return buildPluginBootScript(
       nonceJson: jsonEncode(bridge.bridgeNonce),
@@ -674,13 +683,34 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
     );
   }
 
+  final Map<String, DateTime> _processFailureLoggedAt = {};
+
+  /// רושם נפילה של תהליך — פעם אחת לכל סוג בכל 10 דקות, כי "לא מגיב"
+  /// חוזר כל כמה שניות.
+  void logPluginWebViewGone(
+    String kind, {
+    Map<String, String?> details = const {},
+  }) {
+    final now = DateTime.now();
+    final last = _processFailureLoggedAt[kind];
+    if (last != null && now.difference(last) < const Duration(minutes: 10)) {
+      return;
+    }
+    _processFailureLoggedAt[kind] = now;
+    logPluginWebViewFailure(
+      '$logTag WebView process gone',
+      kind,
+      details: {'Plugin': plugin.pluginId, ...details},
+    );
+  }
+
+  /// רישום בלבד: ההתאוששות מבוססת על ה-callbacks הייעודיים, שמגיעים גם הם
+  /// על אותה נפילה.
   void logPluginProcessFailed(ProcessFailedDetail detail) =>
-      logPluginWebViewFailure(
-        '$logTag WebView2 process failed',
-        detail.kind,
+      logPluginWebViewGone(
+        detail.kind.name(),
         details: {
-          'Plugin': plugin.pluginId,
-          'Reason': detail.reason?.toString(),
+          'Reason': detail.reason?.name(),
           'ExitCode': detail.exitCode?.toString(),
           'Process': detail.processDescription,
         },

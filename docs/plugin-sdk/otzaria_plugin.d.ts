@@ -150,6 +150,23 @@ export interface BootPayload {
    *  For a fresh runtime snapshot, call `app.getGrantedPermissions()` or
    *  listen to `plugin.permissions_changed`. */
   permissions: string[];
+  /** Present whenever the page of an already open tab loads again (discard,
+   *  crash, update) — then `state` may be `null`. For a tab restored from a
+   *  previous session or a workspace, present only if a state was saved.
+   *  Absent on a fresh open. `state` is the last value passed to
+   *  `plugin.setRestoreState`. Since 0.9.99. */
+  restore?: PluginRestorePayload;
+}
+
+/** The `restore` field of `plugin.boot`. Since 0.9.99. */
+export interface PluginRestorePayload {
+  reason: 'discarded' | 'crashed' | 'reloaded' | 'session';
+  state: unknown | null;
+}
+
+/** Arguments of `plugin.setRestoreState`. `null` clears; at most 64KB as JSON. */
+export interface PluginSetRestoreStateArgs {
+  state: unknown | null;
 }
 
 /** Result of `app.getConnectivity`, and the `connectivity` field of `plugin.boot`. */
@@ -2376,6 +2393,7 @@ export type OtzariaMethod =
   /** @internal חנות התוספים בלבד — לא מתועד ב-API_REFERENCE ואינו חוזה יציב. */
   | 'plugin.requestInstall'
   | 'plugin.backgroundDone'
+  | 'plugin.setRestoreState'
   | 'plugin.listInstalled'
   | 'reader.addContextMenuItem'
   | 'reader.removeContextMenuItem'
@@ -2473,6 +2491,12 @@ export interface OtzariaGlobal {
   call(
     method: 'plugin.setNewTabPage',
     payload?: { enabled?: boolean }
+  ): Promise<OtzariaResponse<boolean>>;
+
+  /** שומר מצב שיחזור ב-`plugin.boot.restore` כשהדף של הכרטיסייה ייטען מחדש. */
+  call(
+    method: 'plugin.setRestoreState',
+    payload: PluginSetRestoreStateArgs
   ): Promise<OtzariaResponse<boolean>>;
 
   /** מחזיר רשימה של כל התוספים המותקנים. */

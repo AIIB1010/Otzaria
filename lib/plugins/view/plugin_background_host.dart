@@ -369,6 +369,17 @@ class _BackgroundPluginRunnerState extends State<_BackgroundPluginRunner>
     }
   }
 
+  /// תוסף רקע מוסתר — בלי הרישום אין לנפילה הזו שום עדות נראית. הטריגר הבא
+  /// יעיר אותו מחדש.
+  void _onProcessGone(InAppWebViewController controller, String kind) {
+    if (!isCurrentWebView(controller)) return;
+    logPluginWebViewGone(kind);
+    PluginLazyActivationService.instance.onBackgroundProcessGone(
+      widget.plugin.pluginId,
+      generation: widget.activationGeneration,
+    );
+  }
+
   void _onInstanceFailed() =>
       PluginLazyActivationService.instance.onBackgroundInstanceFailed(
         widget.plugin.pluginId,
@@ -431,6 +442,8 @@ class _BackgroundPluginRunnerState extends State<_BackgroundPluginRunner>
         statusBarEnabled: false,
         cacheEnabled: !widget.plugin.isDevelopment,
         isInspectable: kDebugMode,
+        // בלי זה נפילת ה-renderer ב-Android הורגת את כל האפליקציה.
+        useOnRenderProcessGone: true,
         resourceCustomSchemes: _usesAssetScheme
             ? const [pluginAssetScheme]
             : const [],
@@ -456,11 +469,16 @@ class _BackgroundPluginRunnerState extends State<_BackgroundPluginRunner>
           _onInstanceFailed();
         }
       },
-      onProcessFailed: (controller, detail) {
-        // תוסף רקע מוסתר — בלי הרישום אין לכשל הזה שום עדות נראית.
-        logPluginProcessFailed(detail);
-        _onInstanceFailed();
-      },
+      // רישום בלבד: GPU או utility שנפלו משתקמים לבד, ו"לא מגיב" אינו מוות.
+      onProcessFailed: (controller, detail) => logPluginProcessFailed(detail),
+      onWebContentProcessDidTerminate: (controller) =>
+          _onProcessGone(controller, 'renderer'),
+      onRenderProcessGone: (controller, detail) => _onProcessGone(
+        controller,
+        defaultTargetPlatform == TargetPlatform.windows
+            ? 'browser'
+            : 'renderer',
+      ),
       // מופע רקע אינו מציג ממשק ואין בו לחיצת משתמש — otzaria:// לעולם אינו
       // מגיע למטפל הפרוטוקול של המערכת.
       onLaunchingExternalUriScheme: (controller, request) async =>
