@@ -282,7 +282,9 @@ constexpr int kUpwardTravelLogical = 24;
 // ⚠️ עוזר משותף ל-`windowAtCursor` ול-`dragOutToSystem`, ובמכוון: שני
 // המסלולים מקבלים את אותה החלטה — "מה נמצא שם" — ושתי גרסאות שלה היו
 // נפרדות בשקט ברגע שאחת מהן משתנה.
-flutter::EncodableMap DescribeTarget(HWND under, POINT cursor, HWND self) {
+// [report_hwnd] (חלונות Dart): גם ה-HWND שתחת הסמן, ו-isSelf מול [self] בכל חלון.
+flutter::EncodableMap DescribeTarget(HWND under, POINT cursor, HWND self,
+                                     bool report_hwnd = false) {
   flutter::EncodableMap info;
   info[flutter::EncodableValue("x")] =
       flutter::EncodableValue(static_cast<int>(cursor.x));
@@ -333,13 +335,44 @@ flutter::EncodableMap DescribeTarget(HWND under, POINT cursor, HWND self) {
     info[flutter::EncodableValue("isSelf")] =
         flutter::EncodableValue(under == self);
   }
+  if (report_hwnd) {
+    if (under) {
+      info[flutter::EncodableValue("hwnd")] = flutter::EncodableValue(
+          static_cast<int64_t>(reinterpret_cast<intptr_t>(under)));
+    }
+    info[flutter::EncodableValue("isSelf")] =
+        flutter::EncodableValue(under != nullptr && under == self);
+  }
   return info;
+}
+
+// HWND שהגיע מ-Dart, רק אם הוא חלון חי של התהליך הזה; אחרת nullptr.
+HWND OwnWindowArg(const flutter::EncodableValue* arguments, const char* key) {
+  const auto* args = std::get_if<flutter::EncodableMap>(arguments);
+  if (!args) return nullptr;
+  const auto it = args->find(flutter::EncodableValue(key));
+  if (it == args->end()) return nullptr;
+  int64_t raw = 0;
+  if (const auto* wide = std::get_if<int64_t>(&it->second)) {
+    raw = *wide;
+  } else if (const auto* narrow = std::get_if<int>(&it->second)) {
+    raw = *narrow;
+  } else {
+    return nullptr;
+  }
+  const HWND hwnd = reinterpret_cast<HWND>(static_cast<intptr_t>(raw));
+  if (!hwnd || !::IsWindow(hwnd)) return nullptr;
+  DWORD pid = 0;
+  ::GetWindowThreadProcessId(hwnd, &pid);
+  return pid == ::GetCurrentProcessId() ? hwnd : nullptr;
 }
 
 // מתאר גרירה שהמערכת ניהלה: היעד, והמסגרת שהמשתמש עצר בה.
 flutter::EncodableValue DescribeSystemDrag(
-    const drag_preview::SystemDragResult& drag, HWND self) {
-  flutter::EncodableMap info = DescribeTarget(drag.under, drag.cursor, self);
+    const drag_preview::SystemDragResult& drag, HWND self,
+    bool report_hwnd = false) {
+  flutter::EncodableMap info =
+      DescribeTarget(drag.under, drag.cursor, self, report_hwnd);
   info[flutter::EncodableValue("ran")] = flutter::EncodableValue(drag.ran);
   // ⚠️ `snapped` הוא מה שמבדיל בין "פתח כאן" לבין "פתח **במסגרת הזו**".
   // התצוגה היא בגודל כרטיסיה, ושימוש עיוור במסגרת היה יוצר חלון אוצריא
@@ -770,8 +803,12 @@ bool FlutterWindow::OnCreate() {
           // אינו רואה בה חלון שנגרר, ואין Snap Layouts), ולכן היא הייתה
           // מחזירה את עצמה כיעד וכל שחרור מעל חלון אחר לא היה מזוהה.
           const HWND under = drag_preview::WindowUnderCursor(cursor);
-          result->Success(flutter::EncodableValue(
-              DescribeTarget(under, cursor, GetHandle())));
+          // ארגומנטים רק מחלונות Dart: בלעדיהם התשובה זהה לזו של היום.
+          const bool report_hwnd =
+              std::get_if<flutter::EncodableMap>(call.arguments()) != nullptr;
+          const HWND self = OwnWindowArg(call.arguments(), "selfHwnd");
+          result->Success(flutter::EncodableValue(DescribeTarget(
+              under, cursor, self ? self : GetHandle(), report_hwnd)));
           return;
         }
 
@@ -819,8 +856,9 @@ bool FlutterWindow::OnCreate() {
           }
           // חלון המקור מועבר במפורש: התצוגה מוסתרת רק מעליו, ולא מעל
           // חלונות אוצריא אחרים. ראו ההערה ב-`drag_preview::Begin`.
-          drag_preview::Begin(drag_preview::Utf16FromUtf8(title), GetHandle(),
-                              colors);
+          const HWND source = OwnWindowArg(call.arguments(), "sourceHwnd");
+          drag_preview::Begin(drag_preview::Utf16FromUtf8(title),
+                              source ? source : GetHandle(), colors);
           result->Success();
           return;
         }
@@ -865,7 +903,10 @@ bool FlutterWindow::OnCreate() {
                 DescribeSystemDrag(drag_preview::SystemDragResult{}, nullptr));
             return;
           }
-          pending_system_drags_.push(std::move(result));
+          const HWND source = OwnWindowArg(call.arguments(), "selfHwnd");
+          pending_system_drags_.push(PendingSystemDrag{
+              std::move(result), source,
+              std::get_if<flutter::EncodableMap>(call.arguments()) != nullptr});
           ::PostMessageW(self, kMsgDragOutToSystem, 0, 0);
           return;
         }
@@ -908,7 +949,11 @@ bool FlutterWindow::OnCreate() {
               if (const auto* v = std::get_if<int>(&y_it->second)) pt.y = *v;
             }
           }
-          if (const HWND self = GetHandle()) ::ScreenToClient(self, &pt);
+          // חלון Dart מעביר את ה-HWND שלו; בלעדיו — החלון הזה.
+          const HWND target = OwnWindowArg(call.arguments(), "hwnd");
+          if (const HWND self = target ? target : GetHandle()) {
+            ::ScreenToClient(self, &pt);
+          }
           flutter::EncodableMap out;
           out[flutter::EncodableValue("x")] =
               flutter::EncodableValue(static_cast<int>(pt.x));
@@ -1352,9 +1397,9 @@ void FlutterWindow::OnDestroy() {
   while (!pending_system_drags_.empty()) {
     auto pending = std::move(pending_system_drags_.front());
     pending_system_drags_.pop();
-    if (pending) {
-      pending->Success(
-          DescribeSystemDrag(drag_preview::SystemDragResult{}, nullptr));
+    if (pending.result) {
+      pending.result->Success(DescribeSystemDrag(
+          drag_preview::SystemDragResult{}, nullptr, pending.report_hwnd));
     }
   }
   // ⚠️ **לא** לפי `GetHandle()`. במסלול `WM_DESTROY` השדה `window_handle_`
@@ -1637,14 +1682,21 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     bool replied = false;
     try {
       const auto drag = drag_preview::DragWithSystem();
-      if (pending) {
+      if (pending.result) {
         replied = true;
-        pending->Success(DescribeSystemDrag(drag, GetHandle()));
+        // חלון המקור עלול להיהרס במהלך הלולאה המודאלית.
+        const HWND self = pending.self && ::IsWindow(pending.self)
+                              ? pending.self
+                              : GetHandle();
+        pending.result->Success(
+            DescribeSystemDrag(drag, self, pending.report_hwnd));
       }
     } catch (...) {
       drag_preview::End();
       // `null` ל-Dart פירושו "לא ידוע", והוא מטפל בו כ"אל תעשה כלום".
-      if (pending && !replied) pending->Success(flutter::EncodableValue());
+      if (pending.result && !replied) {
+        pending.result->Success(flutter::EncodableValue());
+      }
     }
     return 0;
   }

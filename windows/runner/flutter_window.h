@@ -118,8 +118,13 @@ class FlutterWindow : public Win32Window {
   // ⚠️ נענות **אחרי** שהמשתמש שחרר, כי התשובה היא המסגרת הסופית — כולל
   // הצמדה. הן אינן מבוצעות בתוך הטיפול בערוץ: `DragWithSystem` נכנס
   // ללולאה מודאלית, וחסימה מתוך קריאת ערוץ היא ריאנטרנטית.
-  std::queue<std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>>
-      pending_system_drags_;
+  struct PendingSystemDrag {
+    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result;
+    // חלון המקור (חלון Dart), או nullptr לחלון הזה.
+    HWND self = nullptr;
+    bool report_hwnd = false;
+  };
+  std::queue<PendingSystemDrag> pending_system_drags_;
   // ערוץ לסגירת חלון ה-splash הנייטיב (otzaria/splash) — Dart קורא "close"
   // בעת חשיפת החלון הראשי.
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
