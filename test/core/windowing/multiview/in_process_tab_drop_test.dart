@@ -264,9 +264,13 @@ void main() {
       await tester.pump();
       expect(runner.named('raiseSelf'), hasLength(1));
 
+      // bloc היעד נסגר באמצע: לא נקלטה, והמקור שומר את הכרטיסיה.
+      await tabs.close();
+      expect(await drops.sendTabToWindow(1, tab), isFalse);
+      expect(tabs.events, hasLength(2));
+
       await tester.pumpWidget(const SizedBox());
       expect(await drops.sendTabToWindow(1, tab), isFalse);
-      await tabs.close();
       await nav.close();
     });
 
@@ -476,7 +480,7 @@ void main() {
       expect(screenCalls, isEmpty);
       expect(
         runner.named('windowAtCursor').map((c) => c.arguments),
-        everyElement(isNull),
+        allOf(isNotEmpty, everyElement(isNull)),
       );
       expect(
         (runner.named('beginTabDrag').single.arguments as Map).containsKey(

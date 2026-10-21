@@ -184,9 +184,11 @@ class _InProcessTabDropReceiverState extends State<InProcessTabDropReceiver> {
 
   bool _receive(OpenedTab tab, int? index) {
     if (!mounted) return false;
+    final tabsBloc = context.read<TabsBloc>();
+    // bloc שנסגר זורק על add; false משאיר את הכרטיסיה במקור.
+    if (tabsBloc.isClosed) return false;
     // החיווי נעלם ברגע שהכרטיסיה התקבלה.
     _dragState.drag.value = null;
-    final tabsBloc = context.read<TabsBloc>();
     tabsBloc.add(AddTab(tab));
     if (index != null) tabsBloc.add(MoveTab(tab, index));
     context.read<NavigationBloc>().add(const NavigateToScreen(Screen.reading));
