@@ -16,6 +16,7 @@ class ThumbnailsView extends StatefulWidget {
     this.onNavigateToPage,
     this.shownPagesFor,
     this.thumbnailCache,
+    this.isPaneOpen = true,
     super.key,
   });
 
@@ -31,6 +32,9 @@ class ThumbnailsView extends StatefulWidget {
 
   /// מטמון של הבעלים, שמרוקן אותו כשהטאב מוסתר; בלעדיו לתצוגה יש מטמון משלה.
   final PdfThumbnailCache? thumbnailCache;
+
+  /// חלונית סגורה או לשונית מוסתרת נשארות בעץ; בלי זה כל דפדוף גולל ובונה אותן.
+  final bool isPaneOpen;
 
   @override
   State<ThumbnailsView> createState() => _ThumbnailsViewState();
@@ -74,6 +78,12 @@ class _ThumbnailsViewState extends State<ThumbnailsView>
       widget.controller?.addListener(_onControllerChanged);
       _lastKnownPage = _currentPage;
     }
+    if (!oldWidget.isPaneOpen && widget.isPaneOpen) {
+      // קפיצה ולא אנימציה: חלונית פתוחה הייתה כבר נמצאת בעמוד הנוכחי.
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _onControllerChanged(animate: false),
+      );
+    }
     if (oldWidget.documentRef != widget.documentRef) {
       _thumbnailCache.clear();
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -91,20 +101,20 @@ class _ThumbnailsViewState extends State<ThumbnailsView>
     super.dispose();
   }
 
-  void _onControllerChanged() {
-    if (!mounted) return;
+  void _onControllerChanged({bool animate = true}) {
+    if (!mounted || !widget.isPaneOpen) return;
     final page = _currentPage;
     if (page == _lastKnownPage) return;
     _lastKnownPage = page;
     setState(() {});
-    _scrollToActiveItem();
+    _scrollToActiveItem(animate: animate);
   }
 
   int? get _currentPage => (widget.controller?.isReady ?? false)
       ? widget.controller!.pageNumber
       : null;
 
-  void _scrollToActiveItem() {
+  void _scrollToActiveItem({bool animate = true}) {
     if (_isManuallyScrolling || !(widget.controller?.isReady ?? false)) return;
     final currentPage = widget.controller?.pageNumber;
     if (currentPage == null || _lastScrolledPage == currentPage) return;
@@ -116,11 +126,19 @@ class _ThumbnailsViewState extends State<ThumbnailsView>
         itemExtent * (currentPage - 1) -
         (viewportHeight / 2) +
         (itemExtent / 2);
-    _scrollController.animateTo(
-      target.clamp(0.0, _scrollController.position.maxScrollExtent),
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
+    final offset = target.clamp(
+      0.0,
+      _scrollController.position.maxScrollExtent,
     );
+    if (animate) {
+      _scrollController.animateTo(
+        offset,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    } else {
+      _scrollController.jumpTo(offset);
+    }
     _lastScrolledPage = currentPage;
   }
 

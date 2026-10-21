@@ -4704,6 +4704,7 @@ class _PdfBookScreenState extends State<PdfBookScreen>
                       onNavigateToPage: _goToPageWithSpreadLock,
                       shownPagesFor: _spreadPageRangeFor,
                       thumbnailCache: _thumbnailCache,
+                      isPaneOpen: showLeftPane && _currentLeftPaneTabIndex == 2,
                     ),
                   ),
                 ),
