@@ -537,7 +537,7 @@ PdfPageLayout buildBookViewPageLayout({
   );
 }
 
-/// יחס הפיקסלים של צילום הדפדוף: עד 1.6MP לכל החלון, בין 0.85 ל-1.35.
+/// יחס הפיקסלים של צילום הדפדוף: עד 1.6MP לכל החלון, ולא יותר מ-1.35.
 @visibleForTesting
 double pdfSpreadSnapshotPixelRatio({
   required Size viewSize,
@@ -548,7 +548,7 @@ double pdfSpreadSnapshotPixelRatio({
   final cappedPixelRatio = viewportPixels <= 0
       ? 1.0
       : sqrt(maxCapturePixels / viewportPixels);
-  return min(devicePixelRatio, min(1.35, cappedPixelRatio)).clamp(0.85, 1.35);
+  return min(devicePixelRatio, min(1.35, cappedPixelRatio));
 }
 
 /// קנה המידה לרינדור עמוד לצילום הדפדוף: מה שהצילום מצייר בפועל (בתצוגת ספר
