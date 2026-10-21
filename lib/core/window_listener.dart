@@ -16,6 +16,7 @@ import 'package:otzaria/core/windowing/app_window_id.dart';
 import 'package:otzaria/core/windowing/window_manager_app_window_controller.dart';
 import 'package:otzaria/core/windowing/last_active_window.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/core/windowing/window_bus.dart';
 import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/core/user_state/user_state_database.dart';
@@ -289,7 +290,7 @@ class AppWindowListener extends WindowListener {
       // (הצעד הראשון ב-`_shutdownProcessUpToFlush`), ולכן ערוץ שלא עונה
       // היה משאיר את החלון פתוח ואת התהליך חי בלי שום רשת ביטחון —
       // המשתמש לוחץ X ושום דבר לא קורה, לנצח.
-      final info = await const MultiWindowService().windowCount().timeout(
+      final info = await WindowOpener.current.windowCount().timeout(
         const Duration(seconds: 2),
       );
       if (info != null) return info.count <= 1;
@@ -573,7 +574,7 @@ class AppWindowListener extends WindowListener {
             // חלון סגור מוסתר ולא נהרס, ולכן `engines` יכול להיות 4 בעוד
             // `count` הוא 1 — ובלי המספר הזה בלוג אין דרך לדעת אם קריסת
             // יציאה שדווחה הייתה בתצורה המסוכנת.
-            final live = await const MultiWindowService().windowCount().timeout(
+            final live = await WindowOpener.current.windowCount().timeout(
               const Duration(seconds: 1),
               onTimeout: () => null,
             );

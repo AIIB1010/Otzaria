@@ -6,6 +6,7 @@ import 'package:otzaria/core/messages/window_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/windowing/drag_preview_colors.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/core/windowing/tab_drag_preview.dart';
 import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
 import 'package:otzaria/tabs/bloc/tabs_event.dart';
@@ -455,7 +456,7 @@ class CrossWindowTabDrag {
     // המשתמש ראה את הכרטיסיה ברגע השחרור, ולא מיקום הסמן. השניים אינם
     // זהים, והשימוש בסמן הוא מה שהוליד את "גררתי ימינה והחלון נפתח
     // בשמאל": ה-runner הזיז את החלון `-width + 100` מהסמן.
-    final moved = await _service.openWindow(
+    final moved = await WindowOpener.current.openWindow(
       tab: tab,
       origin: outcome.snapped ? null : (x: outcome.left, y: outcome.top),
       bounds: outcome.snapped
@@ -473,7 +474,7 @@ class CrossWindowTabDrag {
     }
 
     _hidePreview();
-    await _service.reportOpenWindowFailure();
+    await WindowOpener.current.reportOpenWindowFailure();
   }
 
   /// מעביר את הכרטיסיה לחלון [slot], למקום המדויק שתחת הסמן.
@@ -560,7 +561,7 @@ class CrossWindowTabDrag {
 
     // ⚠️ החלון נפתח **בנקודת השחרור**, והרוח נשארת שם עד שהוא נחשף.
     // עד כה הוא נפתח בהיסט מדורג מהפינה, בלי קשר למקום שאליו גררו.
-    final moved = await _service.openWindow(
+    final moved = await WindowOpener.current.openWindow(
       tab: tab,
       // מסלול הנפילה, כשהגרירה לא נמסרה למערכת: אין תצוגה שנעצרה
       // במקום, ולכן הסמן הוא כל מה שיש.
@@ -571,7 +572,7 @@ class CrossWindowTabDrag {
       return;
     }
     _hidePreview();
-    await _service.reportOpenWindowFailure();
+    await WindowOpener.current.reportOpenWindowFailure();
   }
 
   void _hidePreview() => unawaited(_service.endTabDrag());

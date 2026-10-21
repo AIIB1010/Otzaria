@@ -14,6 +14,7 @@ import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
 import 'package:otzaria/core/startup_timeline.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/widgets/misc/rtl_icon.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otzaria/core/error_log_file.dart';
@@ -1619,7 +1620,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
         _settingsScreenController.openTab(SettingsTab.tools);
         return true;
       case OpenNewWindowAction():
-        return const MultiWindowService().openEmptyWindow();
+        return WindowOpener.current.openEmptyWindow();
       case ReindexLibraryAction():
         // רענון הקטלוג מהדיסק; ה-listener על completedRefreshRequestIds מריץ
         // ריצת אינדוקס עם בדיקה מלאה כשהרענון שקלט את הבקשה מסתיים.

@@ -10,6 +10,7 @@ import 'package:otzaria/book_protection/utils/copy_guard.dart';
 import 'package:super_clipboard/super_clipboard.dart';
 import 'package:otzaria/core/messages/common_messages.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/models/links.dart';
@@ -62,7 +63,7 @@ class ContextMenuUtils {
   );
 
   static Future<void> _openLinkTargetInNewWindow(Link link) async {
-    const service = MultiWindowService();
+    final service = WindowOpener.current;
     // ⚠️ נבדק לפני הפעולה: `openWindow` ממתין עד 20 שניות, והמשתמש היה מקבל
     // את הודעת התקרה רק בסופן.
     if (!await service.canOpenAnotherWindow() ||
