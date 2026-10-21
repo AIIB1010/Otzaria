@@ -176,6 +176,13 @@ dependency_overrides:
       url: https://github.com/palmoni5/dart_pdf
       ref: f5efa21c2237002280f1ba056971ec1bf1e8cfd7
       path: printing
+  # TODO: לחזור ל-pub.dev אחרי מיזוג ושחרור daohoangson/flutter_widget_from_html#1658, #1659,
+  # #1660, #1661, #1662 (מטמון CSS, מיזוג margins, מחרוזות debug עצלות, Flattener, FutureBuilder).
+  flutter_widget_from_html_core:
+    git:
+      url: https://github.com/Otzaria/flutter_widget_from_html
+      ref: beb13804b10efe6f9f246a3ac0835d41e94d61d7
+      path: packages/core
   matcher: ^0.12.20
   analyzer: ^14.5.0
   device_info_plus: ^13.3.0
