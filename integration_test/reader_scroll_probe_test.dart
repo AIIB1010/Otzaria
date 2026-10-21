@@ -10,6 +10,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -160,12 +161,27 @@ Future<void> _probeBook(
       () => tab.bloc.state is TextBookLoaded && tab.lines.isAttached,
       timeout: const Duration(seconds: 90),
     );
-    final loaded = tab.bloc.state as TextBookLoaded;
-    tab.bloc.add(
-      UpdateCommentators([
-        for (final title in commentators ?? const <String>[])
-          if (loaded.availableCommentators.contains(title)) title,
-      ]),
+    TextBookLoaded loaded() => tab.bloc.state as TextBookLoaded;
+    final wanted = commentators ?? const <String>[];
+    // רשימת המפרשים הזמינים נטענת אחרי TextBookLoaded.
+    await _waitUntil(
+      tester,
+      () => wanted.every(loaded().availableCommentators.contains),
+      timeout: const Duration(seconds: 30),
+      failSilently: true,
+    );
+    final active = [
+      for (final title in wanted)
+        if (loaded().availableCommentators.contains(title)) title,
+    ];
+    tab.bloc.add(UpdateCommentators(active));
+    await _waitUntil(
+      tester,
+      () =>
+          listEquals(loaded().activeCommentators, active) &&
+          !loaded().linksLoading,
+      timeout: const Duration(seconds: 30),
+      failSilently: true,
     );
     await _pumpFor(tester, Duration(seconds: withCommentary ? 6 : 3));
   });
@@ -182,6 +198,9 @@ Future<void> _probeBook(
     'book': label,
     'lineCount': lineCount,
     'linkLines': state.linksByLine.length,
+    'anchorLines': state.linksByLine.values
+        .where((links) => links.any((link) => link.anchorStart != null))
+        .length,
     'showAnchorMarkers': state.bodyDisplayProfile.showAnchorMarkers,
     'activeCommentators': state.activeCommentators,
     'splitView': state.showSplitView,
@@ -260,6 +279,7 @@ Future<void> _waitUntil(
   WidgetTester tester,
   bool Function() condition, {
   required Duration timeout,
+  bool failSilently = false,
 }) async {
   final end = DateTime.now().add(timeout);
   while (DateTime.now().isBefore(end)) {
@@ -267,7 +287,7 @@ Future<void> _waitUntil(
     await tester.pump(const Duration(milliseconds: 100));
     await Future<void>.delayed(const Duration(milliseconds: 100));
   }
-  fail('Timed out after $timeout');
+  if (!failSilently) fail('Timed out after $timeout');
 }
 
 class _Recorder {
