@@ -1731,7 +1731,13 @@ class _AppBootstrapState extends State<AppBootstrap> {
             create: (_) {
               final bloc = StartupTimeline.instance.phaseSync(
                 'tabsBloc',
-                () => TabsBloc(repository: TabsRepository())..add(LoadTabs()),
+                () {
+                  final repository = TabsRepository();
+                  return TabsBloc(
+                    repository: repository,
+                    session: repository.window,
+                  )..add(LoadTabs());
+                },
               );
               // חלון שנפתח עם מטען מקבל את הכרטיסיה שהועברה אליו. `LoadTabs`
               // נשלח קודם כדי שסדר האירועים יהיה זהה לחלון רגיל — הכרטיסיה
