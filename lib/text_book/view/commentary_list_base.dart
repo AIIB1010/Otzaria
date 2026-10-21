@@ -1784,7 +1784,6 @@ class CommentaryListBaseState extends State<CommentaryListBase>
     if (widget.isPaneOpen || _lastView == null || _hasPendingAnchorScroll) {
       return _lastView = build(context, state);
     }
-    _syncSectionScroll(_currentIndexes(state));
     return _lastView!;
   };
 
