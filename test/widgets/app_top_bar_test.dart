@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:otzaria/core/windowing/window_fullscreen_cubit.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/settings/settings_exports.dart';
 import 'package:otzaria/tabs/models/pdf_tab.dart';
@@ -84,15 +85,14 @@ void main() {
     testWidgets(
       'במסך מלא מוזרק לחצן יציאה כפריט בסרגל',
       (tester) async {
-        final settingsBloc = _TestSettingsBloc(
-          SettingsState.initial().copyWith(isFullscreen: true),
-        );
+        final settingsBloc = _TestSettingsBloc(SettingsState.initial());
         addTearDown(settingsBloc.close);
 
         const trailingKey = Key('trailing');
         await tester.pumpWidget(
           _buildBar(
             settingsBloc: settingsBloc,
+            isFullscreen: true,
             center: const SizedBox(width: 100, height: 8),
             trailingItems: const [
               AppTopBarItem(
@@ -231,6 +231,7 @@ Widget _buildBar({
   Widget? center,
   List<AppTopBarItem> trailingItems = const [],
   Widget Function(Widget bar)? wrap,
+  bool isFullscreen = false,
 }) {
   final bar = AppTopBar(
     leadingItems: leadingItems,
@@ -239,8 +240,16 @@ Widget _buildBar({
   );
   return MaterialApp(
     home: Scaffold(
-      body: BlocProvider<SettingsBloc>.value(
-        value: settingsBloc,
+      body: MultiBlocProvider(
+        providers: [
+          BlocProvider<SettingsBloc>.value(value: settingsBloc),
+          BlocProvider<WindowFullscreenCubit>(
+            create: (_) => WindowFullscreenCubit(
+              initial: isFullscreen,
+              persist: (_) async {},
+            ),
+          ),
+        ],
         child: Column(children: [wrap == null ? bar : wrap(bar)]),
       ),
     ),
@@ -262,8 +271,16 @@ class _TestApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       home: Scaffold(
-        body: BlocProvider<SettingsBloc>.value(
-          value: settingsBloc,
+        body: MultiBlocProvider(
+          providers: [
+            BlocProvider<SettingsBloc>.value(value: settingsBloc),
+            BlocProvider<WindowFullscreenCubit>(
+              create: (_) => WindowFullscreenCubit(
+                initial: false,
+                persist: (_) async {},
+              ),
+            ),
+          ],
           child: Column(
             children: [
               ValueListenableBuilder<double>(

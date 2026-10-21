@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:otzaria/text_book/repository/book_notes_repository.dart';
+import 'package:otzaria/core/windowing/window_fullscreen_cubit.dart';
 import 'package:otzaria/book_protection/utils/copy_guard.dart';
 import 'package:otzaria/bookmarks/view/book_bookmarks_action.dart';
 import 'package:otzaria/book_common/view/parallel_editions_action.dart';
@@ -3394,8 +3395,9 @@ bool _handleGlobalKeyEvent(
       // F11 - מסך מלא
       case LogicalKeyboardKey.f11:
         if (!Platform.isAndroid && !Platform.isIOS) {
-          final settingsBloc = context.read<SettingsBloc>();
-          final newFullscreenState = !settingsBloc.state.isFullscreen;
+          final newFullscreenState = !context
+              .read<WindowFullscreenCubit>()
+              .state;
           FullscreenHelper.toggleFullscreen(context, newFullscreenState);
           return true;
         }
@@ -3412,8 +3414,7 @@ bool _handleGlobalKeyEvent(
           return true;
         }
         if (!Platform.isAndroid && !Platform.isIOS) {
-          final settingsBloc = context.read<SettingsBloc>();
-          if (settingsBloc.state.isFullscreen) {
+          if (context.read<WindowFullscreenCubit>().state) {
             FullscreenHelper.toggleFullscreen(context, false);
             return true;
           }
