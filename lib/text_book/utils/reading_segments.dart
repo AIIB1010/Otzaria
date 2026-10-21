@@ -9,6 +9,7 @@
 library;
 
 import 'package:characters/characters.dart';
+import 'package:flutter/foundation.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/utils/inline_notes_utils.dart' as notes;
 import 'package:otzaria/text_book/utils/reading_layout.dart';
@@ -62,6 +63,10 @@ class ReadingSegmentViewport {
   });
 }
 
+/// מעל מה שמוצג בבת אחת; בלי תקרה, גלילה בספר שלם שומרת עותק של כל
+/// טקסטו בפסקאות הממוזגות.
+const int kMaxBuiltReadingSegments = 256;
+
 /// פריטי הרינדור של [layout] מול התוכן הנוכחי. מספר הפריטים קבוע לפי
 /// הפריסה; פריט שחלק משורותיו לא נטען מסומן `isLoaded == false`.
 class ReadingSegments {
@@ -79,6 +84,9 @@ class ReadingSegments {
 
   final Map<int, ReadingSegment> _built = {};
 
+  @visibleForTesting
+  int get debugBuiltCount => _built.length;
+
   int get length => layout.itemCount;
 
   bool get isEmpty => layout.isEmpty;
@@ -87,7 +95,12 @@ class ReadingSegments {
 
   ReadingSegment operator [](int item) {
     RangeError.checkValidIndex(item, this, 'item', length);
-    return _built[item] ??= _buildSegment(item);
+    // LRU: הסרה והכנסה מחדש מעבירה לסוף, ו-keys.first הוא הישן ביותר.
+    final segment = _built.remove(item) ?? _buildSegment(item);
+    if (_built.length >= kMaxBuiltReadingSegments) {
+      _built.remove(_built.keys.first);
+    }
+    return _built[item] = segment;
   }
 
   ReadingSegment get first => this[0];
