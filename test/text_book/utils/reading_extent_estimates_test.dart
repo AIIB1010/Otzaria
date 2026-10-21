@@ -216,83 +216,172 @@ void main() {
     expect(other.changedLinesSince(after), isNull);
   });
 
-  testWidgets('חימום מעדכן פריט רחוק בלי key חדש ובלי לבנותו', (tester) async {
-    final identity = Object();
-    final controller = ItemScrollController();
-    final content = List<String>.filled(1000, '');
-    content[0] = 'אבגד' * 30;
-    var snapshot = _segments(
-      content,
-      flags: [true, ...List<bool>.filled(999, false)],
-      identity: identity,
-      version: 1,
+  for (final textWidth in <double Function(double)?>[null, (w) => w / 2]) {
+    testWidgets(
+      'חימום מעדכן פריט רחוק בלי key חדש ובלי לבנותו${textWidth == null ? '' : ' (עם textWidth)'}',
+      (tester) async {
+        final identity = Object();
+        final controller = ItemScrollController();
+        final content = List<String>.filled(1000, '');
+        content[0] = 'אבגד' * 30;
+        var snapshot = _segments(
+          content,
+          flags: [true, ...List<bool>.filled(999, false)],
+          identity: identity,
+          version: 1,
+        );
+        late StateSetter rebuild;
+        Object? latestKey;
+        ItemExtentEstimator? latestEstimator;
+        double? nativeWidth;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: StatefulBuilder(
+              builder: (_, setState) {
+                rebuild = setState;
+                return SizedBox(
+                  width: 400,
+                  height: 600,
+                  child: ReadingExtentEstimation(
+                    segments: snapshot,
+                    controller: controller,
+                    fontSize: 20,
+                    textWidth: textWidth,
+                    builder: (estimator, key) {
+                      latestKey = key;
+                      latestEstimator = estimator;
+                      return ScrollablePositionedList.builder(
+                        itemCount: 1000,
+                        itemScrollController: controller,
+                        estimateExtent: (index, width) {
+                          nativeWidth = width;
+                          return estimator(index, width);
+                        },
+                        estimationKey: key,
+                        padding: const EdgeInsets.symmetric(horizontal: 17),
+                        itemBuilder: (_, index) =>
+                            SizedBox(key: ValueKey(index), height: 100),
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final key = latestKey;
+        final before = controller.listController!.extentForIndex(500).$1;
+        rebuild(() {
+          final next = List<String>.of(content)..[500] = 'א' * 5000;
+          final flags = List<bool>.of(snapshot.loadedLineFlags!)..[500] = true;
+          snapshot = _segments(
+            next,
+            flags: flags,
+            identity: identity,
+            version: 2,
+            changes: ContentLineChanges(
+              fromVersion: 1,
+              ranges: [(first: 500, last: 500)],
+            ),
+          );
+        });
+        await tester.pumpAndSettle();
+        expect(latestKey, same(key));
+        expect(
+          controller.listController!.extentForIndex(500).$1,
+          greaterThan(before * 10),
+        );
+        expect(
+          controller.listController!.extentForIndex(500).$1,
+          closeTo(latestEstimator!(500, nativeWidth!), 0.001),
+        );
+        expect(find.byKey(const ValueKey(500)), findsNothing);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+      },
     );
-    late StateSetter rebuild;
-    Object? latestKey;
+  }
+
+  testWidgets('רוחב הטקסט מחושב פעם אחת לכל רוחב ולא לכל פריט', (tester) async {
+    final content = List<String>.generate(5000, (i) => 'אבגד' * (i % 40));
+    var textWidthCalls = 0;
+    var estimateCalls = 0;
     ItemExtentEstimator? latestEstimator;
     double? nativeWidth;
+    final controller = ItemScrollController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          width: 400,
+          height: 600,
+          child: ReadingExtentEstimation(
+            segments: _segments(content),
+            controller: controller,
+            fontSize: 20,
+            textWidth: (width) {
+              textWidthCalls++;
+              return width / 2;
+            },
+            builder: (estimator, key) {
+              latestEstimator = estimator;
+              return ScrollablePositionedList.builder(
+                itemCount: content.length,
+                itemScrollController: controller,
+                estimateExtent: (index, width) {
+                  estimateCalls++;
+                  nativeWidth = width;
+                  return estimator(index, width);
+                },
+                estimationKey: key,
+                itemBuilder: (_, index) => const SizedBox(height: 100),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(estimateCalls, greaterThanOrEqualTo(content.length));
+    expect(textWidthCalls, lessThanOrEqualTo(2));
+
+    final settled = textWidthCalls;
+    latestEstimator!(0, nativeWidth! - 50);
+    expect(textWidthCalls, settled + 1);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('החלפת textWidth באותו רוחב מחליפה את ההערכה', (tester) async {
+    final segments = _segments(['אבגד' * 100]);
+    final controller = ItemScrollController();
+    var half = false;
+    var latestEstimate = 0.0;
+    late StateSetter rebuild;
     await tester.pumpWidget(
       MaterialApp(
         home: StatefulBuilder(
           builder: (_, setState) {
             rebuild = setState;
-            return SizedBox(
-              width: 400,
-              height: 600,
-              child: ReadingExtentEstimation(
-                segments: snapshot,
-                controller: controller,
-                fontSize: 20,
-                builder: (estimator, key) {
-                  latestKey = key;
-                  latestEstimator = estimator;
-                  return ScrollablePositionedList.builder(
-                    itemCount: 1000,
-                    itemScrollController: controller,
-                    estimateExtent: (index, width) {
-                      nativeWidth = width;
-                      return estimator(index, width);
-                    },
-                    estimationKey: key,
-                    padding: const EdgeInsets.symmetric(horizontal: 17),
-                    itemBuilder: (_, index) =>
-                        SizedBox(key: ValueKey(index), height: 100),
-                  );
-                },
-              ),
+            return ReadingExtentEstimation(
+              segments: segments,
+              controller: controller,
+              fontSize: 20,
+              textWidth: half ? (width) => width / 2 : (width) => width,
+              builder: (estimate, key) {
+                latestEstimate = estimate(0, 400);
+                return const SizedBox();
+              },
             );
           },
         ),
       ),
     );
     await tester.pumpAndSettle();
-    final key = latestKey;
-    final before = controller.listController!.extentForIndex(500).$1;
-    rebuild(() {
-      final next = List<String>.of(content)..[500] = 'א' * 5000;
-      final flags = List<bool>.of(snapshot.loadedLineFlags!)..[500] = true;
-      snapshot = _segments(
-        next,
-        flags: flags,
-        identity: identity,
-        version: 2,
-        changes: ContentLineChanges(
-          fromVersion: 1,
-          ranges: [(first: 500, last: 500)],
-        ),
-      );
-    });
+    final full = latestEstimate;
+    rebuild(() => half = true);
     await tester.pumpAndSettle();
-    expect(latestKey, same(key));
-    expect(
-      controller.listController!.extentForIndex(500).$1,
-      greaterThan(before * 10),
-    );
-    expect(
-      controller.listController!.extentForIndex(500).$1,
-      closeTo(latestEstimator!(500, nativeWidth!), 0.001),
-    );
-    expect(find.byKey(const ValueKey(500)), findsNothing);
+    expect(latestEstimate, greaterThan(full * 1.5));
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });

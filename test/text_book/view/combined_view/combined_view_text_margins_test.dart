@@ -22,6 +22,7 @@ import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/view/combined_view/combined_book_screen.dart';
 import 'package:otzaria/widgets/feedback/scrollable_positioned_list_scrollbar.dart';
+import 'package:otzaria/widgets/layout/reading_area_width.dart';
 import 'package:otzaria/widgets/smart_text/smart_text_widget.dart';
 import 'package:positioned_sliver_list/positioned_list.dart';
 
@@ -126,11 +127,12 @@ void main() {
     await loader.load();
   });
 
-  Future<void> pumpView(
+  Future<TextBookTab> pumpView(
     WidgetTester tester, {
     required bool isPreviewMode,
     required double textMaxWidth,
     Size size = const Size(900, 700),
+    ValueNotifier<double>? readingAreaWidth,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
@@ -150,6 +152,15 @@ void main() {
     addTearDown(settingsBloc.close);
     addTearDown(tab.dispose);
 
+    final view = CombinedView(
+      data: content,
+      openBookCallback: (_) {},
+      openLeftPaneTab: (_, {searchText}) {},
+      textSize: 18,
+      showCommentaryAsExpansionTiles: false,
+      tab: tab,
+      isPreviewMode: isPreviewMode,
+    );
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('he', 'IL'),
@@ -162,21 +173,21 @@ void main() {
             BlocProvider<SettingsBloc>.value(value: settingsBloc),
           ],
           child: Scaffold(
-            body: CombinedView(
-              data: content,
-              openBookCallback: (_) {},
-              openLeftPaneTab: (_, {searchText}) {},
-              textSize: 18,
-              showCommentaryAsExpansionTiles: false,
-              tab: tab,
-              isPreviewMode: isPreviewMode,
-            ),
+            body: readingAreaWidth == null
+                ? view
+                : ValueListenableBuilder(
+                    valueListenable: readingAreaWidth,
+                    builder: (_, base, child) =>
+                        ReadingAreaWidth(width: base, child: child!),
+                    child: view,
+                  ),
           ),
         ),
       ),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
+    return tab;
   }
 
   /// השוליים של השורה הראשונה משני צדי אזור התוכן של הרשימה. בתצוגה הרגילה
@@ -240,6 +251,30 @@ void main() {
       final insets = lineInsets(tester, listEndPadding: 0);
       expect(insets.start, 0.0);
       expect(insets.end, 0.0);
+    });
+
+    testWidgets('שינוי בסיס אזור הקריאה בלבד מרענן הערכת פריט מחוץ למסך', (
+      tester,
+    ) async {
+      final base = ValueNotifier<double>(900);
+      addTearDown(base.dispose);
+      final tab = await pumpView(
+        tester,
+        isPreviewMode: false,
+        textMaxWidth: -11,
+        readingAreaWidth: base,
+      );
+      final list = tab.lines.itemController.listController!;
+      const farItem = _lineCount - 1;
+      expect(find.byType(SmartTextWidget).evaluate().length, lessThan(farItem));
+      final listWidth = tester.getSize(find.byType(ScrollablePositionedList));
+      final before = list.extentForIndex(farItem).$1;
+
+      base.value = 450;
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tester.getSize(find.byType(ScrollablePositionedList)), listWidth);
+      expect(list.extentForIndex(farItem).$1, greaterThan(before * 1.5));
     });
 
     testWidgets('טעם שבולט אחרי המילה האחרונה בשורה אינו נחתך (issue #1791)', (

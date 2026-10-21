@@ -2329,6 +2329,11 @@ class _CombinedViewState extends State<CombinedView> {
           textMaxWidth: bloc.state.textMaxWidth,
         ),
       );
+      // נקרא ב-build ולא בכל הערכה: התלות נרשמת פעם אחת והבסיס נכנס ל-styleKey.
+      final baseWidth = widget.isPreviewMode
+          ? null
+          : ReadingAreaWidth.maybeOf(context);
+      final setting = metrics.textMaxWidth;
       return ReadingExtentEstimation(
         segments: readingSegmentsOf(state),
         controller: widget.tab.lines.itemController,
@@ -2340,13 +2345,13 @@ class _CombinedViewState extends State<CombinedView> {
           metrics.fontBold ? FontWeight.bold : FontWeight.normal,
         ),
         lineHeight: metrics.lineHeight,
-        styleKey: metrics.textMaxWidth,
+        styleKey: (setting, setting < 0 ? baseWidth : null),
         textWidth: widget.isPreviewMode
             ? null
-            : (availableWidth) => textColumnMaxWidthOf(
-                context,
-                setting: metrics.textMaxWidth,
+            : (availableWidth) => resolveTextColumnMaxWidth(
+                setting: setting,
                 availableWidth: availableWidth,
+                baseWidth: baseWidth ?? availableWidth,
               ),
         builder: builder,
       );
