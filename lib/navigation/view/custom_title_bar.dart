@@ -133,7 +133,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
 
   // הטאב שהעכבר מעליו. שדה ולא משתנה מקומי ב-_buildTab: rebuild של ההורה היה
   // מאפס אותו, וה-X שמוצג רק בריחוף היה נמחק מתחת לסמן לפני שהלחיצה נורית.
-  OpenedTab? _hoveredTab;
+  final _hoveredTab = ValueNotifier<OpenedTab?>(null);
 
   // רוחב אזור הטאבים שנמדד בפריים הקודם (ע"י LayoutBuilder נפרד). הרשימה
   // נבנית עם הערך הזה ולא תחת ה-LayoutBuilder — אחרת Tooltip/OverlayPortal
@@ -612,12 +612,21 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
       onDragStarted: () => _pendingTabSelection = null,
       // סימון שטח הטאב ל-hit-test, כדי שה-double-tap-to-maximize שבמסגרת
       // ידלג עליו (ראה _EmptyAreaDoubleTapRecognizer).
-      tabBuilder: (tab, index, tabWidth) => MetaData(
-        metaData: _kTabHitMarker,
-        behavior: HitTestBehavior.opaque,
-        child: SizedBox(
-          width: tabWidth,
-          child: _buildTab(context, tab, index, state, tabWidth),
+      // הריחוף משנה רק את הכרטיסיה ואת המפריד של השכנה שאחריה, ולכן רק הן
+      // נבנות מחדש ולא השורה כולה.
+      tabBuilder: (tab, index, tabWidth) => _HoverSelector(
+        _hoveredTab,
+        (h) => (
+          identical(h, tab),
+          index > 0 && identical(h, state.tabs[index - 1]),
+        ),
+        (_) => MetaData(
+          metaData: _kTabHitMarker,
+          behavior: HitTestBehavior.opaque,
+          child: SizedBox(
+            width: tabWidth,
+            child: _buildTab(context, tab, index, state, tabWidth),
+          ),
         ),
       ),
     );
@@ -842,7 +851,8 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
   /// המפריד של הכרטיסיה הראשונה מפריד אותה מלחצני הפעולה שלפניה.
   bool _showLeadingDivider(TabsState state, int index) {
     bool emphasized(int i) =>
-        i == state.currentTabIndex || identical(_hoveredTab, state.tabs[i]);
+        i == state.currentTabIndex ||
+        identical(_hoveredTab.value, state.tabs[i]);
     if (index == 0) return !emphasized(0);
     return !emphasized(index) && !emphasized(index - 1);
   }
@@ -870,7 +880,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
   ) {
     final isSelected = index == state.currentTabIndex;
     final showLeadingDivider = _showLeadingDivider(state, index);
-    final isTabHovered = identical(_hoveredTab, tab);
+    final isTabHovered = identical(_hoveredTab.value, tab);
 
     return _wrapWithTabPointer(
       context,
@@ -958,7 +968,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
               '(${ShortcutHelper.formatShortcutForDisplay(closeTabShortcut)})'
         : closeTabLabel;
 
-    final isTabHovered = identical(_hoveredTab, tab);
+    final isTabHovered = identical(_hoveredTab.value, tab);
 
     Widget fadedTitle(String title) => buildFadedTabTitle(context, title);
 
@@ -1187,8 +1197,6 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
       child: AppContextMenuRegion(
         menuBuilder: (menuCtx, _) =>
             _buildTabContextMenuEntries(menuCtx, tab, state),
-        // הריחוף מרענן את השורה כולה ולא רק את הכרטיסיה: המפריד שנעלם בצדה
-        // שייך לכרטיסיה השכנה.
         child: MouseRegion(
           onEnter: (_) => _setHoveredTab(tab),
           onExit: (_) => _clearHoveredTab(tab),
@@ -1198,14 +1206,10 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
     );
   }
 
-  void _setHoveredTab(OpenedTab tab) {
-    if (identical(_hoveredTab, tab)) return;
-    setState(() => _hoveredTab = tab);
-  }
+  void _setHoveredTab(OpenedTab tab) => _hoveredTab.value = tab;
 
   void _clearHoveredTab(OpenedTab tab) {
-    if (!identical(_hoveredTab, tab)) return;
-    setState(() => _hoveredTab = null);
+    if (identical(_hoveredTab.value, tab)) _hoveredTab.value = null;
   }
 
   /// כפתור ה-X של כרטיסיה, או של חלונית בתוך כרטיסיה מפוצלת.
@@ -1312,6 +1316,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
   @override
   void dispose() {
     _crossWindowDrag.dispose();
+    _hoveredTab.dispose();
     super.dispose();
   }
 
@@ -1489,5 +1494,42 @@ class _EmptyAreaDoubleTapRecognizer extends DoubleTapGestureRecognizer {
   bool isPointerAllowed(PointerDownEvent event) {
     if (isPointerOnTab?.call(event.position) ?? false) return false;
     return super.isPointerAllowed(event);
+  }
+}
+
+class _HoverSelector extends StatefulWidget {
+  const _HoverSelector(this.hovered, this.select, this.builder);
+
+  final ValueListenable<OpenedTab?> hovered;
+  final Object? Function(OpenedTab? hovered) select;
+  final WidgetBuilder builder;
+
+  @override
+  State<_HoverSelector> createState() => _HoverSelectorState();
+}
+
+class _HoverSelectorState extends State<_HoverSelector> {
+  Object? _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.hovered.addListener(_onHoverChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.hovered.removeListener(_onHoverChanged);
+    super.dispose();
+  }
+
+  void _onHoverChanged() {
+    if (widget.select(widget.hovered.value) != _selected) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _selected = widget.select(widget.hovered.value);
+    return widget.builder(context);
   }
 }
