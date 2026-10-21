@@ -10,6 +10,7 @@ import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
+import 'package:otzaria/text_book/utils/reading_position.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 import '../../helpers/memory_settings_cache.dart';
@@ -20,6 +21,11 @@ void main() {
   setUp(() async {
     await Settings.init(cacheProvider: MemorySettingsCache());
   });
+  const anchor = ReadingAnchor(
+    line: 12,
+    intraLineFraction: 0.9,
+    alignment: 0.2,
+  );
 
   for (final phase in ['initial', 'loaded', 'loading', 'error']) {
     for (final results in <Set<int>?>[
@@ -33,6 +39,7 @@ void main() {
         final tab = TextBookTab(
           book: TextBook(title: 'בראשית'),
           index: 12,
+          initialReadingAnchor: anchor,
           searchText: 'מקור',
           searchMode: SearchMode.advanced,
           searchDistance: 2,
@@ -80,15 +87,62 @@ void main() {
           expect(copy.pinpointHighlightSectionIndex, loaded ? 7 : 1);
           expect(copy.commentators, loaded ? ['רמב"ן'] : ['רש"י']);
           expect(copy.index, 12);
+          expect(copy.readingAnchor, anchor);
+          expect(copy.lines, isNot(same(tab.lines)));
           expect(copy.isPinned, isTrue);
         }
         expect(clone.dedupeKey, 'זמני');
         expect(json.containsKey('dedupeKey'), isFalse);
         expect(json['showLeftPane'], current.showLeftPane);
         expect(json['initalIndex'], 12);
+        expect(json['readingAnchor'], anchor.toJson());
         expect(json.containsKey('initialSearchResultLines'), results != null);
       });
     }
+  }
+
+  test('snapshot לוכד יעד קריאה נוכחי בלי לטעון את הטאב', () async {
+    final tab = TextBookTab(
+      book: TextBook(title: 'בראשית'),
+      index: 12,
+      initialReadingAnchor: anchor,
+    );
+    addTearDown(tab.dispose);
+    await tab.lines.jumpToLine(80, intraLineFraction: 0.3, alignment: 0.4);
+    final clone = tab.clone() as TextBookTab;
+    final restored = TextBookTab.fromJson(tab.toJson());
+    addTearDown(clone.dispose);
+    addTearDown(restored.dispose);
+    for (final copy in [clone, restored]) {
+      expect(
+        copy.readingAnchor,
+        const ReadingAnchor(line: 80, intraLineFraction: 0.3, alignment: 0.4),
+      );
+      expect(copy.index, 80);
+      expect(copy.lines, isNot(same(tab.lines)));
+      expect(copy.lines.canGoBack.value, isFalse);
+    }
+    expect(tab.blocState, isA<TextBookInitial>());
+  });
+
+  for (final index in [0, 12]) {
+    test('טאב שלא נמדד בשורה $index אינו ממציא עוגן בשכפול ובשמירה', () {
+      final tab = TextBookTab(
+        book: TextBook(title: 'בראשית'),
+        index: index,
+      );
+      addTearDown(tab.dispose);
+      final json = tab.toJson();
+      expect(json.containsKey('readingAnchor'), isFalse);
+      final clone = tab.clone() as TextBookTab;
+      final restored = TextBookTab.fromJson(json);
+      addTearDown(clone.dispose);
+      addTearDown(restored.dispose);
+      for (final copy in [clone, restored]) {
+        expect(copy.index, index);
+        expect(copy.lines.captureAnchor(), isNull);
+      }
+    });
   }
 
   test('מצב טעון שנוקה אינו מחזיר חיפוש או הדגשות משדות הטאב', () {

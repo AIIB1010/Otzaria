@@ -5,7 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:pdfrx/pdfrx.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+import 'package:positioned_sliver_list/positioned_list.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/messages/notes_messages.dart';
@@ -72,12 +72,6 @@ class PersonalNotesSidebarState extends State<PersonalNotesSidebar>
   final ValueNotifier<List<int>> _visibleLineIndices = ValueNotifier(const []);
   final ValueNotifier<int> _newNoteCancelRequest = ValueNotifier<int>(0);
   final ItemScrollController _itemScrollController = ItemScrollController();
-  final ItemPositionsListener _itemPositionsListener =
-      ItemPositionsListener.create();
-  // פריט = הערה, והערה ארוכה עשויה להיות גבוהה מהמסך. בלי ה-offsetController
-  // גרירת האגודל הייתה נעצרת על גבולות פריטים ולא מזיזה כלום בתוכה.
-  final ScrollOffsetController _scrollOffsetController =
-      ScrollOffsetController();
 
   @override
   void initState() {
@@ -533,13 +527,9 @@ class PersonalNotesSidebarState extends State<PersonalNotesSidebar>
 
     return ScrollablePositionedListScrollbar(
       scrollController: _itemScrollController,
-      itemPositionsListener: _itemPositionsListener,
-      offsetController: _scrollOffsetController,
       itemCount: items.length,
       child: ScrollablePositionedList.builder(
         itemScrollController: _itemScrollController,
-        itemPositionsListener: _itemPositionsListener,
-        scrollOffsetController: _scrollOffsetController,
         itemCount: items.length,
         itemBuilder: (context, index) => items[index],
       ),

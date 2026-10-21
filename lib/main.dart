@@ -554,6 +554,7 @@ Future<void> _runAppBootstrap() async {
   if (kDebugMode) {
     Logger.root.level = Level.ALL;
     Logger('fwfh').level = Level.INFO;
+    Logger('SuperSliverList').level = Level.INFO;
     Logger.root.onRecord.listen((record) {
       debugPrint(
         '${record.level.name}: ${record.loggerName}: ${record.message}',

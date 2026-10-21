@@ -76,7 +76,7 @@ import 'package:otzaria/printing/view/printing_screen.dart';
 
 import 'dart:async';
 
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+import 'package:positioned_sliver_list/positioned_list.dart';
 
 /// Type alias לתאימות - משתמש ב-LinkGroup מה-Service
 typedef CommentaryGroup = LinkGroup;
@@ -441,13 +441,11 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
   final ItemScrollController _itemScrollController = ItemScrollController();
   final ItemPositionsListener _itemPositionsListener =
       ItemPositionsListener.create();
-  Completer<bool>? _pendingItemPositionWait;
-  VoidCallback? _pendingItemPositionListener;
-  int? _pendingItemPositionIndex;
-  String? _pendingItemPositionId;
+  final ListController _listController = ListController();
+  final Map<String, GlobalKey> _headerKeys = {};
+  HeaderAnchorHandle? _headerAnchor;
+  Map<Key, int> _flatIndexByKey = const {};
   int _searchScrollGeneration = 0;
-  final ScrollOffsetController _scrollOffsetController =
-      ScrollOffsetController();
   final FocusNode _commentaryFocusNode = FocusNode();
   final Map<String, GlobalKey> _itemKeys = {};
   List<Link> _orderedLinks = [];
@@ -541,6 +539,7 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
   }
 
   void _clearSearchAndCloseField() {
+    _cancelSearchScroll();
     _searchController.clear();
     setState(() {
       _searchQuery = '';
@@ -580,9 +579,11 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
     _loadCommentatorGroups();
     _scrolledRangeKey = _currentRangeKey();
     _searchScopeKey = _currentLinksScopeKey();
+    if (widget.externalSearchController != null) _onExternalSearchChanged();
   }
 
   void _onExternalSearchChanged() {
+    _cancelSearchScroll();
     final text = widget.externalSearchController!.text;
     if (!mounted) return;
     setState(() {
@@ -708,6 +709,33 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
   @override
   void didUpdateWidget(PdfCommentaryPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.externalTotalResultsNotifier !=
+            widget.externalTotalResultsNotifier ||
+        oldWidget.externalCurrentIndexNotifier !=
+            widget.externalCurrentIndexNotifier ||
+        oldWidget.externalSearchSnippetsNotifier !=
+            widget.externalSearchSnippetsNotifier ||
+        oldWidget.externalAllExpandedNotifier !=
+            widget.externalAllExpandedNotifier) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        widget.externalTotalResultsNotifier?.value = _totalSearchResults;
+        widget.externalCurrentIndexNotifier?.value = _currentSearchIndex;
+        widget.externalAllExpandedNotifier?.value = _allExpanded;
+        _publishSearchSnippets();
+      });
+    }
+    if (oldWidget.externalSearchController != widget.externalSearchController) {
+      oldWidget.externalSearchController?.removeListener(
+        _onExternalSearchChanged,
+      );
+      widget.externalSearchController?.addListener(_onExternalSearchChanged);
+      if (widget.externalSearchController != null) {
+        _onExternalSearchChanged();
+      } else {
+        _clearSearchAndCloseField();
+      }
+    }
     // אם initialTabIndex השתנה, מעדכן את הטאב
     if (oldWidget.initialTabIndex != widget.initialTabIndex &&
         widget.initialTabIndex != null) {
@@ -742,7 +770,7 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
       _lastResolvedGroups = null;
       _orderedLinks = [];
       _orderedGroups = [];
-      _cancelPendingItemPositionWait();
+      _cancelSearchScroll();
       _itemKeys.clear();
       _commentatorGroups = [];
       _loadCommentatorGroups();
@@ -761,7 +789,9 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
   void dispose() {
     unawaited(_searchSubscription?.cancel());
     unawaited(_searchBloc.close());
-    _cancelPendingItemPositionWait();
+    _cancelSearchScroll();
+    _cancelHeaderAnchor();
+    _listController.dispose();
     _commentarySelectionDelegate.dispose();
     _hiddenSelectionSubscription?.cancel();
 
@@ -813,16 +843,19 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
 
     _orderedLinks = [];
     _orderedGroups = [];
-    _cancelPendingItemPositionWait();
+    _cancelSearchScroll();
     _totalSearchResults = 0;
     _currentSearchIndex = -1;
     _scheduleSearchCompute();
+    final generation = _searchScrollGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _searchScopeKey != scopeKey) return;
       widget.externalTotalResultsNotifier?.value = _totalSearchResults;
       widget.externalCurrentIndexNotifier?.value = _currentSearchIndex;
       _publishSearchSnippets();
-      if (rangeChanged && _itemScrollController.isAttached) {
+      if (rangeChanged &&
+          generation == _searchScrollGeneration &&
+          _itemScrollController.isAttached) {
         _itemScrollController.jumpTo(index: 0);
       }
     });
@@ -864,9 +897,10 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
 
   /// מרחיב/מכווץ את כל קבוצות המפרשים (להפעלה מסרגל הכלים של הכרטיסייה).
   void toggleAllExpanded() {
-    // Toggling adds or removes items above the view, so the list index would
-    // land elsewhere. Keep the group that was on top in view instead.
+    _cancelPendingNavigation();
+    final generation = _searchScrollGeneration;
     final anchorTitle = _topVisibleGroupTitle();
+    final preserved = _preserveGroupHeader(anchorTitle);
     setState(() {
       final nextExpanded = !_allExpanded;
       _allExpanded = nextExpanded;
@@ -878,9 +912,13 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
       }
     });
     widget.externalAllExpandedNotifier?.value = _allExpanded;
-    if (anchorTitle == null) return;
+    if (anchorTitle == null || preserved) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_itemScrollController.isAttached) return;
+      if (!mounted ||
+          generation != _searchScrollGeneration ||
+          !_itemScrollController.isAttached) {
+        return;
+      }
       final index = _flatItems.indexWhere(
         (item) => item.link == null && item.group.bookTitle == anchorTitle,
       );
@@ -1107,11 +1145,11 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
     return ProgressiveScroll(
       focusNode: _commentaryFocusNode,
       autofocus: widget.isFullScreen,
-      scrollController: _scrollOffsetController,
+      scrollController: _itemScrollController,
+      onNavigationStart: _cancelPendingNavigation,
       maxSpeed: 10000.0,
       curve: 10.0,
-      accelerationFactor: 5,
-      itemScrollController: _itemScrollController,
+      accelerationFactor: 312.5,
       onKeyEvent: (_, event) => ContextMenuUtils.reportCommentaryErrorShortcut(
         context,
         event,
@@ -1388,6 +1426,7 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
         ),
       ],
       onChanged: (value) {
+        _cancelSearchScroll();
         setState(() {
           _searchQuery = value;
           // No current match until the first Enter, so it lands on the first.
@@ -1407,7 +1446,7 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
 
   Widget _buildCommentariesView() {
     if (_showFilterTab) {
-      _cancelPendingItemPositionWait();
+      _cancelSearchScroll();
       return _buildCommentatorsFilter();
     }
 
@@ -1507,7 +1546,7 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
     final visibleContent = _getVisibleContent();
     if (visibleContent == null) {
       _invalidateFullSelection();
-      _cancelPendingItemPositionWait();
+      _cancelSearchScroll();
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -1526,7 +1565,7 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
       _orderedLinks = [];
       _scheduleSearchCompute();
       _invalidateFullSelection();
-      _cancelPendingItemPositionWait();
+      _cancelSearchScroll();
       if (widget.linksLoading) {
         return Center(
           child: Padding(
@@ -1593,7 +1632,7 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
             : null;
         if (currentGroups == null) {
           _invalidateFullSelection();
-          _cancelPendingItemPositionWait();
+          _cancelSearchScroll();
         }
         final sortedGroups = currentGroups ?? _lastResolvedGroups;
         if (sortedGroups == null) {
@@ -1624,11 +1663,16 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
         }
         _flatItems = flatItems;
         _linkFlatIndex = linkFlatIndex;
+        _flatIndexByKey = {
+          for (var index = 0; index < flatItems.length; index++)
+            _flatItemKey(flatItems[index]): index,
+        };
+        final titles = sortedGroups.map((group) => group.bookTitle).toSet();
+        _headerKeys.removeWhere((title, _) => !titles.contains(title));
         if (currentGroups != null) {
           _lastResolvedGroups = currentGroups;
           _orderedGroups = currentGroups;
         }
-        _cancelPendingWaitIfItemChanged();
 
         final orderedLinks = <Link>[];
         for (final group in currentGroups ?? const <CommentaryGroup>[]) {
@@ -1664,26 +1708,29 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
                 maintainSize: true,
                 child: ScrollablePositionedListScrollbar(
                   scrollController: _itemScrollController,
-                  offsetController: _scrollOffsetController,
-                  itemPositionsListener: _itemPositionsListener,
                   itemCount: flatItems.length,
+                  onNavigationStart: _cancelPendingNavigation,
                   labelForIndex: (index) =>
                       index >= 0 && index < flatItems.length
                       ? flatItems[index].group.bookTitle
                       : '',
                   child: constrainToContentWidth(
-                    ScrollablePositionedList.builder(
-                      key: PageStorageKey(
-                        pdfCommentaryListStorageKey(
-                          widget.tab.activeCommentators,
+                    _trackHeaderScroll(
+                      ScrollablePositionedList.builder(
+                        key: PageStorageKey(
+                          pdfCommentaryListStorageKey(
+                            widget.tab.activeCommentators,
+                          ),
                         ),
+                        restorePosition: true,
+                        itemCount: flatItems.length,
+                        itemScrollController: _itemScrollController,
+                        itemPositionsListener: _itemPositionsListener,
+                        listController: _listController,
+                        findChildIndexCallback: (key) => _flatIndexByKey[key],
+                        itemBuilder: (context, index) =>
+                            _buildFlatItem(flatItems[index]),
                       ),
-                      itemCount: flatItems.length,
-                      itemScrollController: _itemScrollController,
-                      itemPositionsListener: _itemPositionsListener,
-                      scrollOffsetController: _scrollOffsetController,
-                      itemBuilder: (context, index) =>
-                          _buildFlatItem(flatItems[index]),
                     ),
                     widget.contentMaxWidth,
                   ),
@@ -1701,197 +1748,117 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
     );
   }
 
-  void _scrollToSearchResult() {
-    final generation = ++_searchScrollGeneration;
-    _cancelPendingItemPositionWait();
-    if (_totalSearchResults == 0 ||
-        _orderedLinks.isEmpty ||
-        !_itemScrollController.isAttached) {
-      return;
-    }
-
-    int cumulativeIndex = 0;
+  Future<void> _scrollToSearchResult() async {
+    _cancelSearchScroll();
+    final generation = _searchScrollGeneration;
+    if (_totalSearchResults == 0 || _orderedLinks.isEmpty) return;
+    var cumulativeIndex = 0;
     Link? targetLink;
-
-    // 1. מוצא את ה-link שמכיל את תוצאת החיפוש הנוכחית
     for (final link in _orderedLinks) {
-      final linkKey = _getLinkKey(link);
-      final itemResults = _searchResultsPerLink[linkKey] ?? 0;
-      if (_currentSearchIndex < cumulativeIndex + itemResults) {
+      final count = _searchResultsPerLink[_getLinkKey(link)] ?? 0;
+      if (_currentSearchIndex < cumulativeIndex + count) {
         targetLink = link;
         break;
       }
-      cumulativeIndex += itemResults;
+      cumulativeIndex += count;
     }
-
     if (targetLink == null) return;
-
-    // 2. מוצא את ה-group שמכיל את ה-link
-    final targetLinkKey = _getLinkKey(targetLink);
-    final targetGroup = _orderedGroups
+    final linkKey = _getLinkKey(targetLink);
+    final group = _orderedGroups
         .where(
-          (group) => group.links.any((l) => _getLinkKey(l) == targetLinkKey),
+          (group) => group.links.any((link) => _getLinkKey(link) == linkKey),
         )
         .firstOrNull;
-    if (targetGroup == null) return;
-
-    // 3. מבטיח שה-ExpansionTile של הקבוצה פתוח
-    final groupTitle = targetGroup.bookTitle;
-    final groupKey = groupTitle;
-    final bool isCurrentlyExpanded = _expansionStates[groupKey] ?? _allExpanded;
-
-    if (!isCurrentlyExpanded) {
-      setState(() {
-        _expansionStates[groupKey] = true;
-      });
+    if (group == null) return;
+    if (!(_expansionStates[group.bookTitle] ?? _allExpanded)) {
+      setState(() => _expansionStates[group.bookTitle] = true);
     }
+    WidgetsBinding.instance.ensureVisualUpdate();
+    await WidgetsBinding.instance.endOfFrame;
+    while (mounted && generation == _searchScrollGeneration) {
+      final index = _linkFlatIndex[linkKey];
+      if (index == null || !_itemScrollController.isAttached) return;
+      await _itemScrollController.jumpToAsync(index: index, alignment: 0.1);
+      if (_linkFlatIndex[linkKey] == index) return;
+    }
+  }
 
-    // 4. ביצוע הגלילה
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted || generation != _searchScrollGeneration) return;
+  void _cancelSearchScroll() {
+    _searchScrollGeneration++;
+    _listController.cancelPositioning();
+  }
 
-      if (!isCurrentlyExpanded) {
-        await Future.delayed(const Duration(milliseconds: 200));
-        if (!mounted || generation != _searchScrollGeneration) return;
-      }
+  Key _flatItemKey(CommentaryFlatItem item) => item.link == null
+      ? ValueKey('h:${item.group.bookTitle}')
+      : ValueKey('l:${_getLinkKey(item.link!)}');
 
-      final linkKey = _getLinkKey(targetLink!);
-      final itemKey = _itemKeys[linkKey];
-      final BuildContext? itemContext = itemKey?.currentContext;
-
-      // בודק אם הפריט כבר בעץ הרינדור (לא נדרשת גלילה גסה)
-      final bool itemInRenderTree =
-          itemContext != null &&
-          itemContext.mounted &&
-          itemContext.findRenderObject() is RenderBox;
-
-      if (!itemInRenderTree) {
-        // The index exists only after the expanded group was laid out.
-        final flatIndex = _linkFlatIndex[linkKey];
-        if (flatIndex != null && _itemScrollController.isAttached) {
-          // לא scrollTo: הוא בונה רשימה שנייה, ובשתיהן אותו GlobalKey (issue #1505).
-          _itemScrollController.jumpTo(index: flatIndex, alignment: 0.05);
-          final reachedTarget = await _waitForItemPosition(
-            flatIndex,
-            'l:$linkKey',
-            generation,
-          );
-          if (!reachedTarget) return;
-        }
-        if (!mounted || generation != _searchScrollGeneration) return;
-      }
-
-      final BuildContext? ctx = itemKey?.currentContext;
-      if (ctx != null && ctx.mounted) {
-        try {
-          final scrollable = Scrollable.of(ctx);
-          scrollable.position.ensureVisible(
-            ctx.findRenderObject()!,
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeInOut,
-            alignment: 0.1,
-          );
-        } catch (e) {
-          debugPrint('Error scrolling to item: $e');
-        }
-      }
+  bool _preserveGroupHeader(String? title) {
+    final render = _headerKeys[title]?.currentContext?.findRenderObject();
+    if (render is! RenderBox || !render.hasSize) return false;
+    final viewport = RenderAbstractViewport.maybeOf(render);
+    if (viewport is! RenderBox) return false;
+    final viewportBox = viewport as RenderBox;
+    final top = render.localToGlobal(Offset.zero, ancestor: viewportBox).dy;
+    if (top + render.size.height <= 0 || top >= viewportBox.size.height) {
+      return false;
+    }
+    final scroll = _itemScrollController.scrollController;
+    if (scroll != null &&
+        scroll.hasClients &&
+        scroll.position.isScrollingNotifier.value) {
+      scroll.jumpTo(scroll.offset);
+    }
+    final handle = _listController.preserveHeader(render);
+    if (handle == null) return false;
+    _headerAnchor = handle;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      handle.cancel();
+      if (identical(_headerAnchor, handle)) _headerAnchor = null;
     });
+    return true;
   }
 
-  /// Identifies a flat list item across rebuilds: its index moves when a
-  /// group above it expands or collapses.
-  String? _flatItemIdAt(int index) {
-    if (index < 0 || index >= _flatItems.length) return null;
-    final item = _flatItems[index];
-    final link = item.link;
-    return link == null
-        ? 'h:${item.group.bookTitle}'
-        : 'l:${_getLinkKey(link)}';
+  void _cancelHeaderAnchor() {
+    _headerAnchor?.cancel();
+    _headerAnchor = null;
   }
 
-  Future<bool> _waitForItemPosition(
-    int index,
-    String itemId,
-    int generation,
-  ) async {
-    bool isVisible() => _itemPositionsListener.itemPositions.value.any(
-      (position) => position.index == index,
-    );
-    bool isTargetItemCurrent() => _flatItemIdAt(index) == itemId;
-    if (!mounted || generation != _searchScrollGeneration) return false;
-    if (!isTargetItemCurrent()) return false;
-    if (isVisible()) return true;
-
-    final wait = Completer<bool>();
-    void onPositionsChanged() {
-      if (wait.isCompleted) return;
-      if (!mounted ||
-          generation != _searchScrollGeneration ||
-          !isTargetItemCurrent()) {
-        wait.complete(false);
-      } else if (isVisible()) {
-        wait.complete(true);
-      }
-    }
-
-    _pendingItemPositionWait = wait;
-    _pendingItemPositionListener = onPositionsChanged;
-    _pendingItemPositionIndex = index;
-    _pendingItemPositionId = itemId;
-    _itemPositionsListener.itemPositions.addListener(onPositionsChanged);
-    onPositionsChanged();
-    try {
-      return await wait.future;
-    } finally {
-      _itemPositionsListener.itemPositions.removeListener(onPositionsChanged);
-      if (identical(_pendingItemPositionWait, wait)) {
-        _pendingItemPositionWait = null;
-        _pendingItemPositionListener = null;
-        _pendingItemPositionIndex = null;
-        _pendingItemPositionId = null;
-      }
-    }
+  void _cancelPendingNavigation() {
+    _cancelHeaderAnchor();
+    _cancelSearchScroll();
   }
 
-  void _cancelPendingWaitIfItemChanged() {
-    final index = _pendingItemPositionIndex;
-    final itemId = _pendingItemPositionId;
-    if (index == null || itemId == null) return;
-    if (_flatItemIdAt(index) != itemId) _cancelPendingItemPositionWait();
-  }
-
-  void _cancelPendingItemPositionWait() {
-    final listener = _pendingItemPositionListener;
-    if (listener != null) {
-      _itemPositionsListener.itemPositions.removeListener(listener);
-    }
-    final wait = _pendingItemPositionWait;
-    _pendingItemPositionWait = null;
-    _pendingItemPositionListener = null;
-    _pendingItemPositionIndex = null;
-    _pendingItemPositionId = null;
-    if (wait != null && !wait.isCompleted) wait.complete(false);
-  }
+  Widget _trackHeaderScroll(Widget child) => Listener(
+    onPointerDown: (_) => _cancelPendingNavigation(),
+    onPointerSignal: (_) => _cancelPendingNavigation(),
+    child: NotificationListener<ScrollStartNotification>(
+      onNotification: (notification) {
+        if (notification.depth == 0) _cancelHeaderAnchor();
+        return false;
+      },
+      child: child,
+    ),
+  );
 
   Widget _buildFlatItem(CommentaryFlatItem item) {
     final group = item.group;
     final link = item.link;
     return BlocBuilder<SettingsBloc, SettingsState>(
-      key: link == null
-          ? ValueKey('h:${group.bookTitle}')
-          : ValueKey('l:${_getLinkKey(link)}'),
+      key: _flatItemKey(item),
       builder: (context, settingsState) {
         final Widget child;
         if (link == null) {
           final groupKey = group.bookTitle;
           final isExpanded = _expansionStates[groupKey] ?? _allExpanded;
           child = _PdfCommentaryGroupHeader(
+            key: _headerKeys.putIfAbsent(groupKey, GlobalKey.new),
             bookTitle: groupKey,
             settingsState: settingsState,
             isExpanded: isExpanded,
-            onTap: () => setState(() {
-              _expansionStates[groupKey] = !isExpanded;
-            }),
+            onTap: () {
+              if (isExpanded) _preserveGroupHeader(groupKey);
+              setState(() => _expansionStates[groupKey] = !isExpanded);
+            },
           );
         } else {
           final generation = _searchBloc.generation;
@@ -2252,6 +2219,7 @@ class _PdfCommentaryGroupHeader extends StatelessWidget {
   final VoidCallback onTap;
 
   const _PdfCommentaryGroupHeader({
+    super.key,
     required this.bookTitle,
     required this.settingsState,
     required this.isExpanded,

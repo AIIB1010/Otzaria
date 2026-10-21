@@ -50,6 +50,7 @@ import 'package:otzaria/text_display/text_display_exports.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/view/reading_viewport/line_scroll_controller.dart';
+import 'package:otzaria/text_book/view/widgets/reader_back_button.dart';
 import 'package:otzaria/data/constants/database_constants.dart';
 import 'package:otzaria/data/repository/data_repository.dart';
 import 'package:otzaria/library/bloc/library_bloc.dart';
@@ -1468,6 +1469,12 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
       minCenterWidth: ReaderNavCenter.minTitleWidth,
       leadingItems: [
         AppTopBarItem(widget: _buildMenuButton(context, state)),
+        AppTopBarItem(
+          widget: ReaderBackButton(
+            lines: widget.tab.lines,
+            compact: context.read<SettingsBloc>().state.compactMenuMode,
+          ),
+        ),
         if (state.showLeftPane && NavPanelSearch.isWide(context))
           AppTopBarItem(
             widget: NavPanelPinButton(

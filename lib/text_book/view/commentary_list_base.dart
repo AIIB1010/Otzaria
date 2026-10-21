@@ -1,5 +1,8 @@
+import 'package:otzaria/data/book_identity.dart';
 import 'package:otzaria/book_common/bloc/commentary_search_bloc.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:otzaria/widgets/misc/rtl_icon.dart';
 import 'package:otzaria/book_common/view/content_width.dart';
 import 'package:otzaria/book_common/selection/commentary_selection.dart';
@@ -59,9 +62,8 @@ import 'package:otzaria/settings/settings_exports.dart';
 import 'package:otzaria/utils/text/ref_helper.dart';
 import 'package:otzaria/utils/text/text_manipulation.dart' as utils;
 import 'package:otzaria/utils/ui/context_menu_utils.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+import 'package:positioned_sliver_list/positioned_list.dart';
 import 'package:otzaria/widgets/text/otzaria_search_field.dart';
-import 'package:otzaria/widgets/feedback/app_future_builder.dart';
 import 'package:otzaria/widgets/feedback/scrollable_positioned_list_scrollbar.dart';
 import 'package:flutter/foundation.dart';
 
@@ -260,17 +262,18 @@ class CommentaryListBase extends StatefulWidget {
   State<CommentaryListBase> createState() => CommentaryListBaseState();
 }
 
-// AutomaticKeepAliveClientMixin: בחלונית עם לשוניות (מפרשים/קישורים/הערות)
-// TabBarView משמיד את ה-State של לשונית לא-פעילה, ומצב הכיווץ של המפרשים
-// חי כאן (issue #1326).
+enum _CommentaryStorageSlot { expansion }
+
+// לשוניות שומרות את העץ; כרטיסים בתוך הספר משתחררים מחוץ למטמון הגלילה.
 class CommentaryListBaseState extends State<CommentaryListBase>
     with AutomaticKeepAliveClientMixin {
   @override
-  bool get wantKeepAlive => true;
+  bool get wantKeepAlive => !widget.shrinkWrap;
 
+  PageStorageBucket? _inlineStorage;
+  Object? _inlineStorageIdentifier;
   final TextEditingController _searchController = TextEditingController();
   final ValueNotifier<String> _searchQueryNotifier = ValueNotifier<String>('');
-  final ScrollOffsetController scrollController = ScrollOffsetController();
   final ItemScrollController _itemScrollController = ItemScrollController();
   final ItemPositionsListener _itemPositionsListener =
       ItemPositionsListener.create();
@@ -286,10 +289,6 @@ class CommentaryListBaseState extends State<CommentaryListBase>
   int _lastScrollIndex = 0; // שומר את מיקום הגלילה האחרון
   // שורות המקור שהרשימה מציגה כרגע — לזיהוי מעבר לקטע אחר.
   List<int>? _sectionIndexes;
-  bool _scrollToTopScheduled = false;
-  // bucket מקומי: ScrollablePositionedList משחזר מיקום מ-PageStorage ודורס בכך
-  // את initialScrollIndex, כך שקטע חדש נפתח על היסט הקטע הקודם (issue #846).
-  final PageStorageBucket _listStorageBucket = PageStorageBucket();
   // מצב גלובלי של פתיחה/סגירה של כל המפרשים — חשוף ככ-ValueListenable כדי
   // שצרכנים חיצוניים (למשל CommentatorsTabScreen) יוכלו להאזין ולעדכן UI.
   final ValueNotifier<bool> _allExpandedNotifier = ValueNotifier<bool>(true);
@@ -300,11 +299,30 @@ class CommentaryListBaseState extends State<CommentaryListBase>
   String? _cachedGroupingSignature;
   List<Link>? _cachedGroupingSource;
   Future<List<CommentaryGroup>>? _cachedGroupsFuture;
+  List<CommentaryGroup>? _lastResolvedGroups;
+  List<int>? _lastResolvedGroupIndexes;
+  Object? _lastResolvedGroupBook;
+  bool _groupsReady = false;
 
   // הרשימה השטוחה: פריט נפרד לכל כותרת מפרש ולכל קטע — כך הרשימה נבנית
   // בעצלנות ולא כל מפרשי הקטע בבת אחת (מקור האיטיות ב-issue #844).
   Map<String, int> _groupHeaderFlatIndex = const {};
   Map<String, int> _linkFlatIndex = const {};
+  final ListController _listController = ListController();
+  final Map<String, GlobalKey> _headerKeys = {};
+  HeaderAnchorHandle? _headerAnchor;
+  Map<Key, int> _flatIndexByKey = const {};
+  int _flatItemsRevision = 0;
+  ({
+    List<CommentaryGroup> groups,
+    Map<String, bool> expansion,
+    List<CommentaryFlatItem> items,
+  })?
+  _flatSnapshot;
+
+  @visibleForTesting
+  int get debugFlatItemsRevision => _flatItemsRevision;
+  int _searchScrollGeneration = 0;
   // הערות אישיות פר ספר-מפרש, משותפות לכל הקטעים של אותו מפרש.
   final Map<String, Future<List<PersonalNote>>> _personalNotesByGroup = {};
   StreamSubscription<String>? _notesChangesSubscription;
@@ -478,6 +496,16 @@ class CommentaryListBaseState extends State<CommentaryListBase>
   /// בונה את פריטי הרשימה השטוחה מהקבוצות, לפי מצב הכיווץ הנוכחי, ומעדכן
   /// את מיפויי האינדקסים לגלילה (כותרת קבוצה / קטע מפרש → אינדקס ברשימה).
   List<CommentaryFlatItem> _buildFlatItems(List<CommentaryGroup> groups) {
+    final snapshot = _flatSnapshot;
+    if (snapshot != null &&
+        identical(snapshot.groups, groups) &&
+        groups.every(
+          (group) =>
+              snapshot.expansion[group.bookTitle] ==
+              (_expansionStates[group.bookTitle] ?? _allExpanded),
+        )) {
+      return snapshot.items;
+    }
     final headerIdx = <String, int>{};
     final linkIdx = <String, int>{};
     final items = buildCommentaryFlatItems(
@@ -489,27 +517,96 @@ class CommentaryListBaseState extends State<CommentaryListBase>
     );
     _groupHeaderFlatIndex = headerIdx;
     _linkFlatIndex = linkIdx;
+    _flatIndexByKey = {
+      for (var i = 0; i < items.length; i++) _flatItemKey(items[i]): i,
+    };
+    _headerKeys.removeWhere((title, _) => !headerIdx.containsKey(title));
+    _flatItemsRevision++;
+    _flatSnapshot = (
+      groups: groups,
+      expansion: {
+        for (final group in groups)
+          group.bookTitle: _expansionStates[group.bookTitle] ?? _allExpanded,
+      },
+      items: items,
+    );
     return items;
   }
 
+  Key _flatItemKey(CommentaryFlatItem item) => item.link == null
+      ? ValueKey('h:${item.group.bookTitle}')
+      : ValueKey('l:${_getLinkKey(item.link!)}');
+
+  bool _preserveGroupHeader(String? title) {
+    final render = _headerKeys[title]?.currentContext?.findRenderObject();
+    if (render is! RenderBox || !render.hasSize) return false;
+    final viewport = RenderAbstractViewport.maybeOf(render);
+    if (viewport is! RenderBox) return false;
+    final viewportBox = viewport as RenderBox;
+    final top = render.localToGlobal(Offset.zero, ancestor: viewportBox).dy;
+    if (top + render.size.height <= 0 || top >= viewportBox.size.height) {
+      return false;
+    }
+    final scroll = _itemScrollController.scrollController;
+    if (scroll != null &&
+        scroll.hasClients &&
+        scroll.position.isScrollingNotifier.value) {
+      scroll.jumpTo(scroll.offset);
+    }
+    final handle = _listController.preserveHeader(render);
+    if (handle == null) return false;
+    _headerAnchor = handle;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      handle.cancel();
+      if (identical(_headerAnchor, handle)) _headerAnchor = null;
+    });
+    return true;
+  }
+
+  void _cancelHeaderAnchor() {
+    _headerAnchor?.cancel();
+    _headerAnchor = null;
+  }
+
+  void _cancelPendingNavigation() {
+    _cancelSearchNavigation();
+    _commentatorScrollGeneration++;
+    _pendingScrollTarget = null;
+  }
+
+  Widget _trackHeaderScroll(Widget child) => Listener(
+    onPointerDown: (_) => _cancelPendingNavigation(),
+    onPointerSignal: (_) => _cancelPendingNavigation(),
+    child: NotificationListener<ScrollStartNotification>(
+      onNotification: (notification) {
+        if (notification.depth == 0) _cancelHeaderAnchor();
+        return false;
+      },
+      child: child,
+    ),
+  );
+
   void _toggleGroupExpansion(CommentaryGroup group) {
+    _cancelPendingNavigation();
+    final generation = _commentatorScrollGeneration;
     final key = group.bookTitle;
     final expanded = !(_expansionStates[key] ?? _allExpanded);
     final headerIndex = _groupHeaderFlatIndex[key];
     final headerEdge = expanded || headerIndex == null
         ? null
         : _leadingEdgeOfItem(headerIndex);
+    final preserved = !expanded && _preserveGroupHeader(key);
     setState(() {
       _expansionStates[key] = expanded;
       _updateGlobalExpansionState();
     });
     if (expanded) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
+        if (!mounted || generation != _commentatorScrollGeneration) return;
         final index = _groupHeaderFlatIndex[key];
         if (index != null) _ensureExpandedGroupVisible(index);
       });
-    } else if (headerEdge != null) {
+    } else if (!preserved && headerEdge != null) {
       _reanchorAfterCollapse(key, headerEdge);
     }
   }
@@ -618,17 +715,19 @@ class CommentaryListBaseState extends State<CommentaryListBase>
 
   /// מתג מצב הכיווץ הגלובלי של כל המפרשים. מעדכן את כל הקבוצות בהתאם.
   void toggleAllExpanded() {
+    _cancelPendingNavigation();
     final collapsing = _allExpanded;
     final anchorTitle = collapsing
         ? groupTitleAtFlatIndex(_groupHeaderFlatIndex, _lastScrollIndex)
         : null;
+    final preserved = collapsing && _preserveGroupHeader(anchorTitle);
     setState(() {
       _allExpanded = !_allExpanded;
       for (final key in _expansionStates.keys) {
         _expansionStates[key] = _allExpanded;
       }
     });
-    if (collapsing) _reanchorAfterCollapse(anchorTitle, 0);
+    if (collapsing && !preserved) _reanchorAfterCollapse(anchorTitle, 0);
   }
 
   /// ניווט לתוצאת חיפוש לפי אינדקס גלובלי (לשימוש חיצוני)
@@ -639,6 +738,7 @@ class CommentaryListBaseState extends State<CommentaryListBase>
   }
 
   void _onHighlightQueryChanged() {
+    _cancelSearchNavigation();
     _currentSearchIndexNotifier.value = 0;
     _searchResultOffsets = null;
     _scheduleSearchCompute();
@@ -933,6 +1033,18 @@ class CommentaryListBaseState extends State<CommentaryListBase>
   void initState() {
     super.initState();
     _searchSubscription = _searchBloc.stream.listen(_applySearchState);
+    _updateInlineStorage();
+    if (widget.shrinkWrap && _inlineStorageIdentifier != null) {
+      final saved = _inlineStorage?.readState(
+        context,
+        identifier: _inlineStorageIdentifier,
+      );
+      if (saved is (bool, Map<String, bool>)) {
+        _allExpanded = saved.$1;
+        _expansionStates.addAll(saved.$2);
+      }
+    }
+    _searchQueryNotifier.addListener(_cancelSearchNavigation);
     // האזנה לשינויים במיקום הגלילה כדי לשמור את המיקום האחרון
     _itemPositionsListener.itemPositions.addListener(_updateLastScrollIndex);
     widget.selectionSyncController?.addListener(_handleExternalSelectionChange);
@@ -952,30 +1064,79 @@ class CommentaryListBaseState extends State<CommentaryListBase>
     // בקשה שנקבעה לפני שהרשימה נבנתה (הפאנל נפתח בעקבות אותה לחיצה) —
     // בלי הבדיקה הזו היא הייתה אובדת, כי ה-listener מגיב רק לשינוי.
     _onExternalScrollTargetChanged();
-    if (widget.externalTotalResultsNotifier != null) {
-      _totalSearchResultsNotifier.addListener(() {
-        widget.externalTotalResultsNotifier!.value =
-            _totalSearchResultsNotifier.value;
-      });
+    _totalSearchResultsNotifier.addListener(_publishExternalState);
+    _currentSearchIndexNotifier.addListener(_publishExternalState);
+    _allExpandedNotifier.addListener(_publishExternalState);
+    _publishExternalState();
+    if (widget.externalSearchController != null) _onExternalSearchChanged();
+  }
+
+  void _publishExternalState() {
+    final total = widget.externalTotalResultsNotifier;
+    final current = widget.externalCurrentIndexNotifier;
+    final expanded = widget.externalAllExpandedNotifier;
+    final byPath = widget.externalSearchResultsByPathNotifier;
+    final snippets = widget.externalSearchSnippetsNotifier;
+    final search = _searchBloc.state;
+    if ((total == null || total.value == _totalSearchResultsNotifier.value) &&
+        (current == null ||
+            current.value == _currentSearchIndexNotifier.value) &&
+        (expanded == null || expanded.value == _allExpanded) &&
+        (byPath == null || identical(byPath.value, search.countsByPath)) &&
+        (snippets == null || identical(snippets.value, search.snippets))) {
+      return;
     }
-    if (widget.externalCurrentIndexNotifier != null) {
-      _currentSearchIndexNotifier.addListener(() {
-        widget.externalCurrentIndexNotifier!.value =
-            _currentSearchIndexNotifier.value;
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _publishExternalState();
       });
+      return;
     }
-    // סנכרון מצב הכיווץ הגלובלי לנוטיפייר חיצוני (אם סופק)
-    if (widget.externalAllExpandedNotifier != null) {
-      widget.externalAllExpandedNotifier!.value = _allExpanded;
-      _allExpandedNotifier.addListener(() {
-        widget.externalAllExpandedNotifier!.value = _allExpanded;
-      });
+    total?.value = _totalSearchResultsNotifier.value;
+    current?.value = _currentSearchIndexNotifier.value;
+    expanded?.value = _allExpanded;
+    byPath?.value = search.countsByPath;
+    snippets?.value = search.snippets;
+  }
+
+  void _updateInlineStorage() {
+    _inlineStorage = PageStorage.maybeOf(context);
+    Object? keys;
+    bool collect(BuildContext element) {
+      final key = element.widget.key;
+      if (key is PageStorageKey) keys = (keys, key);
+      return element.widget is! PageStorage;
     }
+
+    if (collect(context)) context.visitAncestorElements(collect);
+    _inlineStorageIdentifier = keys == null
+        ? null
+        : (_CommentaryStorageSlot.expansion, keys);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _updateInlineStorage();
   }
 
   @override
   void didUpdateWidget(CommentaryListBase oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.shrinkWrap != widget.shrinkWrap) updateKeepAlive();
+    _publishExternalState();
+    if (oldWidget.externalSearchController != widget.externalSearchController) {
+      oldWidget.externalSearchController?.removeListener(
+        _onExternalSearchChanged,
+      );
+      widget.externalSearchController?.addListener(_onExternalSearchChanged);
+      if (widget.externalSearchController != null) {
+        _onExternalSearchChanged();
+      } else {
+        _clearSearchAndCloseField();
+      }
+    }
     if (oldWidget.selectionSyncController != widget.selectionSyncController) {
       oldWidget.selectionSyncController?.removeListener(
         _handleExternalSelectionChange,
@@ -1002,6 +1163,7 @@ class CommentaryListBaseState extends State<CommentaryListBase>
         _onHighlightQueryChanged,
       );
       widget.highlightQueryListenable?.addListener(_onHighlightQueryChanged);
+      _onHighlightQueryChanged();
     }
     if (oldWidget.scrollTargetListenable != widget.scrollTargetListenable) {
       oldWidget.scrollTargetListenable?.removeListener(
@@ -1010,6 +1172,7 @@ class CommentaryListBaseState extends State<CommentaryListBase>
       widget.scrollTargetListenable?.addListener(
         _onExternalScrollTargetChanged,
       );
+      _lastHandledScrollRequestId = 0;
       _onExternalScrollTargetChanged();
     }
     if (oldWidget.typeSelection != widget.typeSelection) {
@@ -1030,15 +1193,7 @@ class CommentaryListBaseState extends State<CommentaryListBase>
     }
   }
 
-  /// מציג את הרשימה מתחילתה. `jumpTo` ולא גלילה מונפשת: התוכן שמתחתיה מוחלף,
-  /// ואנימציה על תוכן חדש נראית כתקלה. הקפיצה נדחית לסוף הפריים כדי שאפשר
-  /// יהיה לקרוא לזה גם מתוך build.
-  ///
-  /// בקשת עוגן ממתינה גוברת: לחיצה על אות-עוגן שולחת קודם
-  /// `UpdateSelectedIndex(sourceLine)`, ולכן *אותה לחיצה* נחשבת גם מעבר קטע.
-  /// האיפוס מתוזמן מה-build שנגרם ממנה — כלומר **אחרי** הגלילה לעוגן — והיה
-  /// מוחק אותה ב-`jumpTo(0)`. בממשק זה נראה כאילו נפתח הקטע הראשון של המפרש,
-  /// שהוא גם היעד של האות הראשונה; לכן הבאג התחזה ל"רק א עובד".
+  /// מחליף קטע מראש הרשימה אחרי פריסה; בקשת עוגן גוברת על האיפוס.
   void scrollToTop() {
     // המיקום המשוחזר לבנייה הבאה מתאפס בכל מקרה — היסט הקטע הקודם אינו
     // מתאים לתוכן החדש, ובקשת העוגן ממילא תמקם מחדש.
@@ -1048,11 +1203,13 @@ class CommentaryListBaseState extends State<CommentaryListBase>
     )) {
       return;
     }
-    if (_scrollToTopScheduled) return;
-    _scrollToTopScheduled = true;
+    final generation = _commentatorScrollGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollToTopScheduled = false;
-      if (!mounted || !_itemScrollController.isAttached) return;
+      if (!mounted ||
+          generation != _commentatorScrollGeneration ||
+          !_itemScrollController.isAttached) {
+        return;
+      }
       // גם בסדר ההפוך: הקפיצה תוזמנה, ורק אז הגיעה בקשת העוגן.
       if (!shouldResetScrollForSectionChange(
         hasPendingAnchorScroll: _hasPendingAnchorScroll,
@@ -1063,9 +1220,8 @@ class CommentaryListBaseState extends State<CommentaryListBase>
     });
   }
 
-  /// האם יש בקשת גלילה לעוגן שטרם הושלמה — ממתינה או באמצע לולאת הניסיונות.
-  bool get _hasPendingAnchorScroll =>
-      _pendingScrollTarget != null || _commentatorScrollRunning;
+  /// בקשת עוגן שממתינה לנתונים או לפריסה.
+  bool get _hasPendingAnchorScroll => _pendingScrollTarget != null;
 
   /// מעבר לקטע מקור אחר מציג את המפרשים מתחילתם — היסט הגלילה של הקטע הקודם
   /// אינו מתאים לתוכן החדש (issue #846).
@@ -1083,11 +1239,13 @@ class CommentaryListBaseState extends State<CommentaryListBase>
     // מעבר הקטע שנגרם מלחיצת העוגן עצמה אינו סיבה לאפס: `UpdateSelectedIndex`
     // מגיע דרך ה-bloc ולכן נוחת *אחרי* שהגלילה כבר הסתיימה, כשאין עוד בקשה
     // ממתינה לחסום אותו. בלי החריג הזה כל לחיצה נגמרה ב-jumpTo(0) מאוחר.
-    if (currentIndexes.isNotEmpty &&
-        currentIndexes.first == _anchorScrollSectionLine) {
+    if (currentIndexes.contains(_anchorScrollSectionLine)) {
       return;
     }
-    // מעבר לקטע אחר מבטל את החריג: מכאן ואילך איפוס רגיל.
+    _commentatorScrollGeneration++;
+    _pendingScrollTarget = null;
+    _cancelHeaderAnchor();
+    _listController.cancelPositioning();
     _anchorScrollSectionLine = null;
     scrollToTop();
   }
@@ -1114,6 +1272,9 @@ class CommentaryListBaseState extends State<CommentaryListBase>
   /// נקרא משני מסלולי העוגן: `_CommentaryCard` (מפרשים מתחת לטקסט) ו-
   /// [CommentaryListBase.scrollTargetListenable] (מפרשים בצד).
   void scrollToCommentator(String title, {String? linkKey, int? sourceLine}) {
+    _cancelHeaderAnchor();
+    _listController.cancelPositioning();
+    _searchScrollGeneration++;
     _pendingScrollTarget = (title: title, linkKey: linkKey);
     _commentatorScrollGeneration++;
     if (sourceLine != null) _anchorScrollSectionLine = sourceLine;
@@ -1127,182 +1288,73 @@ class CommentaryListBaseState extends State<CommentaryListBase>
       _commentatorScrollScheduled = false;
       unawaited(_runPendingCommentatorScroll());
     });
-    // addPostFrameCallback אינו מבקש פריים בעצמו. בפועל תמיד הגיע פריים
-    // (הלחיצה על העוגן משנה את הבחירה), אבל ההסתמכות הזו שקטה ושבירה —
-    // מסלול שלא יגרור פריים היה מותיר את הבקשה תלויה בלי שום סימן.
+    // בקשה חיצונית עשויה להגיע בלי שינוי אחר שמבקש פריים.
     WidgetsBinding.instance.ensureVisualUpdate();
   }
 
-  /// מספר ניסיונות הגלילה עד ויתור. הניסיון הראשון נצרך בדרך כלל לייצוב
-  /// האינדקס (ראו הדרישה לשתי פתירות זהות), ולכן התקרה נדיבה.
-  static const int _maxCommentatorScrollAttempts = 6;
-
-  /// המתנה אחרי כל ניסיון, לפני מדידת המיקום שהתקבל.
-  static const Duration _commentatorScrollSettle = Duration(milliseconds: 220);
-
-  /// היעד: ראש אזור הגלילה.
-  static const double _commentatorScrollAlignment = 0.0;
-
-  /// סטייה נסבלת מ-[_commentatorScrollAlignment], כשבר מגובה אזור הגלילה.
-  static const double _commentatorScrollTolerance = 0.02;
-
-  /// גולל אל היעד הממתין, מודד, וחוזר עד שהוא באמת שם.
-  ///
-  /// ניסיון יחיד אינו מספיק: `ScrollablePositionedList` גולל לפריט שכבר בנוי
-  /// דרך `animateTo` לאופסט **פיקסלים** שחושב מהפריסה שברגע ההתחלה, וגובהו
-  /// של כל קטע מפרש נקבע רק אחרי ש-`link.content` נפתר ו-`CommentaryContent`
-  /// מחליף את שלד הטעינה בטקסט. ככל שיש יותר מפרשים על הקטע כך גדל הפער
-  /// שנפתח מעל היעד תוך כדי האנימציה — ולכן הגלילה נעצרה *לפני* המפרש
-  /// המקושר. כאן מודדים את המיקום שהתקבל וגוללים שוב עד שהוא מתייצב.
   Future<void> _runPendingCommentatorScroll() async {
-    // רץ יחיד. הרשימה מתזמנת בנייה מחדש גם באמצע ריצה (הקבוצות נבנות
-    // אסינכרונית), ושתי לולאות במקביל היו מריצות שתי אנימציות גלילה זו
-    // מול זו על אותו controller.
-    if (_commentatorScrollRunning) {
-      return;
-    }
+    if (_commentatorScrollRunning || !mounted) return;
     _commentatorScrollRunning = true;
+    final generation = _commentatorScrollGeneration;
+    final revision = _flatItemsRevision;
     try {
-      // בקשה חדשה שנרשמה תוך כדי ריצה פותחת סבב חדש במקום להיבלע.
-      for (var generation = -1; generation != _commentatorScrollGeneration;) {
-        generation = _commentatorScrollGeneration;
-        await _runCommentatorScrollAttempts(generation);
-        if (!mounted) return;
-      }
-    } finally {
-      _commentatorScrollRunning = false;
-    }
-  }
-
-  Future<void> _runCommentatorScrollAttempts(int generation) async {
-    var previousEdge = double.nan;
-    int? lastResolvedIndex;
-
-    for (var attempt = 0; attempt < _maxCommentatorScrollAttempts; attempt++) {
-      if (!mounted || generation != _commentatorScrollGeneration) return;
       final target = _pendingScrollTarget;
-      if (target == null) return;
-      // הבקר מתנתק לרגע כשהרשימה נבנית מחדש — למשל כששינוי סדר המפרשים
-      // מחליף את ה-key של SPL. יציאה כאן הייתה מאבדת את הבקשה בשקט, כי
-      // הסבב הנוכחי מסתיים ואיש אינו מתזמן מחדש.
-      if (!_itemScrollController.isAttached) {
-        await Future<void>.delayed(_commentatorScrollSettle);
-        continue;
+      if (target == null ||
+          !_groupsReady ||
+          !_itemScrollController.isAttached) {
+        return;
       }
-
-      // קבוצה מכווצת אינה פולטת פריטי קטע כלל, ולכן מפתח הקטע לא יימצא
-      // לפני שהיא נפתחת. הפתיחה נכנסת לתוקף רק בפריים הבא.
       if (_expansionStates[target.title] == false) {
         setState(() => _expansionStates[target.title] = true);
         _schedulePendingCommentatorScroll();
         return;
       }
-
-      // הרשימה טרם נמדדה — הפריים הראשון שלה. גלילה לפני שיש פריסה אינה
-      // יכולה להצליח, ו-ScrollablePositionedList אף נופל עליה בפריסה
-      // בלתי-חסומה. קורה כשהפאנל נפתח באותה לחיצה שיצרה את הבקשה.
-      if (_itemPositionsListener.itemPositions.value.isEmpty) {
-        await Future<void>.delayed(_commentatorScrollSettle);
-        continue;
+      if (_groupHeaderFlatIndex.isEmpty) return;
+      final sourceLine = _anchorScrollSectionLine;
+      if (sourceLine != null &&
+          !(_sectionIndexes?.contains(sourceLine) ?? false)) {
+        return;
       }
-
-      // מפתח הקטע טרם מופיע במיפוי: הרשימה עדיין מציגה את הקטע הקודם
-      // ומיפויי האינדקסים שלה מיושנים. גלילה עכשיו הייתה קופצת לאינדקס של
-      // הקטע הקודם — ובנוסף מפילה את SPL, שנדרש לפרוס פריט בזמן שהתוכן
-      // מתחלף. ממתינים לפריים הבא במקום. נפילה-אחורה לכותרת נשמרת לניסיון
-      // האחרון, שאז זה כבר באמת מפרש שאינו ברשימה.
-      final isLastAttempt = attempt == _maxCommentatorScrollAttempts - 1;
-      final index = _resolveCommentatorScrollIndex(
-        target,
-        allowHeaderFallback: target.linkKey == null || isLastAttempt,
-      );
-      if (index == null) {
-        // מפה ריקה = הקבוצות עדיין נבנות (Future). בנייתן מתזמנת אותנו
-        // מחדש, ולכן משאירים את היעד ממתין. מפה מלאה בלי המפרש בניסיון
-        // האחרון = הוא אינו ברשימה כלל (סונן/הוסתר), ואין למה לחכות.
-        if (_groupHeaderFlatIndex.isEmpty || !isLastAttempt) {
-          await Future<void>.delayed(_commentatorScrollSettle);
-          continue;
+      final index = _resolveCommentatorScrollIndex(target);
+      if (index != null) {
+        await _itemScrollController.jumpToAsync(index: index);
+      }
+      if (!mounted || generation != _commentatorScrollGeneration) return;
+      if (revision == _flatItemsRevision) {
+        final key = index == _groupHeaderFlatIndex[target.title]
+            ? _headerKeys[target.title]
+            : _itemKeys[target.linkKey];
+        final render = key?.currentContext?.findRenderObject();
+        if (render is RenderBox && render.attached && render.hasSize) {
+          _headerAnchor = _listController.preserveHeader(render);
         }
         _pendingScrollTarget = null;
-        return;
       }
-
-      // הלחיצה על העוגן גם מסדרת מחדש את הרשימה (המפרש שנלחץ עולה לראש),
-      // ולכן האינדקס שנפתר מיד אחריה עדיין שייך לסדר הישן. גלילה אליו לא
-      // רק מיותרת — היא רצה בזמן שהעץ נבנה מחדש, ומייצרת שגיאות פריסה
-      // אמיתיות (GlobalKey כפול, RenderBox ללא פריסה). לכן דורשים שתי
-      // פתירות רצופות שמסכימות לפני שגוללים בפועל.
-      // בניסיון האחרון גוללים בלי לדרוש יציבות — אחרת הדרישה בולעת את
-      // ההזדמנות האחרונה, והנפילה-אחורה לכותרת לא מגיעה לגלול כלל.
-      if (index != lastResolvedIndex && !isLastAttempt) {
-        lastResolvedIndex = index;
-        await Future<void>.delayed(_commentatorScrollSettle);
-        continue;
+    } finally {
+      _commentatorScrollRunning = false;
+      if (mounted &&
+          _pendingScrollTarget != null &&
+          (generation != _commentatorScrollGeneration ||
+              revision != _flatItemsRevision)) {
+        _schedulePendingCommentatorScroll();
       }
-
-      // `jumpTo` ולא `scrollTo` מונפש, משלוש סיבות שכולן נצפו בשדה:
-      //
-      // 1. כשהיעד אינו בנוי, `scrollTo` בונה **רשימה שנייה** למעבר
-      //    המונפש. הרשימה מקצה GlobalKey לכל קטע (`_itemKeys`), ואותו
-      //    פריט שנבנה בשתי הרשימות בו-זמנית מייצר `Duplicate GlobalKey`
-      //    ואחריו מפל שגיאות פריסה.
-      // 2. ה-Future של אותו מעבר אינו מושלם לעולם אם הרשימה נבנית מחדש
-      //    באמצעו — וזה בדיוק מה שקורה כשהמפרש שנלחץ עולה לראש.
-      // 3. המעבר המונפש נעשה ב-`animateTo` לאופסט **פיקסלים** שחושב מראש,
-      //    ולכן גדילת קטעים מעל היעד (תוכן שנטען) משאירה אותו קצר.
-      //    `jumpTo` עוגן-לפי-אינדקס חסין לכל אלה.
-      //
-      // גם `scrollToTop` כאן כבר משתמש ב-`jumpTo` מאותו טעם — אנימציה על
-      // תוכן שמתחלף נראית כתקלה.
-      _itemScrollController.jumpTo(
-        index: index,
-        alignment: _commentatorScrollAlignment,
-      );
-      await Future<void>.delayed(_commentatorScrollSettle);
-      if (!mounted || generation != _commentatorScrollGeneration) {
-        return;
-      }
-
-      final edge = _leadingEdgeOfItem(index);
-      if (edge == null) continue; // הפריט לא דווח עדיין — ניסיון נוסף
-      if ((edge - _commentatorScrollAlignment).abs() <=
-          _commentatorScrollTolerance) {
-        break;
-      }
-      // אותו מיקום פעמיים = הרשימה בקצה ואינה יכולה להתקדם. ללא הבלם הזה
-      // קטע אחרון קצר היה מייצר חמישה ניסיונות עקרים.
-      if (!previousEdge.isNaN && (edge - previousEdge).abs() < 0.001) break;
-      previousEdge = edge;
     }
-
-    if (generation == _commentatorScrollGeneration) _pendingScrollTarget = null;
   }
 
-  /// האינדקס ברשימה השטוחה שאליו יש לגלול.
-  ///
-  /// הקטע המדויק גובר על כותרת הקבוצה — זה מה שמבדיל בין שני קטעים של אותו
-  /// מפרש על אותה שורה. יוצא מן הכלל: הקטע הראשון בקבוצה, שעבורו גוללים
-  /// לכותרת כדי ששם המפרש יישאר גלוי מעל הטקסט.
-  ///
-  /// [allowHeaderFallback] — כשכבוי, מפתח קטע שאינו במיפוי מחזיר null במקום
-  /// את הכותרת. הקורא ממתין אז לרשימה שתתעדכן, במקום לגלול לכותרת של
-  /// הקטע — שהיא בדיוק הקטע הראשון של המפרש, כלומר הבאג המקורי.
+  /// קטע ראשון בקבוצה מתיישר לכותרת; שאר הקטעים מתיישרים לעצמם.
   int? _resolveCommentatorScrollIndex(
-    ({String title, String? linkKey}) target, {
-    bool allowHeaderFallback = true,
-  }) {
+    ({String title, String? linkKey}) target,
+  ) {
     final headerIndex = _groupHeaderFlatIndex[target.title];
     final linkKey = target.linkKey;
     final linkIndex = linkKey == null ? null : _linkFlatIndex[linkKey];
-    if (linkIndex == null) return allowHeaderFallback ? headerIndex : null;
+    if (linkIndex == null) return headerIndex;
     if (headerIndex != null && linkIndex == headerIndex + 1) return headerIndex;
     return linkIndex;
   }
 
   /// הקצה העליון של הפריט [index] כשבר מגובה אזור הגלילה, או null אם הפריט
-  /// אינו בנוי כלל. ערך מחוץ ל-[0,1] פירושו שהפריט מחוץ למסך — וזה בדיוק
-  /// המצב שהלולאה מתקנת.
+  /// אינו בנוי כלל. ערך מחוץ ל-[0,1] פירושו שהפריט מחוץ למסך.
   double? _leadingEdgeOfItem(int index) {
     for (final position in _itemPositionsListener.itemPositions.value) {
       if (position.index == index) return position.itemLeadingEdge;
@@ -1310,12 +1362,17 @@ class CommentaryListBaseState extends State<CommentaryListBase>
     return null;
   }
 
-  /// עיגון מחדש על [groupTitle] אחרי כיווץ: כשהרשימה מתקצרת SPL מקצץ את
-  /// פריט-העוגן בלי לתקן את ההיסט, ונותר רווח ריק (issue #1174).
+  /// מחזיר את כותרת [groupTitle] לקצה שלה אחרי כיווץ: פריטי הקבוצה שהרשימה
+  /// עוגנה בהם נעלמים, והיא הייתה נעצרת במפרש אחר (#1174).
   void _reanchorAfterCollapse(String? groupTitle, double alignment) {
     if (groupTitle == null) return;
+    final generation = _commentatorScrollGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_itemScrollController.isAttached) return;
+      if (!mounted ||
+          generation != _commentatorScrollGeneration ||
+          !_itemScrollController.isAttached) {
+        return;
+      }
       final index = _groupHeaderFlatIndex[groupTitle];
       if (index == null) return;
       _itemScrollController.jumpTo(
@@ -1404,10 +1461,27 @@ class CommentaryListBaseState extends State<CommentaryListBase>
   }
 
   @override
+  void deactivate() {
+    if (widget.shrinkWrap && _inlineStorageIdentifier != null) {
+      // ה-sliver עשוי לנתק את הפריט מאבותיו לפני deactivate.
+      _inlineStorage?.writeState(
+        context,
+        (_allExpanded, Map<String, bool>.of(_expansionStates)),
+        identifier: _inlineStorageIdentifier,
+      );
+    }
+    super.deactivate();
+  }
+
+  @override
   void dispose() {
     unawaited(_searchSubscription?.cancel());
     unawaited(_searchBloc.close());
 
+    _searchScrollGeneration++;
+    _commentatorScrollGeneration++;
+    _cancelHeaderAnchor();
+    _listController.dispose();
     _notesChangesSubscription?.cancel();
     _itemPositionsListener.itemPositions.removeListener(_updateLastScrollIndex);
     widget.selectionSyncController?.clear(_selectionOwner);
@@ -1453,115 +1527,43 @@ class CommentaryListBaseState extends State<CommentaryListBase>
   }
 
   Future<void> _scrollToSearchResult() async {
-    if (_totalSearchResultsNotifier.value == 0 ||
-        _orderedLinks.isEmpty ||
-        !_itemScrollController.isAttached) {
-      return;
-    }
-
-    final state = context.read<TextBookBloc>().state;
-    if (state is! TextBookLoaded) {
-      return;
-    }
-
-    int cumulativeIndex = 0;
+    _cancelHeaderAnchor();
+    _listController.cancelPositioning();
+    final generation = ++_searchScrollGeneration;
+    _commentatorScrollGeneration++;
+    _pendingScrollTarget = null;
+    if (_totalSearchResultsNotifier.value == 0 || _orderedLinks.isEmpty) return;
+    var cumulativeIndex = 0;
     Link? targetLink;
-
-    // 1. מוצא את ה-link שמכיל את תוצאת החיפוש הנוכחית
     for (final link in _orderedLinks) {
-      final linkKey = _getLinkKey(link);
-      final itemResults = _searchResultsPerLink[linkKey] ?? 0;
-      if (_currentSearchIndexNotifier.value < cumulativeIndex + itemResults) {
+      final results = _searchResultsPerLink[_getLinkKey(link)] ?? 0;
+      if (_currentSearchIndexNotifier.value < cumulativeIndex + results) {
         targetLink = link;
         break;
       }
-      cumulativeIndex += itemResults;
+      cumulativeIndex += results;
     }
-
-    if (targetLink == null) {
-      return;
+    if (targetLink == null) return;
+    final linkKey = _getLinkKey(targetLink);
+    final groupTitle = utils.getTitleFromPath(targetLink.path2);
+    if (!(_expansionStates[groupTitle] ?? _allExpanded)) {
+      setState(() => _expansionStates[groupTitle] = true);
     }
-
-    // 2. מבטיח שהקבוצה של ה-link פתוחה (בקבוצה מכווצת הקטעים אינם ברשימה)
-    final groupKey = utils.getTitleFromPath(targetLink.path2);
-
-    final bool isCurrentlyExpanded = _expansionStates[groupKey] ?? true;
-
-    // אם צריך לפתוח, פותח ומחכה לאנימציה
-    if (!isCurrentlyExpanded) {
-      setState(() {
-        _expansionStates[groupKey] = true;
-      });
+    WidgetsBinding.instance.ensureVisualUpdate();
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted || generation != _searchScrollGeneration) return;
+    while (mounted && generation == _searchScrollGeneration) {
+      final index = _linkFlatIndex[linkKey];
+      if (index == null || !_itemScrollController.isAttached) return;
+      await _itemScrollController.jumpToAsync(index: index, alignment: 0.1);
+      if (_linkFlatIndex[linkKey] == index) return;
     }
+  }
 
-    // 4. ביצוע הגלילה בתוך Callback
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
-
-      // המתנה לסיום אנימציית הפתיחה אם הייתה
-      if (!isCurrentlyExpanded) {
-        await Future.delayed(const Duration(milliseconds: 200));
-        if (!mounted) return;
-      }
-
-      final linkKey = _getLinkKey(targetLink!);
-      final itemKey = _itemKeys[linkKey];
-      final BuildContext? itemContext = itemKey?.currentContext;
-
-      // בודק אם הפריט כבר בעץ הרינדור (לא נדרשת גלילה גסה להכניסו לזיכרון)
-      final bool itemInRenderTree =
-          itemContext != null &&
-          itemContext.mounted &&
-          itemContext.findRenderObject() is RenderBox;
-
-      // שלב א': גלילה גסה לפריט השטוח של הקטע – רק אם הוא לא בעץ הרינדור
-      if (!itemInRenderTree) {
-        final flatIndex = _linkFlatIndex[linkKey];
-        if (flatIndex != null && _itemScrollController.isAttached) {
-          // לא scrollTo: הוא בונה רשימה שנייה, ובשתיהן אותו GlobalKey (issue #1505).
-          _itemScrollController.jumpTo(index: flatIndex, alignment: 0.05);
-        }
-        await Future.delayed(const Duration(milliseconds: 350));
-        if (!mounted) return;
-      }
-
-      // שלב ב': גלילה עדינה לפריט הספציפי
-      final BuildContext? ctx = itemKey?.currentContext;
-      if (ctx != null && ctx.mounted) {
-        try {
-          final RenderObject? itemRenderObj = ctx.findRenderObject();
-          if (itemRenderObj is! RenderBox) return;
-          final RenderBox itemBox = itemRenderObj;
-
-          final ScrollableState scrollable = Scrollable.of(ctx);
-          if (!scrollable.mounted) return;
-
-          final RenderObject? viewportRenderObj = scrollable.context
-              .findRenderObject();
-          if (viewportRenderObj is! RenderBox) return;
-          final RenderBox viewportBox = viewportRenderObj;
-
-          final Offset itemOffset = itemBox.localToGlobal(
-            Offset.zero,
-            ancestor: viewportBox,
-          );
-
-          // מביא את הפריט ל-10% מראש הרשימה
-          final double targetY = viewportBox.size.height * 0.1;
-          final double scrollDelta = itemOffset.dy - targetY;
-
-          if (scrollDelta.abs() > 10) {
-            scrollController.animateScroll(
-              offset: scrollDelta,
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeInOut,
-            );
-          }
-        } catch (e) {
-          debugPrint('Error during micro-scrolling: $e');
-        }
-      }
-    });
+  void _cancelSearchNavigation() {
+    _cancelHeaderAnchor();
+    _searchScrollGeneration++;
+    _listController.cancelPositioning();
   }
 
   late final CommentarySearchBloc _searchBloc = CommentarySearchBloc(
@@ -1591,11 +1593,10 @@ class CommentaryListBaseState extends State<CommentaryListBase>
     if (state.counts.isEmpty) setState(() {});
     _searchResultOffsets = null;
     _totalSearchResultsNotifier.value = state.total;
-    widget.externalSearchResultsByPathNotifier?.value = state.countsByPath;
-    widget.externalSearchSnippetsNotifier?.value = state.snippets;
     if (_currentSearchIndexNotifier.value >= state.total && state.total > 0) {
       _currentSearchIndexNotifier.value = 0;
     }
+    _publishExternalState();
   }
 
   void _updateSearchResultsCount(Link link, int count, int generation) {
@@ -1641,7 +1642,7 @@ class CommentaryListBaseState extends State<CommentaryListBase>
 
   Widget _buildGroupHeader(CommentaryGroup group) {
     return _CommentaryGroupHeader(
-      key: ValueKey('h:${group.bookTitle}'),
+      key: _headerKeys.putIfAbsent(group.bookTitle, GlobalKey.new),
       bookTitle: group.bookTitle,
       fontSize: widget.fontSize,
       isExpanded: _expansionStates[group.bookTitle] ?? _allExpanded,
@@ -1692,8 +1693,11 @@ class CommentaryListBaseState extends State<CommentaryListBase>
     TextBookLoaded state,
   ) {
     final generation = _searchBloc.generation;
+    final key = _getLinkKey(link);
+    // שומרים את הרשימה בזמן חישוב הסדר, אך לא מציירים קישור שכבר הוסר.
+    if (!_itemKeys.containsKey(key)) return const SizedBox.shrink();
     return _CommentaryLinkItem(
-      key: ValueKey(_getLinkKey(link)),
+      key: ValueKey(key),
       link: link,
       fontSize: widget.fontSize,
       openBookCallback: widget.openBookCallback,
@@ -1980,6 +1984,9 @@ class CommentaryListBaseState extends State<CommentaryListBase>
                   effectiveTypes,
                 ),
                 builder: (context, thisLinksSnapshot) {
+                  final linksReady =
+                      thisLinksSnapshot.connectionState == ConnectionState.done;
+                  if (!linksReady) _groupsReady = false;
                   if (!thisLinksSnapshot.hasData) {
                     // רק אם יש קישורים רלוונטיים, מציג אנימציית טעינה
                     return _buildSkeletonLoading();
@@ -1987,6 +1994,7 @@ class CommentaryListBaseState extends State<CommentaryListBase>
                   if (thisLinksSnapshot.data!.isEmpty) {
                     _orderedLinks = [];
                     _scheduleSearchCompute();
+                    if (linksReady) _pendingScrollTarget = null;
                     // רשימה ריקה כאן נובעת מסינון הסוגים בלבד (יש קישורים
                     // רלוונטיים), ולכן מסבירים במקום להציג ריק בלי הסבר.
                     if (effectiveTypes.isEmpty) return const SizedBox.shrink();
@@ -2059,10 +2067,40 @@ class CommentaryListBaseState extends State<CommentaryListBase>
                         }
                         _focusNode.requestFocus();
                       },
-                      child: AppFutureBuilder<List<CommentaryGroup>>(
+                      child: FutureBuilder<List<CommentaryGroup>>(
                         future: _getCachedGroups(data),
-                        loadingWidget: _buildSkeletonLoading(),
-                        builder: (context, groups) {
+                        builder: (context, snapshot) {
+                          if (snapshot.hasError) {
+                            _groupsReady = false;
+                            _pendingScrollTarget = null;
+                            return Center(
+                              child: Text('שגיאה: ${snapshot.error}'),
+                            );
+                          }
+                          final bookScope = (
+                            BookIdentity.keyOf(state.book),
+                            state.book.versionTitle,
+                          );
+                          final resolved =
+                              snapshot.connectionState == ConnectionState.done
+                              ? snapshot.data
+                              : null;
+                          _groupsReady = linksReady && resolved != null;
+                          final groups =
+                              resolved ??
+                              (_lastResolvedGroupBook == bookScope &&
+                                      listEquals(
+                                        _lastResolvedGroupIndexes,
+                                        currentIndexes,
+                                      )
+                                  ? _lastResolvedGroups
+                                  : null);
+                          if (groups == null) return _buildSkeletonLoading();
+                          if (_groupsReady) {
+                            _lastResolvedGroups = groups;
+                            _lastResolvedGroupBook = bookScope;
+                            _lastResolvedGroupIndexes = List.of(currentIndexes);
+                          }
                           for (final group in groups) {
                             final groupKey = group.bookTitle;
                             _expansionStates.putIfAbsent(
@@ -2071,10 +2109,7 @@ class CommentaryListBaseState extends State<CommentaryListBase>
                             );
                           }
                           final flatItems = _buildFlatItems(groups);
-                          // רק כאן מיפויי האינדקסים קיימים. ה-FutureBuilder
-                          // החיצוני כבר לא יבנה מחדש כשה-Future של הקבוצות
-                          // נפתר, ולכן בקשה שהגיעה לפני שהרשימה נבנתה הייתה
-                          // נשארת תלויה בלי הרענון הזה.
+                          // מפת היעדים מתעדכנת רק אחרי שהקבוצות מוכנות.
                           if (_pendingScrollTarget != null) {
                             _schedulePendingCommentatorScroll();
                           }
@@ -2082,17 +2117,17 @@ class CommentaryListBaseState extends State<CommentaryListBase>
                           final listView = ScrollablePositionedList.builder(
                             itemScrollController: _itemScrollController,
                             itemPositionsListener: _itemPositionsListener,
+                            listController: _listController,
+                            restorePosition: widget.shrinkWrap,
+                            findChildIndexCallback: (key) =>
+                                _flatIndexByKey[key],
                             initialScrollIndex: flatItems.isEmpty
                                 ? 0
                                 : _lastScrollIndex.clamp(
                                     0,
                                     flatItems.length - 1,
                                   ),
-                            key: ValueKey(
-                              'commentary_${selectedCommentators.join(',')}',
-                            ),
                             physics: const ClampingScrollPhysics(),
-                            scrollOffsetController: scrollController,
                             shrinkWrap: widget.shrinkWrap,
                             itemCount: flatItems.length,
                             itemBuilder: (context, index) {
@@ -2101,10 +2136,17 @@ class CommentaryListBaseState extends State<CommentaryListBase>
                               final child = link == null
                                   ? _buildGroupHeader(item.group)
                                   : _buildLinkItem(item.group, link, state);
-                              if (!item.showDivider) return child;
-                              return Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [child, const Divider(height: 1)],
+                              return KeyedSubtree(
+                                key: _flatItemKey(item),
+                                child: item.showDivider
+                                    ? Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          child,
+                                          const Divider(height: 1),
+                                        ],
+                                      )
+                                    : child,
                               );
                             },
                           );
@@ -2115,11 +2157,11 @@ class CommentaryListBaseState extends State<CommentaryListBase>
                           return ProgressiveScroll(
                             focusNode: _focusNode,
                             autofocus: widget.autofocus,
-                            scrollController: scrollController,
+                            scrollController: _itemScrollController,
+                            onNavigationStart: _cancelPendingNavigation,
                             maxSpeed: 10000.0,
                             curve: 10.0,
-                            accelerationFactor: 5,
-                            itemScrollController: _itemScrollController,
+                            accelerationFactor: 312.5,
                             onKeyEvent: (_, event) =>
                                 ContextMenuUtils.reportCommentaryErrorShortcut(
                                   context,
@@ -2141,16 +2183,12 @@ class CommentaryListBaseState extends State<CommentaryListBase>
                                     ),
                                 child: ScrollablePositionedListScrollbar(
                                   scrollController: _itemScrollController,
-                                  offsetController: scrollController,
-                                  itemPositionsListener: _itemPositionsListener,
                                   itemCount: flatItems.length,
+                                  onNavigationStart: _cancelPendingNavigation,
                                   child: SmoothWheelScroll(
-                                    child: PageStorage(
-                                      bucket: _listStorageBucket,
-                                      child: constrainToContentWidth(
-                                        listView,
-                                        widget.contentMaxWidth,
-                                      ),
+                                    child: constrainToContentWidth(
+                                      _trackHeaderScroll(listView),
+                                      widget.contentMaxWidth,
                                     ),
                                   ),
                                 ),

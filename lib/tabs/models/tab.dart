@@ -11,6 +11,7 @@ import 'package:otzaria/tabs/models/commentators_tab.dart';
 import 'package:otzaria/tabs/models/pdf_commentators_tab.dart';
 import 'package:otzaria/tabs/models/tool_tab.dart';
 import 'package:otzaria/models/books.dart';
+import 'package:otzaria/text_book/utils/reading_position.dart';
 
 abstract class OpenedTab {
   String title;
@@ -30,6 +31,7 @@ abstract class OpenedTab {
   factory OpenedTab.fromBook(
     Book book,
     int index, {
+    ReadingAnchor? initialReadingAnchor,
     String searchText = '',
     String highlightText = '',
     int? permanentHighlightLine,
@@ -60,6 +62,7 @@ abstract class OpenedTab {
       return TextBookTab(
         book: book.toTextBook(),
         index: index,
+        initialReadingAnchor: initialReadingAnchor,
         searchText: searchText,
         highlightText: highlightText,
         permanentHighlightLine: permanentHighlightLine,
@@ -75,6 +78,7 @@ abstract class OpenedTab {
       return TextBookTab(
         book: book,
         index: index,
+        initialReadingAnchor: initialReadingAnchor,
         searchText: searchText,
         highlightText: highlightText,
         permanentHighlightLine: permanentHighlightLine,

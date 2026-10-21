@@ -45,7 +45,7 @@ import 'package:otzaria/widgets/controls/action_buttons.dart';
 import 'package:otzaria/widgets/lists/filter_chips_widget.dart';
 import 'package:otzaria/widgets/misc/app_menu_exports.dart';
 import 'package:otzaria/widgets/feedback/scrollable_positioned_list_scrollbar.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+import 'package:positioned_sliver_list/positioned_list.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:pdf/pdf.dart' hide PdfDocument;
 import 'package:pdf/widgets.dart' as pw;
@@ -2703,7 +2703,6 @@ class _PrintingScreenState extends State<PrintingScreen> {
 
               final list = ScrollablePositionedListScrollbar(
                 scrollController: _itemScrollController,
-                itemPositionsListener: _itemPositionsListener,
                 itemCount: itemCount,
                 child: ScrollablePositionedList.separated(
                   itemScrollController: _itemScrollController,
