@@ -2,6 +2,7 @@ import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart'
     show ValueListenable, visibleForTesting;
+import 'package:flutter/cupertino.dart' show InheritedCupertinoTheme;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -684,8 +685,8 @@ class _ReadingScreenState extends State<ReadingScreen>
   }
 }
 
-/// מקפיא את מדדי החלון רק בטאבים מוסתרים לגמרי; בזמן החלקה שני הטאבים
-/// הנראים חייבים לקבל מדדים עדכניים גם לפני שהטאב הנבחר מתחלף.
+/// מקפיא את מדדי החלון וערכת הצבע רק בטאבים מוסתרים לגמרי; בזמן החלקה שני
+/// הטאבים הנראים חייבים לקבל ערכים עדכניים גם לפני שהטאב הנבחר מתחלף.
 class _BackgroundTabMediaQuery extends StatefulWidget {
   final bool frozen;
   final PageController controller;
@@ -706,10 +707,30 @@ class _BackgroundTabMediaQuery extends StatefulWidget {
 
 class _BackgroundTabMediaQueryState extends State<_BackgroundTabMediaQuery> {
   MediaQueryData? _data;
+  late Widget Function(Widget child) _theme;
 
   @override
   Widget build(BuildContext context) {
     final live = MediaQuery.of(context);
+    // Theme.of תלוי גם ב-CupertinoTheme, ו-MaterialApp מגדיר גם את צבע הבחירה;
+    // בלי להקפיא את שלושתם אנימציית ערכת הצבע בונה את טאבי הרקע בכל פריים.
+    final theme = Theme.of(context);
+    final cupertino = context
+        .dependOnInheritedWidgetOfExactType<InheritedCupertinoTheme>()
+        ?.theme;
+    final selection = DefaultSelectionStyle.of(context);
+    Widget liveTheme(Widget child) {
+      child = DefaultSelectionStyle(
+        selectionColor: selection.selectionColor,
+        cursorColor: selection.cursorColor,
+        mouseCursor: selection.mouseCursor,
+        child: Theme(data: theme, child: child),
+      );
+      return cupertino == null
+          ? child
+          : InheritedCupertinoTheme(theme: cupertino, child: child);
+    }
+
     return AnimatedBuilder(
       animation: widget.controller,
       child: widget.child,
@@ -723,8 +744,9 @@ class _BackgroundTabMediaQueryState extends State<_BackgroundTabMediaQuery> {
             (page - widget.index).abs() < 1 ||
             _data == null) {
           _data = live;
+          _theme = liveTheme;
         }
-        return MediaQuery(data: _data!, child: child!);
+        return MediaQuery(data: _data!, child: _theme(child!));
       },
     );
   }
