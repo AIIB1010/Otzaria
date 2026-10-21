@@ -79,11 +79,11 @@ import 'package:otzaria/core/windowing/app_window_scope.dart';
 import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/core/user_state/window_bounds.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
-import 'package:otzaria/core/windowing/dock_progress_listener.dart';
-import 'package:otzaria/core/windowing/multi_window_service.dart';
 import 'package:otzaria/core/windowing/multiview/multi_view_host.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
+import 'package:otzaria/core/windowing/dock_progress_listener.dart';
+import 'package:otzaria/core/windowing/multi_window_service.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/core/windowing/window_bus_host.dart';
 import 'package:otzaria/core/windowing/window_bus.dart';
@@ -1866,8 +1866,11 @@ void _maybeScheduleDebugSecondWindow() {
     Platform.environment['OTZARIA_DEBUG_OPEN_WINDOW_MS'] ?? '',
   );
   if (ms == null || ms <= 0) return;
+  if (MultiViewMode.enabled) {
+    Timer(Duration(milliseconds: ms), _debugOpenViewWindow);
+    return;
+  }
   Timer(Duration(milliseconds: ms), () async {
-    if (MultiViewMode.enabled) return _debugOpenViewWindow();
     final opened = await WindowOpener.current.openWindow();
     debugPrint('[debug] openWindow -> $opened');
   });
