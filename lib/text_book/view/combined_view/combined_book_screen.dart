@@ -316,6 +316,16 @@ typedef _CommentaryScrollTarget = ({
 
 final _detailsTag = RegExp(r'<details\b', caseSensitive: false);
 
+class _ChildBuilder extends StatelessWidget {
+  const _ChildBuilder({required this.builder, required this.child});
+
+  final Widget Function(BuildContext context, Widget child) builder;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => builder(context, child);
+}
+
 // מעבר אנימציה בונה שתי רשימות; scope מבדיל בין עותקי אותו פריט.
 class _ParagraphStateKey extends GlobalKey {
   const _ParagraphStateKey(this.scope, this.index) : super.constructor();
@@ -2436,8 +2446,9 @@ class _CombinedViewState extends State<CombinedView> {
                       _selectionStartColumn = occurrenceStart;
                     }
                   },
-                  child: ValueListenableBuilder<String?>(
-                    valueListenable: _savedSelectedText,
+                  // הטקסט הנבחר נקרא בפתיחת התפריט; האזנה אליו בנתה מחדש את
+                  // שכבת התפריט של כל שורה גלויה בכל שינוי בבחירה.
+                  child: _ChildBuilder(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 2.0),
                       child: LayoutBuilder(
@@ -2499,7 +2510,7 @@ class _CombinedViewState extends State<CombinedView> {
                         },
                       ),
                     ),
-                    builder: (context, selectedText, child) {
+                    builder: (context, child) {
                       return AppContextMenuRegion(
                         // לחיצה ימנית על הטקסט המסומן (כולל הרווח שבין שורות-תצוגה של
                         // שורת-מקור שנשברה) לא תשחרר את הבחירה; לחיצה על חלק לא-מסומן
@@ -2525,13 +2536,13 @@ class _CombinedViewState extends State<CombinedView> {
                               state,
                               hit?.lineIndex ?? selectedLineIndex,
                               menuCtx,
-                              selectedText,
+                              _savedSelectedText.value,
                               tapPos,
                               lineRange: hit?.lineRange,
                             ),
                           ];
                         },
-                        child: child!,
+                        child: child,
                       );
                     },
                   ),
