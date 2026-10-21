@@ -589,6 +589,7 @@ const Map<String, Map<String, String>> kSettingsCatalogs = {
     'השליחה לשרת חסומה כעת ברשת שלך (ייתכן שעל ידי סינון). הנתונים נשמרים במחשב ויישלחו כשהגישה תיפתח.': 'Sending to the server is currently blocked on your network (possibly by a filter). The data is kept on this computer and will be sent once access is restored.',
     'השתמש בברירת מחדל': 'Use the Default',
     'השתמש במיקום זה': 'Use this location',
+    'התאם לרוחב / לעמוד שלם (PDF)': 'Fit Width / Whole Page (PDF)',
     'התאמה לפי עניין': 'Topic match',
     'התאמה מילולית': 'Word match',
     'התאמה מילולית ולפי עניין': 'Word and topic match',

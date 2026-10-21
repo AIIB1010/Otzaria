@@ -816,6 +816,12 @@ class ShortcutsSettingsTab extends StatelessWidget {
               allShortcuts: _shortcutsList,
             ),
             _ShortcutTile(
+              settingKey: ShortcutValidator.fitPdfViewKey,
+              label: context.settingsText('התאם לרוחב / לעמוד שלם (PDF)'),
+              icon: FluentIcons.page_fit_24_regular,
+              allShortcuts: _shortcutsList,
+            ),
+            _ShortcutTile(
               settingKey: ShortcutValidator.findNextKey,
               label: context.settingsText('תוצאת החיפוש הבאה (PDF)'),
               icon: FluentIcons.chevron_down_24_regular,

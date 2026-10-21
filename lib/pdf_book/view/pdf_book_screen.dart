@@ -120,6 +120,7 @@ import 'package:otzaria/book_common/utils/commentator_group_builder.dart';
 import 'package:otzaria/printing/printing_helpers.dart';
 import 'package:otzaria/printing/view/printing_screen.dart';
 import 'package:otzaria/shortcuts/shortcut_helper.dart';
+import 'package:otzaria/pdf_book/utils/pdf_shortcut_bindings.dart';
 import 'package:otzaria/shortcuts/shortcut_validator.dart';
 import 'package:otzaria/utils/link_helpers.dart';
 import 'package:otzaria/widgets/navigation/panel_tab_header.dart';
@@ -4939,30 +4940,15 @@ class _PdfBookScreenState extends State<PdfBookScreen>
     );
   }
 
-  /// קיצורי הזום והמעבר בין התאמות החיפוש לפי ההגדרות, כולל המקביל בלוח הספרות.
-  Map<ShortcutActivator, VoidCallback> _configurableBindings() {
-    final bindings = <ShortcutActivator, VoidCallback>{};
-    void bind(String settingKey, VoidCallback action) {
-      final shortcut = ShortcutValidator.getShortcutValue(settingKey) ?? '';
-      if (shortcut.isEmpty) return;
-      for (final activator in ShortcutHelper.activatorsFromShortcut(shortcut)) {
-        bindings[activator] = action;
-      }
-    }
-
-    bind(ShortcutValidator.zoomInKey, _zoomIn);
-    bind(ShortcutValidator.zoomOutKey, _zoomOut);
-    bind(ShortcutValidator.zoomResetKey, _resetZoom);
-    bind(
-      ShortcutValidator.findNextKey,
-      () => unawaited(textSearcher?.goToNextMatch()),
-    );
-    bind(
-      ShortcutValidator.findPreviousKey,
-      () => unawaited(textSearcher?.goToPrevMatch()),
-    );
-    return bindings;
-  }
+  Map<ShortcutActivator, VoidCallback> _configurableBindings() =>
+      pdfReadingShortcutBindings(
+        zoomIn: _zoomIn,
+        zoomOut: _zoomOut,
+        resetZoom: _resetZoom,
+        fitView: _toggleFitMode,
+        nextMatch: () => unawaited(textSearcher?.goToNextMatch()),
+        previousMatch: () => unawaited(textSearcher?.goToPrevMatch()),
+      );
 
   void _zoomIn() {
     _bloc.add(const pdf_events.ZoomIn());

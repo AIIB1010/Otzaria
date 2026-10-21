@@ -79,6 +79,7 @@ class ShortcutValidator {
   static const String zoomInKey = 'key-shortcut-zoom-in';
   static const String zoomOutKey = 'key-shortcut-zoom-out';
   static const String zoomResetKey = 'key-shortcut-zoom-reset';
+  static const String fitPdfViewKey = 'key-shortcut-fit-pdf-view';
 
   /// מעבר בין התאמות החיפוש בתוך ספר PDF פתוח.
   static const String findNextKey = 'key-shortcut-find-next';
@@ -205,6 +206,7 @@ class ShortcutValidator {
     zoomInKey,
     zoomOutKey,
     zoomResetKey,
+    fitPdfViewKey,
     findNextKey,
     findPreviousKey,
     'key-shortcut-calendar-toggle-times',
@@ -279,6 +281,7 @@ class ShortcutValidator {
     zoomInKey: 'ctrl+equal',
     zoomOutKey: 'ctrl+minus',
     zoomResetKey: 'ctrl+0',
+    fitPdfViewKey: 'ctrl+shift+0',
     findNextKey: 'f3',
     findPreviousKey: 'shift+f3',
     'key-shortcut-calendar-toggle-times': 'ctrl+t',
@@ -343,6 +346,7 @@ class ShortcutValidator {
     zoomInKey: 'הגדלת הטקסט / התצוגה',
     zoomOutKey: 'הקטנת הטקסט / התצוגה',
     zoomResetKey: 'איפוס גודל הטקסט / התצוגה',
+    fitPdfViewKey: 'התאם לרוחב / לעמוד שלם (PDF)',
     findNextKey: 'תוצאת החיפוש הבאה (PDF)',
     findPreviousKey: 'תוצאת החיפוש הקודמת (PDF)',
     'key-shortcut-calendar-toggle-times': 'לוח שנה: פתיחה/סגירה זמני היום',
