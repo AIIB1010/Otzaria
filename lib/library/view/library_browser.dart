@@ -364,6 +364,9 @@ class _LibraryBrowserState extends State<LibraryBrowser>
   bool _pendingKeepPreview = false;
   bool _lastScrollVisible = true;
 
+  // רק המצב הריק מציג את טקסט החיפוש; בלעדיו הקלדה לא בונה מחדש את התוכן.
+  bool _showsEmptyState = false;
+
   static const List<String> _orderedTopCategories = [
     'תנ"ך',
     'מדרש',
@@ -526,7 +529,7 @@ class _LibraryBrowserState extends State<LibraryBrowser>
                 p.currentCategory != c.currentCategory ||
                 p.searchResults != c.searchResults ||
                 p.searchCategoryResults != c.searchCategoryResults ||
-                p.searchQuery != c.searchQuery ||
+                (_showsEmptyState && p.searchQuery != c.searchQuery) ||
                 p.selectedTopics != c.selectedTopics,
             builder: (context, state) {
               if (state.error != null) {
@@ -1427,6 +1430,7 @@ class _LibraryBrowserState extends State<LibraryBrowser>
     SettingsState settingsState,
     FocusRepository repo,
   ) {
+    _showsEmptyState = true;
     final searchText = repo.librarySearchController.text;
     final isDeepLink = _isDeepLinkText(searchText);
 
@@ -1488,6 +1492,7 @@ class _LibraryBrowserState extends State<LibraryBrowser>
     return BlocSelector<LibraryBloc, LibraryState, bool>(
       selector: (s) => s.isSearching,
       builder: (ctx, isSearching) {
+        _showsEmptyState = false;
         if (isSearching) {
           return const Center(child: _SearchingIndicator());
         }
