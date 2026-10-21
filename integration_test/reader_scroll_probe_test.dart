@@ -360,7 +360,7 @@ class _Recorder {
   String summary() {
     final out = StringBuffer(
       'book | phase | frames | build avg/p50/p90/p99/max | raster p90/max | '
-      '>16 | >33 | fast/full | fwfh ms\n',
+      '>16 | >33 | work>16 | work>33 | fast/full | fwfh ms\n',
     );
     for (final r in _phases) {
       final f = r['frames']! as Map<String, Object?>;
@@ -374,6 +374,7 @@ class _Recorder {
         '${f['buildP99Ms']}/${f['buildMaxMs']} | '
         '${f['rasterP90Ms']}/${f['rasterMaxMs']} | '
         '${f['over16Ms']} | ${f['over33Ms']} | '
+        '${f['workOver16Ms']} | ${f['workOver33Ms']} | '
         '$fast/${s?['fullHtml'] ?? 0} | ${s?['fwfhBuildMs'] ?? 0}',
       );
     }
@@ -385,6 +386,12 @@ class _Recorder {
     final build = [for (final t in timings) ms(t.buildDuration)]..sort();
     final raster = [for (final t in timings) ms(t.rasterDuration)]..sort();
     final total = [for (final t in timings) ms(t.totalSpan)];
+    // עבודת הפריים בלבד: totalSpan כולל גם המתנה ל-vsync ולתור, שתלויה בעומס
+    // על המחשב ולא בקוד.
+    final work = [
+      for (final t in timings) ms(t.buildDuration) + ms(t.rasterDuration),
+    ];
+    final vsync = [for (final t in timings) ms(t.vsyncOverhead)]..sort();
     double pct(List<double> sorted, double q) =>
         sorted.isEmpty ? 0 : _round2(sorted[((sorted.length - 1) * q).round()]);
     return {
@@ -404,6 +411,9 @@ class _Recorder {
       'rasterMaxMs': raster.isEmpty ? 0 : _round2(raster.last),
       'over16Ms': total.where((v) => v > 1000 / 60).length,
       'over33Ms': total.where((v) => v > 33).length,
+      'workOver16Ms': work.where((v) => v > 1000 / 60).length,
+      'workOver33Ms': work.where((v) => v > 33).length,
+      'vsyncOverheadP90Ms': pct(vsync, 0.9),
     };
   }
 
