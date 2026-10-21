@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:otzaria/data/cache/books_cache.dart';
 import 'package:otzaria/attached_libraries/repository/attached_library_registry.dart';
 import 'package:otzaria/attached_libraries/repository/external_link_repository.dart';
 import 'package:otzaria/data/data_providers/db_read_worker.dart';
@@ -363,15 +364,35 @@ class TextBookRepository {
     return const [];
   }
 
-  ({TextBook book, List<TocEntry> toc})? _lastToc;
+  ({TextBook book, int generation, List<TocEntry> toc})? _lastToc;
 
   Future<List<TocEntry>> getTableOfContents(TextBook book) async {
-    // מתג תצוגה טוען מחדש כל טאב עם התוכן הקיים; בלי זה כל טאב שולף שוב את
-    // ה-TOC. ריק אינו נשמר: הוא עשוי להיות כשל זמני בעלייה.
+    final cache = BooksCache.instance;
+    final entry = book.id == null ? null : cache.getBookById(book.id!);
+    // רק תוכן שמאומת בקטלוג הרשמי נשמר; קבצים ומקורות חיצוניים עשויים להשתנות.
+    if (!book.source.isOfficial ||
+        book.filePath != null ||
+        entry == null ||
+        entry.filePath != null ||
+        entry.title != book.title ||
+        entry.categoryId != book.categoryId ||
+        entry.fileType != (book.fileType ?? 'txt')) {
+      return loadBookToc(book, sqliteProvider: _sqliteProvider);
+    }
+    final generation = cache.generation;
     final last = _lastToc;
-    if (last != null && identical(last.book, book)) return last.toc;
+    if (last != null &&
+        identical(last.book, book) &&
+        last.generation == generation) {
+      return last.toc;
+    }
     final toc = await loadBookToc(book, sqliteProvider: _sqliteProvider);
-    if (toc.isNotEmpty) _lastToc = (book: book, toc: toc);
+    // ריק עשוי להיות כשל זמני; טעינה שחפפה לעדכון ספרייה אינה נשמרת.
+    if (toc.isNotEmpty &&
+        generation == cache.generation &&
+        book.filePath == null) {
+      _lastToc = (book: book, generation: generation, toc: toc);
+    }
     return toc;
   }
 
