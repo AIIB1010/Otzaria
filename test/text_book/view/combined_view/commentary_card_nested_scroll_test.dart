@@ -29,6 +29,7 @@ import 'package:otzaria/text_book/view/commentary_list_base.dart';
 import 'package:otzaria/widgets/lists/scroll_position_reanchor.dart';
 
 import '../../../test_helpers/memory_cache_provider.dart';
+import '../../../test_helpers/reading_toc.dart';
 
 const _commentators = ['מפרש א', 'מפרש ב', 'מפרש ג', 'מפרש ד'];
 const _segmentsPerCommentator = 4;
@@ -107,6 +108,130 @@ void main() {
     );
     expect(innerScrollable(), same(scrollableBefore));
     expect(innerScrollable().position.pixels, pixels);
+  });
+
+  testWidgets('כרטיסים נבחרים מחוץ למטמון משתחררים ומשחזרים כיווץ וגלילה', (
+    tester,
+  ) async {
+    const selected = {2, 42, 82};
+    final linksByLine = {
+      for (final line in selected)
+        line + 1: [
+          for (final title in _commentators)
+            for (var segment = 0; segment < _segmentsPerCommentator; segment++)
+              _link(title, segment, cardLine: line),
+        ],
+    };
+    final content = [
+      for (var line = 0; line < 200; line++)
+        line % 10 == 0 ? '<h2>פרק $line</h2>' : 'שורה $line',
+    ];
+    final (tab, _) = await _pumpCombinedView(
+      tester,
+      initialState: _loadedState(lineCount: 200).copyWith(
+        selectedIndices: selected,
+        selectedIndex: 82,
+        supportsContinuousReadingMode: true,
+        content: content,
+        tableOfContents: headerToc(content),
+        links: linksByLine.values.expand((links) => links).toList(),
+        linksByLine: linksByLine,
+      ),
+    );
+    Finder cardAt(int line) => find.descendant(
+      of: find.byKey(ValueKey('commentary_card_$line')),
+      matching: find.byType(CommentaryListBase),
+    );
+    ScrollablePositionedList innerList(Finder card) =>
+        tester.widget<ScrollablePositionedList>(
+          find.descendant(
+            of: card,
+            matching: find.byType(ScrollablePositionedList),
+          ),
+        );
+    ScrollableState innerScroll(Finder card) => tester.state<ScrollableState>(
+      find.descendant(of: card, matching: find.byType(Scrollable)).first,
+    );
+    final firstCard = cardAt(2);
+    expect(firstCard, findsOneWidget);
+    final oldState = tester.state<CommentaryListBaseState>(firstCard);
+    final oldKey =
+        tester.widget<CommentaryListBase>(firstCard).key!
+            as GlobalKey<CommentaryListBaseState>;
+    await tester.tap(
+      find.descendant(of: firstCard, matching: find.text('מפרש א')).first,
+    );
+    await _settle(tester);
+    expect(innerList(firstCard).itemCount, 16);
+    innerScroll(firstCard).position.jumpTo(350);
+    await _settle(tester);
+    final before = innerList(firstCard)
+        .itemPositionsListener!
+        .itemPositions
+        .value
+        .where((item) => item.itemTrailingEdge > 0 && item.itemLeadingEdge < 1)
+        .reduce((a, b) => a.itemLeadingEdge < b.itemLeadingEdge ? a : b);
+    final beforeOffset =
+        before.itemLeadingEdge *
+        innerScroll(firstCard).position.viewportDimension;
+    final visitedStates = <CommentaryListBaseState>[oldState];
+    for (final line in [42, 82, 162]) {
+      tab.lines.itemController.jumpTo(index: line);
+      await _settle(tester);
+      if (selected.contains(line)) {
+        visitedStates.add(tester.state<CommentaryListBaseState>(cardAt(line)));
+      }
+    }
+    expect(visitedStates.every((state) => !state.mounted), isTrue);
+    expect(oldKey.currentState, isNull);
+
+    final bloc =
+        tester.element(find.byType(CombinedView)).read<TextBookBloc>()
+            as _TestTextBookBloc;
+    for (final continuous in [false, true, false]) {
+      bloc.emitState(
+        (bloc.state as TextBookLoaded).copyWith(
+          continuousReadingMode: continuous,
+        ),
+      );
+      await _settle(tester);
+      expect(
+        tester
+            .widget<ScrollablePositionedList>(
+              find.byType(ScrollablePositionedList).first,
+            )
+            .itemCount,
+        continuous ? 40 : 200,
+      );
+      final back = tab.lines.scrollToLine(2, duration: Duration.zero);
+      await _settle(tester);
+      await back;
+      final restoredCard = cardAt(2);
+      final restoredState = tester.state<CommentaryListBaseState>(restoredCard);
+      expect(restoredState, isNot(same(oldState)));
+      expect(innerList(restoredCard).itemCount, 16);
+      final restored = innerList(restoredCard)
+          .itemPositionsListener!
+          .itemPositions
+          .value
+          .firstWhere((item) => item.index == before.index);
+      expect(
+        restored.itemLeadingEdge *
+            innerScroll(restoredCard).position.viewportDimension,
+        moreOrLessEquals(beforeOffset, epsilon: 1),
+        reason: 'אבד מיקום הכרטיס במצב רציף=$continuous',
+      );
+      final leave = tab.lines.scrollToLine(162, duration: Duration.zero);
+      await _settle(tester);
+      await leave;
+      expect(
+        restoredState.mounted,
+        isFalse,
+        reason:
+            'רציף=$continuous, שורה=${tab.lines.position.value?.topLine}, '
+            'פריטים=${tab.lines.positionsListener.itemPositions.value.map((item) => item.index)}',
+      );
+    }
   });
 
   testWidgets('מרווח שורות אחרי ניווט אינו נסחף בגלל חוב של כרטיס שפורק', (
@@ -286,6 +411,8 @@ TextBookLoaded _loadedState({
 
 class _TestTextBookBloc extends Bloc<TextBookEvent, TextBookState>
     implements TextBookBloc {
+  void emitState(TextBookLoaded value) => emit(value);
+
   _TestTextBookBloc(super.initialState) {
     on<TextBookEvent>((event, emit) {});
   }
