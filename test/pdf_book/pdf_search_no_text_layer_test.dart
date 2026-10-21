@@ -63,6 +63,10 @@ class _FakeTextSearcher extends PdfTextSearcher {
   final String pageFullText;
   final List<int> requestedPages = [];
 
+  // pdfrx מסמן חיפוש פעיל לפני useDocument, והקונטרולר המזויף לא מריץ אותו.
+  @override
+  bool get isSearching => false;
+
   @override
   Future<PdfPageText?> loadText({required int pageNumber}) async {
     requestedPages.add(pageNumber);

@@ -373,9 +373,10 @@ void main(List<String> args) async {
 
   PluginDevToolsMode.initFromArgs(args);
   PluginSafeMode.initFromArgs(args);
-  // שכבות טקסט של ספרים סרוקים שומרות עברית בסדר ויזואלי; בלי זה חיפוש,
-  // העתקה ואינדוקס מקבלים את המילים הפוכות.
+  // שכבות טקסט של ספרים סרוקים שומרות עברית בסדר ויזואלי או ב-Windows-1255;
+  // בלי זה חיפוש, העתקה ואינדוקס מקבלים מילים הפוכות או ג'יבריש.
   Pdfrx.normalizeHebrewText = true;
+  Pdfrx.decodeLegacyHebrewText = true;
 
   SentryWidgetsFlutterBinding.ensureInitialized();
 
@@ -2022,6 +2023,7 @@ void secondaryWindowMain(List<String> args) async {
   WindowRole.isSecondary = true;
   _secondaryWindowStartup = Stopwatch()..start();
   Pdfrx.normalizeHebrewText = true;
+  Pdfrx.decodeLegacyHebrewText = true;
   SentryWidgetsFlutterBinding.ensureInitialized();
   EditableText.debugDeterministicCursor = true;
 
