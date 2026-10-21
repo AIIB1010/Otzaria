@@ -694,14 +694,8 @@ class MainWindowScreenState extends State<MainWindowScreen>
       }
     }
 
-    PluginPageLauncher.instance.navigator = (pluginId) {
-      if (!mounted) return;
-      openToolTabById(context, pluginId);
-    };
-    ToolsLauncherController.instance.opener = () {
-      if (!mounted || _isToolsLauncherOpen) return;
-      setState(() => _isToolsLauncherOpen = true);
-    };
+    PluginPageLauncher.instance.register(_windowKeys, _openPluginPage);
+    ToolsLauncherController.instance.register(_windowKeys, _openToolsLauncher);
 
     // הצגת פופאפ פרסומת אחרי 5 שניות
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1801,8 +1795,11 @@ class MainWindowScreenState extends State<MainWindowScreen>
     _startupWorkGate.markStartupIndexingSettled();
     _startupRefreshWait.cancel();
     _indexingDeferral.clear();
-    PluginPageLauncher.instance.navigator = null;
-    ToolsLauncherController.instance.opener = null;
+    PluginPageLauncher.instance.unregister(_windowKeys, _openPluginPage);
+    ToolsLauncherController.instance.unregister(
+      _windowKeys,
+      _openToolsLauncher,
+    );
     // Clean up fullscreen callback
     appWindowListener?.onFullscreenChanged = null;
     appWindowListener?.onWindowStateChanged = null;
@@ -1895,6 +1892,16 @@ class MainWindowScreenState extends State<MainWindowScreen>
     }
     _lastBackPressAt = now;
     UiSnack.show(CommonMessages.pressBackAgainToExit);
+  }
+
+  void _openPluginPage(String pluginId) {
+    if (!mounted) return;
+    openToolTabById(context, pluginId);
+  }
+
+  void _openToolsLauncher() {
+    if (!mounted || _isToolsLauncherOpen) return;
+    setState(() => _isToolsLauncherOpen = true);
   }
 
   void _toggleToolsLauncher() {

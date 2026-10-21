@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/plugins/plugin_constants.dart';
 import 'package:otzaria/plugins/services/plugin_runtime_dispatcher.dart';
 
@@ -10,8 +11,24 @@ class PluginPageLauncher {
   static final PluginPageLauncher instance = PluginPageLauncher._();
   PluginPageLauncher._();
 
-  /// מנווט לדף התוסף — נרשם ע"י MainWindowScreen (בעל הגישה למסך הכלים).
-  void Function(String pluginId)? navigator;
+  final _navigators = Expando<void Function(String pluginId)>();
+
+  /// מנווט לדף התוסף בחלון הנוכחי — נרשם ע"י MainWindowScreen של כל חלון.
+  void Function(String pluginId)? get navigator =>
+      _navigators[AppWindowKeys.current];
+  set navigator(void Function(String pluginId)? value) =>
+      _navigators[AppWindowKeys.current] = value;
+
+  void register(AppWindowKeys keys, void Function(String pluginId) navigator) =>
+      _navigators[keys] = navigator;
+
+  /// מסיר את [navigator] רק אם הוא עדיין הרשום בחלון [keys].
+  void unregister(
+    AppWindowKeys keys,
+    void Function(String pluginId) navigator,
+  ) {
+    if (_navigators[keys] == navigator) _navigators[keys] = null;
+  }
 
   final Map<String, List<({String topic, Map<String, dynamic> payload})>>
   _pending = {};
