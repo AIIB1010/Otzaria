@@ -1322,8 +1322,8 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/pdfrx"
-      ref: f97d79cb291b6417ea0c1bcd96d3e22ba596592b
-      resolved-ref: f97d79cb291b6417ea0c1bcd96d3e22ba596592b
+      ref: "1598298faa58d3c254230573061e18b3ff561fab"
+      resolved-ref: "1598298faa58d3c254230573061e18b3ff561fab"
       url: "https://github.com/palmoni5/pdfrx"
     source: git
     version: "2.9.0"
@@ -1331,8 +1331,8 @@ packages:
     dependency: "direct overridden"
     description:
       path: "packages/pdfrx_engine"
-      ref: f97d79cb291b6417ea0c1bcd96d3e22ba596592b
-      resolved-ref: f97d79cb291b6417ea0c1bcd96d3e22ba596592b
+      ref: "1598298faa58d3c254230573061e18b3ff561fab"
+      resolved-ref: "1598298faa58d3c254230573061e18b3ff561fab"
       url: "https://github.com/palmoni5/pdfrx"
     source: git
     version: "0.7.4"
