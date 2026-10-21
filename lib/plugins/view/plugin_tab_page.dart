@@ -624,7 +624,7 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
 
           // כל הגופנים חייבים להירשם לפני boot, כדי שתוספים יוכלו לטעון
           // ולמדוד אותם מתוך plugin.ready בלי ליפול לגופן חלופי.
-          final fontFaceCss = await buildPluginFontFaceCss();
+          final fontFaceJson = await buildPluginFontFaceJson();
           if (!mounted) return;
 
           // Use cached PackageInfo — avoids async gap crossing a dispose
@@ -647,7 +647,7 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
                 final tab? => PluginTextReaderRegistry.bookPayload(tab),
                 null => null,
               },
-              fontFaceCss: fontFaceCss,
+              fontFaceJson: fontFaceJson,
             ),
           );
           await _pushHostShortcuts(controller);

@@ -380,7 +380,10 @@ Future<Map<String, dynamic>> debugResolveFontFamilies(
 ) => _resolveFontFamilies(requested);
 
 @visibleForTesting
-void debugClearFontFaceCssCache() => _fontFaceCache.clear();
+void debugClearFontFaceCssCache() {
+  _fontFaceCache.clear();
+  _fontFaceJsonCache = null;
+}
 
 @visibleForTesting
 int get debugFontFaceCssCacheSize => _fontFaceCache.length;
@@ -388,14 +391,34 @@ int get debugFontFaceCssCacheSize => _fontFaceCache.length;
 /// \u05d1\u05d5\u05e0\u05d4 \u05d1\u05dc\u05d5\u05e7 CSS \u05e2\u05dd `@font-face` \u05dc\u05db\u05dc \u05d4\u05d2\u05d5\u05e4\u05e0\u05d9\u05dd \u05e9\u05ea\u05d5\u05e1\u05e3 \u05d9\u05db\u05d5\u05dc \u05dc\u05e0\u05e7\u05d5\u05d1 \u05d1\u05e9\u05de\u05dd:
 /// \u05d4\u05de\u05d5\u05d1\u05e0\u05d9\u05dd \u05e9\u05dc \u05d0\u05d5\u05e6\u05e8\u05d9\u05d0, \u05d5\u05d1\u05e0\u05d5\u05e1\u05e3 \u05d2\u05d5\u05e4\u05df \u05de\u05e2\u05e8\u05db\u05ea \u05e9\u05e0\u05d1\u05d7\u05e8 \u05d1\u05d4\u05d2\u05d3\u05e8\u05d5\u05ea. \u05de\u05e9\u05e4\u05d7\u05d4
 /// \u05e9\u05d0\u05d9\u05e0\u05d4 \u05e0\u05e9\u05dc\u05d7\u05ea \u05e0\u05d5\u05e4\u05dc\u05ea \u05d1-WebView \u05dc-fallback \u05e9\u05dc \u05d4\u05de\u05e2\u05e8\u05db\u05ea \u05d5\u05de\u05d5\u05e6\u05d2\u05ea \u05d1\u05d2\u05d5\u05e4\u05df \u05d0\u05d7\u05e8.
-Future<String> buildPluginFontFaceCss() async {
-  final families = <String>{
-    ...AppFonts.fontPaths.keys,
-    Settings.getValue<String>(SettingsRepository.keyFontFamily) ??
-        AppFonts.defaultFont,
-    Settings.getValue<String>(SettingsRepository.keyCommentatorsFontFamily) ??
-        AppFonts.defaultCommentatorsFont,
-  };
+Future<String> buildPluginFontFaceCss() =>
+    _buildFontFaceCss(_pluginFontFamilies());
+
+Set<String> _pluginFontFamilies() => {
+  ...AppFonts.fontPaths.keys,
+  Settings.getValue<String>(SettingsRepository.keyFontFamily) ??
+      AppFonts.defaultFont,
+  Settings.getValue<String>(SettingsRepository.keyCommentatorsFontFamily) ??
+      AppFonts.defaultCommentatorsFont,
+};
+
+({String key, String json})? _fontFaceJsonCache;
+
+/// [buildPluginFontFaceCss] מקודד ל-JSON. הקידוד (~2MB) עולה כ-10ms בכל טעינת
+/// תוסף, ולכן נשמר כל עוד המשפחות זהות וכולן נטענו (כשל נטען שוב בפעם הבאה).
+Future<String> buildPluginFontFaceJson() async {
+  final families = _pluginFontFamilies();
+  final key = families.join('\u0000');
+  final cached = _fontFaceJsonCache;
+  if (cached != null && cached.key == key) return cached.json;
+  final json = jsonEncode(await _buildFontFaceCss(families));
+  if (families.every(_fontFaceCache.containsKey)) {
+    _fontFaceJsonCache = (key: key, json: json);
+  }
+  return json;
+}
+
+Future<String> _buildFontFaceCss(Set<String> families) async {
   final parts = <String>[];
   for (final family in families) {
     final css = await _loadFontFaceCss(family);
