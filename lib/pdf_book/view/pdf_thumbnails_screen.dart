@@ -1,6 +1,3 @@
-//
-// Super simple thumbnails view
-//
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -81,7 +78,7 @@ class _ThumbnailsViewState extends State<ThumbnailsView>
     if (!oldWidget.isPaneOpen && widget.isPaneOpen) {
       // קפיצה ולא אנימציה: חלונית פתוחה הייתה כבר נמצאת בעמוד הנוכחי.
       WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _onControllerChanged(animate: false),
+        (_) => _scrollToActiveItem(animate: false),
       );
     }
     if (oldWidget.documentRef != widget.documentRef) {
@@ -101,13 +98,17 @@ class _ThumbnailsViewState extends State<ThumbnailsView>
     super.dispose();
   }
 
-  void _onControllerChanged({bool animate = true}) {
-    if (!mounted || !widget.isPaneOpen) return;
+  void _onControllerChanged() {
+    if (!mounted) return;
     final page = _currentPage;
     if (page == _lastKnownPage) return;
     _lastKnownPage = page;
+    if (!widget.isPaneOpen) {
+      _lastScrolledPage = null;
+      return;
+    }
     setState(() {});
-    _scrollToActiveItem(animate: animate);
+    _scrollToActiveItem();
   }
 
   int? get _currentPage => (widget.controller?.isReady ?? false)
@@ -115,7 +116,12 @@ class _ThumbnailsViewState extends State<ThumbnailsView>
       : null;
 
   void _scrollToActiveItem({bool animate = true}) {
-    if (_isManuallyScrolling || !(widget.controller?.isReady ?? false)) return;
+    if (!mounted ||
+        !widget.isPaneOpen ||
+        _isManuallyScrolling ||
+        !(widget.controller?.isReady ?? false)) {
+      return;
+    }
     final currentPage = widget.controller?.pageNumber;
     if (currentPage == null || _lastScrolledPage == currentPage) return;
     if (!_scrollController.hasClients) return;

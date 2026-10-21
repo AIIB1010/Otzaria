@@ -209,6 +209,86 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 200));
   });
+
+  for (final turnWhileHidden in [true, false]) {
+    for (final closePane in [true, false]) {
+      testWidgets(
+        'גלילה ידנית ופתיחה מחדש: closePane=$closePane, turnWhileHidden=$turnWhileHidden',
+        (tester) async {
+          final (bloc, tab) = await pumpBook(tester);
+          bloc.add(const ToggleLeftPane(true));
+          await settle(tester);
+          await tester.tap(find.text('דפים'));
+          await settle(tester);
+          final list = find.descendant(
+            of: find.byType(ThumbnailsView),
+            matching: find.byType(Scrollable),
+          );
+          await tester.drag(list, const Offset(0, -650));
+          await settle(tester);
+          expect(
+            tester
+                .state<ScrollableState>(list)
+                .position
+                .isScrollingNotifier
+                .value,
+            isFalse,
+          );
+          final manualOffset = thumbnailsOffset(tester);
+          expect(manualOffset, greaterThan(400));
+          if (closePane) {
+            bloc.add(const ToggleLeftPane(false));
+          } else {
+            await tester.tap(find.text('ניווט'));
+          }
+          await settle(tester);
+          if (turnWhileHidden) {
+            for (final page in [8, 1]) {
+              unawaited(
+                tab.pdfViewerController.goToPage(
+                  pageNumber: page,
+                  duration: Duration.zero,
+                ),
+              );
+              await settle(tester);
+              expect(tab.pdfViewerController.pageNumber, page);
+            }
+            unawaited(tab.pdfViewerController.zoomUp(duration: Duration.zero));
+            await settle(tester);
+            expect(tab.pdfViewerController.pageNumber, 1);
+          }
+          expect(thumbnailsOffset(tester), manualOffset);
+          if (closePane) {
+            bloc.add(const ToggleLeftPane(true));
+          } else {
+            await tester.tap(find.text('דפים'));
+          }
+          await settle(tester);
+          final finalOffset = thumbnailsOffset(tester);
+          final activePageVisible = find
+              .descendant(
+                of: find.byType(ThumbnailsView),
+                matching: find.text('1'),
+              )
+              .hitTestable()
+              .evaluate()
+              .isNotEmpty;
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump(const Duration(milliseconds: 200));
+          if (!turnWhileHidden) {
+            expect(finalOffset, manualOffset);
+          }
+          expect(
+            activePageVisible,
+            turnWhileHidden ? isTrue : isFalse,
+            reason: turnWhileHidden
+                ? 'העמוד הפעיל חייב להופיע לאחר דפדוף מוסתר'
+                : 'פתיחה בלי דפדוף חייבת לשמר את הגלילה הידנית',
+          );
+        },
+      );
+    }
+  }
 }
 
 class _TabsRepository implements TabsRepository {
