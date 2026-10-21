@@ -405,6 +405,72 @@ void main() {
     });
   }
 
+  testWidgets('קישור בתיבת ההערות המרחפת מנווט בתוך הספר (issue #2956)', (
+    tester,
+  ) async {
+    addTearDown(LinkPreviewOverlay.dismiss);
+    final lines = LineScrollController();
+    addTearDown(lines.dispose);
+    final content = [for (var i = 1; i <= 40; i++) 'שורה $i'];
+    final note = _note().copyWith(
+      content:
+          r'[{"insert":"עיין שורה 30","attributes":{"link":"otzaria://book?bookId=ספר בדיקה&line=30"}},{"insert":"\n"}]',
+      contentFormat: PersonalNoteContentFormat.quillDelta,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MultiBlocProvider(
+          providers: [
+            BlocProvider<TextBookBloc>.value(
+              value: _TestTextBookBloc(
+                _loadedState().copyWith(content: content),
+              ),
+            ),
+            BlocProvider<PersonalNotesBloc>.value(
+              value: _TestPersonalNotesBloc(
+                PersonalNotesState(
+                  isLoading: false,
+                  bookId: 'ספר בדיקה',
+                  locatedNotes: [note],
+                  missingNotes: const [],
+                  errorMessage: null,
+                  filteredLocatedNotes: [note],
+                  filteredMissingNotes: const [],
+                ),
+              ),
+            ),
+            BlocProvider<SettingsBloc>.value(
+              value: _TestSettingsBloc(SettingsState.initial()),
+            ),
+          ],
+          child: Scaffold(
+            body: SimpleTextViewer(
+              content: content,
+              fontSize: 18,
+              openBookCallback: (_) {},
+              isMainText: true,
+              lines: lines,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final position = lines.itemController.scrollController!.position;
+    expect(position.pixels, 0);
+
+    tester
+        .widgetList<SmartTextWidget>(find.byType(SmartTextWidget))
+        .firstWhere((w) => w.onAnchorHover != null)
+        .onAnchorHover!('otzaria://note?line=0', const Offset(400, 100));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
+    await tester.tap(find.widgetWithText(ActionChip, 'עיין שורה 30'));
+    await tester.pumpAndSettle();
+
+    expect(position.pixels, greaterThan(0));
+  });
+
   testWidgets('סימון הערה inline מוזרק לטקסט ולחיצתו פותחת את טאב ההערות', (
     tester,
   ) async {
