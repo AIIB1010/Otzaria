@@ -14,8 +14,8 @@ String expandBannerTitle(String text, String title) {
   return linked.replaceAll(_titlePlaceholder, title);
 }
 
-/// כמו `URLEncoder.encode(title, UTF_8)` של Java, ורווח = `%20`. surrogate
-/// בודד הופך ל-`?` לפני הקידוד, כמו ב-`String.getBytes` של Java.
+/// כמו `URLEncoder.encode(title, UTF_8)` של Java לטקסט תקין, ורווח = `%20`.
+/// surrogate בודד הופך ל-`?` לפני הקידוד (Java עצמה אינה עקבית בו).
 String _percentEncodeTitle(String title) {
   final out = StringBuffer();
   final wellFormed = String.fromCharCodes(

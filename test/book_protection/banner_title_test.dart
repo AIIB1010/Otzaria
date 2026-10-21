@@ -32,7 +32,7 @@ void main() {
   });
 
   test(
-    'surrogate בודד מקודד כ-%3F בקישור ונשאר כלשונו מחוצה לו — כמו ב-Java',
+    'surrogate בודד מקודד כ-%3F בקישור ונשאר כלשונו מחוצה לו',
     () {
       const title = 'a\uD800b\uDC00c\uD83D\uDCD6';
       expect(
