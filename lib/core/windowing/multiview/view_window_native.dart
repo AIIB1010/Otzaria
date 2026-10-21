@@ -5,6 +5,7 @@ import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:win32/win32.dart';
+import 'package:window_manager/window_manager.dart' show ResizeEdge;
 
 /// מה שחלון Dart צריך מהמערכת ואין לו בבקר של המסגרת. הכול בפיקסלים פיזיים.
 abstract interface class ViewWindowNative {
@@ -18,11 +19,20 @@ abstract interface class ViewWindowNative {
   void focus(int hwnd);
   void startDragging(int hwnd);
 
+  /// לולאת שינוי הגודל של המערכת מ-[edge], כמו `windowManager.startResizing`.
+  void startResizing(int hwnd, ResizeEdge edge);
+
+  /// הגדלה לגובה המסך, כמו לחיצה כפולה על הקצה העליון.
+  void maximizeVertically(int hwnd);
+
   /// אזור העבודה של המסך שהחלון עליו.
   Rect? workArea(int hwnd);
 
   /// תיקוני הקלט של ה-runner (#1441, #1645) לתצוגה של החלון.
   Future<void> installViewHooks(int hwnd);
+
+  /// מסיר את כותרת המערכת, כמו `TitleBarStyle.hidden` בחלון הראשי.
+  Future<void> makeFrameless(int hwnd);
 }
 
 /// המימוש האמיתי: win32 ישירות, והערוץ של ה-runner להתקנת התיקונים.
@@ -85,6 +95,40 @@ class Win32ViewWindowNative implements ViewWindowNative {
     );
   }
 
+  static const Map<ResizeEdge, int> _hitTest = {
+    ResizeEdge.top: HTTOP,
+    ResizeEdge.topLeft: HTTOPLEFT,
+    ResizeEdge.topRight: HTTOPRIGHT,
+    ResizeEdge.left: HTLEFT,
+    ResizeEdge.right: HTRIGHT,
+    ResizeEdge.bottom: HTBOTTOM,
+    ResizeEdge.bottomLeft: HTBOTTOMLEFT,
+    ResizeEdge.bottomRight: HTBOTTOMRIGHT,
+  };
+
+  // הודעת קליינט-שאינו-לקוח במיקום הסמן, כמו ב-window_manager.
+  static void _postAtCursor(int hwnd, int message, int hitTest) {
+    final point = calloc<POINT>();
+    try {
+      GetCursorPos(point);
+      final x = point.ref.x & 0xFFFF;
+      final y = point.ref.y & 0xFFFF;
+      PostMessage(_h(hwnd), message, WPARAM(hitTest), LPARAM(x | (y << 16)));
+    } finally {
+      calloc.free(point);
+    }
+  }
+
+  @override
+  void startResizing(int hwnd, ResizeEdge edge) {
+    ReleaseCapture();
+    _postAtCursor(hwnd, WM_NCLBUTTONDOWN, _hitTest[edge]!);
+  }
+
+  @override
+  void maximizeVertically(int hwnd) =>
+      _postAtCursor(hwnd, WM_NCLBUTTONDBLCLK, HTTOP);
+
   @override
   Rect? workArea(int hwnd) {
     final monitor = MonitorFromWindow(_h(hwnd), MONITOR_DEFAULTTONEAREST);
@@ -109,6 +153,20 @@ class Win32ViewWindowNative implements ViewWindowNative {
     } catch (e) {
       // החלון עובד גם בלי התיקונים; רק מגע ו-Shift תקוע חוזרים.
       debugPrint('installViewHooks failed: $e');
+    }
+  }
+
+  @override
+  Future<void> makeFrameless(int hwnd) async {
+    if (!Platform.isWindows) return;
+    try {
+      final done = await _channel.invokeMethod<bool>('makeFrameless', {
+        'hwnd': hwnd,
+      });
+      if (done != true) debugPrint('makeFrameless: not applied');
+    } catch (e) {
+      // בלי זה החלון נשאר עם מסגרת מערכת וכפתורים כפולים, אבל עובד.
+      debugPrint('makeFrameless failed: $e');
     }
   }
 }

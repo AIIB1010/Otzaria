@@ -108,7 +108,7 @@ class ViewWindowHandle {
   void dispose() => _controller.dispose();
 }
 
-/// פותח חלון רגיל עם מסגרת מערכת. החלון מוסתר עד הפריים הראשון של התצוגה.
+/// פותח חלון רגיל (את הכותרת מסיר ה-registry). מוסתר עד הפריים הראשון.
 ViewWindowHandle createViewWindow({
   required Size size,
   required String title,

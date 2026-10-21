@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_native.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
+import 'package:window_manager/window_manager.dart' show ResizeEdge;
 
 import 'second_test_view.dart';
 
@@ -93,6 +94,9 @@ class FakeViewWindowNative implements ViewWindowNative {
   final List<int> hooked = [];
   final List<int> focused = [];
   final List<int> dragged = [];
+  final List<int> frameless = [];
+  final List<(int, ResizeEdge)> resized = [];
+  final List<int> maximizedVertically = [];
 
   @override
   Rect? windowRect(int hwnd) => rects[hwnd];
@@ -110,6 +114,12 @@ class FakeViewWindowNative implements ViewWindowNative {
   Rect? workArea(int hwnd) => area;
   @override
   Future<void> installViewHooks(int hwnd) async => hooked.add(hwnd);
+  @override
+  Future<void> makeFrameless(int hwnd) async => frameless.add(hwnd);
+  @override
+  void startResizing(int hwnd, ResizeEdge edge) => resized.add((hwnd, edge));
+  @override
+  void maximizeVertically(int hwnd) => maximizedVertically.add(hwnd);
 }
 
 /// רשימת חלונות שכל חלון בה הוא [SecondTestView] עם בקר מדומה.

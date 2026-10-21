@@ -53,8 +53,8 @@ class AppWindowRole {
   /// האם החלון נפתח עם כרטיסיה שהועברה אליו ([WindowRole.openedWithTab]).
   final bool openedWithTab;
 
-  /// חלון Dart ולא חלון של ה-runner: מסגרת מערכת, ובלי ה-singletons של החלון
-  /// הראשי (`windowManager`, חשיפת ה-splash, ה-listener שלו).
+  /// חלון Dart ולא חלון של ה-runner: מסגרת משלו (`AppVirtualWindowFrame`), ובלי
+  /// ה-singletons של החלון הראשי (`windowManager`, חשיפת ה-splash, ה-listener).
   final bool isViewWindow;
 
   @override

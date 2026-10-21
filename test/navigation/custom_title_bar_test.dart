@@ -8,6 +8,9 @@ import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:otzaria_icons/otzaria_icons.dart';
 import 'package:otzaria/core/windowing/app_window_caption.dart';
+import 'package:otzaria/core/windowing/app_window_controller.dart';
+import 'package:otzaria/core/windowing/app_window_id.dart';
+import 'package:otzaria/core/windowing/multiview/host_window_app_window_controller.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
 import 'package:otzaria/core/windowing/window_fullscreen_cubit.dart';
 import 'package:otzaria/core/windowing/window_manager_app_window_controller.dart';
@@ -42,7 +45,10 @@ import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/workspaces/bloc/workspace_bloc.dart';
 import 'package:otzaria/workspaces/bloc/workspace_state.dart';
+import 'package:window_manager/window_manager.dart' show WindowCaptionButton;
 import '../helpers/memory_settings_cache.dart';
+import '../test_helpers/fake_view_window.dart';
+import '../test_helpers/second_test_view.dart';
 
 class _NewTabRegistryRepo extends Fake implements PluginRegistryRepository {
   @override
@@ -2722,9 +2728,7 @@ void main() {
     expect(find.byType(AppWindowCaption), findsOneWidget);
   });
 
-  testWidgets('בחלון Dart כפתורי החלון של המערכת, בלי AppWindowCaption', (
-    tester,
-  ) async {
+  testWidgets('בחלון Dart כפתורי החלון פועלים על החלון שלו', (tester) async {
     final tab = _makeTextTab('ספר א');
     final tabsBloc = _TestTabsBloc(
       TabsState(tabs: [tab], currentTabIndex: 0),
@@ -2733,6 +2737,15 @@ void main() {
       const NavigationState(currentScreen: Screen.reading),
     );
     final settingsBloc = _TestSettingsBloc(SettingsState.initial());
+    final stub = StubWindowController(SecondTestView(tester.view));
+    final handle = StubWindowHandle(stub, (_) {}, fakeHwnd: 9);
+    var closes = 0;
+    final window = HostWindowAppWindowController(
+      id: const AppWindowId('window-view-2'),
+      handle: handle,
+      onClose: () async => closes++,
+      native: FakeViewWindowNative(),
+    );
 
     addTearDown(() async {
       tab.dispose();
@@ -2748,10 +2761,34 @@ void main() {
       navigationBloc: navigationBloc,
       settingsBloc: settingsBloc,
       role: const AppWindowRole.view(),
+      controller: window,
     );
 
-    expect(find.byType(AppWindowCaption), findsNothing);
+    expect(find.byType(AppWindowCaption), findsOneWidget);
     expect(find.text('ספר א'), findsOneWidget);
+    final buttons = find.descendant(
+      of: find.byType(AppWindowCaption),
+      matching: find.byType(WindowCaptionButton),
+    );
+    expect(buttons, findsNWidgets(3));
+
+    await tester.tap(buttons.at(1));
+    stub.notify();
+    await tester.pumpAndSettle();
+    expect(stub.maximized, isTrue);
+    // אחרי WM_SIZE הכפתור האמצעי מחזיר לגודל רגיל.
+    await tester.tap(buttons.at(1));
+    stub.notify();
+    await tester.pumpAndSettle();
+    expect(stub.maximized, isFalse);
+
+    await tester.tap(buttons.first);
+    await tester.pump();
+    expect(stub.minimized, isTrue);
+
+    await tester.tap(buttons.last);
+    await tester.pump();
+    expect(closes, 1);
   });
 }
 
@@ -2773,13 +2810,14 @@ Future<void> _pumpTitleBar(
   WorkspaceBloc? workspaceBloc,
   WindowFullscreenCubit? fullscreenCubit,
   AppWindowRole? role,
+  AppWindowController? controller,
 }) async {
   await tester.pumpWidget(
     // CustomTitleBar שולף את החלון מ-[AppWindowScope] (maximize בלחיצה
     // כפולה, מזעור, סגירה, גרירת החלון). הבקר האמיתי מנתב לאותו
     // MethodChannel שממוקם בבדיקה, ולכן ההנחות הקיימות נשארות בתוקף.
     AppWindowScope(
-      controller: const WindowManagerAppWindowController(),
+      controller: controller ?? const WindowManagerAppWindowController(),
       geometry: const WindowManagerAppWindowController(),
       role: role,
       child: MultiBlocProvider(

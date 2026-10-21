@@ -182,6 +182,7 @@ void main() {
     expect(entry.openedWithTab, isTrue);
     expect(sessions.rows[2], isNull, reason: 'שארית מקריסה אינה נטענת');
     expect(windows.native.hooked, [windows.handleOf(entry).fakeHwnd]);
+    expect(windows.native.frameless, [windows.handleOf(entry).fakeHwnd]);
     final count = (await opener.windowCount())!;
     expect((count.count, count.max, count.engines), (2, 8, 1));
   });
