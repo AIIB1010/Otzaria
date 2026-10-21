@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/data/cache/books_cache.dart';
 import 'package:otzaria/data/data_providers/book_composite_key.dart';
 import 'package:otzaria/data/data_providers/file_system_data_provider.dart';
-import 'package:otzaria/data/data_providers/library_provider.dart';
+import 'package:otzaria/data/data_providers/database_library_provider.dart';
 import 'package:otzaria/data/data_providers/library_provider_manager.dart';
 import 'package:otzaria/data/repository/text_book_repository.dart';
 import 'package:otzaria/models/book_source.dart';
@@ -90,6 +90,20 @@ void main() {
       expect(provider.calls, [book.title, book.title]);
     });
   }
+
+  test('מקור בפועל שהשתנה לאישי פוסל גם פגיעה קיימת במטמון', () async {
+    final repository = newRepository();
+    await repository.getTableOfContents(bookA);
+    provider.resolvedSource = BookSource.user;
+    provider.toc = [TocEntry(text: 'כותרת אישית', index: 3, level: 1)];
+    final firstUser = await repository.getTableOfContents(bookA);
+    provider.toc = [TocEntry(text: 'כותרת אישית מעודכנת', index: 6, level: 1)];
+    final updatedUser = await repository.getTableOfContents(bookA);
+
+    expect(firstUser.single.text, 'כותרת אישית');
+    expect(updatedUser.single.text, 'כותרת אישית מעודכנת');
+    expect(provider.calls, [bookA.title, bookA.title, bookA.title]);
+  });
 
   test('ספר legacy מקובץ אינו נשמר גם כשהמקור רשמי', () async {
     BooksCache.instance.setBooksForTesting([
@@ -180,6 +194,25 @@ void main() {
     expect(provider.calls, [bookA.title, bookA.title]);
   });
 
+  test('תוצאה שחפפה לשינוי מקור אינה נשמרת בשם המקור הרשמי', () async {
+    final repository = newRepository();
+    final pending = Completer<List<TocEntry>>();
+    provider.pending = pending;
+    final loading = repository.getTableOfContents(bookA);
+    expect(provider.calls, [bookA.title]);
+    provider.resolvedSource = BookSource.user;
+    pending.complete([TocEntry(text: 'כותרת אישית', index: 3, level: 1)]);
+    await loading;
+    provider.pending = null;
+    provider.resolvedSource = BookSource.official;
+    provider.toc = [TocEntry(text: 'כותרת רשמית', index: 8, level: 1)];
+
+    final official = await repository.getTableOfContents(bookA);
+
+    expect(official.single.text, 'כותרת רשמית');
+    expect(provider.calls, [bookA.title, bookA.title]);
+  });
+
   test('ספר אחר, מופע ספר אחר ותוכן עניינים ריק נשלפים כמו קודם', () async {
     final repository = newRepository();
 
@@ -217,10 +250,14 @@ void main() {
   });
 }
 
-class _CountingTocProvider implements LibraryProvider {
+class _CountingTocProvider implements DatabaseLibraryProvider {
   final calls = <String>[];
   List<TocEntry>? toc;
   Completer<List<TocEntry>>? pending;
+  BookSource resolvedSource = BookSource.official;
+
+  @override
+  BookSource? resolvedSourceForBook(TextBook book) => resolvedSource;
 
   @override
   Future<List<TocEntry>?> getBookToc(

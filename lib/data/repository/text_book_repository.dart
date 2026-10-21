@@ -367,10 +367,19 @@ class TextBookRepository {
   ({TextBook book, int generation, List<TocEntry> toc})? _lastToc;
 
   Future<List<TocEntry>> getTableOfContents(TextBook book) async {
+    final manager = LibraryProviderManager.instance;
+    final provider = manager.getProviderForBook(
+      book.title,
+      categoryId: book.categoryId,
+      fileType: book.fileType,
+    );
     final cache = BooksCache.instance;
     final entry = book.id == null ? null : cache.getBookById(book.id!);
     // רק תוכן שמאומת בקטלוג הרשמי נשמר; קבצים ומקורות חיצוניים עשויים להשתנות.
-    if (!book.source.isOfficial ||
+    if (!manager.isInitialized ||
+        provider is! DatabaseLibraryProvider ||
+        provider.resolvedSourceForBook(book)?.isOfficial != true ||
+        !book.source.isOfficial ||
         book.filePath != null ||
         entry == null ||
         entry.filePath != null ||
@@ -386,10 +395,18 @@ class TextBookRepository {
         last.generation == generation) {
       return last.toc;
     }
-    final toc = await loadBookToc(book, sqliteProvider: _sqliteProvider);
-    // ריק עשוי להיות כשל זמני; טעינה שחפפה לעדכון ספרייה אינה נשמרת.
-    if (toc.isNotEmpty &&
-        generation == cache.generation &&
+    final toc = await manager.getBookToc(
+      book.title,
+      categoryId: book.categoryId,
+      fileType: book.fileType ?? 'txt',
+      preferSource: book.source,
+    );
+    if (toc == null || toc.isEmpty) {
+      return loadBookTocFallback(book, sqliteProvider: _sqliteProvider);
+    }
+    // טעינה שחפפה לעדכון ספרייה או מקור אינה נשמרת.
+    if (generation == cache.generation &&
+        provider.resolvedSourceForBook(book)?.isOfficial == true &&
         book.filePath == null) {
       _lastToc = (book: book, generation: generation, toc: toc);
     }
