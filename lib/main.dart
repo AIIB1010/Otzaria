@@ -75,7 +75,6 @@ import 'package:otzaria/empty_library/bloc/empty_library_bloc.dart';
 import 'package:otzaria/library_update/bloc/library_update_bloc.dart';
 import 'package:otzaria/library_update/changes_notes/library_changes_notes.dart';
 import 'package:otzaria/library_update/services/library_access_gate.dart';
-import 'package:otzaria/library_update/services/library_update_window_link.dart';
 import 'package:otzaria/library_update/repository/library_update_repository.dart';
 import 'package:otzaria/library_update/services/streaming_patch_downloader.dart';
 import 'package:otzaria/library_update/services/companion_assets_service.dart';
@@ -1849,13 +1848,14 @@ class _AppBootstrapState extends State<AppBootstrap> {
               isOfflineMode: () =>
                   Settings.getValue<bool>(SettingsRepository.keyOfflineMode) ??
                   false,
+              // בדיקת עדכונים רצה רק במארח, כדי שחלונות משניים לא יכפילו
+              // בקשות GitHub ויקבלו 403.
               areUpdatesEnabled: () =>
-                  Settings.getValue<bool>(
-                    SettingsRepository.keySoftwareAndBookUpdatesEnabled,
-                  ) ??
-                  true,
-              // חלון משני מעביר את העדכון למארח ומציג את מצבו.
-              windowLink: const LibraryUpdateWindowLink(),
+                  !WindowRole.isSecondary &&
+                  (Settings.getValue<bool>(
+                        SettingsRepository.keySoftwareAndBookUpdatesEnabled,
+                      ) ??
+                      true),
               // עדכוני ספרייה תמיד ליציב בלבד — מנותק מערוץ הפיתוח, שמשפיע רק
               // על עדכוני התוכנה.
               allowPrerelease: () => false,

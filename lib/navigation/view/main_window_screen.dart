@@ -1166,7 +1166,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
     if (_isShowingFullDownloadDialog) return;
     _isShowingFullDownloadDialog = true;
     final bloc = context.read<LibraryUpdateBloc>();
-    final sizeMb = ((state.fullDownloadSize ?? 0) / (1 << 20)).round();
+    final sizeMb = ((state.plan?.totalDownloadSize ?? 0) / (1 << 20)).round();
     final sizeText = sizeMb >= 1024
         ? '${(sizeMb / 1024).toStringAsFixed(1)} GB'
         : '$sizeMb MB';
@@ -2985,8 +2985,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
                   );
                 }
               } else if (state.status ==
-                      LibraryUpdateStatus.needsFullConfirmation &&
-                  context.read<LibraryUpdateBloc>().promptsInThisWindow) {
+                  LibraryUpdateStatus.needsFullConfirmation) {
                 _promptFullDownload(context, state);
               }
             },

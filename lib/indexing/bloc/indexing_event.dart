@@ -53,13 +53,8 @@ class StartIndexing extends RunIndexing {
 
 /// מחיקת האינדקס ואחריה אינדוקס מלא, באותו תור סדרתי — כדי שהאינדוקס
 /// לא ירוץ לפני שהמחיקה הסתיימה.
-class ResetAndIndex extends IndexingWorkEvent {
-  final Library library;
-
-  const ResetAndIndex(this.library);
-
-  @override
-  List<Object?> get props => [library];
+class ResetAndIndex extends RunIndexing {
+  const ResetAndIndex(super.library);
 }
 
 /// מעדכן במנוע את סדר הקטלוג והדורות של העץ המלא, בלי פליטת מצב.

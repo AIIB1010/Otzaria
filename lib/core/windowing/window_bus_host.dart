@@ -24,9 +24,7 @@ import 'package:otzaria/library/hidden/hidden_library_selection.dart';
 import 'package:otzaria/library/hidden/hidden_library_store.dart';
 import 'package:otzaria/library/bloc/library_bloc.dart';
 import 'package:otzaria/library/bloc/library_event.dart';
-import 'package:otzaria/library_update/bloc/library_update_bloc.dart';
 import 'package:otzaria/library_update/services/library_access_gate.dart';
-import 'package:otzaria/library_update/services/library_update_window_link.dart';
 import 'package:otzaria/navigation/bloc/navigation_bloc.dart';
 import 'package:otzaria/navigation/bloc/navigation_event.dart';
 import 'package:otzaria/navigation/bloc/navigation_state.dart';
@@ -240,16 +238,6 @@ class _WindowBusHostState extends State<WindowBusHost> {
       case SemanticSearchRepository.requestCommand:
       case SemanticSearchRepository.requestRelease:
         return SemanticSearchRepository.handleWindowRequest(request);
-      case LibraryUpdateWindowLink.requestEvent:
-        return mounted &&
-            context.read<LibraryUpdateBloc>().handleHostEvent(request);
-      case LibraryUpdateWindowLink.requestState:
-        if (!mounted) return null;
-        final libraryUpdate = context.read<LibraryUpdateBloc>();
-        if (!WindowRole.isSecondary) return libraryUpdate.hostSnapshot();
-        final state = request['state'];
-        if (state is Map) libraryUpdate.applyHostState(state);
-        return true;
       case ExternalLinkRepository.requestState:
       case ExternalLinkRepository.requestCommand:
         return ExternalLinkRepository.instance.handleWindowRequest(request);
