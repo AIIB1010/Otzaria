@@ -149,22 +149,28 @@ class _ReadingScreenState extends State<ReadingScreen>
 
   /// Handing Flutter the same widget instance skips rebuilding that subtree, so
   /// a tab switch only rebuilds the tabs whose content actually changed.
-  final Map<OpenedTab, Widget> _tabViewCache = Map.identity();
+  final Map<OpenedTab, ({Widget view, String titles})> _tabViewCache =
+      Map.identity();
   int? _tabViewCacheCounter;
 
-  Widget _cachedTabView(OpenedTab tab) =>
-      _tabViewCache[tab] ??= _buildTabView(tab);
+  static String _paneTitles(OpenedTab tab) =>
+      leafPanes(tab).map((pane) => pane.title).join('\n');
+
+  Widget _cachedTabView(OpenedTab tab) => (_tabViewCache[tab] ??= (
+    view: _buildTabView(tab),
+    titles: _paneTitles(tab),
+  )).view;
 
   void _pruneTabViewCache(TabsState state) {
-    // updateCounter marks tabs mutated in place (e.g. pin); their
-    // content must be rebuilt.
-    if (_tabViewCacheCounter != state.updateCounter) {
-      _tabViewCacheCounter = state.updateCounter;
-      _tabViewCache.clear();
-      return;
-    }
+    // updateCounter marks tabs mutated in place; of those mutations only a
+    // rename reaches tab content, so a pin keeps every cached view.
+    final mutated = _tabViewCacheCounter != state.updateCounter;
+    _tabViewCacheCounter = state.updateCounter;
     final open = Set<OpenedTab>.identity()..addAll(state.tabs);
-    _tabViewCache.removeWhere((tab, _) => !open.contains(tab));
+    _tabViewCache.removeWhere(
+      (tab, entry) =>
+          !open.contains(tab) || (mutated && entry.titles != _paneTitles(tab)),
+    );
   }
 
   void _ensurePageController(int initialIndex) {
