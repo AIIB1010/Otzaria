@@ -64,16 +64,29 @@ void tuneWritableDatabase(Database db, String label) {
 void enableWalBestEffort(Database db, String label) {
   try {
     db.execute('PRAGMA journal_mode=WAL');
-    // ה-PRAGMA מצליח גם כשהמצב אינו שמיש: קובץ ה-shared-memory של WAL נפתח
-    // רק בטרנזקציה הראשונה, וכרטיס SD ב-Android נכשל שם (IOERR_SHMOPEN).
-    db.execute('BEGIN IMMEDIATE');
-    db.execute('COMMIT');
+    _probeWalWriteWithoutWaiting(db);
   } catch (e) {
     debugPrint('[$label] journal_mode=WAL failed: $e');
+    // BUSY הוא נעילה של חיבור אחר, לא WAL פגום: החזרה הייתה נכשלת עליה
+    // ומשאירה את החיבור ב-locking_mode=EXCLUSIVE, שנועל את המסד לכל השאר.
+    if (e is SqliteException && e.resultCode == SqlError.SQLITE_BUSY) return;
     _revertToRollbackJournal(db, label);
     return;
   }
   _relaxSyncIfWal(db, label);
+}
+
+// קריאה עשויה להצליח גם כש-shm אינו כתיב. בודקים כתיבה ללא המתנה
+// כדי שחיבור אחר שכותב לא יעכב את הפתיחה; ROLLBACK אינו משנה נתונים.
+void _probeWalWriteWithoutWaiting(Database db) {
+  final timeout = firstIntValue(db.select('PRAGMA busy_timeout'))!;
+  try {
+    db.execute('PRAGMA busy_timeout=0');
+    db.execute('BEGIN IMMEDIATE');
+    db.execute('ROLLBACK');
+  } finally {
+    db.execute('PRAGMA busy_timeout=$timeout');
+  }
 }
 
 /// NORMAL חוסך fsync בכל commit, ורק ב-WAL הוא לא משחית את המסד: בנפילת
