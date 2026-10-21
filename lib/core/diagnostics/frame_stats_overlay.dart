@@ -278,6 +278,14 @@ String formatFrameStats(FrameStats stats) {
       buffer.write('  ${r.count} rend ${r.privMb} MB (max ${r.eachMb.first})');
     }
   }
+  final estimates = stats.estimates;
+  if (estimates != null) {
+    buffer.write(
+      '\nestimates ${estimates.count}x  ${ms(estimates.totalMs)} ms  '
+      '${estimates.items} items  deferred ${estimates.deferred}  '
+      'skipped ${estimates.skipped}',
+    );
+  }
   for (final entry in stats.topRebuilds.take(5)) {
     buffer.write('\nrebuild   ${entry.value}x ${entry.key}');
   }

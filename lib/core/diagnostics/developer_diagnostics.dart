@@ -12,6 +12,7 @@ import 'package:otzaria/core/error_log_file.dart';
 import 'package:otzaria/core/info/os_version.dart';
 import 'package:otzaria/core/startup_timeline.dart';
 import 'package:path/path.dart' as p;
+import 'package:positioned_sliver_list/positioned_list.dart';
 
 /// How diagnostics were requested at launch.
 enum DiagnosticsLaunchMode { off, panel, logOnly }
@@ -52,6 +53,62 @@ class FrameSample {
   final double totalMs;
 }
 
+/// Refreshes of estimated item extents during one tick, summed over lists.
+@immutable
+class EstimateRefreshWindow {
+  const EstimateRefreshWindow({
+    this.count = 0,
+    this.totalMs,
+    this.items = 0,
+    this.deferred = 0,
+    this.skipped = 0,
+  });
+
+  final int count;
+
+  /// Null when a list refreshed more than once: only its last duration is known.
+  final double? totalMs;
+  final int items;
+  final int deferred;
+  final int skipped;
+
+  bool get isEmpty => count == 0 && deferred == 0 && skipped == 0;
+
+  Map<String, Object?> toJson() => {
+    'count': count,
+    if (totalMs != null) 'totalMs': totalMs,
+    'items': items,
+    'deferred': deferred,
+    'skipped': skipped,
+  };
+}
+
+/// Sums the change from each `before` (null for a new list) to its `after`.
+EstimateRefreshWindow estimateRefreshDelta(
+  Iterable<(EstimateRefreshStats?, EstimateRefreshStats)> lists,
+) {
+  var count = 0, items = 0, deferred = 0, skipped = 0;
+  var totalMicros = 0;
+  var exact = true;
+  for (final (before, after) in lists) {
+    final refreshes = after.refreshCount - (before?.refreshCount ?? 0);
+    deferred += after.deferredResizeCount - (before?.deferredResizeCount ?? 0);
+    skipped += after.skippedResizeCount - (before?.skippedResizeCount ?? 0);
+    if (refreshes <= 0) continue;
+    count += refreshes;
+    items += refreshes * after.lastRefreshItemCount;
+    if (refreshes > 1) exact = false;
+    totalMicros += after.lastRefreshDuration.inMicroseconds;
+  }
+  return EstimateRefreshWindow(
+    count: count,
+    totalMs: exact && count > 0 ? _round1(totalMicros / 1000) : null,
+    items: items,
+    deferred: deferred,
+    skipped: skipped,
+  );
+}
+
 /// Frame statistics over the sliding window shown in the panel and logged.
 @immutable
 class FrameStats {
@@ -67,6 +124,7 @@ class FrameStats {
     this.peakRssMb = 0,
     this.topRebuilds = const [],
     this.processes,
+    this.estimates,
   });
 
   final int framesPerSecond;
@@ -86,6 +144,9 @@ class FrameStats {
   /// פלטפורמה בלי מימוש).
   final ProcessTreeSample? processes;
 
+  /// Estimate refreshes of the reader lists since the previous tick, if any.
+  final EstimateRefreshWindow? estimates;
+
   Map<String, Object?> toJson({bool includeProcesses = true}) => {
     'fps': framesPerSecond,
     'buildAvgMs': buildAvgMs,
@@ -99,6 +160,7 @@ class FrameStats {
     if (topRebuilds.isNotEmpty)
       'rebuilds': {for (final e in topRebuilds) e.key: e.value},
     if (includeProcesses && processes != null) 'processes': processes!.toJson(),
+    if (estimates != null) 'estimates': estimates!.toJson(),
   };
 }
 
@@ -111,6 +173,7 @@ FrameStats computeFrameStats(
   int peakRssMb = 0,
   List<MapEntry<String, int>> topRebuilds = const [],
   ProcessTreeSample? processes,
+  EstimateRefreshWindow? estimates,
 }) {
   double? avg(Iterable<double> v) =>
       v.isEmpty ? null : _round1(v.reduce((a, b) => a + b) / v.length);
@@ -132,6 +195,7 @@ FrameStats computeFrameStats(
     peakRssMb: peakRssMb,
     topRebuilds: topRebuilds,
     processes: processes,
+    estimates: estimates == null || estimates.isEmpty ? null : estimates,
   );
 }
 
@@ -192,6 +256,8 @@ class DeveloperDiagnostics {
   Future<bool>? _flushInFlight;
   static const int _maxPendingRecords = 4096;
   final Map<String, int> _rebuildsInWindow = {};
+  final Set<ItemScrollController> _estimateLists = {};
+  Expando<EstimateRefreshStats> _lastEstimates = Expando();
   int _slowTotal = 0;
   int _peakRss = 0;
   Timer? _tick;
@@ -212,6 +278,26 @@ class DeveloperDiagnostics {
   int _session = 0;
 
   bool get isCollecting => _running;
+
+  /// רשימה שעלות רענון ההערכות שלה נכנסת ל-stats. נרשמת גם כשהאיסוף כבוי,
+  /// כדי שהפעלה ב-Ctrl+Shift+I תכלול רשימות שכבר פתוחות.
+  void trackEstimateRefreshes(ItemScrollController controller) =>
+      _estimateLists.add(controller);
+
+  void untrackEstimateRefreshes(ItemScrollController controller) =>
+      _estimateLists.remove(controller);
+
+  EstimateRefreshWindow _estimateRefreshesSinceLastTick() {
+    final lists = <(EstimateRefreshStats?, EstimateRefreshStats)>[];
+    for (final controller in _estimateLists) {
+      final list = controller.listController;
+      final stats = list?.estimateRefreshStats;
+      if (list == null || stats == null) continue;
+      lists.add((_lastEstimates[list], stats));
+      _lastEstimates[list] = stats;
+    }
+    return estimateRefreshDelta(lists);
+  }
 
   /// Called once from main(); cheap and does no I/O unless requested.
   void initFromLaunch(List<String> args, {Map<String, String>? environment}) {
@@ -263,6 +349,9 @@ class DeveloperDiagnostics {
     _startupWritten = false;
     _lastContext = null;
     _resetProcesses();
+    // רענונים שקדמו לאיסוף אינם נספרים.
+    _lastEstimates = Expando();
+    _estimateRefreshesSinceLastTick();
     SchedulerBinding.instance.addTimingsCallback(_onTimings);
     if (kDebugMode) {
       _previousRebuildCallback = debugOnRebuildDirtyWidget;
@@ -406,6 +495,7 @@ class DeveloperDiagnostics {
       peakRssMb: _peakRss >> 20,
       topRebuilds: top.take(10).toList(),
       processes: _processes,
+      estimates: _estimateRefreshesSinceLastTick(),
     );
     stats.value = current;
     final freshProcesses = _processesFresh;
@@ -419,6 +509,7 @@ class DeveloperDiagnostics {
     }
     if (current.framesPerSecond > 0 ||
         current.topRebuilds.isNotEmpty ||
+        current.estimates != null ||
         freshProcesses) {
       _write({
         'type': 'stats',
@@ -576,6 +667,8 @@ class DeveloperDiagnostics {
     _flushInFlight = null;
     _samples.clear();
     _rebuildsInWindow.clear();
+    _estimateLists.clear();
+    _lastEstimates = Expando();
     contextProvider = null;
     errorLogWriter = ErrorLogFile.appendText;
     processSampler = _sampleProcessTree;

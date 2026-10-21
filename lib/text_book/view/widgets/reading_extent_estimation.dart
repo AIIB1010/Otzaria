@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:otzaria/core/diagnostics/developer_diagnostics.dart';
 import 'package:otzaria/text_book/utils/reading_extent_estimates.dart';
 import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:positioned_sliver_list/positioned_list.dart';
@@ -58,6 +59,12 @@ class _ReadingExtentEstimationState extends State<ReadingExtentEstimation> {
   double? _textWidth;
 
   @override
+  void initState() {
+    super.initState();
+    DeveloperDiagnostics.instance.trackEstimateRefreshes(widget.controller);
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _enabled = TickerMode.valuesOf(context).enabled;
@@ -65,6 +72,7 @@ class _ReadingExtentEstimationState extends State<ReadingExtentEstimation> {
 
   @override
   void dispose() {
+    DeveloperDiagnostics.instance.untrackEstimateRefreshes(widget.controller);
     _data?.dispose();
     super.dispose();
   }
@@ -81,6 +89,11 @@ class _ReadingExtentEstimationState extends State<ReadingExtentEstimation> {
       _refreshScheduled = false;
     } else {
       _data?.update(widget.segments);
+    }
+    if (!identical(oldWidget.controller, widget.controller)) {
+      DeveloperDiagnostics.instance
+        ..untrackEstimateRefreshes(oldWidget.controller)
+        ..trackEstimateRefreshes(widget.controller);
     }
     if (changedReader ||
         !oldWidget.segments.layout.hasSameStructure(widget.segments.layout) ||
