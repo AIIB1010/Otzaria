@@ -15,6 +15,7 @@ import 'package:otzaria/core/windowing/app_window_scope.dart';
 import 'package:otzaria/core/windowing/last_active_window.dart';
 import 'package:otzaria/core/windowing/multiview/multi_view_host.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
+import 'package:otzaria/core/windowing/multiview/view_window_close_flow.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_scope.dart';
 import 'package:otzaria/core/windowing/window_title_sync.dart';
@@ -22,6 +23,7 @@ import 'package:otzaria/history/history_repository.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
 import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
+import 'package:otzaria/tabs/models/tab.dart';
 import 'package:otzaria/tabs/models/tool_tab.dart';
 
 import '../../../helpers/memory_settings_cache.dart';
@@ -56,8 +58,9 @@ void main() {
   /// התוכן של כל חלון: MaterialApp עם ה-navigator של החלון, כמו ב-`App`.
   Future<(Map<int, BuildContext>, BuildContext Function())> pumpHost(
     WidgetTester tester,
-    ViewWindowRegistry registry,
-  ) async {
+    ViewWindowRegistry registry, {
+    ViewWindowCloseFlowFactory? closeFlow,
+  }) async {
     final contexts = <int, BuildContext>{};
     late BuildContext mainContext;
     await tester.pumpWidget(
@@ -68,6 +71,8 @@ void main() {
           contentBuilder: (context, entry) => ViewWindowScope(
             entry: entry,
             historyRepository: HistoryRepository(),
+            closeFlow:
+                closeFlow ?? (entry) => ViewWindowCloseFlow(entry: entry),
             child: Builder(
               builder: (context) => MaterialApp(
                 navigatorKey: AppWindowKeys.of(context).navigator,
@@ -232,6 +237,70 @@ void main() {
     expect(bounds.height, 600);
     expect(bounds.dpr, 2.0);
     expect(await WindowSessionStore.instance.load(1), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('סגירה: ביטול משאיר את החלון; אישור מוחק סשן, הורס ומפרק', (
+    tester,
+  ) async {
+    final windows = FakeViewWindows(tester);
+    var allow = false;
+    final asked = <List<OpenedTab>>[];
+    final (contexts, _) = await pumpHost(
+      tester,
+      windows.registry,
+      closeFlow: (entry) => ViewWindowCloseFlow(
+        entry: entry,
+        confirm: (context, tabs) async {
+          asked.add(tabs);
+          return allow;
+        },
+      ),
+    );
+    final tab = ToolTab(toolId: 'calendar', title: 'לוח שנה');
+    final a = windows.registry.open(
+      size: const Size(800, 600),
+      initialTab: tab,
+    )!;
+    final b = windows.registry.open(size: const Size(800, 600))!;
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    final tabsA = contexts[a.slot]!.read<TabsBloc>();
+    await tester.pump(const Duration(seconds: 1));
+    expect(await WindowSessionStore.instance.load(a.slot), isNotNull);
+    windows.stubOf(a)
+      ..activated = true
+      ..notify();
+    expect(AppWindowKeys.current, same(a.keys));
+
+    // X מהמערכת → מסלול הסגירה של החלון הזה, עם הכרטיסיות שלו.
+    windows.handleOf(a).requestClose();
+    await tester.pump();
+    expect(asked.single, [same(tab)]);
+    expect(windows.stubOf(a).destroyed, isFalse);
+    expect(windows.registry.windows, [a, b]);
+
+    allow = true;
+    await a.controller.close();
+    await tester.pump();
+    expect(windows.stubOf(a).destroyed, isTrue);
+    expect(windows.registry.windows, [b]);
+    expect(a.tabsSession.slot, isNull);
+    expect(find.byType(View), findsNWidgets(2));
+    expect(AppWindowKeys.current, isNot(same(a.keys)));
+
+    await tester.pump(const Duration(seconds: 1));
+    expect(windows.stubOf(a).disposed, isTrue);
+    expect(tabsA.isClosed, isTrue);
+    // סגירת ה-blocs אינה יוצרת מחדש את הסשן שנמחק.
+    expect(await WindowSessionStore.instance.load(a.slot), isNull);
+    expect(windows.stubOf(b).destroyed, isFalse);
+
+    // חלון שנהרס כבר אינו רשום: הפעלה לפי המזהה שלו אינה מחליפה מפתחות.
+    AppWindowKeys.activateWindow(a.id);
+    expect(AppWindowKeys.current, isNot(same(a.keys)));
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 1));

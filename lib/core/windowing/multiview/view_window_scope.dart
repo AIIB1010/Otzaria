@@ -4,11 +4,16 @@ import 'package:otzaria/app_scope/window_scope_providers.dart';
 import 'package:otzaria/core/window_persistence.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
+import 'package:otzaria/core/windowing/multiview/view_window_close_flow.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
 import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/core/windowing/window_title_sync.dart';
 import 'package:otzaria/history/history_repository.dart';
 import 'package:otzaria/tabs/models/tab.dart';
+
+/// בונה את מסלול הסגירה של חלון; ניתן להחלפה בבדיקות.
+typedef ViewWindowCloseFlowFactory =
+    ViewWindowCloseFlow Function(ViewWindowEntry entry);
 
 /// היקף החלון של חלון Dart: בקר, מפתחות, תפקיד וספקי חלון משלו, בלי
 /// `WindowBusHost` (האפיק שייך ל-isolate, ומופע שני היה גונב את הבקשות).
@@ -17,11 +22,13 @@ class ViewWindowScope extends StatefulWidget {
     super.key,
     required this.entry,
     required this.historyRepository,
+    this.closeFlow = _defaultCloseFlow,
     required this.child,
   });
 
   final ViewWindowEntry entry;
   final HistoryRepository historyRepository;
+  final ViewWindowCloseFlowFactory closeFlow;
   final Widget child;
 
   /// חלון Dart אינו מריץ עבודה של התהליך ואינו מארח את התוספים שברקע.
@@ -30,6 +37,9 @@ class ViewWindowScope extends StatefulWidget {
     hostsPluginBackground: false,
   );
 
+  static ViewWindowCloseFlow _defaultCloseFlow(ViewWindowEntry entry) =>
+      ViewWindowCloseFlow(entry: entry);
+
   @override
   State<ViewWindowScope> createState() => _ViewWindowScopeState();
 }
@@ -37,6 +47,7 @@ class ViewWindowScope extends StatefulWidget {
 class _ViewWindowScopeState extends State<ViewWindowScope> {
   late final ViewWindowEntry _entry = widget.entry;
   late final OpenedTab? _initialTab;
+  late final ViewWindowCloseFlow _closeFlow = widget.closeFlow(_entry);
   late final WindowTitleSync _titleSync = WindowTitleSync(
     setTitle: (title) async => _entry.handle.setTitle(title),
   );
@@ -52,10 +63,13 @@ class _ViewWindowScopeState extends State<ViewWindowScope> {
   void initState() {
     super.initState();
     _initialTab = _entry.takeInitialTab();
+    _entry.closeHandler = _close;
     WindowTitleSync.bind(_entry.keys, _titleSync);
     _entry.handle.changes.addListener(_onWindowChanged);
     _onWindowChanged();
   }
+
+  Future<void> _close() => _closeFlow.run();
 
   void _onWindowChanged() {
     final active = _entry.handle.isActivated;
@@ -69,6 +83,9 @@ class _ViewWindowScopeState extends State<ViewWindowScope> {
   void dispose() {
     _entry.handle.changes.removeListener(_onWindowChanged);
     WindowTitleSync.unbind(_entry.keys, _titleSync);
+    if (_entry.closeHandler == _close) {
+      _entry.closeHandler = null;
+    }
     super.dispose();
   }
 
