@@ -112,10 +112,50 @@ class SnippetBuilder {
   /// מחלץ את המונחים שהמנוע סימן כהתאמות (תוכן תגי [_highlightTags]) מתוך
   /// [html]. משמש להדגשת ההתאמות האמיתיות על גבי דפי PDF.
   static Set<String> extractHighlightedTerms(String html) {
+    final simple = simpleHighlightedTerms(html);
+    if (simple != null) return simple;
     final body = html_parser.parse(html).body;
     if (body == null) return const {};
     final terms = <String>{};
     _collectHighlightedTerms(body, highlighted: false, terms: terms);
+    return terms;
+  }
+
+  static final RegExp _plainTag = RegExp(
+    r"""<(?:br[\t\n\f\r ]*/?|(font|mark)(?=[\t\n\f\r />])[^<>"']*>([^<]*)</\1)>""",
+    caseSensitive: false,
+  );
+  static final RegExp _engineEntity = RegExp('&(amp|lt|gt|quot|#x27);');
+
+  /// קטע מנוע (טקסט מוברח, `<br>` ותגי הדגשה סביב טקסט) נקרא בלי המפרסר,
+  /// שעל 1000 תוצאות חוסם את המסך. null — כשיש בו מבנה אחר.
+  @visibleForTesting
+  static Set<String>? simpleHighlightedTerms(String html) {
+    final terms = <String>{};
+    var tagStart = html.indexOf('<');
+    while (tagStart != -1) {
+      final tag = _plainTag.matchAsPrefix(html, tagStart);
+      if (tag == null) return null;
+      tagStart = html.indexOf('<', tag.end);
+      var raw = tag[2];
+      if (raw == null) continue;
+      if (raw.contains('\u0000')) return null;
+      if (raw.contains('&')) {
+        if (raw.replaceAll(_engineEntity, '').contains('&')) return null;
+        raw = raw.replaceAllMapped(
+          _engineEntity,
+          (m) => switch (m[1]) {
+            'amp' => '&',
+            'lt' => '<',
+            'gt' => '>',
+            'quot' => '"',
+            _ => "'",
+          },
+        );
+      }
+      final text = raw.replaceAll(_whitespace, ' ').trim();
+      if (text.isNotEmpty) terms.add(text);
+    }
     return terms;
   }
 
