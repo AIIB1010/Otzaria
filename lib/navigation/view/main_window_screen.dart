@@ -1021,7 +1021,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
     final refresh = _startupRefreshWait.begin();
     try {
       final settled = bloc.stream.firstWhere(libraryUpdateSettledForIndexing);
-      bloc.add(const StartLibraryUpdate());
+      bloc.add(const StartLibraryUpdate(automatic: true));
       final result = await settled;
       // אותו תנאי שבו ה-listener של LibraryUpdateBloc שולח RefreshLibrary.
       final refreshRequested =
