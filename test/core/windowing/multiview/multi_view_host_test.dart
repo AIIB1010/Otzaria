@@ -6,6 +6,7 @@ import 'package:flutter/src/widgets/_window.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/app_scope/app_scope_providers.dart';
+import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/windowing/multiview/multi_view_host.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
@@ -13,7 +14,10 @@ import 'package:otzaria/plugins/bloc/plugin_updates_cubit.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
 
 void main() {
-  tearDown(() => MultiViewMode.debugOverride = null);
+  tearDown(() {
+    MultiViewMode.debugOverride = null;
+    AppWindowKeys.resetForTest();
+  });
 
   testWidgets('בלי הדגל MultiViewHost מחזיר את child כמו שהוא', (
     tester,

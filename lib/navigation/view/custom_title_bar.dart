@@ -324,7 +324,11 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
                                           context,
                                         ).close(),
                                   ),
-                                if (!isFullscreen)
+                                // לחלון Dart יש כפתורי מערכת במסגרת שלו.
+                                if (!isFullscreen &&
+                                    !AppWindowScope.roleOf(
+                                      context,
+                                    ).isViewWindow)
                                   SizedBox(
                                     width: _kWindowCaptionButtonsWidth,
                                     height: 50,

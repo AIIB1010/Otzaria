@@ -72,8 +72,10 @@ class WindowScopeProviders extends StatelessWidget {
           create: (_) => _WindowUiLifetime(AppWindowKeys.of(context)),
           dispose: (lifetime) => lifetime.dispose(),
         ),
+        // של החלון הזה ולא של החלון הפעיל, שבזמן היצירה עשוי להיות אחר.
         RepositoryProvider<FocusRepository>(
-          create: (_) => FocusRepository(),
+          create: (context) =>
+              FocusRepository.forWindow(AppWindowKeys.of(context)),
         ),
         RepositoryProvider<ProcessDuties>.value(
           value: duties ?? ProcessDuties.current,

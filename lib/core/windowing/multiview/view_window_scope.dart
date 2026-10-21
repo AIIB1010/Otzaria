@@ -1,0 +1,89 @@
+import 'package:flutter/widgets.dart';
+import 'package:otzaria/app_scope/process_duties.dart';
+import 'package:otzaria/app_scope/window_scope_providers.dart';
+import 'package:otzaria/core/window_persistence.dart';
+import 'package:otzaria/core/windowing/app_window_keys.dart';
+import 'package:otzaria/core/windowing/app_window_scope.dart';
+import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
+import 'package:otzaria/core/windowing/window_role.dart';
+import 'package:otzaria/core/windowing/window_title_sync.dart';
+import 'package:otzaria/history/history_repository.dart';
+import 'package:otzaria/tabs/models/tab.dart';
+
+/// היקף החלון של חלון Dart: בקר, מפתחות, תפקיד וספקי חלון משלו, בלי
+/// `WindowBusHost` (האפיק שייך ל-isolate, ומופע שני היה גונב את הבקשות).
+class ViewWindowScope extends StatefulWidget {
+  const ViewWindowScope({
+    super.key,
+    required this.entry,
+    required this.historyRepository,
+    required this.child,
+  });
+
+  final ViewWindowEntry entry;
+  final HistoryRepository historyRepository;
+  final Widget child;
+
+  /// חלון Dart אינו מריץ עבודה של התהליך ואינו מארח את התוספים שברקע.
+  static final ProcessDuties duties = ProcessDuties(
+    isProcessOwner: () => false,
+    hostsPluginBackground: false,
+  );
+
+  @override
+  State<ViewWindowScope> createState() => _ViewWindowScopeState();
+}
+
+class _ViewWindowScopeState extends State<ViewWindowScope> {
+  late final ViewWindowEntry _entry = widget.entry;
+  late final OpenedTab? _initialTab;
+  late final WindowTitleSync _titleSync = WindowTitleSync(
+    setTitle: (title) async => _entry.handle.setTitle(title),
+  );
+  late final WindowPersistenceBinding _persistence = WindowPersistenceBinding(
+    controller: _entry.controller,
+    geometry: _entry.controller,
+    slot: () => _entry.tabsSession.slot,
+    view: _entry.handle.view,
+  );
+  bool _wasActive = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initialTab = _entry.takeInitialTab();
+    WindowTitleSync.bind(_entry.keys, _titleSync);
+    _entry.handle.changes.addListener(_onWindowChanged);
+    _onWindowChanged();
+  }
+
+  void _onWindowChanged() {
+    final active = _entry.handle.isActivated;
+    if (active && !_wasActive) AppWindowKeys.activateWindow(_entry.id);
+    _wasActive = active;
+    // אין הודעה על הזזה בלבד: מיקום חדש נשמר בשינוי הבא.
+    _persistence.scheduleSave();
+  }
+
+  @override
+  void dispose() {
+    _entry.handle.changes.removeListener(_onWindowChanged);
+    WindowTitleSync.unbind(_entry.keys, _titleSync);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AppWindowScope(
+    controller: _entry.controller,
+    geometry: _entry.controller,
+    keys: _entry.keys,
+    role: AppWindowRole.view(openedWithTab: _entry.openedWithTab),
+    child: WindowScopeProviders(
+      historyRepository: widget.historyRepository,
+      initialTab: _initialTab,
+      tabsSession: _entry.tabsSession,
+      duties: ViewWindowScope.duties,
+      child: widget.child,
+    ),
+  );
+}

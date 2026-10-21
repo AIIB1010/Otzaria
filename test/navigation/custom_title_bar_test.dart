@@ -11,6 +11,7 @@ import 'package:otzaria/core/windowing/app_window_caption.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
 import 'package:otzaria/core/windowing/window_fullscreen_cubit.dart';
 import 'package:otzaria/core/windowing/window_manager_app_window_controller.dart';
+import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/tabs/models/combined_tab.dart';
 import 'package:otzaria/tabs/models/commentators_tab.dart';
@@ -2720,6 +2721,38 @@ void main() {
 
     expect(find.byType(AppWindowCaption), findsOneWidget);
   });
+
+  testWidgets('בחלון Dart כפתורי החלון של המערכת, בלי AppWindowCaption', (
+    tester,
+  ) async {
+    final tab = _makeTextTab('ספר א');
+    final tabsBloc = _TestTabsBloc(
+      TabsState(tabs: [tab], currentTabIndex: 0),
+    );
+    final navigationBloc = _TestNavigationBloc(
+      const NavigationState(currentScreen: Screen.reading),
+    );
+    final settingsBloc = _TestSettingsBloc(SettingsState.initial());
+
+    addTearDown(() async {
+      tab.dispose();
+      await tabsBloc.close();
+      await navigationBloc.close();
+      await settingsBloc.close();
+    });
+
+    await _setSurfaceSize(tester, const Size(1200, 800));
+    await _pumpTitleBar(
+      tester,
+      tabsBloc: tabsBloc,
+      navigationBloc: navigationBloc,
+      settingsBloc: settingsBloc,
+      role: const AppWindowRole.view(),
+    );
+
+    expect(find.byType(AppWindowCaption), findsNothing);
+    expect(find.text('ספר א'), findsOneWidget);
+  });
 }
 
 /// לחיצה כפולה במיקום נתון: שתי הקשות עם השהיה תקפה ל-double-tap, ואז המתנה
@@ -2739,6 +2772,7 @@ Future<void> _pumpTitleBar(
   HistoryBloc? historyBloc,
   WorkspaceBloc? workspaceBloc,
   WindowFullscreenCubit? fullscreenCubit,
+  AppWindowRole? role,
 }) async {
   await tester.pumpWidget(
     // CustomTitleBar שולף את החלון מ-[AppWindowScope] (maximize בלחיצה
@@ -2747,6 +2781,7 @@ Future<void> _pumpTitleBar(
     AppWindowScope(
       controller: const WindowManagerAppWindowController(),
       geometry: const WindowManagerAppWindowController(),
+      role: role,
       child: MultiBlocProvider(
         providers: [
           BlocProvider<TabsBloc>.value(value: tabsBloc),
