@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/text_book/utils/reading_segment_navigation.dart';
+import 'package:otzaria/widgets/smart_text/long_line_chunks.dart';
 import 'package:otzaria/widgets/smart_text/render_settings.dart';
 import 'package:otzaria/widgets/smart_text/smart_text_widget.dart';
 import 'package:positioned_sliver_list/positioned_list.dart';
@@ -137,4 +138,55 @@ void main() {
       },
     );
   }
+
+  testWidgets('ניווט שבוטל בזמן הבנייה אינו חוזר ליעד כשהשורה הושלמה', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final line = _nastyText(320000);
+    final segments = buildReadingSegments([line], continuous: false);
+    final item = ItemScrollController();
+    final pixels = ScrollController();
+    addTearDown(pixels.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ScrollablePositionedList.builder(
+            itemScrollController: item,
+            scrollController: pixels,
+            itemCount: 1,
+            itemBuilder: (_, index) =>
+                SmartTextWidget(text: line, settings: _settings),
+          ),
+        ),
+      ),
+    );
+    var current = true;
+    var finished = false;
+    final navigation = scrollToSourceLine(
+      scrollController: item,
+      positionsListener: null,
+      segments: segments,
+      lineIndex: 0,
+      viewportExtent: 600,
+      intraLineFraction: 0.85,
+      duration: Duration.zero,
+      isCurrent: () => current,
+    ).then((_) => finished = true);
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(find.byType(LongLineChunks), findsOneWidget);
+    expect(finished, isFalse);
+
+    current = false;
+    item.listController!.cancelPositioning();
+    pixels.jumpTo(pixels.offset + 30);
+    final userPixels = pixels.offset;
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(finished, isTrue);
+    await navigation;
+    await tester.pumpAndSettle();
+    expect(pixels.offset, closeTo(userPixels, 0.01));
+  });
 }

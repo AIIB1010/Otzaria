@@ -240,6 +240,27 @@ void main() {
     expect(await builtWithoutFrame(), isTrue);
   });
 
+  testWidgets('ביטול ניווט מפסיק המתנה גם כשהשורה עדיין נבנית', (tester) async {
+    await tester.pumpWidget(
+      _host(SmartTextWidget(text: _syntheticLine(120000), settings: _settings)),
+    );
+    var current = true;
+    var finished = false;
+    final waiting = longLinesBuilt(isCurrent: () => current).then((waited) {
+      finished = true;
+      return waited;
+    });
+    await tester.idle();
+    expect(finished, isFalse);
+    current = false;
+    await tester.pump();
+    expect(finished, isTrue);
+    expect(await waiting, isTrue);
+    expect(_textOf(tester).length, lessThan(100000));
+    await tester.pumpWidget(_host(const SizedBox()));
+    expect(await longLinesBuilt(), isFalse);
+  });
+
   testWidgets('בחירת הכול מעתיקה את טקסט השורה כולו, בלי תוספות בין מקטעים', (
     tester,
   ) async {
