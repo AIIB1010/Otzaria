@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:otzaria/attached_libraries/repository/external_link_repository.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/app_runtime_reset.dart';
 import 'package:otzaria/core/error_log_file.dart';
@@ -38,6 +39,8 @@ import 'package:otzaria/plugins/services/plugin_new_tab_page_service.dart';
 import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
 import 'package:otzaria/settings/engine/settings_bloc.dart';
 import 'package:otzaria/settings/engine/settings_event.dart';
+import 'package:otzaria/semantic_search/repository/semantic_search_repository.dart';
+import 'package:otzaria/settings/services/backup_service.dart';
 import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
 import 'package:otzaria/widgets/misc/restart_widget.dart';
 import 'package:otzaria/workspaces/bloc/workspace_bloc.dart';
@@ -225,6 +228,19 @@ class _WindowBusHostState extends State<WindowBusHost> {
         return _openUri(request['uri']);
       case MultiWindowService.requestIndex:
         return _runIndexRequest(request);
+      case BackupService.requestRestore:
+        if (!mounted) return null;
+        if (!await AppWindowScope.controllerOf(context).isVisible()) {
+          return {'error': WindowMessages.restoreNeedsOpenMainWindow};
+        }
+        return BackupService.handleRestoreRequest(request);
+      case SemanticSearchRepository.requestState:
+      case SemanticSearchRepository.requestCommand:
+      case SemanticSearchRepository.requestRelease:
+        return SemanticSearchRepository.handleWindowRequest(request);
+      case ExternalLinkRepository.requestState:
+      case ExternalLinkRepository.requestCommand:
+        return ExternalLinkRepository.instance.handleWindowRequest(request);
       case MultiWindowService.requestIndexVisibilityResult:
         final id = request['operationId'];
         final success = request['success'];
@@ -415,6 +431,11 @@ class _WindowBusHostState extends State<WindowBusHost> {
         final library = await DataRepository.instance.library;
         if (!mounted) return false;
         indexing.add(StartIndexing(library));
+        return true;
+      case MultiWindowService.indexOpResetAndIndex:
+        final library = await DataRepository.instance.library;
+        if (!mounted) return false;
+        indexing.add(ResetAndIndex(library));
         return true;
       case MultiWindowService.indexOpVisibility:
         final bookKeys = request['bookKeys'];

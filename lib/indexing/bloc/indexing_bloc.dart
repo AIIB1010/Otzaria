@@ -113,7 +113,11 @@ class IndexingBloc extends Bloc<IndexingEvent, IndexingState> {
     // קפצה בכל פתיחת חלון משני.
     if (_delegateIndexMutationToMainWindow(
       emit,
-      forwardOp: event is StartIndexing ? MultiWindowService.indexOpAll : null,
+      forwardOp: switch (event) {
+        StartIndexing() => MultiWindowService.indexOpAll,
+        ResetAndIndex() => MultiWindowService.indexOpResetAndIndex,
+        _ => null,
+      },
     )) {
       return;
     }
@@ -123,6 +127,18 @@ class IndexingBloc extends Bloc<IndexingEvent, IndexingState> {
     if (_isPaused) {
       _isPaused = false;
       _repository.resumeIndexing();
+    }
+
+    if (event is ResetAndIndex) {
+      final cancelCount = _cancelCount;
+      _activeWorkId = null;
+      final requiresReset = await _repository.requiresManualReindex(
+        event.library,
+      );
+      if (cancelCount != _cancelCount) return;
+      // בקשה כפולה או מחלון שמצבו לא התעדכן הייתה מוחקת אינדקס שזה עתה נבנה.
+      if (requiresReset && !await _repository.clearIndex()) return;
+      if (cancelCount != _cancelCount) return;
     }
 
     if (event is RunIndexing) {

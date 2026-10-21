@@ -51,6 +51,9 @@ class TantivyDataProvider {
   /// (otzaria_index_meta.json או meta.json של Tantivy) דרך מנוע החיפוש.
   IndexCompatibility? _indexCompatibility;
   IndexCompatibility? get indexCompatibility => _indexCompatibility;
+  @visibleForTesting
+  set indexCompatibility(IndexCompatibility? value) =>
+      _indexCompatibility = value;
 
   /// Indicates whether the indexing process is currently running
   ValueNotifier<bool> isIndexing = ValueNotifier(false);

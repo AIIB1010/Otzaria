@@ -1848,10 +1848,8 @@ class _AppBootstrapState extends State<AppBootstrap> {
               isOfflineMode: () =>
                   Settings.getValue<bool>(SettingsRepository.keyOfflineMode) ??
                   false,
-              // ⚠️ חלון משני לעולם אינו בודק עדכונים. עדכון ספרייה הוא
-              // פעולה פר-תהליך: שני חלונות ששאלו את GitHub במקביל קיבלו
-              // 403, והמשתמש ראה "שגיאה בקבלת רשימת ה-releases" בכל
-              // פתיחת חלון.
+              // בדיקת עדכונים רצה רק במארח, כדי שחלונות משניים לא יכפילו
+              // בקשות GitHub ויקבלו 403.
               areUpdatesEnabled: () =>
                   !WindowRole.isSecondary &&
                   (Settings.getValue<bool>(
