@@ -2482,18 +2482,8 @@ class PluginBridgeAdapter {
         await PluginTextReaderRegistry.instance.select(plugin, enabled);
         return {'enabled': enabled};
       case 'setTextReaderFontSize':
-        final tab = readerTab;
-        final registry = PluginTextReaderRegistry.instance;
+        final tab = _requireEmbeddedTextReader();
         final size = args['fontSize'];
-        if (tab == null ||
-            instanceId == PluginInstanceIds.background ||
-            !registry.usesPlugin(tab) ||
-            registry.activePlugin?.pluginId != plugin.pluginId ||
-            tab.bloc.isClosed) {
-          throw Exception(
-            'error.unavailable: Not an active embedded text reader',
-          );
-        }
         if (size is! num || !size.isFinite || size < 14 || size > 60) {
           throw Exception(
             'error.invalid_params: fontSize must be between 14 and 60',
@@ -2502,17 +2492,7 @@ class PluginBridgeAdapter {
         tab.bloc.add(UpdateFontSize(size.toDouble()));
         return true;
       case 'reportTextReaderLocation':
-        final tab = readerTab;
-        final registry = PluginTextReaderRegistry.instance;
-        if (tab == null ||
-            instanceId == PluginInstanceIds.background ||
-            !registry.usesPlugin(tab) ||
-            registry.activePlugin?.pluginId != plugin.pluginId ||
-            tab.bloc.isClosed) {
-          throw Exception(
-            'error.unavailable: Not an active embedded text reader',
-          );
-        }
+        final tab = _requireEmbeddedTextReader();
         final index = args['index'];
         if (index is! int || index < 0) {
           throw Exception('error.invalid_params: index must be nonnegative');
@@ -3324,6 +3304,20 @@ class PluginBridgeAdapter {
           'error.unknown_method: Unknown action in reader: $action',
         );
     }
+  }
+
+  /// טאב הספר שבו התוסף הזה מוצג כרגע כקורא הטקסט.
+  TextBookTab _requireEmbeddedTextReader() {
+    final tab = readerTab;
+    final registry = PluginTextReaderRegistry.instance;
+    if (tab == null ||
+        instanceId == PluginInstanceIds.background ||
+        !registry.usesPlugin(tab) ||
+        registry.activePlugin?.pluginId != plugin.pluginId ||
+        tab.bloc.isClosed) {
+      throw Exception('error.unavailable: Not an active embedded text reader');
+    }
+    return tab;
   }
 
   Map<String, dynamic> _identityFields(Map<String, dynamic> args) => {
