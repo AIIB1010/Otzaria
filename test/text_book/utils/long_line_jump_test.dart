@@ -189,4 +189,59 @@ void main() {
     await tester.pumpAndSettle();
     expect(pixels.offset, closeTo(userPixels, 0.01));
   });
+
+  testWidgets('שורה ארוכה ברשימה אחרת אינה מעכבת ניווט רגיל', (tester) async {
+    final regular = ItemScrollController();
+    final segments = buildReadingSegments(
+      List.generate(100, (i) => 'שורה קצרה $i'),
+      continuous: false,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Row(
+            children: [
+              Expanded(
+                child: ListView(
+                  children: [
+                    SmartTextWidget(
+                      text: _nastyText(640000),
+                      settings: _settings,
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ScrollablePositionedList.builder(
+                  itemScrollController: regular,
+                  itemCount: 100,
+                  itemBuilder: (_, i) =>
+                      SizedBox(height: 40, child: Text('שורה קצרה $i')),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    var finished = false;
+    final navigation = scrollToSourceLine(
+      scrollController: regular,
+      positionsListener: null,
+      segments: segments,
+      lineIndex: 20,
+      viewportExtent: 600,
+      duration: Duration.zero,
+    ).then((_) => finished = true);
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(
+      finished,
+      isTrue,
+      reason: 'ניווט רגיל צריך להסתיים בזמן שהרשימה האחרת עדיין נבנית',
+    );
+    await tester.pumpAndSettle();
+    await navigation;
+  });
 }

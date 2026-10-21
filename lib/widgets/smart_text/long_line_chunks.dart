@@ -208,18 +208,25 @@ class _LongLineChunk extends SingleChildRenderObjectWidget {
   }
 }
 
-/// מספר השורות הארוכות שבנייתן עוד לא הושלמה.
-final ValueNotifier<int> _building = ValueNotifier(0);
+/// שורות ארוכות שבנייתן טרם הושלמה.
+final Set<_LongLineChunksState> _building = {};
 
 /// ממתין לבניית השורות הארוכות, עד [maxFrames], ומחזיר האם הייתה בנייה פעילה.
+/// כשמועבר [scrollController], ממתין רק לשורות המחוברות אליו.
 Future<bool> longLinesBuilt({
   int maxFrames = 240,
+  ScrollController? scrollController,
   bool Function()? isCurrent,
 }) async {
-  final wasBuilding = _building.value > 0;
+  bool isBuilding() => _building.any(
+    (line) =>
+        scrollController == null ||
+        scrollController.positions.contains(line._scrollPosition),
+  );
+  final wasBuilding = isBuilding();
   for (
     var i = 0;
-    i < maxFrames && _building.value > 0 && (isCurrent?.call() ?? true);
+    i < maxFrames && isBuilding() && (isCurrent?.call() ?? true);
     i++
   ) {
     await WidgetsBinding.instance.endOfFrame;
@@ -251,13 +258,21 @@ class _LongLineChunksState extends State<LongLineChunks> {
   /// מקטעים שכבר נבנו נשמרים כאותו מופע, כדי שהוספת מקטע לא תעדכן את כולם.
   final List<Widget> _built = [];
   bool _scheduled = false;
-  bool _counted = false;
+  ScrollPosition? _scrollPosition;
   int _generation = 0;
 
   void _setBuilding(bool value) {
-    if (value == _counted) return;
-    _counted = value;
-    _building.value += value ? 1 : -1;
+    if (value) {
+      _building.add(this);
+    } else {
+      _building.remove(this);
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _scrollPosition = Scrollable.maybeOf(context)?.position;
   }
 
   @override
@@ -319,24 +334,17 @@ class _LongLineChunksState extends State<LongLineChunks> {
     SchedulerBinding.instance.addPostFrameCallback((_) {
       _scheduled = false;
       if (!mounted) return;
-      _notifyScrollListeners();
       if (_built.length < widget.split.chunks.length) {
         setState(_addChunks);
         return;
       }
-      // הסיום מסומן פריים אחד אחרי ההודעה, כשהמיקומים כבר עודכנו.
+      // הרשימה מפרסמת את המיקומים אחרי הפריסה; הניווט ממשיך בפריים הבא.
       SchedulerBinding.instance
         ..addPostFrameCallback((_) {
           if (generation == _generation) _setBuilding(false);
         })
         ..scheduleFrame();
     });
-  }
-
-  /// הפריט גדל בלי גלילה, ומי שמאזין לגלילה (מיקומי הפריטים ברשימה) לא יודע.
-  void _notifyScrollListeners() {
-    // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
-    Scrollable.maybeOf(context)?.position.notifyListeners();
   }
 
   @override

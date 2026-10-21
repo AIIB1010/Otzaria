@@ -132,7 +132,12 @@ Future<void> scrollToSourceLine({
   await (visible && controller is JumpAwareItemScrollController
       ? controller.withoutNotifying(move)
       : move());
-  if (!await longLinesBuilt(isCurrent: isCurrent) ||
+  final pixels = scrollController.scrollController;
+  if (pixels == null) return;
+  if (!await longLinesBuilt(
+        scrollController: pixels,
+        isCurrent: isCurrent,
+      ) ||
       !scrollController.isAttached ||
       !(isCurrent?.call() ?? true)) {
     return;

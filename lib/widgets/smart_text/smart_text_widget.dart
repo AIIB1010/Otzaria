@@ -210,14 +210,17 @@ class SmartTextWidget extends StatelessWidget {
       final simpleSpan =
           heading?.span ?? SimpleInlineHtml.tryParse(processedHtml, textStyle);
       if (simpleSpan != null) {
-        if (simpleSpan.toPlainText().isEmpty) {
+        final plainText = simpleSpan.toPlainText();
+        if (plainText.isEmpty) {
           return const SizedBox.shrink();
         }
         final strutStyle = exactLineHeightStrut(lineStyle, simpleSpan);
         final textAlign = settings.justifyText
             ? TextAlign.justify
             : TextAlign.right;
-        final longLine = heading == null ? splitLongLine(simpleSpan) : null;
+        final longLine = heading == null && plainText.length > kLongLineMinChars
+            ? splitLongLine(simpleSpan)
+            : null;
         // רוחב מלא כמו <div> בלוק ב-HtmlWidget - אחרת מסכים שעוטפים שורה
         // ב-Center (הגבלת רוחב קריאה) ימרכזו שורות קצרות בטעות.
         return _withPluginFrames(
