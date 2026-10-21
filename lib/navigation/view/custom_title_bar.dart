@@ -486,8 +486,17 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
     );
   }
 
+  /// השורה אינה מציגה את החלונית הפעילה, ולכן לחיצה בחלונית אחרת של טאב
+  /// מפוצל אינה צריכה לבנות מחדש את כל הכרטיסיות.
+  static bool _tabStripChanged(TabsState previous, TabsState current) =>
+      previous.tabs != current.tabs ||
+      previous.currentTabIndex != current.currentTabIndex ||
+      previous.updateCounter != current.updateCounter ||
+      previous.selectedTabs != current.selectedTabs;
+
   Widget _buildReadingTabs(BuildContext context) {
     return BlocBuilder<TabsBloc, TabsState>(
+      buildWhen: _tabStripChanged,
       builder: (context, state) {
         if (!state.hasOpenTabs) {
           return DragToMoveArea(
@@ -692,6 +701,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
 
   Widget _buildNarrowTabsRow(BuildContext context) {
     return BlocBuilder<TabsBloc, TabsState>(
+      buildWhen: _tabStripChanged,
       builder: (context, state) {
         if (!state.hasOpenTabs) return const SizedBox.shrink();
         return Container(
