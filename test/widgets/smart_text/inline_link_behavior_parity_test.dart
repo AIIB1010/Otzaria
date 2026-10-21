@@ -202,4 +202,66 @@ void main() {
   testWidgets('גאומטריה, סגנון וסימונים מורמים של השורה זהים', (tester) async {
     await expectInlineParity(tester, _line, width: 360);
   });
+
+  // המסמך שמור במטמון ומשותף; ה-recognizers שייכים לכל ווידג'ט בנפרד.
+  testWidgets('אותה שורה בשתי חלוניות: recognizers נפרדים ו-callbacks חיים', (
+    tester,
+  ) async {
+    final log = <String>[];
+    Future<List<TapGestureRecognizer>> pumpPanes(
+      List<(String, String)> panes,
+    ) async {
+      await tester.pumpWidget(
+        parityApp(
+          Column(
+            children: [
+              for (final (key, text) in panes)
+                SmartTextWidget(
+                  key: ValueKey(key),
+                  text: text,
+                  settings: const RenderSettings(fontSize: 22, lineHeight: 1.6),
+                  onAnchorTap: (url) => log.add('$key:$url'),
+                ),
+            ],
+          ),
+          width: 360,
+        ),
+      );
+      final recognizers = <TapGestureRecognizer>[];
+      for (final paragraph in tester.renderObjectList<RenderParagraph>(
+        find.byWidgetPredicate((w) => w is RichText),
+      )) {
+        final index = paragraph.text.toPlainText().indexOf('(א)');
+        if (index < 0) continue;
+        final span =
+            paragraph.text.getSpanForPosition(
+                  TextPosition(offset: index),
+                )!
+                as TextSpan;
+        recognizers.add(span.recognizer! as TapGestureRecognizer);
+      }
+      return recognizers;
+    }
+
+    final first = await pumpPanes([('a', _line), ('b', _line)]);
+    expect(first, hasLength(2));
+    expect(identical(first[0], first[1]), isFalse);
+
+    // callbacks חדשים בלי שינוי טקסט: אותם recognizers קוראים לחדשים.
+    final second = await pumpPanes([('c', _line), ('b', _line)]);
+    expect(identical(second[1], first[1]), isTrue);
+    for (final recognizer in second) {
+      recognizer.onTap!();
+    }
+    await tester.pump();
+    expect(log, ['c:otzaria://anchor?ref=3_0', 'b:otzaria://anchor?ref=3_0']);
+
+    // הסרת חלונית אינה פוגעת בשנייה.
+    log.clear();
+    final third = await pumpPanes([('b', _line)]);
+    expect(identical(third.single, first[1]), isTrue);
+    third.single.onTap!();
+    await tester.pump();
+    expect(log, ['b:otzaria://anchor?ref=3_0']);
+  });
 }

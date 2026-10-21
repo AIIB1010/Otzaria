@@ -185,6 +185,7 @@ class InlineHtmlDocument {
       final document = _InlineBuilder(
         style,
         inheritedVariations: baseStyle.fontVariations,
+        rootFontSize: baseStyle.fontSize,
       ).build(heading.nodes);
       if (document == null || document.plainText.isEmpty) return null;
       return InlineHtmlLine(style, document, isHeading: true);
@@ -296,14 +297,6 @@ class _Props {
   /// האלמנט רשם ירושה משלו. בלעדיה fwfh רואה אותו כזהה להורה, ורצף טקסט
   /// שעובר דרכו נשאר באותו ספאן — וזה משנה את קיטום הרווחים בקצוות.
   bool hasCallbacks;
-
-  _Props get root {
-    var props = this;
-    while (props.parent != null) {
-      props = props.parent!;
-    }
-    return props;
-  }
 }
 
 /// עלה בעץ הביטים של fwfh: טקסט, רווח או `<br>`.
@@ -374,14 +367,21 @@ class _Unsupported implements Exception {
 }
 
 class _InlineBuilder {
-  _InlineBuilder(this.baseStyle, {List<FontVariation>? inheritedVariations})
-    : inheritedVariations = inheritedVariations ?? baseStyle.fontVariations;
+  _InlineBuilder(
+    this.baseStyle, {
+    List<FontVariation>? inheritedVariations,
+    double? rootFontSize,
+  }) : inheritedVariations = inheritedVariations ?? baseStyle.fontVariations,
+       rootFontSize = rootFontSize ?? baseStyle.fontSize;
 
   /// סגנון השורש של הספאנים (בכותרת — סגנון הכותרת).
   final TextStyle baseStyle;
 
   /// ה-fontVariations שב-HtmlWidget עוברות בירושה לכל ספאן (של סגנון השורה).
   final List<FontVariation>? inheritedVariations;
+
+  /// גודל השורש של HtmlWidget, שאליו יחסיים `medium`, `large` וכו' — גם בכותרת.
+  final double? rootFontSize;
   final List<InlineLink> _links = [];
 
   InlineHtmlDocument? build(List<dom.Node> nodes) {
@@ -724,7 +724,7 @@ class _InlineBuilder {
     }
   }
 
-  static double? _fontSize(css.Expression value, _Props parent) {
+  double? _fontSize(css.Expression value, _Props parent) {
     final base = parent.fontSize;
     if (value is css.EmTerm) {
       return _multiply(base, (value.value as num).toDouble());
@@ -738,7 +738,7 @@ class _InlineBuilder {
       return null;
     }
     if (value is css.LiteralTerm) {
-      final rootSize = parent.root.fontSize;
+      final rootSize = rootFontSize;
       return switch (value.valueAsString) {
         'xxx-large' => _multiply(rootSize, 3.0),
         'xx-large' => _multiply(rootSize, 2.0),

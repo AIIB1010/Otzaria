@@ -66,6 +66,8 @@ final Map<String, List<String>> _cases = {
     '<span style="font-size: smaller">א</span><span style="font-size: larger">ב</span><span style="font-size: 1.5em">ג</span><span style="font-size: x-large">ד</span><span style="font-size: 12">ה</span>',
     '<span style="color: hsl(120, 100%, 25%)">ירוק</span> <span style="color: #f00a">שקוף</span> <span style="font-style: normal"><i>נטוי</i></span> <i><span style="font-style: normal">ישר</span></i>',
     '<u><span style="text-decoration: none">לא מוסר</span></u> <span style="text-decoration: underline"><span style="text-decoration-color: #00ff00">צבע</span></span>',
+    '<small><big>א</big></small> <big><big>ב</big></big> <span style="font-size:2em"><span style="font-size:smaller">ג</span><span style="font-size:x-small">ד</span></span>',
+    '<B>רישיות</B> <SPAN STYLE="COLOR: RED; Font-Size: 1.2EM">תג</SPAN> <span style="text-decoration: underline; text-decoration-thickness: 200%;">עבה</span> <span style="text-decoration: line-through double;">כפול</span>',
   ],
   'הדגשות חיפוש בשורה מעוגנת': [
     'בראשית <span style="color: red">ברא</span>${_anchor(0, 'א')} אלהים <span style="background-color: rgba(255, 255, 0, 0.8); color: black">את</span> $_long',
@@ -84,11 +86,16 @@ final Map<String, List<String>> _cases = {
     '<a href="x">א<a href="y">ב</a></a>',
     '<span class="x">א </span>ב <span>ג  </span> ד <span dir="rtl"> ה </span> ו',
     '<a href="x">קישור </a>אחרי <a class="link-anchor-range" href="y"> טווח </a> סוף',
+    'א <!-- הערה --> ב<!--x-->ג <span style="white-space: nowrap"> ד ה  ו	ז </span>ח',
+    '<br>א <b><br> ב</b> ג<br><b> ד</b> &#160;ה&#x200F; &apos;ו&apos;<br>',
   ],
   'כותרות': [
     '<h2>כותרת ${_anchor(0, 'א')} עם עוגן</h2>',
     '<h3>כותרת <span style="color:#2828AC;">צבעונית</span></h3>',
     ' <h1><a href="otzaria://inline-link?path=x&index=1&ref=y">קישור בכותרת</a></h1> ',
+    // מילות גודל מוחלטות יחסיות לשורש של HtmlWidget, לא לכותרת.
+    '<h2>א<span style="font-size: medium">ב</span><span style="font-size: x-large">ג</span></h2>',
+    '<h5>קטנה <big>גדולה</big> <span style="font-size: small">קטן</span></h5>',
   ],
 };
 
