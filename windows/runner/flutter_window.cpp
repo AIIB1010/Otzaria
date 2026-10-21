@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cwchar>
 #include <limits>
 #include <map>
 #include <optional>
@@ -531,6 +532,39 @@ bool CreateSecondaryWindowOnThisThread(const flutter::DartProject& base,
   return true;
 }
 
+// חלון שנוצר מ-Dart (ריבוי תצוגות). חי על המנוע של החלון הראשי, באותו thread.
+bool IsDartHostWindow(HWND hwnd) {
+  wchar_t name[32] = {};
+  return ::GetClassNameW(hwnd, name, ARRAYSIZE(name)) > 0 &&
+         wcscmp(name, L"FLUTTER_HOST_WINDOW") == 0;
+}
+
+BOOL CALLBACK FindVisibleDartHostWindow(HWND hwnd, LPARAM found) {
+  if (!::IsWindowVisible(hwnd) || !IsDartHostWindow(hwnd)) return TRUE;
+  *reinterpret_cast<bool*>(found) = true;
+  return FALSE;
+}
+
+bool HasVisibleDartHostWindow() {
+  bool found = false;
+  ::EnumThreadWindows(::GetCurrentThreadId(), FindVisibleDartHostWindow,
+                      reinterpret_cast<LPARAM>(&found));
+  return found;
+}
+
+// מתקין על תצוגת Flutter של חלון Dart את אותם תיקוני קלט של החלון הראשי.
+// רק חלון Dart של ה-thread הזה; התקנה חוזרת אינה עושה דבר.
+bool InstallDartViewHooks(HWND root) {
+  if (!::IsWindow(root) || !IsDartHostWindow(root) ||
+      ::GetWindowThreadProcessId(root, nullptr) != ::GetCurrentThreadId()) {
+    return false;
+  }
+  const HWND view = ::FindWindowExW(root, nullptr, L"FLUTTERVIEW", nullptr);
+  if (!view) return false;
+  InstallPhantomMouseButtonFilter(view);
+  InstallShiftKeyNormalizer(view);
+  return true;
+}
 
 }  // namespace
 
@@ -881,6 +915,22 @@ bool FlutterWindow::OnCreate() {
           out[flutter::EncodableValue("y")] =
               flutter::EncodableValue(static_cast<int>(pt.y));
           result->Success(flutter::EncodableValue(out));
+          return;
+        }
+
+        // חלון Dart חדש: תיקוני הקלט של #1441 ו-#1645 לתצוגה שלו.
+        if (call.method_name() == "installViewHooks") {
+          bool installed = false;
+          if (const auto* args =
+                  std::get_if<flutter::EncodableMap>(call.arguments())) {
+            const auto it = args->find(flutter::EncodableValue("hwnd"));
+            if (it != args->end()) {
+              const int64_t hwnd = it->second.LongValue();
+              installed = InstallDartViewHooks(
+                  reinterpret_cast<HWND>(static_cast<intptr_t>(hwnd)));
+            }
+          }
+          result->Success(flutter::EncodableValue(installed));
           return;
         }
 
@@ -1498,6 +1548,9 @@ void FlutterWindow::OnWindowHidden() {
   if (g_live_window_count.fetch_sub(1) > 1) {
     return;
   }
+  // חלון Dart עדיין גלוי: הוא חי על המנוע הזה, ויציאה הייתה הורגת אותו.
+  // הסגירה שלו היא שתסיים את התהליך (מסלול הסגירה של Dart).
+  if (HasVisibleDartHostWindow()) return;
 
   // ⚠️ נסגר החלון האחרון. **לא** `PostQuitMessage`.
   //
