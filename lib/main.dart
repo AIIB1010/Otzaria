@@ -335,8 +335,7 @@ bool _isIgnorableHardwareKeyboardAssertion(String errorString) {
 /// 1. Sets up custom error handlers
 /// 2. Initializes Sentry for error tracking
 /// 3. Ensures Flutter bindings are initialized
-/// 4. Calls [initialize] to set up required services and configurations
-/// 5. Launches the main application widget
+/// 4. Launches the main application widget
 void main(List<String> args) async {
   // לינוקס: ה-runner מסמן חלון משני בארגומנטים, כי ל-`FlDartProject` אין
   // נקודת כניסה שאינה `main`.
@@ -2048,8 +2047,6 @@ Future<void> loadCerts() => _loadCertsFuture ??= _loadCerts();
 Future<void> _loadCerts() async {
   trustCertificates(await loadNetfreeCaBytes());
 }
-
-// Note: TOC parsing helper moved to lib/utils/toc_parser.dart for reuse
 
 /// נקודת הכניסה של חלון אוצריא נוסף.
 ///

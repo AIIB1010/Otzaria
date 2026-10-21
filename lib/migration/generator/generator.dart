@@ -68,7 +68,6 @@ class DatabaseGenerator {
   /// [directory] The directory to process
   /// [parentCategoryId] The ID of the parent category, if any
   /// [level] The current level in the directory hierarchy
-  /// [metadata] The metadata for books
   Future<void> processDirectory(
     String directory,
     int? parentCategoryId,
@@ -164,7 +163,6 @@ class DatabaseGenerator {
   ///
   /// [bookPath] The path to the book file
   /// [categoryId] The ID of the category the book belongs to
-  /// [metadata] The metadata for the book
   /// [isPersonal] Whether the book is personal (default: false)
   Future<void> createAndProcessBook(
     String bookPath,

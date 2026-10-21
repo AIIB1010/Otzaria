@@ -658,7 +658,7 @@ class _PluginNetworkRequest {
 }
 
 // ===================================================================
-// Bridge Adapter - strict 1:1 with plugin_system_plan.md
+// Bridge Adapter
 // ===================================================================
 String _transformTextReaderContent((String, TextDisplayProfile) input) {
   final (rawText, profile) = input;
