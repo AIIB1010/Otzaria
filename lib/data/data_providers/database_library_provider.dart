@@ -159,6 +159,55 @@ String? _existingAttachedFile(
   return resolved != null && File(resolved).existsSync() ? resolved : null;
 }
 
+/// שורות הקטלוג של seforim.db על חיבור משלו: על ה-UI isolate הן חוסמות
+/// כ-50-100ms מיד אחרי החשיפה. null — כתיבה חיצונית, ונקרא כמו קודם.
+Future<CatalogRows?> _officialCatalogInIsolate(String dbPath) async {
+  if (dbPath.isEmpty) return null;
+  try {
+    return await DbReadWorker.runOnFreshIsolate(
+      () => readOfficialCatalogSync(dbPath),
+    );
+  } on DbReadWorkerSuspended {
+    return null;
+  }
+}
+
+typedef CatalogRows = ({
+  List<Map<String, dynamic>> books,
+  List<Map<String, dynamic>> categories,
+  Map<int, String> authors,
+});
+
+@visibleForTesting
+CatalogRows readOfficialCatalogSync(String dbPath) {
+  final db = openReadOnlyTarget((
+    path: dbPath,
+    untrusted: false,
+    immutable: false,
+  ));
+  try {
+    return _readCatalogRows(db, DbCapabilities.probe(db));
+  } finally {
+    db.close();
+  }
+}
+
+/// בטרנזקציה אחת, כדי שסנכרון רקע לא ינעל את המסד בין השאילתות.
+CatalogRows _readCatalogRows(
+  sqlite3.Database db,
+  DbCapabilities capabilities,
+) {
+  late final CatalogRows rows;
+  withTransaction(db, () {
+    rows = (
+      books: BookDao.selectBooksMinimal(db, capabilities),
+      categories: CategoryDao.selectCategoryRows(db, capabilities),
+      authors: BookDao.selectBookAuthorsMap(db, capabilities),
+    );
+  });
+  return rows;
+}
+
 Future<AttachedCatalogRows> _readAttachedCatalogInIsolate(
   ReadOnlyDbTarget target,
 ) => Isolate.run(() => readAttachedCatalogSync(target));
@@ -3159,16 +3208,15 @@ class DatabaseLibraryProvider implements LibraryProvider, LinkLinesProvider {
     // from locking the DB between them (which caused 17s delays).
     final tQuery = DateTime.now();
 
-    late final List<Map<String, dynamic>> allDbBooks;
-    late List<Map<String, dynamic>> allCatRows;
-    late final Map<int, String> authorsByBookId;
-
-    final db = await repository.database.database;
-    withTransaction(db, () {
-      allDbBooks = repository.database.bookDao.getAllBooksMinimal(db);
-      allCatRows = repository.database.categoryDao.getAllCategoryRows(db);
-      authorsByBookId = repository.database.bookDao.getBookAuthorsMap(db);
-    });
+    final catalogRows =
+        await _officialCatalogInIsolate(_sqliteProvider.dbPath) ??
+        _readCatalogRows(
+          await repository.database.database,
+          await repository.database.capabilities,
+        );
+    final allDbBooks = catalogRows.books;
+    var allCatRows = catalogRows.categories;
+    final authorsByBookId = catalogRows.authors;
     // מסד בלי קטגוריות: כל ספריו (categoryId = 0) תחת שורש יחיד.
     if (allCatRows.isEmpty && allDbBooks.isNotEmpty) {
       allCatRows = const [
