@@ -1,5 +1,6 @@
 #include "flutter_window.h"
 
+#include <commctrl.h>
 #include <dwmapi.h>
 
 #include <algorithm>
@@ -626,6 +627,104 @@ bool InstallDartViewHooks(HWND root) {
   return true;
 }
 
+constexpr UINT_PTR kFramelessSubclassId = 0x0F1F;
+
+// כמו `IsWindows11OrGreater` של window_manager: ב-10 נשאר פס עליון של פיקסל.
+bool IsWindows11OrGreaterForFrame() {
+#pragma warning(push)
+#pragma warning(disable : 4996)
+  const DWORD version = ::GetVersion();
+#pragma warning(pop)
+  const DWORD build = version < 0x80000000 ? HIWORD(version) : 0;
+  return build >= 22000;
+}
+
+// `adjustNCCALCSIZE` של window_manager: חלון ממוקסם ממלא את אזור העבודה.
+void AdjustMaximizedClientRect(NCCALCSIZE_PARAMS* sz) {
+  LONG l = 8;
+  LONG t = 8;
+  const HMONITOR monitor =
+      ::MonitorFromRect(&sz->rgrc[0], MONITOR_DEFAULTTONEAREST);
+  MONITORINFO info = {sizeof(MONITORINFO)};
+  if (monitor && ::GetMonitorInfo(monitor, &info)) {
+    l = sz->rgrc[0].left - info.rcWork.left;
+    t = sz->rgrc[0].top - info.rcWork.top;
+  }
+  sz->rgrc[0].left -= l;
+  sz->rgrc[0].top -= t;
+  sz->rgrc[0].right += l;
+  sz->rgrc[0].bottom += t;
+}
+
+// מה ש-window_manager עושה לחלון הראשי ב-`TitleBarStyle.hidden`, לחלון Dart.
+// בלי WS_THICKFRAME (מסך מלא של ה-engine) הכול עובר כרגיל.
+LRESULT CALLBACK FramelessViewProc(HWND hwnd, UINT message, WPARAM wparam,
+                                   LPARAM lparam, UINT_PTR, DWORD_PTR) {
+  const bool framed =
+      (::GetWindowLongPtr(hwnd, GWL_STYLE) & WS_THICKFRAME) != 0;
+  switch (message) {
+    case WM_NCCALCSIZE:
+      if (wparam && framed) {
+        auto* sz = reinterpret_cast<NCCALCSIZE_PARAMS*>(lparam);
+        if (::IsZoomed(hwnd)) {
+          AdjustMaximizedClientRect(sz);
+        } else {
+          sz->rgrc[0].top += IsWindows11OrGreaterForFrame() ? 0 : 1;
+          sz->rgrc[0].right -= 8;
+          sz->rgrc[0].bottom -= 8;
+          sz->rgrc[0].left += 8;
+        }
+        return 0;
+      }
+      break;
+    case WM_NCACTIVATE:
+      if (framed) return 1;
+      break;
+    case WM_NCDESTROY:
+      ::RemoveWindowSubclass(hwnd, FramelessViewProc, kFramelessSubclassId);
+      break;
+  }
+  return ::DefSubclassProc(hwnd, message, wparam, lparam);
+}
+
+// חלון Dart בלי כותרת, כמו החלון הראשי. רק חלון Dart של ה-thread הזה.
+bool InstallFramelessViewFrame(HWND root) {
+  if (!::IsWindow(root) || !IsDartHostWindow(root) ||
+      ::GetWindowThreadProcessId(root, nullptr) != ::GetCurrentThreadId()) {
+    return false;
+  }
+  DWORD_PTR existing = 0;
+  if (::GetWindowSubclass(root, FramelessViewProc, kFramelessSubclassId,
+                          &existing)) {
+    return true;
+  }
+  if (!::SetWindowSubclass(root, FramelessViewProc, kFramelessSubclassId, 0)) {
+    return false;
+  }
+  // כמו `SetTitleBarStyle`: מאפס את הרחבת ה-DWM ומחשב מחדש את המסגרת.
+  const MARGINS margins = {0, 0, 0, 0};
+  ::DwmExtendFrameIntoClientArea(root, &margins);
+  ::SetWindowPos(root, nullptr, 0, 0, 0, 0,
+                 SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOMOVE | SWP_NOSIZE |
+                     SWP_NOACTIVATE | SWP_FRAMECHANGED);
+  return true;
+}
+
+// ה-HWND מארגומנט `{hwnd}` של הערוץ; 0 כשחסר או אינו מספר.
+HWND HwndArgument(const flutter::EncodableValue* arguments) {
+  const auto* args = std::get_if<flutter::EncodableMap>(arguments);
+  if (!args) return nullptr;
+  const auto it = args->find(flutter::EncodableValue("hwnd"));
+  if (it == args->end()) return nullptr;
+  int64_t hwnd = 0;
+  if (const auto* wide = std::get_if<int64_t>(&it->second)) {
+    hwnd = *wide;
+  } else if (const auto* narrow = std::get_if<int>(&it->second)) {
+    hwnd = *narrow;
+  }
+  return reinterpret_cast<HWND>(static_cast<intptr_t>(hwnd));
+}
+
 }  // namespace
 
 std::vector<FlutterWindow*>& FlutterWindow::AllWindowsInProcess() {
@@ -1011,6 +1110,14 @@ bool FlutterWindow::OnCreate() {
             }
           }
           result->Success(flutter::EncodableValue(installed));
+          return;
+        }
+
+        // חלון Dart בלי כותרת המערכת, כמו החלון הראשי (P1f).
+        if (call.method_name() == "makeFrameless") {
+          const HWND hwnd = HwndArgument(call.arguments());
+          result->Success(flutter::EncodableValue(
+              hwnd != nullptr && InstallFramelessViewFrame(hwnd)));
           return;
         }
 
