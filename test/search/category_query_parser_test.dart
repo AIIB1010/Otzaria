@@ -18,6 +18,27 @@ Category _category(
   parent: null,
 );
 
+class _CountingCategory extends Category {
+  _CountingCategory()
+    : super(
+        title: 'קטגוריה',
+        description: '',
+        shortDescription: '',
+        order: 0,
+        subCategories: [],
+        books: [],
+        parent: null,
+      );
+
+  int pathReads = 0;
+
+  @override
+  String get path {
+    pathReads++;
+    return super.path;
+  }
+}
+
 void main() {
   group('parseCategoryQuery', () {
     test('ללא @ — מחזיר את השאילתה כמות שהיא ו-facets null', () {
@@ -81,10 +102,7 @@ void main() {
     test('כמה @ — מאחד את ה-facets של כל הספרים', () {
       final library = Library(
         categories: [
-          _category('תורה', [
-            TextBook(title: 'רשי'),
-            TextBook(title: 'רמבן'),
-          ]),
+          _category('תורה', [TextBook(title: 'רשי'), TextBook(title: 'רמבן')]),
         ],
       );
 
@@ -155,9 +173,7 @@ void main() {
             exactBook,
             TextBook(title: 'קיצור משנה ברורה', id: 3),
           ]),
-          _category('פירושי משנה ברורה', [
-            TextBook(title: 'הערות', id: 4),
-          ]),
+          _category('פירושי משנה ברורה', [TextBook(title: 'הערות', id: 4)]),
         ],
       );
 
@@ -213,6 +229,53 @@ void main() {
           ),
         ),
       );
+    });
+
+    test('שם ללא נתיב לא בונה facet לספרים שאינם תואמים', () {
+      final category = _CountingCategory();
+      final book = TextBook(title: 'ספר אחר', id: 1, category: category);
+      category.books.add(book);
+      final library = Library(categories: [category]);
+
+      final parsed = parseCategoryQuery('מילה@לאקייםבכלל', library);
+
+      expect(parsed.categoryFound, isFalse);
+      expect(category.pathReads, 0);
+    });
+
+    test('נתיב תואם ספר תחת קטגוריה ששמה מכיל פסיק', () {
+      final category = _category('נתיבות המשפט, ביאורים', []);
+      final book = TextBook(
+        title: 'נתיבות המשפט, ביאורים',
+        id: 3831,
+        category: category,
+      );
+      category.books.add(book);
+      final library = Library(categories: [category]);
+
+      for (final name in ['נתיבות המשפט/ביאורים', 'ביאורים/נתיבות המשפט']) {
+        final parsed = parseCategoryQuery('מילה@$name', library);
+
+        expect(parsed.categoryFound, isTrue, reason: name);
+        expect(parsed.facets, [
+          FacetHelper.buildBookFacet(
+            FacetHelper.resolveCategoryPath(book),
+            book,
+          ),
+        ], reason: name);
+      }
+    });
+
+    test('נתיב ממשיך דרך תת קטגוריה מתחת לשם שמכיל פסיק', () {
+      final child = _category('סימנים', [TextBook(title: 'ביאור', id: 1)]);
+      final parent = _category('נתיבות המשפט, ביאורים', [], sub: [child]);
+      child.parent = parent;
+      final library = Library(categories: [parent]);
+
+      final parsed = parseCategoryQuery('מילה@נתיבות המשפט/סימנים', library);
+
+      expect(parsed.categoryFound, isTrue);
+      expect(parsed.facets, [child.path]);
     });
 
     group('נתיב (issue #2842)', () {

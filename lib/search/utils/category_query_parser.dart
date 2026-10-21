@@ -2,6 +2,7 @@ import 'package:otzaria/data/cache/acronyms_cache.dart';
 import 'package:otzaria/data/repository/data_repository.dart'
     show bookSearchWordMatchesFuzzy;
 import 'package:otzaria/library/models/library.dart';
+import 'package:otzaria/search/book_facet.dart';
 import 'package:otzaria/search/utils/facet_helper.dart';
 import 'package:otzaria/search/utils/find_match_utils.dart';
 
@@ -135,8 +136,15 @@ List<String> _facetsForName(
     return const [];
   }
 
-  bool inScope(String facet) =>
-      within == null || within.any((scope) => facet.startsWith('$scope/'));
+  final scopes = within
+      ?.map((scope) => BookFacet.resolveFacetCategoryPath(categoryPath: scope))
+      .toList(growable: false);
+  bool inScope(String facet) {
+    if (scopes == null) return true;
+    // נתיב הקטגוריה שומר פסיקים; ה-facet של הספר מנרמל אותם למפרידים.
+    final normalized = BookFacet.resolveFacetCategoryPath(categoryPath: facet);
+    return scopes.any((scope) => normalized.startsWith('$scope/'));
+  }
 
   final nameWords = normalizedName.split(' ');
   final tiers = [<String>[], <String>[], <String>[], <String>[]];
@@ -164,17 +172,28 @@ List<String> _facetsForName(
         ? const <String>[]
         : AcronymsCache.instance.acronymsFor(book.source, id) ??
               const <String>[];
-    final facet = FacetHelper.buildBookFacet(
-      FacetHelper.resolveCategoryPath(book),
-      book,
-    );
-    if (!inScope(facet)) continue;
+    String? facet;
+    if (within != null) {
+      facet = FacetHelper.buildBookFacet(
+        FacetHelper.resolveCategoryPath(book),
+        book,
+      );
+      if (!inScope(facet)) continue;
+    }
     final title = normalizeFindText(book.title);
     final tier = title == normalizedName ? 0 : tierOf([title, ...acronyms]);
-    if (tier != null) tiers[tier].add(facet);
+    if (tier != null) {
+      tiers[tier].add(
+        facet ??
+            FacetHelper.buildBookFacet(
+              FacetHelper.resolveCategoryPath(book),
+              book,
+            ),
+      );
+    }
   }
   for (final category in library.getAllCategories()) {
-    if (!inScope(category.path)) continue;
+    if (within != null && !inScope(category.path)) continue;
     final title = normalizeFindText(category.title);
     final tier = tiers[0].isNotEmpty && title == normalizedName
         ? 0
