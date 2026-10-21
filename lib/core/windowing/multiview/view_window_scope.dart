@@ -9,6 +9,7 @@ import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
 import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/core/windowing/window_title_sync.dart';
 import 'package:otzaria/history/history_repository.dart';
+import 'package:otzaria/plugins/services/plugin_runtime_dispatcher.dart';
 import 'package:otzaria/tabs/models/tab.dart';
 
 /// בונה את מסלול הסגירה של חלון; ניתן להחלפה בבדיקות.
@@ -61,10 +62,13 @@ class _ViewWindowScopeState extends State<ViewWindowScope> {
     slot: () => _entry.tabsSession.slot,
     view: _entry.handle.view,
   );
+  // נשמר מראש: בסגירה הבקר של החלון כבר עשוי להיות מושמד.
+  late final int _viewId;
 
   @override
   void initState() {
     super.initState();
+    _viewId = _entry.handle.view.viewId;
     _initialTab = _entry.takeInitialTab();
     _entry.closeHandler = _close;
     WindowTitleSync.bind(_entry.keys, _titleSync);
@@ -92,6 +96,8 @@ class _ViewWindowScopeState extends State<ViewWindowScope> {
     if (_entry.closeHandler == _close) {
       _entry.closeHandler = null;
     }
+    // התוספים שהוצגו בחלון אינם מוצגים עוד; בלי זה היו נשארים רצים.
+    PluginRuntimeDispatcher.instance.forgetWindow(_viewId);
     super.dispose();
   }
 

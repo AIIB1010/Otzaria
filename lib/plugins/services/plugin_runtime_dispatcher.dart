@@ -121,6 +121,16 @@ class _PluginInstance {
   }
 }
 
+/// מצב הנראות של חלון אחד (תצוגה אחת).
+class _WindowVisibility {
+  Set<PluginInstanceKey> visibleKeys = const {};
+  bool readerScreenVisible = true;
+  bool shown = true;
+  bool minimized = false;
+
+  bool get isForeground => readerScreenVisible && shown && !minimized;
+}
+
 class PluginRuntimeDispatcher {
   static final PluginRuntimeDispatcher instance = PluginRuntimeDispatcher._();
   PluginRuntimeDispatcher._();
@@ -207,12 +217,32 @@ class PluginRuntimeDispatcher {
   // לא נוגעים במופע הרקע ('background') — הוא הוער כדי לרוץ בלי דף נראה.
   //
   // קבוצה ולא מפתח יחיד: טאב מפוצל בעיון יכול להציג שני מופעים בו-זמנית.
-  Set<PluginInstanceKey> _visibleInstanceKeys = const {};
-  bool _readerScreenVisible = true;
-  bool _windowShown = true;
-  bool _windowMinimized = false;
+  //
+  // הנראות נשמרת לכל חלון לפי viewId: מופע רץ אם הוא מוצג בחלון כלשהו שמסך
+  // העיון שלו גלוי והוא עצמו מוצג. בלי ריבוי חלונות קיים רק החלון הראשי.
+  final Map<int, _WindowVisibility> _windows = {
+    mainViewId: _WindowVisibility(),
+  };
   bool _appVisible = true;
   Set<PluginInstanceKey> _runningForegroundKeys = const {};
+
+  /// התצוגה של החלון הראשי (ה-implicit view).
+  static const int mainViewId = 0;
+
+  _WindowVisibility _window(int? viewId) =>
+      _windows.putIfAbsent(viewId ?? mainViewId, _WindowVisibility.new);
+
+  Set<PluginInstanceKey> get _visibleInstanceKeys => _windows.length == 1
+      ? _windows.values.single.visibleKeys
+      : {for (final window in _windows.values) ...window.visibleKeys};
+
+  /// מסך העיון של החלון שמציג את [key]; מופע שאינו מוצג — של החלון הראשי.
+  bool _readerScreenVisibleFor(PluginInstanceKey key) {
+    for (final window in _windows.values) {
+      if (window.visibleKeys.contains(key)) return window.readerScreenVisible;
+    }
+    return _window(mainViewId).readerScreenVisible;
+  }
 
   // מסדר את כל פעולות מחזור-החיים בשרשרת אחת. בלי זה, שני reconciles
   // חופפים (מעבר מהיר בין תוספים/מסכים) מ-await בו-זמנית את pause/resume,
@@ -438,7 +468,7 @@ class PluginRuntimeDispatcher {
           hasController: true,
           isVisible: isInstanceVisible(key),
           isSuspended: instance.suspended,
-          readerScreenVisible: _readerScreenVisible,
+          readerScreenVisible: _readerScreenVisibleFor(key),
           platformNeedsHandoff: platformNeedsHandoff,
           appIsActive: appIsActiveNow(),
           flutterOwnsKeyboard: deferred && flutterOwnsKeyboardNow(),
@@ -453,7 +483,7 @@ class PluginRuntimeDispatcher {
     if (shouldRememberKeyboardFocusRequest(
       isBackground: isBackground,
       isVisible: isInstanceVisible(key),
-      readerScreenVisible: _readerScreenVisible,
+      readerScreenVisible: _readerScreenVisibleFor(key),
       platformNeedsHandoff: platformNeedsHandoff,
     )) {
       final pending = _instanceFor(pluginId, instanceId);
@@ -616,32 +646,37 @@ class PluginRuntimeDispatcher {
     return {'reason': reason.name, 'state': store.stateOf(key)};
   }
 
-  /// מעדכן אילו מופעי תוספים מוצגים כעת בטאב העיון הפעיל (ריק = אף אחד).
-  void setVisiblePluginInstances(Set<PluginInstanceKey> keys) {
-    if (setEquals(_visibleInstanceKeys, keys)) return;
-    _visibleInstanceKeys = Set.unmodifiable(keys);
+  /// מעדכן אילו מופעי תוספים מוצגים כעת בטאב העיון הפעיל (ריק = אף אחד)
+  /// של החלון [viewId] (`null` — החלון הראשי).
+  void setVisiblePluginInstances(Set<PluginInstanceKey> keys, {int? viewId}) {
+    final window = _window(viewId);
+    if (setEquals(window.visibleKeys, keys)) return;
+    window.visibleKeys = Set.unmodifiable(keys);
     unawaited(_serializeLifecycle(_reconcileForeground));
   }
 
   /// מעדכן אם מסך העיון גלוי. ביציאה משהים את המופעים המוצגים, בחזרה מחדשים.
-  void setReaderScreenVisible(bool visible) {
-    if (_readerScreenVisible == visible) return;
-    _readerScreenVisible = visible;
+  void setReaderScreenVisible(bool visible, {int? viewId}) {
+    final window = _window(viewId);
+    if (window.readerScreenVisible == visible) return;
+    window.readerScreenVisible = visible;
     unawaited(_serializeLifecycle(_reconcileForeground));
   }
 
   /// מעדכן אם החלון עצמו מוצג. חלון שנסגר מוסתר ולא נהרס, ובלי זה
   /// התוספים שבו היו ממשיכים לרוץ ברקע.
-  void setWindowShown(bool shown) {
-    if (_windowShown == shown) return;
-    _windowShown = shown;
+  void setWindowShown(bool shown, {int? viewId}) {
+    final window = _window(viewId);
+    if (window.shown == shown) return;
+    window.shown = shown;
     unawaited(_serializeLifecycle(_reconcileForeground));
   }
 
   /// חלון ממוזער אינו מוצג: התוספים שבו מושהים עד השחזור.
-  void setWindowMinimized(bool minimized) {
-    if (_windowMinimized == minimized) return;
-    _windowMinimized = minimized;
+  void setWindowMinimized(bool minimized, {int? viewId}) {
+    final window = _window(viewId);
+    if (window.minimized == minimized) return;
+    window.minimized = minimized;
     unawaited(_serializeLifecycle(_reconcileForeground));
   }
 
@@ -652,16 +687,29 @@ class PluginRuntimeDispatcher {
     unawaited(_serializeLifecycle(_reconcileForeground));
   }
 
-  Set<PluginInstanceKey> get _desiredForegroundKeys =>
-      _readerScreenVisible && _windowShown && !_windowMinimized && _appVisible
-      ? _visibleInstanceKeys
-      : const {};
+  /// חלון Dart נסגר: המופעים שהציג כבר אינם מוצגים בו. החלון הראשי נשאר תמיד.
+  void forgetWindow(int viewId) {
+    if (viewId == mainViewId || _windows.remove(viewId) == null) return;
+    unawaited(_serializeLifecycle(_reconcileForeground));
+  }
+
+  Set<PluginInstanceKey> get _desiredForegroundKeys {
+    if (!_appVisible) return const {};
+    if (_windows.length == 1) {
+      final window = _windows.values.single;
+      return window.isForeground ? window.visibleKeys : const {};
+    }
+    return {
+      for (final window in _windows.values)
+        if (window.isForeground) ...window.visibleKeys,
+    };
+  }
 
   /// מאפס את מצב הנראות בלבד (בלי לגעת ב-controllers). הדיספצ'ר הוא singleton,
   /// ובלי איפוס מפורש מצב מטסט אחד דולף לבא אחריו.
   @visibleForTesting
   void resetVisibilityForTesting() {
-    _visibleInstanceKeys = const {};
+    _resetWindows();
     _runningForegroundKeys = const {};
     for (final instance in _instances.values) {
       instance.suspended = false;
@@ -673,9 +721,6 @@ class PluginRuntimeDispatcher {
       instance.graceTimer?.cancel();
       instance.graceTimer = null;
     }
-    _readerScreenVisible = true;
-    _windowShown = true;
-    _windowMinimized = false;
     _appVisible = true;
     _lifecycleLock = Future.value();
     _cancelTimers();
@@ -690,6 +735,10 @@ class PluginRuntimeDispatcher {
     _selectionTimer = null;
     _pendingSelection = null;
   }
+
+  void _resetWindows() => _windows
+    ..clear()
+    ..[mainViewId] = _WindowVisibility();
 
   /// נקרא ע"י [PluginTabPage] כשה-WebView שלו סיים להיטען (אחרי boot).
   /// אם המופע נטען בזמן שאינו מוצג (למשל המשתמש עבר לטאב אחר לפני שהטעינה
@@ -1105,11 +1154,8 @@ class PluginRuntimeDispatcher {
     _instancesByPlugin.clear();
     _enabledCache.clear();
     _permissionCache.clear();
-    _visibleInstanceKeys = const {};
+    _resetWindows();
     _runningForegroundKeys = const {};
-    _readerScreenVisible = true;
-    _windowShown = true;
-    _windowMinimized = false;
     _appVisible = true;
     _lifecycleLock = Future.value();
     _cancelTimers();

@@ -916,6 +916,78 @@ void main() {
       expect(a.resumeCalls, 2);
     });
 
+    group('נראות לפי חלון', () {
+      const viewB = 7;
+
+      test('עזיבת מסך העיון בחלון אחד אינה משהה תוסף בחלון אחר', () async {
+        final a = _LifecycleFakeController();
+        final b = _LifecycleFakeController();
+        _d.registerController(pidA, a);
+        _d.registerController(pidB, b);
+
+        _d.setVisiblePluginInstances({_fg(pidA)});
+        _d.setVisiblePluginInstances({_fg(pidB)}, viewId: viewB);
+        await pumpEventQueue();
+        expect(a.resumeCalls, 1);
+        expect(b.resumeCalls, 1);
+        expect(_d.isInstanceVisible(_fg(pidA)), isTrue);
+        expect(_d.isInstanceVisible(_fg(pidB)), isTrue);
+
+        _d.setReaderScreenVisible(false, viewId: viewB);
+        await pumpEventQueue();
+        expect(b.pauseCalls, 1);
+        expect(a.pauseCalls, 0);
+
+        // עדכון הטאבים בחלון B אינו דורס את הנראות של הראשי.
+        _d.setVisiblePluginInstances(const {}, viewId: viewB);
+        await pumpEventQueue();
+        expect(a.pauseCalls, 0);
+        expect(_d.isInstanceVisible(_fg(pidB)), isFalse);
+      });
+
+      test('הסתרת הראשי משהה רק את התוספים שבו', () async {
+        final a = _LifecycleFakeController();
+        final b = _LifecycleFakeController();
+        _d.registerController(pidA, a);
+        _d.registerController(pidB, b);
+
+        _d.setVisiblePluginInstances({_fg(pidA)});
+        _d.setVisiblePluginInstances({_fg(pidB)}, viewId: viewB);
+        await pumpEventQueue();
+
+        _d.setWindowShown(false);
+        await pumpEventQueue();
+        expect(a.pauseCalls, 1);
+        expect(b.pauseCalls, 0);
+      });
+
+      test('forgetWindow משהה את מה שהוצג בחלון שנסגר', () async {
+        final b = _LifecycleFakeController();
+        _d.registerController(pidB, b);
+
+        _d.setVisiblePluginInstances({_fg(pidB)}, viewId: viewB);
+        await pumpEventQueue();
+        expect(b.resumeCalls, 1);
+
+        _d.forgetWindow(viewB);
+        await pumpEventQueue();
+        expect(b.pauseCalls, 1);
+        expect(_d.isInstanceVisible(_fg(pidB)), isFalse);
+      });
+
+      test('forgetWindow של החלון הראשי אינו עושה דבר', () async {
+        final a = _LifecycleFakeController();
+        _d.registerController(pidA, a);
+
+        _d.setVisiblePluginInstances({_fg(pidA)});
+        await pumpEventQueue();
+        _d.forgetWindow(PluginRuntimeDispatcher.mainViewId);
+        await pumpEventQueue();
+        expect(a.pauseCalls, 0);
+        expect(_d.isInstanceVisible(_fg(pidA)), isTrue);
+      });
+    });
+
     test('instance הרקע אינו מושהה ביציאה', () async {
       final bg = _LifecycleFakeController();
       _d.registerController(pidA, bg, instanceId: 'background');
