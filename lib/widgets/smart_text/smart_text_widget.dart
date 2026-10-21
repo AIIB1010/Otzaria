@@ -119,10 +119,13 @@ class SmartTextWidget extends StatelessWidget {
       listenables.add(utils.highlightPatternRevision);
     }
     if (bookId != null && sectionIndex != null) {
-      listenables.addAll([
-        PluginHighlightRegistry.instance,
-        PluginHighlightRevealService.instance,
-      ]);
+      listenables.add(
+        PluginHighlightRegistry.instance.sectionListenable(
+          bookId: bookId,
+          sectionIndex: sectionIndex,
+          bookUid: highlightBookUid,
+        ),
+      );
     }
     Widget buildResolved() => _buildResolved(
       context,
@@ -136,7 +139,9 @@ class SmartTextWidget extends StatelessWidget {
     );
     if (listenables.isEmpty) return buildResolved();
     return ListenableBuilder(
-      listenable: Listenable.merge(listenables),
+      listenable: listenables.length == 1
+          ? listenables.single
+          : Listenable.merge(listenables),
       builder: (context, _) => buildResolved(),
     );
   }
