@@ -204,10 +204,11 @@ class SmartTextWidget extends StatelessWidget {
       ),
       height: settings.lineHeight,
     );
-    final colorScheme = Theme.of(context).colorScheme;
-    final linkColor = AppSurfaces.readerLink(colorScheme);
-    final onTapUrl = _tapHandler(context);
-    final onMiddleClickUrl = onOpenBook == null
+    // נחוצים רק לשורה עם קישורים או ל-HtmlWidget, לא לשורה סטטית.
+    late final colorScheme = Theme.of(context).colorScheme;
+    late final linkColor = AppSurfaces.readerLink(colorScheme);
+    late final onTapUrl = _tapHandler(context);
+    late final onMiddleClickUrl = onOpenBook == null
         ? null
         : (String url) => HtmlLinkHandler.openLinkInBackground(context, url);
 
@@ -222,6 +223,10 @@ class SmartTextWidget extends StatelessWidget {
           return const SizedBox.shrink();
         }
         final lineStyle = line.style;
+        final staticSpan = document.staticSpan;
+        final textAlign = settings.justifyText
+            ? TextAlign.justify
+            : TextAlign.right;
         // רוחב מלא כמו <div> בלוק ב-HtmlWidget - אחרת מסכים שעוטפים שורה
         // ב-Center (הגבלת רוחב קריאה) ימרכזו שורות קצרות בטעות.
         return _withPluginFrames(
@@ -233,22 +238,29 @@ class SmartTextWidget extends StatelessWidget {
             SizedBox(
               key: widgetKey,
               width: double.infinity,
-              child: InlineHtmlText(
-                document: document,
-                style: lineStyle,
-                strutStyle: line.strutStyle,
-                textAlign: settings.justifyText
-                    ? TextAlign.justify
-                    : TextAlign.right,
-                // ב-HtmlWidget צבע הקישור עובר ב-CSS כ-hex בלי שקיפות.
-                linkColor: Color(0xFF000000 | linkColor.toARGB32()),
-                primaryColor: colorScheme.primary,
-                splitLongLines: !line.isHeading,
-                onTapUrl: onTapUrl,
-                onAnchorHover: onAnchorHover,
-                onAnchorHoverExit: onAnchorHoverExit,
-                onMiddleClickUrl: onMiddleClickUrl,
-              ),
+              child: staticSpan != null
+                  ? inlineSpanText(
+                      staticSpan,
+                      plainTextLength: document.plainText.length,
+                      style: lineStyle,
+                      strutStyle: line.strutStyle,
+                      textAlign: textAlign,
+                      splitLongLines: !line.isHeading,
+                    )
+                  : InlineHtmlText(
+                      document: document,
+                      style: lineStyle,
+                      strutStyle: line.strutStyle,
+                      textAlign: textAlign,
+                      // ב-HtmlWidget צבע הקישור עובר ב-CSS כ-hex בלי שקיפות.
+                      linkColor: Color(0xFF000000 | linkColor.toARGB32()),
+                      primaryColor: colorScheme.primary,
+                      splitLongLines: !line.isHeading,
+                      onTapUrl: onTapUrl,
+                      onAnchorHover: onAnchorHover,
+                      onAnchorHoverExit: onAnchorHoverExit,
+                      onMiddleClickUrl: onMiddleClickUrl,
+                    ),
             ),
           ),
         );

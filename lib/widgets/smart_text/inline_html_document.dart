@@ -29,6 +29,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:otzaria/core/diagnostics/smart_text_render_stats.dart';
 import 'package:otzaria/theme/app_fonts.dart';
 import 'package:otzaria/widgets/smart_text/exact_line_height.dart';
+import 'package:otzaria/widgets/smart_text/inline_html_tokenizer.dart';
 import 'package:otzaria/widgets/smart_text/simple_inline_html.dart';
 import 'package:otzaria/widgets/smart_text/smart_text_css.dart';
 
@@ -171,7 +172,8 @@ class InlineHtmlDocument {
 
   static InlineHtmlLine? _parseLineUncached(String html, TextStyle baseStyle) {
     final List<dom.Node> nodes = html.contains('<') || html.contains('&')
-        ? html_parser.parseFragment(html).nodes
+        ? parseWellFormedInlineHtml(html) ??
+              html_parser.parseFragment(html).nodes
         : [dom.Text(html)];
     final heading = _wholeLineHeading(nodes);
     if (heading != null) {
@@ -565,20 +567,33 @@ class _InlineBuilder {
     _ => const [],
   };
 
-  List<css.Declaration> _customDeclarations(dom.Element element, bool hasHref) {
-    final css = smartTextElementCss(
+  /// ה-CSS תלוי רק בתג, במחרוזת המחלקות וב-href; אלמנט כותרת אינו מגיע לכאן.
+  static List<css.Declaration> _customDeclarations(
+    dom.Element element,
+    bool hasHref,
+  ) {
+    final key = (element.localName, element.className, hasHref);
+    final cached = _customCache[key];
+    if (cached != null) return cached;
+    final map = smartTextElementCss(
       element.localName,
       element.classes,
       hasHref: hasHref,
-      fontFamily: baseStyle.fontFamily,
+      fontFamily: null,
       linkColorCss: _kLinkColorToken,
       headingColorCss: _kHeadingColorToken,
     );
-    if (css == null || css.isEmpty) return const [];
-    return _declarations(
-      css.entries.map((e) => '${e.key}: ${e.value}').join(';'),
-    );
+    final declarations = map == null || map.isEmpty
+        ? const <css.Declaration>[]
+        : _declarations(
+            map.entries.map((e) => '${e.key}: ${e.value}').join(';'),
+          );
+    if (_customCache.length >= 512) _customCache.clear();
+    return _customCache[key] = declarations;
   }
+
+  static final Map<(String?, String, bool), List<css.Declaration>>
+  _customCache = {};
 
   static final Map<String, List<css.Declaration>> _declarationsCache = {};
 

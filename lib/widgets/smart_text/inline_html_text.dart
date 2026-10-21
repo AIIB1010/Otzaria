@@ -182,26 +182,41 @@ class _InlineHtmlTextState extends State<InlineHtmlText> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final span = _buildSpan();
-    final longLine =
-        widget.splitLongLines &&
-            widget.document.plainText.length > kLongLineMinChars
-        ? splitLongLine(span)
-        : null;
-    if (longLine != null) {
-      return LongLineChunks(
-        split: longLine,
-        style: widget.style,
-        strutStyle: widget.strutStyle,
-        textAlign: widget.textAlign,
-      );
-    }
-    return SelectionFillText.rich(
-      span,
-      style: widget.style,
-      strutStyle: widget.strutStyle,
-      textAlign: widget.textAlign,
+  Widget build(BuildContext context) => inlineSpanText(
+    _buildSpan(),
+    plainTextLength: widget.document.plainText.length,
+    style: widget.style,
+    strutStyle: widget.strutStyle,
+    textAlign: widget.textAlign,
+    splitLongLines: widget.splitLongLines,
+  );
+}
+
+/// מציג ספאן שורה ב-[SelectionFillText], ושורה ארוכה מאוד ב-[LongLineChunks].
+/// שורה בלי קישורים מוצגת כך ישירות, בלי ה-State של [InlineHtmlText].
+Widget inlineSpanText(
+  TextSpan span, {
+  required int plainTextLength,
+  required TextStyle style,
+  StrutStyle? strutStyle,
+  required TextAlign textAlign,
+  bool splitLongLines = true,
+}) {
+  final longLine = splitLongLines && plainTextLength > kLongLineMinChars
+      ? splitLongLine(span)
+      : null;
+  if (longLine != null) {
+    return LongLineChunks(
+      split: longLine,
+      style: style,
+      strutStyle: strutStyle,
+      textAlign: textAlign,
     );
   }
+  return SelectionFillText.rich(
+    span,
+    style: style,
+    strutStyle: strutStyle,
+    textAlign: textAlign,
+  );
 }
