@@ -31,9 +31,7 @@ abstract interface class ForegroundWorkPlatform {
   Future<void> stop();
 }
 
-/// מחזיק שירות חזית באנדרואיד כל עוד יש לו בעלים אחד לפחות: בלעדיו כיבוי
-/// המסך מכניס את התהליך ל-Doze, והרשת נחסמת באמצע הורדה של כמה GB.
-///
+/// מחזיק שירות חזית באנדרואיד כל עוד יש בעלים, בלי להבטיח רשת ב-Doze.
 /// כשל בהפעלת השירות אינו עוצר את העבודה — הוא נרשם ל-errors.txt בלבד.
 class ForegroundWork {
   ForegroundWork({

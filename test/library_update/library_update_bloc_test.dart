@@ -145,6 +145,19 @@ class _CancellableFullService extends _FakeService {
   }
 }
 
+class _DelayedResumeProbeService extends _CancellableFullService {
+  _DelayedResumeProbeService(super.plan, super.gate);
+
+  final probeStarted = Completer<void>();
+  final probe = Completer<bool>();
+
+  @override
+  Future<bool> hasResumableDownload(LibraryUpdatePlan plan) {
+    probeStarted.complete();
+    return probe.future;
+  }
+}
+
 class _FullRefreshFailingService extends _FakeService {
   _FullRefreshFailingService(super.plan);
 
@@ -2365,6 +2378,47 @@ void main() {
         expect(platform.calls, ['start'], reason: 'המערכת כבר עצרה אותו');
       },
     );
+
+    for (final interrupt in [
+      const CancelLibraryUpdate(),
+      const ResetLibraryUpdate(),
+    ]) {
+      test('בדיקת timeout ישנה אינה דורסת הורדה אחרי $interrupt', () async {
+        final gate = Completer<void>();
+        final service = _DelayedResumeProbeService(fullPlan, gate);
+        final bloc = awaitingFull(service);
+        addTearDown(bloc.close);
+        addTearDown(() {
+          if (!gate.isCompleted) gate.complete();
+          if (!service.probe.isCompleted) service.probe.complete(false);
+        });
+        bloc.add(const ConfirmFullDownload());
+        await until(bloc, LibraryUpdateStatus.downloading);
+        await foregroundWork.settled;
+
+        platform.timeout();
+        await service.probeStarted.future;
+        bloc.add(interrupt);
+        await until(bloc, LibraryUpdateStatus.idle);
+        bloc.add(const StartLibraryUpdate());
+        await until(bloc, LibraryUpdateStatus.needsFullConfirmation);
+        bloc.add(const ConfirmFullDownload());
+        await until(bloc, LibraryUpdateStatus.downloading);
+        await foregroundWork.settled;
+        expect(platform.calls, ['start', 'start']);
+
+        service.probe.complete(true);
+        await Future<void>.delayed(Duration.zero);
+        await foregroundWork.settled;
+        expect(bloc.state.status, LibraryUpdateStatus.downloading);
+        expect(platform.calls, ['start', 'start']);
+
+        gate.complete();
+        await until(bloc, LibraryUpdateStatus.completed);
+        await foregroundWork.settled;
+        expect(platform.calls, ['start', 'start', 'stop']);
+      });
+    }
 
     test('מכסת הזמן בזמן כתיבת הדלתא אינה עוצרת את ההחלה', () async {
       final gate = Completer<void>();

@@ -11,10 +11,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 
-/**
- * שירות חזית (dataSync) שמחזיק את התהליך חי בזמן הורדת הספרייה, כדי ש-Doze
- * לא יחסום את הרשת כשהמסך כבה. העבודה עצמה רצה ב-Dart.
- */
+/** שירות חזית (dataSync) להורדת הספרייה ב-Dart; אינו מבטיח גישה לרשת ב-Doze. */
 class ForegroundWorkService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 

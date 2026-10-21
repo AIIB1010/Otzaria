@@ -46,7 +46,7 @@ class LibraryUpdateBloc extends Bloc<LibraryUpdateEvent, LibraryUpdateState> {
   /// שעון — ניתן להזרקה לבדיקות ויסות ההתקדמות.
   final DateTime Function() _now;
 
-  /// שירות החזית שמחזיק את ההורדה חיה כשהמסך כבוי (אנדרואיד).
+  /// שירות חזית שמגן על ההורדה מפני מגבלות עבודה ברקע באנדרואיד.
   final ForegroundWork _foregroundWork;
   bool _holdsForeground = false;
 
@@ -196,7 +196,7 @@ class LibraryUpdateBloc extends Bloc<LibraryUpdateEvent, LibraryUpdateState> {
     Emitter<LibraryUpdateState> emit,
   ) async {
     if (!state.isBusy || !_canCancel(state)) return;
-    _operationId++;
+    final opId = ++_operationId;
     final pending = _pendingCompleted;
     _pendingCompleted = null;
     if (pending != null) {
@@ -206,7 +206,7 @@ class LibraryUpdateBloc extends Bloc<LibraryUpdateEvent, LibraryUpdateState> {
     final plan = _activePlan;
     final canResume =
         plan != null && await repository.hasResumableDownload(plan);
-    if (isClosed) return;
+    if (isClosed || _isStale(opId)) return;
     emit(
       LibraryUpdateState(
         status: LibraryUpdateStatus.error,

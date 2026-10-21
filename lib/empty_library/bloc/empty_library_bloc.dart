@@ -101,7 +101,7 @@ class EmptyLibraryBloc extends Bloc<EmptyLibraryEvent, EmptyLibraryState> {
   /// דגל הביטול של פריסת חבילה שרצה כעת.
   ZstdCancelFlag? _activeImportCancel;
 
-  /// שירות החזית שמחזיק את ההורדה חיה כשהמסך כבוי (אנדרואיד).
+  /// שירות חזית שמגן על ההורדה מפני מגבלות עבודה ברקע באנדרואיד.
   final ForegroundWork _foregroundWork;
 
   /// רישום כשל הורדה ל-errors.txt — ההודעה למשתמש קצרה.
