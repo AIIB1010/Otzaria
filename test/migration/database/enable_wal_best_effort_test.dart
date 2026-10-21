@@ -152,6 +152,18 @@ void main() {
     expect(() => enableWalBestEffort(db, 'test'), returnsNormally);
   });
 
+  test('BUSY בבדיקת ה-WAL אינו מחזיר ל-journal רגיל ואינו נועל בלעדית', () {
+    // SQLITE_BUSY_RECOVERY (261) — חיבור אחר משחזר את ה-WAL; ה-WAL עצמו תקין.
+    final db = _FakeDatabase(
+      failOn: (sql) => sql.contains('sqlite_schema'),
+      extendedResultCode: 261,
+    );
+
+    expect(() => enableWalBestEffort(db, 'test'), returnsNormally);
+    expect(db.statements, isNot(contains('PRAGMA locking_mode=EXCLUSIVE')));
+    expect(db.statements, isNot(contains('PRAGMA journal_mode=DELETE')));
+  });
+
   test('WAL שאינו שמיש במערכת הקבצים מוחזר ל-journal רגיל', () {
     // SQLITE_IOERR_SHMOPEN (4618) — כרטיס SD ב-Android: ה-PRAGMA עובר,
     // ופתיחת ה-shared-memory נכשלת רק בטרנזקציה הראשונה.

@@ -69,6 +69,9 @@ void enableWalBestEffort(Database db, String label) {
     db.execute('SELECT count(*) FROM sqlite_schema');
   } catch (e) {
     debugPrint('[$label] journal_mode=WAL failed: $e');
+    // BUSY הוא נעילה של חיבור אחר, לא WAL פגום: החזרה הייתה נכשלת עליה
+    // ומשאירה את החיבור ב-locking_mode=EXCLUSIVE, שנועל את המסד לכל השאר.
+    if (e is SqliteException && e.resultCode == SqlError.SQLITE_BUSY) return;
     _revertToRollbackJournal(db, label);
     return;
   }
