@@ -230,12 +230,10 @@ class PluginBridgeHandler {
     // permission_denied. כדי לא להוסיף קריאת DB לכל RPC, ההקדמה הזו מתבצעת רק
     // לקריאות תוכן; שאר הקריאות נבדקות כרגיל בהמשך.
     final isContentRead = isRateLimitExempt(request.method);
-    final isSearchCancellation =
-        request.method == 'search.query' &&
-        PluginBridgeAdapter.isSearchCancellationPayload(request.payload);
-    final isNetworkFetchCancellation =
-        request.method == 'network.fetchStream' &&
-        PluginBridgeAdapter.isNetworkFetchCancellationPayload(request.payload);
+    final isStreamCancellation =
+        (request.method == 'search.query' ||
+            request.method == 'network.fetchStream') &&
+        PluginBridgeAdapter.isStreamCancellationPayload(request.payload);
     bool? grantedEarly;
     if (isContentRead && declaresPermission && requiredPermission != null) {
       grantedEarly =
@@ -244,9 +242,7 @@ class PluginBridgeHandler {
     }
 
     final exempt =
-        (isContentRead && (grantedEarly ?? false)) ||
-        isSearchCancellation ||
-        isNetworkFetchCancellation;
+        (isContentRead && (grantedEarly ?? false)) || isStreamCancellation;
     if (!exempt && !_rateLimiter.consume()) {
       return _errorResp("error.rate_limited", "Rate limit exceeded");
     }
