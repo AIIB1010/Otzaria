@@ -36,11 +36,16 @@ const _titles = [
   'מיקרופדיה תלמודית',
 ];
 
-const _commentaryPreference = [
-  'רש"י על בראשית',
-  'רמב"ן על בראשית',
-  'אבן עזרא על בראשית',
-];
+/// ספרים שנמדדים שוב עם חלונית מפרשים פתוחה. סמני-האות של המפרשים מוזרקים
+/// רק למפרשים פעילים; בשו"ע או"ח הם מופיעים ברוב השורות.
+const _commentaryRuns = {
+  'בראשית': ['רש"י על בראשית', 'רמב"ן על בראשית', 'אבן עזרא על בראשית'],
+  'שולחן ערוך, אורח חיים': [
+    'משנה ברורה',
+    'מגן אברהם',
+    'באר היטב אורח חיים',
+  ],
+};
 
 /// גלילה רציפה: מספר פריימים × פיקסלים לפריים, קפיצה אחת בכל פריים.
 const _stepFrames = 180;
@@ -109,8 +114,15 @@ void main() {
         continue;
       }
       await _probeBook(tester, rec, tabsBloc, book);
-      if (title == 'בראשית') {
-        await _probeBook(tester, rec, tabsBloc, book, withCommentary: true);
+      final commentators = _commentaryRuns[title];
+      if (commentators != null) {
+        await _probeBook(
+          tester,
+          rec,
+          tabsBloc,
+          book,
+          commentators: commentators,
+        );
       }
     }
     SmartTextRenderStats.enabled = false;
@@ -127,8 +139,9 @@ Future<void> _probeBook(
   _Recorder rec,
   TabsBloc tabsBloc,
   TextBook book, {
-  bool withCommentary = false,
+  List<String>? commentators,
 }) async {
+  final withCommentary = commentators != null;
   final label = withCommentary ? '${book.title} +מפרשים' : book.title;
   tabsBloc.add(CloseAllTabs());
   await _pumpFor(tester, const Duration(seconds: 2));
@@ -148,10 +161,12 @@ Future<void> _probeBook(
       timeout: const Duration(seconds: 90),
     );
     final loaded = tab.bloc.state as TextBookLoaded;
-    final commentators = withCommentary
-        ? _pickCommentators(loaded.availableCommentators)
-        : const <String>[];
-    tab.bloc.add(UpdateCommentators(commentators));
+    tab.bloc.add(
+      UpdateCommentators([
+        for (final title in commentators ?? const <String>[])
+          if (loaded.availableCommentators.contains(title)) title,
+      ]),
+    );
     await _pumpFor(tester, Duration(seconds: withCommentary ? 6 : 3));
   });
 
@@ -219,19 +234,18 @@ Future<void> _probeBook(
 
   await rec.phase(label, 'far_jumps', () async {
     for (final fraction in _farJumpFractions) {
-      unawaited(tab.lines.jumpToLine((lineCount * fraction).floor()));
+      final line = (lineCount * fraction).floor();
+      final mark = rec.mark();
+      unawaited(tab.lines.jumpToLine(line));
       await _pumpFor(tester, const Duration(milliseconds: 1500));
+      rec.write({
+        'type': 'jump',
+        'book': label,
+        'line': line,
+        'frames': rec.framesSince(mark),
+      });
     }
   });
-}
-
-List<String> _pickCommentators(List<String> available) {
-  final picked = [
-    for (final title in _commentaryPreference)
-      if (available.contains(title)) title,
-  ];
-  if (picked.isNotEmpty) return picked;
-  return (List.of(available)..sort()).take(3).toList();
 }
 
 Future<void> _pumpFor(WidgetTester tester, Duration duration) async {
@@ -302,6 +316,19 @@ class _Recorder {
     write(record);
   }
 
+  int mark() => _timings.length;
+
+  /// מספר הפריימים ו-build המקסימלי מאז [mark].
+  Map<String, Object?> framesSince(int mark) {
+    final slice = _timings.length > mark ? _timings.sublist(mark) : const [];
+    var maxBuild = 0.0;
+    for (final t in slice) {
+      final ms = t.buildDuration.inMicroseconds / 1000;
+      if (ms > maxBuild) maxBuild = ms;
+    }
+    return {'count': slice.length, 'buildMaxMs': _round2(maxBuild)};
+  }
+
   void write(Map<String, Object?> record) {
     outFile.writeAsStringSync(
       '${jsonEncode(record)}\n',
@@ -350,6 +377,9 @@ class _Recorder {
       'buildP99Ms': pct(build, 0.99),
       'buildMaxMs': build.isEmpty ? 0 : _round2(build.last),
       'buildSumMs': _round2(build.fold(0.0, (a, b) => a + b)),
+      'slowestBuildMs': [
+        for (final v in build.reversed.take(5)) _round2(v),
+      ],
       'rasterP90Ms': pct(raster, 0.9),
       'rasterMaxMs': raster.isEmpty ? 0 : _round2(raster.last),
       'over16Ms': total.where((v) => v > 1000 / 60).length,
