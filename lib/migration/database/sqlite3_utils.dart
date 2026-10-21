@@ -37,43 +37,43 @@ void closeWithCheckpoint(Database db) {
   db.close();
 }
 
-/// פותח DB כתיב עם הכוונון האחיד לכל מסדי הנתונים של האפליקציה.
-Database openWritableDatabase(String path, String label) {
+/// פותח DB כתיב עם הכוונון האחיד לכל מסדי הנתונים של האפליקציה: המתנה
+/// לנעילה, ו-WAL כשהאחסון תומך בו. [label] מזהה את הקורא בלוג.
+Database openWritableDatabase(
+  String path,
+  String label, {
+  int busyTimeoutMs = 5000,
+}) {
   final db = sqlite3.open(path);
-  tuneWritableDatabase(db, label);
-  return db;
+  _setBusyTimeout(db, label, busyTimeoutMs);
+  if (enableWalBestEffort(db, label)) return db;
+  db.close();
+  return _openInRollbackJournal(path, label, busyTimeoutMs);
 }
 
-/// כוונון אחיד לחיבור כתיב: המתנה לנעילה, ו-WAL כשהאחסון תומך בו.
-void tuneWritableDatabase(Database db, String label) {
+void _setBusyTimeout(Database db, String label, int busyTimeoutMs) {
   try {
     // המתנה במקום כישלון מיידי ב-SQLITE_BUSY: מופע שני של התוכנה או נעילה
     // שנשארה מסגירה כפויה היו מפילים את ה-DDL הראשון.
-    db.execute('PRAGMA busy_timeout=5000');
+    db.execute('PRAGMA busy_timeout=$busyTimeoutMs');
   } catch (e) {
     debugPrint('[$label] busy_timeout failed: $e');
   }
-  enableWalBestEffort(db, label);
 }
 
-/// מפעיל WAL כשאפשר, ולא מפיל את פתיחת ה-DB כשלא.
-///
-/// המעבר ל-WAL קוטם את קובץ ה-journal, וקטימה חסומה (נעילה שנשארה מסגירה
-/// כפויה, אנטי-וירוס) אינה סיבה שכל התכונה לא תעלה: ה-DB נשאר שמיש במצב
-/// ה-journal הקיים. [label] מזהה את הקורא בלוג.
-void enableWalBestEffort(Database db, String label) {
+/// מפעיל WAL כשאפשר, בלי להפיל את הפתיחה כשלא. `false` כשהחיבור צריך
+/// להיפתח מחדש ב-journal רגיל (shm שאינו נפתח, journal שאינו נקטם).
+bool enableWalBestEffort(Database db, String label) {
   try {
     db.execute('PRAGMA journal_mode=WAL');
     _probeWalWriteWithoutWaiting(db);
   } catch (e) {
     debugPrint('[$label] journal_mode=WAL failed: $e');
-    // BUSY הוא נעילה של חיבור אחר, לא WAL פגום: החזרה הייתה נכשלת עליה
-    // ומשאירה את החיבור ב-locking_mode=EXCLUSIVE, שנועל את המסד לכל השאר.
-    if (e is SqliteException && e.resultCode == SqlError.SQLITE_BUSY) return;
-    _revertToRollbackJournal(db, label);
-    return;
+    // BUSY הוא נעילה של חיבור אחר, לא WAL פגום.
+    return e is SqliteException && e.resultCode == SqlError.SQLITE_BUSY;
   }
   _relaxSyncIfWal(db, label);
+  return true;
 }
 
 // קריאה עשויה להצליח גם כש-shm אינו כתיב. בודקים כתיבה ללא המתנה
@@ -111,17 +111,19 @@ bool shrinkMemoryBestEffort(Database? db) {
   }
 }
 
-/// מחזיר את ה-DB ל-journal רגיל אחרי ש-WAL התגלה כלא שמיש.
-/// locking_mode=EXCLUSIVE הוא התנאי שבו SQLite עוזב WAL בלי קובץ shm.
-void _revertToRollbackJournal(Database db, String label) {
-  try {
-    db.execute('ROLLBACK');
-  } catch (_) {}
+/// חיבור שכבר נכשל בפתיחת ה-shm אינו מצליח לעזוב WAL. חיבור טרי שננעל
+/// בלעדית לפני הגישה הראשונה עוזב אותו בלי shm, ואז חוזר לנעילה רגילה.
+Database _openInRollbackJournal(String path, String label, int busyTimeoutMs) {
+  final db = sqlite3.open(path);
+  _setBusyTimeout(db, label, busyTimeoutMs);
   try {
     db.execute('PRAGMA locking_mode=EXCLUSIVE');
     db.execute('PRAGMA journal_mode=DELETE');
     db.execute('PRAGMA locking_mode=NORMAL');
+    // הנעילה הבלעדית משתחררת רק בגישה הבאה; בלעדיה חיבור אחר ממתין לה.
+    db.execute('SELECT count(*) FROM sqlite_schema');
   } catch (e) {
     debugPrint('[$label] fallback to rollback journal failed: $e');
   }
+  return db;
 }

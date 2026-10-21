@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:otzaria/migration/database/sqlite3_utils.dart';
+import 'package:sqlite3/common.dart' show CommonDatabase;
 import 'package:sqlite3/sqlite3.dart';
 
 /// DB שמתעד כל `execute` ונכשל בשגיאת IO על המשפטים ש-[failOn] מזהה.
@@ -39,33 +40,7 @@ class _FakeDatabase implements Database {
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
 }
 
-/// חיבור אמיתי שנכשל בבדיקת ה-WAL כמו WAL שאינו שמיש (IOERR_SHMOPEN).
-class _ShmFailingDatabase implements Database {
-  _ShmFailingDatabase(this.inner);
-
-  final Database inner;
-
-  @override
-  void execute(String sql, [List<Object?> parameters = const []]) {
-    if (sql == 'BEGIN IMMEDIATE') {
-      throw SqliteException(
-        extendedResultCode: 4618,
-        message: 'disk I/O error',
-        causingStatement: sql,
-      );
-    }
-    inner.execute(sql, parameters);
-  }
-
-  @override
-  ResultSet select(String sql, [List<Object?> parameters = const []]) =>
-      inner.select(sql, parameters);
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
-}
-
-int _synchronous(Database db) =>
+int _synchronous(CommonDatabase db) =>
     db.select('PRAGMA synchronous').first.values.first as int;
 
 void main() {
@@ -75,7 +50,7 @@ void main() {
     final db = sqlite3.open(p.join(dir.path, 'plugins_host.db'));
     addTearDown(db.close);
 
-    enableWalBestEffort(db, 'test');
+    expect(enableWalBestEffort(db, 'test'), isTrue);
 
     expect(db.select('PRAGMA journal_mode').first.values.first, 'wal');
     expect(_synchronous(db), 1, reason: 'NORMAL');
@@ -153,24 +128,62 @@ void main() {
     final db = sqlite3.openInMemory();
     addTearDown(db.close);
 
-    enableWalBestEffort(db, 'test');
+    expect(enableWalBestEffort(db, 'test'), isTrue);
 
     expect(db.select('PRAGMA journal_mode').first.values.first, 'memory');
     expect(_synchronous(db), 2, reason: 'FULL');
   });
 
-  test('החזרה ל-journal רגיל משאירה synchronous=FULL', () {
-    final dir = Directory.systemTemp.createTempSync('wal_fallback_sync');
-    addTearDown(() => dir.deleteSync(recursive: true));
-    final inner = sqlite3.open(p.join(dir.path, 'cache.db'));
-    addTearDown(inner.close);
+  group('shm שאינו נפתח (תיקייה במקום הקובץ)', () {
+    late Directory dir;
+    late String path;
 
-    inner.execute('PRAGMA busy_timeout=1337');
-    enableWalBestEffort(_ShmFailingDatabase(inner), 'test');
+    setUp(() {
+      dir = Directory.systemTemp.createTempSync('wal_shm_blocked');
+      path = p.join(dir.path, 'cache.db');
+    });
+    tearDown(() => dir.deleteSync(recursive: true));
 
-    expect(inner.select('PRAGMA journal_mode').first.values.first, 'delete');
-    expect(_synchronous(inner), 2, reason: 'FULL');
-    expect(inner.select('PRAGMA busy_timeout').first.values.first, 1337);
+    void blockShm() => Directory('$path-shm').createSync();
+
+    void expectRollbackJournal(CommonDatabase db) {
+      expect(db.select('PRAGMA journal_mode').first.values.first, 'delete');
+      expect(db.select('PRAGMA locking_mode').first.values.first, 'normal');
+      expect(_synchronous(db), 2, reason: 'FULL');
+    }
+
+    test('מסד שכבר ב-WAL חוזר ל-journal רגיל ושמיש', () {
+      final seed = sqlite3.open(path)
+        ..execute('PRAGMA journal_mode=WAL')
+        ..execute('CREATE TABLE t(x)');
+      seed.close();
+      blockShm();
+
+      final db = openWritableDatabase(path, 'test');
+      addTearDown(db.close);
+
+      expectRollbackJournal(db);
+      db.execute('INSERT INTO t VALUES (1)');
+    });
+
+    test('שני חיבורים לאותו מסד שמישים גם אחרי שהראשון נסגר', () {
+      sqlite3.open(path)
+        ..execute('CREATE TABLE t(x)')
+        ..close();
+      blockShm();
+
+      final first = openWritableDatabase(path, 'first');
+      final stopwatch = Stopwatch()..start();
+      final second = openWritableDatabase(path, 'second');
+      addTearDown(second.close);
+      expect(stopwatch.elapsed, lessThan(const Duration(seconds: 2)));
+      first.execute('INSERT INTO t VALUES (1)');
+      first.close();
+
+      expectRollbackJournal(second);
+      second.execute('INSERT INTO t VALUES (2)');
+      expect(second.select('SELECT count(*) FROM t').first.values.first, 2);
+    });
   });
 
   test('closeWithCheckpoint ממזג את ה-WAL גם כשחיבור אחר פתוח', () {
@@ -198,23 +211,23 @@ void main() {
       extendedResultCode: 1546,
     );
 
-    expect(() => enableWalBestEffort(db, 'test'), returnsNormally);
+    expect(enableWalBestEffort(db, 'test'), isFalse);
   });
 
-  test('BUSY בבדיקת ה-WAL אינו מחזיר ל-journal רגיל ואינו נועל בלעדית', () {
+  test('BUSY בבדיקת ה-WAL אינו מחייב פתיחה מחדש ב-journal רגיל', () {
     // SQLITE_BUSY_RECOVERY (261) — חיבור אחר משחזר את ה-WAL; ה-WAL עצמו תקין.
     final db = _FakeDatabase(
       failOn: (sql) => sql == 'BEGIN IMMEDIATE',
       extendedResultCode: 261,
     );
 
-    expect(() => enableWalBestEffort(db, 'test'), returnsNormally);
+    expect(enableWalBestEffort(db, 'test'), isTrue);
     expect(db.statements, isNot(contains('PRAGMA locking_mode=EXCLUSIVE')));
     expect(db.statements, isNot(contains('PRAGMA journal_mode=DELETE')));
     expect(db.statements.last, 'PRAGMA busy_timeout=1400');
   });
 
-  test('WAL שאינו שמיש במערכת הקבצים מוחזר ל-journal רגיל', () {
+  test('WAL שאינו שמיש במערכת הקבצים מחייב פתיחה מחדש', () {
     // SQLITE_IOERR_SHMOPEN (4618) — כרטיס SD ב-Android: ה-PRAGMA עובר,
     // ופתיחת ה-shared-memory נכשלת רק בטרנזקציה הראשונה.
     final db = _FakeDatabase(
@@ -222,9 +235,7 @@ void main() {
       extendedResultCode: 4618,
     );
 
-    expect(() => enableWalBestEffort(db, 'test'), returnsNormally);
-    expect(db.statements, contains('PRAGMA journal_mode=DELETE'));
-    expect(db.statements, contains('PRAGMA locking_mode=NORMAL'));
+    expect(enableWalBestEffort(db, 'test'), isFalse);
     expect(db.statements, isNot(contains('PRAGMA synchronous=NORMAL')));
   });
 }
