@@ -370,7 +370,14 @@ class AppWindowListener extends WindowListener {
     var correctionQuitFinished = false;
     try {
       if (canClose != null && !canClose()) return;
-      if (!await confirmAppCloseWithUnsavedChanges(allWindows: quit)) return;
+      // יציאה מחלון Dart האחרון שואלת בו (הוא הופעל); סגירה רגילה — בחלון הזה.
+      final closing = quit ? null : AppWindowKeys.byId(windowId);
+      if (!await confirmAppCloseWithUnsavedChanges(
+        allWindows: quit,
+        window: closing,
+      )) {
+        return;
+      }
       if (!await confirmCloseWhilePrinting()) return;
       if (canClose != null && !canClose()) return;
 
@@ -388,7 +395,10 @@ class AppWindowListener extends WindowListener {
 
       if (endsProcess) {
         if (!quit &&
-            !await confirmAppCloseWithUnsavedChanges(allWindows: true)) {
+            !await confirmAppCloseWithUnsavedChanges(
+              allWindows: true,
+              window: closing,
+            )) {
           return;
         }
         if (!await finishPreparedProcessCorrectionQuit()) {
