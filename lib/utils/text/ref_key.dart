@@ -99,16 +99,29 @@ bool isHebrewNumeral(String token) {
   return true;
 }
 
+/// טווח וסימן דף דורשים מקף, נקודה או נקודתיים. רוב ה-heRef אינם מכילים
+/// אותם, וסריקת שני הביטויים בכל אחד מהם היא רוב עלות הנרמול.
+@visibleForTesting
+bool mayHaveRangeOrDafMark(String ref) =>
+    ref.contains('-') ||
+    ref.contains('–') ||
+    ref.contains('־') ||
+    ref.contains('.') ||
+    ref.contains(':');
+
 /// טוקני המפתח הקנוני של [ref], לפי הסדר: חיתוך טווח, הרחבת סימוני דף,
 /// הסרת ניקוד/טעמים, מיפוי ע"א/ע"ב, הסרת גרשיים/פיסוק והסרת מילות מיקום.
 List<String> refKeyTokens(String ref) {
   // חיתוך הטווח לפני הנרמול — המקף נהפך לרווח בהסרת הניקוד. תחילית ההתאמה
   // ורכיב המספר אינם מכילים מפריד, ולכן הראשון שאחרי תחילתה הוא מפריד הטווח.
-  final range = _trailingRange.firstMatch(ref);
+  final marked = mayHaveRangeOrDafMark(ref);
+  final range = marked ? _trailingRange.firstMatch(ref) : null;
   final dash = range == null ? -1 : ref.indexOf(RegExp('[-–־]'), range.start);
   final head = dash > 0 ? ref.substring(0, dash) : ref;
 
-  var cleaned = removeTeamim(removeVolwels(_expandDafMarks(head)));
+  var cleaned = removeTeamim(
+    removeVolwels(marked ? _expandDafMarks(head) : head),
+  );
   cleaned = cleaned.replaceAll(_amudA, 'א').replaceAll(_amudB, 'ב');
   cleaned = cleaned
       .replaceAll('"', '')
