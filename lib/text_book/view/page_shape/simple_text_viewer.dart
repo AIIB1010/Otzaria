@@ -517,6 +517,9 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
   set _lastActiveCommentary(_SimpleTextViewerState? viewer) =>
       _activeCommentarySlot.viewer = viewer;
 
+  /// של החלון הזה, לא של החלון הפעיל; נלכד ב-initState כדי ש-dispose לא יחפש.
+  late final FocusRepository _focus;
+
   late ItemScrollController _scrollController;
   late ItemPositionsListener _positionsListener;
   ScrollOffsetController? _offsetController;
@@ -1085,6 +1088,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     super.initState();
     _previewWindow = AppWindowKeys.of(context);
     _activeCommentarySlot = AppWindowKeys.of(context)._activeCommentary;
+    _focus = FocusRepository.of(context);
     _configureScrollControllers();
     _selectionFocusNode = FocusNode(debugLabel: 'SelectionAreaFocus');
     _resolvedKeyboardFocusNode;
@@ -1125,7 +1129,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
       // אזור הקריאה דרך reading_screen (גלילה בחצים עובדת מיד).
       final tab = widget.tab;
       if (tab != null) {
-        FocusRepository().registerTabContentFocusRequester(
+        _focus.registerTabContentFocusRequester(
           tab,
           () => _requestKeyboardFocus('tab-content-focus'),
         );
@@ -1271,7 +1275,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
       FocusManager.instance.removeListener(_handleGlobalFocusChange);
       final tab = widget.tab;
       if (tab != null) {
-        FocusRepository().unregisterTabContentFocusRequester(tab);
+        _focus.unregisterTabContentFocusRequester(tab);
       }
     }
     if (!widget.isMainText) {
@@ -1315,10 +1319,10 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
       }
       if (widget.isMainText) {
         if (oldTab != null) {
-          FocusRepository().unregisterTabContentFocusRequester(oldTab);
+          _focus.unregisterTabContentFocusRequester(oldTab);
         }
         if (newTab != null) {
-          FocusRepository().registerTabContentFocusRequester(
+          _focus.registerTabContentFocusRequester(
             newTab,
             () => _requestKeyboardFocus('tab-content-focus'),
           );
