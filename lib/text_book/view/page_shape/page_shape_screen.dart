@@ -1143,6 +1143,7 @@ class _PageShapeScreenState extends State<PageShapeScreen> {
                           onNavigateToLine: (lineNumber, {note}) =>
                               _navigateToLine(state, lineNumber, note),
                           onClosePane: _toggleLeftSidebar,
+                          isPaneOpen: _isLeftSidebarOpen,
                           initialTabIndex: _leftSidebarTabIndex,
                           onTabChanged: (index) {
                             setState(() {
