@@ -24,10 +24,8 @@ class WindowRole {
   static bool openedWithTab = false;
 }
 
-/// תפקיד חלון אחד, כפי שנחשף ב-`AppWindowScope.roleOf`.
-///
-/// [AppWindowRole.current] הוא בדיוק מה ש-[WindowRole] אומר היום; חלון שנוצר
-/// באותו isolate יעביר ערכים משלו במקום הסטטיים.
+/// תפקיד חלון אחד, כפי שנחשף ב-`AppWindowScope.roleOf`. [AppWindowRole.current]
+/// הוא מה ש-[WindowRole] אומר; חלון באותו isolate יעביר ערכים משלו.
 class AppWindowRole {
   const AppWindowRole({
     required this.isPrimaryView,

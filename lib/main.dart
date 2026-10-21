@@ -1993,11 +1993,8 @@ Future<T> _timedPhase<T>(String name, Future<T> Function() body) async {
   }
 }
 
-/// המטען הגולמי שאיתו נפתח החלון, אם נפתח כחלון משני.
-///
-/// נצרך **פעם אחת** ב-[_takeSecondaryWindowInitialTab] ומתאפס שם, כדי
-/// ש-`RestartWidget` לא יוסיף את הכרטיסיה שוב בהפעלה מחדש של העץ. הפענוח
-/// קורה שם ולא כאן — ראו ההערה ב-[secondaryWindowMain].
+/// המטען הגולמי של חלון משני; נצרך **פעם אחת** כדי ש-`RestartWidget` לא
+/// יוסיף את הכרטיסיה שוב. ראו [_takeSecondaryWindowInitialTab].
 String? _secondaryWindowPayload;
 
 /// צורך את [_secondaryWindowPayload] ומפענח את הכרטיסיה שבו, אם יש.

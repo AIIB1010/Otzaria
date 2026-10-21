@@ -41,9 +41,6 @@ import 'package:otzaria/workspaces/workspace_repository.dart';
 
 /// ספקים של חלון אחד: כל מה שמחזיק מצב של החלון. נשען על [AppScopeProviders]
 /// שמעליו; הכיוון ההפוך (ספק תהליך שקורא ספק חלון) אסור.
-///
-/// הפרמטרים האופציונליים מאפשרים חלון נוסף באותו isolate; ברירות המחדל הן
-/// החלון היחיד של התהליך, כמו היום.
 class WindowScopeProviders extends StatelessWidget {
   const WindowScopeProviders({
     super.key,
