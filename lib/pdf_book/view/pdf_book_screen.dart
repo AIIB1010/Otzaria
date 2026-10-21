@@ -127,31 +127,6 @@ import 'package:otzaria/widgets/navigation/nav_side_panel.dart';
 import 'package:otzaria/theme/theme_exports.dart';
 import 'package:otzaria/widgets/navigation/app_top_bar.dart';
 
-final GlobalKey pdfBookNavigationTourTargetKey = GlobalKey(
-  debugLabel: 'pdf_book_navigation_tour_target',
-);
-final GlobalKey pdfBookBookmarkTourTargetKey = GlobalKey(
-  debugLabel: 'pdf_book_bookmark_tour_target',
-);
-final GlobalKey pdfBookSearchTourTargetKey = GlobalKey(
-  debugLabel: 'pdf_book_search_tour_target',
-);
-final GlobalKey pdfBookPrintTourTargetKey = GlobalKey(
-  debugLabel: 'pdf_book_print_tour_target',
-);
-final GlobalKey pdfBookOverflowTourTargetKey = GlobalKey(
-  debugLabel: 'pdf_book_overflow_tour_target',
-);
-final GlobalKey pdfBookOverflowBookmarkTourTargetKey = GlobalKey(
-  debugLabel: 'pdf_book_overflow_bookmark_tour_target',
-);
-final GlobalKey pdfBookOverflowSearchTourTargetKey = GlobalKey(
-  debugLabel: 'pdf_book_overflow_search_tour_target',
-);
-final GlobalKey pdfBookOverflowPrintTourTargetKey = GlobalKey(
-  debugLabel: 'pdf_book_overflow_print_tour_target',
-);
-
 /// תקציב מטמון התמונות של ה-renderer לטאב שלם, מתחלק בין חלוניותיו.
 ///
 /// ברירת המחדל של pdfrx 2.4.3 היא 100MB לכל viewer; מהודק כאן בגלל תרחיש
@@ -4286,7 +4261,7 @@ class _PdfBookScreenState extends State<PdfBookScreen>
                   AppTopBarItem(
                     widget: NavPanelToggleButton(
                       key: TourTargetsScope.enabledOf(context)
-                          ? pdfBookNavigationTourTargetKey
+                          ? TourTargetKeys.of(context).pdfBookNavigation
                           : null,
                       isOpen: showLeftPane,
                       onToggle: () => _setLeftPaneVisibility(!showLeftPane),
@@ -5070,19 +5045,20 @@ class _PdfBookScreenState extends State<PdfBookScreen>
   }
 
   Widget _buildPdfActions(BuildContext context) {
+    final tourKeys = TourTargetKeys.of(context);
     return ListenableBuilder(
       listenable: PluginToolbarRegistry.instance,
       builder: (context, _) => ResponsiveActionBar(
         key: const ValueKey('pdf_actions'),
         overflowMenuOffset: const Offset(0, 8),
         overflowButtonKey: TourTargetsScope.enabledOf(context)
-            ? pdfBookOverflowTourTargetKey
+            ? tourKeys.pdfBookOverflow
             : null,
         menuItemKeysByTooltip: TourTargetsScope.enabledOf(context)
             ? {
-                'סימניות בספר זה': pdfBookOverflowBookmarkTourTargetKey,
-                'חיפוש': pdfBookOverflowSearchTourTargetKey,
-                'הדפס': pdfBookOverflowPrintTourTargetKey,
+                'סימניות בספר זה': tourKeys.pdfBookOverflowBookmark,
+                'חיפוש': tourKeys.pdfBookOverflowSearch,
+                'הדפס': tourKeys.pdfBookOverflowPrint,
               }
             : null,
         actions: [
@@ -5145,7 +5121,7 @@ class _PdfBookScreenState extends State<PdfBookScreen>
       ),
       ActionButtonData.simple(
         key: TourTargetsScope.enabledOf(context)
-            ? pdfBookSearchTourTargetKey
+            ? TourTargetKeys.of(context).pdfBookSearch
             : null,
         icon: FluentIcons.search_24_regular,
         tooltip: 'חיפוש',
@@ -5228,7 +5204,7 @@ class _PdfBookScreenState extends State<PdfBookScreen>
           book: widget.tab.book,
           compact: isCompact,
           tourKey: TourTargetsScope.enabledOf(context)
-              ? pdfBookBookmarkTourTargetKey
+              ? TourTargetKeys.of(context).pdfBookBookmark
               : null,
         ),
       ),
@@ -5248,7 +5224,7 @@ class _PdfBookScreenState extends State<PdfBookScreen>
           60,
           ActionButtonData.simple(
             key: TourTargetsScope.enabledOf(context)
-                ? pdfBookPrintTourTargetKey
+                ? TourTargetKeys.of(context).pdfBookPrint
                 : null,
             icon: FluentIcons.print_24_regular,
             tooltip: 'הדפס',
