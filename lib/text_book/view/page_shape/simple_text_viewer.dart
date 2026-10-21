@@ -2680,6 +2680,12 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
               }
 
               return BlocBuilder<PersonalNotesBloc, PersonalNotesState>(
+                // שאר שדות ה-bloc (חיפוש, טיוטה) משתנים בכל הקשה; הבנייה
+                // קוראת רק את אלה, וטור מפרש אף לא אותם.
+                buildWhen: (previous, current) =>
+                    widget.isMainText &&
+                    (previous.bookId != current.bookId ||
+                        previous.locatedNotes != current.locatedNotes),
                 builder: (context, notesState) {
                   final noteMap = <int, List<PersonalNote>>{};
                   final visibleNotes = widget.isMainText
