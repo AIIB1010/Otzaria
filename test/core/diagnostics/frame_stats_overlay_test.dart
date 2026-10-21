@@ -9,6 +9,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/diagnostics/developer_diagnostics.dart';
 import 'package:otzaria/core/diagnostics/frame_stats_overlay.dart';
 import 'package:otzaria/core/diagnostics/process_tree_sampler.dart';
+import 'package:otzaria/core/windowing/app_window_controller.dart';
+import 'package:otzaria/core/windowing/app_window_id.dart';
+import 'package:otzaria/core/windowing/app_window_keys.dart';
+import 'package:otzaria/core/windowing/app_window_scope.dart';
 
 class _Probe extends StatefulWidget {
   const _Probe();
@@ -21,6 +25,9 @@ class _ProbeState extends State<_Probe> {
   @override
   Widget build(BuildContext context) => const SizedBox.expand();
 }
+
+class _FakeWindow extends Fake
+    implements AppWindowController, AppWindowGeometry {}
 
 void main() {
   late String outputPath;
@@ -202,5 +209,35 @@ void main() {
     final text = formatFrameStats(const FrameStats());
     expect(text, contains('frames/s  0'));
     expect(text, contains('avg -  max -'));
+  });
+
+  testWidgets('two windows in one isolate toggle once, from the active one', (
+    tester,
+  ) async {
+    final original = AppWindowKeys.current;
+    addTearDown(() => AppWindowKeys.activate(original));
+    final window = _FakeWindow();
+    final a = AppWindowKeys(id: const AppWindowId('a'));
+    final b = AppWindowKeys(id: const AppWindowId('b'));
+    Widget tree(AppWindowKeys keys) => Expanded(
+      child: AppWindowScope(
+        controller: window,
+        geometry: window,
+        keys: keys,
+        child: const FrameStatsOverlay(child: _Probe()),
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Row(children: [tree(a), tree(b)]),
+      ),
+    );
+    AppWindowKeys.activate(b);
+
+    await pressShortcut(tester);
+    expect(DeveloperDiagnostics.instance.isCollecting, isTrue);
+
+    await pressShortcut(tester);
+    expect(DeveloperDiagnostics.instance.isCollecting, isFalse);
   });
 }

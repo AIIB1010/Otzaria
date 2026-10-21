@@ -7,6 +7,7 @@ import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:otzaria/core/diagnostics/developer_diagnostics.dart';
 import 'package:otzaria/core/messages/common_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
+import 'package:otzaria/core/windowing/app_window_keys.dart';
 
 /// Wraps the app, toggles developer mode on Ctrl+Shift+I, and shows the
 /// diagnostics panel in a corner while it is on.
@@ -52,6 +53,8 @@ class _FrameStatsOverlayState extends State<FrameStatsOverlay> {
     if (!isDeveloperModeShortcut(event, HardwareKeyboard.instance)) {
       return false;
     }
+    // מצב הלוח משותף; מאזין בכל חלון היה מחליף אותו פעמיים.
+    if (!AppWindowKeys.isActiveWindow(context)) return false;
     _diagnostics.toggle();
     return true;
   }

@@ -72,6 +72,11 @@ class AppWindowKeys {
     _current = _primary;
   }
 
+  /// האם [context] יושב בחלון הפעיל. `HardwareKeyboard` מעביר מקשים מכל
+  /// החלונות לכל המאזינים, ולכן מאזין גלובלי פועל רק כשזה נכון.
+  static bool isActiveWindow(BuildContext context) =>
+      identical(of(context), _current);
+
   /// מפתחות החלון ש-[context] יושב בו, או [current] אם אין scope מעליו.
   /// בלי רישום תלות: המפתחות קבועים לחיי החלון, וכך מותר לקרוא גם מ-callback.
   static AppWindowKeys of(BuildContext context) =>

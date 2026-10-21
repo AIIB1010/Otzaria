@@ -205,6 +205,50 @@ void main() {
       expect(navigatorKey, same(keys.navigator));
     });
   });
+
+  testWidgets('isActiveWindow: רק החלון הנוכחי; בלי scope — תמיד', (
+    tester,
+  ) async {
+    final a = AppWindowKeys(id: const AppWindowId('a'));
+    final b = AppWindowKeys(id: const AppWindowId('b'));
+    late BuildContext inA;
+    late BuildContext inB;
+    late BuildContext outside;
+    Widget scoped(AppWindowKeys keys, void Function(BuildContext) grab) =>
+        AppWindowScope(
+          controller: window,
+          geometry: window,
+          keys: keys,
+          child: Builder(
+            builder: (context) {
+              grab(context);
+              return const SizedBox();
+            },
+          ),
+        );
+    await tester.pumpWidget(
+      Column(
+        children: [
+          scoped(a, (c) => inA = c),
+          scoped(b, (c) => inB = c),
+          Builder(
+            builder: (context) {
+              outside = context;
+              return const SizedBox();
+            },
+          ),
+        ],
+      ),
+    );
+
+    AppWindowKeys.activate(a);
+    expect(AppWindowKeys.isActiveWindow(inA), isTrue);
+    expect(AppWindowKeys.isActiveWindow(inB), isFalse);
+    expect(AppWindowKeys.isActiveWindow(outside), isTrue);
+    AppWindowKeys.activate(b);
+    expect(AppWindowKeys.isActiveWindow(inA), isFalse);
+    expect(AppWindowKeys.isActiveWindow(inB), isTrue);
+  });
 }
 
 class _FakeWindow extends Fake

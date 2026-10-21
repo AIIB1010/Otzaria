@@ -11,6 +11,7 @@ import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/plugins/services/plugin_file_drop_service.dart';
 import 'package:otzaria/theme/theme_exports.dart';
 import 'package:otzaria_report_contract/otzaria_report_contract.dart';
+import 'package:otzaria/core/windowing/app_window_keys.dart';
 
 /// אזור צירוף צילומי מסך לדיווח: הדבקה (מכל מקום בטופס), שחרור קובץ
 /// או לחיצה לבחירת קובץ, ומתחתיו התמונות שצורפו.
@@ -63,6 +64,7 @@ class _AppReportImagesSectionState extends State<AppReportImagesSection> {
     if (event is! KeyDownEvent || !widget.enabled) return false;
     if (!_isPasteShortcut(event)) return false;
     if (!(ModalRoute.of(context)?.isCurrent ?? false)) return false;
+    if (!AppWindowKeys.isActiveWindow(context)) return false;
     unawaited(_paste());
     return false;
   }
