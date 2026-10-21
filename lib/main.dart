@@ -990,54 +990,12 @@ Future<void> _initializeTimeZonesOnly() async {
   }
 }
 
-/// האם נותרו התראות מתוזמנות שיש לשחזר, לפי הערכים השמורים. אין כאלה — אין
-/// סיבה לגעת בתוסף: כל שאר נקודות השימוש מאתחלות אותו לפי דרישה.
-@visibleForTesting
-bool hasScheduledNotificationsToRestore({
-  required String zmanAlertsJson,
-  required String eventNotificationIdsJson,
-}) {
-  bool isEmptyJson(String value) {
-    final trimmed = value.trim();
-    return trimmed.isEmpty ||
-        trimmed == '{}' ||
-        trimmed == '[]' ||
-        trimmed == 'null';
-  }
-
-  return !isEmptyJson(zmanAlertsJson) || !isEmptyJson(eventNotificationIdsJson);
-}
-
-bool _hasScheduledNotificationsToRestore() {
-  return hasScheduledNotificationsToRestore(
-    zmanAlertsJson:
-        Settings.getValue<String>(
-          SettingsRepository.keyCalendarZmanAlerts,
-          defaultValue: '{}',
-        ) ??
-        '{}',
-    eventNotificationIdsJson:
-        Settings.getValue<String>(
-          SettingsRepository.keyCalendarEventNotificationIds,
-          defaultValue: '[]',
-        ) ??
-        '[]',
-  );
-}
-
 Future<void> _runDeferredNotificationService() async {
+  if (WindowRole.isSecondary) return;
   await _initializeTimeZonesOnly();
 
-  // ⚠️ אתחול התוסף נתקע במחשבים מסוימים 30 שניות (#1192): רק כשיש מה לשחזר.
-  if (!_hasScheduledNotificationsToRestore()) return;
-
-  try {
-    await _mainWindowRevealedCompleter.future.timeout(
-      const Duration(seconds: 20),
-    );
-  } on TimeoutException {
-    // החלון עדיין מוסתר — ממשיכים, אחרת ההתראות לא ישוחזרו כלל.
-  }
+  // קריאת אירועי התוספים נוגעת ב-SQLite סינכרוני; אין לעקוף את החשיפה.
+  await _mainWindowRevealedCompleter.future;
 
   try {
     // הבעלים מאתחל את התוסף רק אם יש מה לתזמן או לבטל, ומאריך את החלון.

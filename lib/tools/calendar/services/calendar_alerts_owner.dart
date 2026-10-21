@@ -12,6 +12,13 @@ import 'package:otzaria/tools/calendar/services/calendar_alert_planner.dart';
 import 'package:otzaria/tools/calendar/services/calendar_alerts_store.dart';
 import 'package:otzaria/tools/calendar/services/notification_service.dart';
 
+typedef ZmanAlertPlanner =
+    Iterable<PlannedAlert> Function({
+      required Map<String, ZmanAlertPreference> alerts,
+      required String city,
+      required DateTime now,
+    });
+
 /// מצב שהבעלים פרסם: [values] בתוקף מ-[revision] של ההפעלה [epoch].
 @immutable
 class CalendarAlertsUpdate {
@@ -103,6 +110,7 @@ class CalendarAlertsOwner {
     PluginNotificationIdStore? pluginIds,
     Future<List<CustomEvent>> Function()? pluginEvents,
     DateTime Function()? now,
+    ZmanAlertPlanner? zmanPlanner,
     void Function(Map<String, Object?> message)? broadcast,
     bool? dedupeDuplicates,
     this.pluginEventsDelay = const Duration(milliseconds: 50),
@@ -112,6 +120,7 @@ class CalendarAlertsOwner {
            pluginEvents ??
            (() => const PluginCalendarAdapter().loadAllPluginEvents()),
        _now = now ?? DateTime.now,
+       _zmanPlanner = zmanPlanner ?? CalendarAlertPlanner.planZmanAlerts,
        _broadcast = broadcast ?? _broadcastToWindows,
        _dedupeDuplicates =
            dedupeDuplicates ?? defaultTargetPlatform == TargetPlatform.windows;
@@ -140,6 +149,7 @@ class CalendarAlertsOwner {
   final PluginNotificationIdStore? _pluginIdsOverride;
   final Future<List<CustomEvent>> Function() _pluginEvents;
   final DateTime Function() _now;
+  final ZmanAlertPlanner _zmanPlanner;
   final void Function(Map<String, Object?> message) _broadcast;
   final bool _dedupeDuplicates;
 
@@ -167,6 +177,9 @@ class CalendarAlertsOwner {
   bool _dedupedPending = false;
 
   Set<int>? _ledger;
+  final Map<int, PlannedAlert> _appliedAlerts = {};
+  (DateTime, String, Object?)? _zmanPlanKey;
+  List<PlannedAlert> _zmanPlan = const [];
   bool _reconcileRunning = false;
   bool _reconcileRequested = false;
   Completer<void>? _idle;
@@ -711,20 +724,43 @@ class CalendarAlertsOwner {
       plan[alert.id] = alert;
     }
     final zmanAlerts = _decodeZmanAlerts(values[CalendarAlertsKeys.zmanAlerts]);
-    for (final alert in CalendarAlertPlanner.planZmanAlerts(
-      alerts: zmanAlerts,
-      city: values[CalendarAlertsKeys.city] as String? ?? 'ירושלים',
-      now: now,
-    )) {
-      plan[alert.id] = alert;
-      // חישוב זמני היום כבד; מפנים את ה-isolate בין יום ליום.
-      await Future<void>.delayed(Duration.zero);
+    // שומרים יום שלם; הסינון להלן מתחשב גם בחזרה בשעון באותו יום.
+    final today = DateTime(now.year, now.month, now.day);
+    final city = values[CalendarAlertsKeys.city] as String? ?? 'ירושלים';
+    final zmanPlanKey = (today, city, values[CalendarAlertsKeys.zmanAlerts]);
+    if (_zmanPlanKey != zmanPlanKey) {
+      final cached = <PlannedAlert>[];
+      for (final alert in _zmanPlanner(
+        alerts: zmanAlerts,
+        city: city,
+        now: today,
+      )) {
+        cached.add(alert);
+        // חישוב זמני היום כבד; מפנים את ה-isolate בין יום ליום.
+        await Future<void>.delayed(Duration.zero);
+      }
+      _zmanPlan = cached;
+      _zmanPlanKey = zmanPlanKey;
+    }
+    for (final alert in _zmanPlan) {
+      if (NotificationService.resolveScheduleTime(
+            eventDate: alert.eventDate,
+            reminderMinutes: alert.reminderMinutes,
+            now: now,
+          ) !=
+          null) {
+        plan[alert.id] = alert;
+      }
     }
 
+    final refreshDaily =
+        plan.isNotEmpty ||
+        zmanAlerts.isNotEmpty ||
+        events.any((event) => event.recurring);
     primeLedger();
     final previous = _ledger!;
+    _armDailyTimer(active: refreshDaily || previous.isNotEmpty);
     if (plan.isEmpty && previous.isEmpty) {
-      _armDailyTimer(active: false);
       _reportStatus(revision, ok: true);
       return;
     }
@@ -745,6 +781,7 @@ class CalendarAlertsOwner {
     final present = <int>{};
     var failures = 0;
     for (final id in previous.difference(plan.keys.toSet())) {
+      _appliedAlerts.remove(id);
       try {
         await notifications.cancelNotifications([id]);
       } catch (error, stackTrace) {
@@ -756,6 +793,13 @@ class CalendarAlertsOwner {
     final permitted = notifications.hasPermissions;
     if (!permitted) failures += plan.length;
     for (final alert in plan.values) {
+      if (permitted &&
+          previous.contains(alert.id) &&
+          _appliedAlerts[alert.id] == alert) {
+        present.add(alert.id);
+        continue;
+      }
+      _appliedAlerts.remove(alert.id);
       try {
         await notifications.cancelNotifications([alert.id]);
       } catch (error, stackTrace) {
@@ -775,13 +819,14 @@ class CalendarAlertsOwner {
           soundEnabled: alert.soundEnabled,
         );
         present.add(alert.id);
+        _appliedAlerts[alert.id] = alert;
       } catch (error, stackTrace) {
         failures++;
         NotificationService.logFailure('תזמון התראה נכשל', error, stackTrace);
       }
     }
     await _writeLedger(present);
-    _armDailyTimer(active: plan.isNotEmpty);
+    _armDailyTimer(active: refreshDaily || present.isNotEmpty);
     _reportStatus(revision, ok: failures == 0, failures: failures);
   }
 

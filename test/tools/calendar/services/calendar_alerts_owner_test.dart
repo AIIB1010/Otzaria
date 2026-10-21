@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -34,6 +35,7 @@ void main() {
     WindowsLikeNotifications? using,
     bool dedupe = false,
     bool crashes = false,
+    ZmanAlertPlanner? zmanPlanner,
   }) {
     final created = CalendarAlertsOwner(
       store: store,
@@ -41,6 +43,7 @@ void main() {
       pluginIds: pluginIds,
       pluginEvents: () async => pluginEvents,
       now: () => now,
+      zmanPlanner: zmanPlanner,
       broadcast: broadcasts.add,
       dedupeDuplicates: dedupe,
       pluginEventsDelay: const Duration(milliseconds: 200),
@@ -135,6 +138,191 @@ void main() {
     expect(statuses.last.ok, isTrue);
   });
 
+  test('חישוב זמני יום נשמר עד שינוי עיר, יום או העדפות', () async {
+    var calculations = 0;
+    final o = owner(
+      zmanPlanner: ({required alerts, required city, required now}) {
+        calculations++;
+        return CalendarAlertPlanner.planZmanAlerts(
+          alerts: alerts,
+          city: city,
+          now: now,
+        );
+      },
+    );
+    await o.execute('setZmanAlert', {
+      'timeId': 'sunset',
+      'pref': const ZmanAlertPreference(
+        minutesBefore: 10,
+        displayName: 'שקיעה',
+      ).toJson(),
+    });
+    await o.idle;
+    expect(calculations, 1);
+    await o.execute('upsertEvent', eventArgs(futureEvent('a')));
+    await o.idle;
+    await o.execute('setNotificationPrefs', {'sound': false});
+    await o.idle;
+    expect(calculations, 1);
+    await o.execute('setCity', {'city': 'חיפה'});
+    await o.idle;
+    expect(calculations, 2);
+    await o.execute('setZmanAlert', {
+      'timeId': 'sunset',
+      'pref': const ZmanAlertPreference(
+        minutesBefore: 15,
+        displayName: 'שקיעה',
+      ).toJson(),
+    });
+    await o.idle;
+    expect(calculations, 3);
+    now = now.add(const Duration(days: 1));
+    await o.restoreIfNeeded();
+    expect(calculations, 4);
+    expect(notifications.everyIdAtMostOnce, isTrue);
+  });
+
+  test('תוכנית שמורה מסננת זמנים שחלפו ומאפשרת חזרה בשעון', () async {
+    final o = owner();
+    store.values[CalendarAlertsKeys.zmanAlerts] = jsonEncode({
+      'sunrise': const ZmanAlertPreference(
+        minutesBefore: 10,
+        displayName: 'הנץ',
+      ).toJson(),
+    });
+    final today = CalendarAlertPlanner.zmanNotificationId('sunrise', now);
+    await o.restoreIfNeeded();
+    expect(notifications.present, isNot(contains(today)));
+    now = DateTime(2026, 10, 20, 0, 1);
+    await o.restoreIfNeeded();
+    expect(notifications.present, contains(today));
+    notifications.scheduled.clear();
+    now = DateTime(2026, 10, 20, 9);
+    await o.restoreIfNeeded();
+    expect(notifications.present, isNot(contains(today)));
+    expect(notifications.scheduled, isEmpty);
+  });
+
+  test('רענון יומי נשאר פעיל לאירוע חוזר שעדיין מחוץ לחלון', () {
+    fakeAsync((async) {
+      final event = futureEvent('future').copyWith(
+        baseGregorianDate: DateTime(2027, 2, 1),
+        recurrenceType: RecurrenceType.weekly,
+      );
+      store.values[CalendarAlertsKeys.events] = jsonEncode([event.toJson()]);
+      final o = CalendarAlertsOwner(
+        store: store,
+        notifications: notifications,
+        pluginEvents: () async => [],
+        now: () => now,
+        broadcast: (_) {},
+        dedupeDuplicates: false,
+      );
+      unawaited(o.restoreIfNeeded());
+      async.elapse(Duration.zero);
+      expect(notifications.initCalls, 0);
+      expect(store.ledger, isEmpty);
+      now = DateTime(2027, 1, 31, 9);
+      async.elapse(const Duration(days: 1));
+      expect(notifications.scheduled, isNotEmpty);
+      expect(notifications.everyIdAtMostOnce, isTrue);
+      o.dispose();
+      async.flushMicrotasks();
+    });
+  });
+
+  test('עריכת אירוע אינה מתזמנת מחדש זמני יום שלא השתנו', () async {
+    store.values[CalendarAlertsKeys.zmanAlerts] = jsonEncode({
+      'sunset': const ZmanAlertPreference(
+        minutesBefore: 10,
+        displayName: 'שקיעה',
+      ).toJson(),
+    });
+    final o = owner();
+    await o.restoreIfNeeded();
+    final original = notifications.present;
+    expect(original, hasLength(46));
+    notifications.scheduled.clear();
+    notifications.cancelled.clear();
+
+    await o.execute('upsertEvent', eventArgs(futureEvent('new')));
+    await o.idle;
+
+    expect(notifications.scheduled.map((a) => a.id), [reminderId('new')]);
+    expect(notifications.cancelled, [reminderId('new')]);
+    expect(notifications.present, {...original, reminderId('new')});
+  });
+
+  test('שינוי צליל מתזמן רק אירועים, ושינוי עיר רק זמני יום', () async {
+    store.values[CalendarAlertsKeys.zmanAlerts] = jsonEncode({
+      'sunset': const ZmanAlertPreference(
+        minutesBefore: 10,
+        displayName: 'שקיעה',
+      ).toJson(),
+    });
+    final o = owner();
+    await o.execute('upsertEvent', eventArgs(futureEvent('a')));
+    await o.idle;
+    notifications.scheduled.clear();
+    notifications.cancelled.clear();
+
+    await o.execute('setNotificationPrefs', {'sound': false});
+    await o.idle;
+    expect(notifications.scheduled.map((a) => a.id), [reminderId('a')]);
+    expect(notifications.scheduled.single.sound, isFalse);
+    notifications.scheduled.clear();
+    notifications.cancelled.clear();
+
+    await o.execute('setCity', {'city': 'חיפה'});
+    await o.idle;
+    expect(notifications.scheduled, isNotEmpty);
+    expect(
+      notifications.scheduled.map((a) => a.id),
+      isNot(contains(reminderId('a'))),
+    );
+    expect(notifications.cancelled, isNot(contains(reminderId('a'))));
+    expect(notifications.everyIdAtMostOnce, isTrue);
+  });
+
+  test('כשל ביטול וכשל תזמון נשארים ניתנים לניסיון חוזר', () async {
+    final o = owner();
+    await o.execute('upsertEvent', eventArgs(futureEvent('a')));
+    await o.idle;
+    notifications.onCancel = () => throw StateError('cancel failed');
+    await o.execute('deleteEvent', {'id': 'a'});
+    await o.idle;
+    expect(store.ledger, [reminderId('a')]);
+    expect(statuses.last.ok, isFalse);
+    notifications.onCancel = null;
+    await o.restoreIfNeeded();
+    expect(notifications.present, isEmpty);
+    expect(store.ledger, isEmpty);
+
+    notifications.failingIds.add(reminderId('a'));
+    await o.execute('upsertEvent', eventArgs(futureEvent('a')));
+    await o.idle;
+    expect(store.ledger, isEmpty);
+    notifications.failingIds.clear();
+    await o.restoreIfNeeded();
+    expect(notifications.present, {reminderId('a')});
+    expect(notifications.everyIdAtMostOnce, isTrue);
+  });
+
+  test('אובדן הרשאה ושחזורה אינם משאירים cache של תזמון שבוטל', () async {
+    final o = owner();
+    await o.execute('upsertEvent', eventArgs(futureEvent('a')));
+    await o.idle;
+    notifications.permissions = false;
+    await o.restoreIfNeeded();
+    expect(store.ledger, isEmpty);
+    expect(notifications.present, isEmpty);
+    expect(statuses.last.ok, isFalse);
+    notifications.permissions = true;
+    await o.restoreIfNeeded();
+    expect(notifications.present, {reminderId('a')});
+    expect(notifications.everyIdAtMostOnce, isTrue);
+  });
+
   test('חלון זמני היום מתארך כשהבעלים מתזמן ביום הבא', () async {
     store.values[CalendarAlertsKeys.zmanAlerts] = jsonEncode({
       'sunrise': const ZmanAlertPreference(
@@ -227,6 +415,64 @@ void main() {
       for (final scope in ['global', 'workspace:w', 'book:b'])
         reminderId('p:$scope'),
     });
+  });
+
+  test('כשל קריאת תוספים שומר התראות, וקריאה ריקה מוצלחת מבטלת', () async {
+    var fails = false;
+    var title = 'original';
+    var empty = false;
+    final adapter = PluginCalendarAdapter(
+      recordsLoader: (_) async {
+        if (fails) throw StateError('database unavailable');
+        return [
+          if (!empty)
+            {
+              'plugin_id': 'p',
+              'key': 'future',
+              'scope': 'global',
+              'payload_json': jsonEncode({
+                'title': title,
+                'startsAt': '2026-10-25T18:00:00',
+              }),
+            },
+        ];
+      },
+    );
+    final o = CalendarAlertsOwner(
+      store: store,
+      notifications: notifications,
+      pluginEvents: adapter.loadAllPluginEvents,
+      now: () => now,
+      broadcast: (_) {},
+      dedupeDuplicates: false,
+    );
+    o.scheduleStatuses.listen(statuses.add);
+    addTearDown(o.dispose);
+    await o.restoreIfNeeded();
+    final initial = notifications.present;
+    final ledger = List<int>.of(store.ledger);
+    expect(initial, hasLength(1));
+    notifications.scheduled.clear();
+    notifications.cancelled.clear();
+
+    fails = true;
+    await o.restoreIfNeeded();
+    expect(notifications.present, initial);
+    expect(store.ledger, ledger);
+    expect(notifications.cancelled, isEmpty);
+    expect(statuses.last.ok, isFalse);
+
+    fails = false;
+    title = 'updated';
+    await o.restoreIfNeeded();
+    expect(notifications.scheduled.single.title, 'updated');
+    expect(notifications.everyIdAtMostOnce, isTrue);
+    expect(statuses.last.ok, isTrue);
+
+    empty = true;
+    await o.restoreIfNeeded();
+    expect(notifications.present, isEmpty);
+    expect(store.ledger, isEmpty);
   });
 
   test('ב-Windows כפילויות של מזהים שלנו נמחקות פעם אחת', () async {

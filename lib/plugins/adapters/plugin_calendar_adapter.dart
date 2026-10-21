@@ -4,30 +4,15 @@ import 'package:kosher_dart/kosher_dart.dart';
 import 'package:otzaria/plugins/storage/plugin_system_database.dart';
 import 'package:otzaria/tools/calendar/bloc/calendar_cubit.dart';
 
-/// PluginCalendarAdapter
-///
-/// ממיר records מסוג `calendar.event` שפורסמו על-ידי תוספים
-/// (פורמט ה-spec: title, startsAt, source?, importance?, scope?, workspaceId?, bookId?)
-/// ל-[CustomEvent] פנימי של אוצריא.
-///
-/// ### scope semantics (spec §published-data):
-/// | scope               | מה זה אומר                     |
-/// |---------------------|--------------------------------|
-/// | `global`            | הצג תמיד בלוח                  |
-/// | `workspace:<id>`    | הצג רק כשה-workspaceId תואם    |
-/// | `book:<bookUid>`    | הצג רק כשה-bookUid/כותרת תואם  |
-///
-/// currentWorkspaceId / currentBookId מוזנקים מבחוץ (ראה [loadAndMergePluginEvents]).
+/// ממיר רשומות `calendar.event` של תוספים לאירועי לוח השנה.
+/// תצוגת חלון מסוננת לפי scope; תזמון ההתראות כולל את כל החלונות.
 class PluginCalendarAdapter {
   const PluginCalendarAdapter({this.recordsLoader});
 
   /// מקור הרשומות; ברירת המחדל היא מסד התוספים.
   final Future<List<Map<String, dynamic>>> Function(String type)? recordsLoader;
 
-  /// טוען records מסוג calendar.event ומאחד עם [existingEvents].
-  ///
-  /// [currentWorkspaceId] — מזהה ה-workspace הנוכחי (אופציונלי, לסינון workspace-scope)
-  /// [currentBookId]      — מזהה הספר הנוכחי (אופציונלי, לסינון book-scope)
+  /// מאחד רשומות תוספים עם [existingEvents], לפי סביבת העבודה והספר הנוכחיים.
   Future<List<CustomEvent>> loadAndMergePluginEvents(
     List<CustomEvent> existingEvents, {
     String? currentWorkspaceId,
@@ -46,8 +31,14 @@ class PluginCalendarAdapter {
   }
 
   /// כל אירועי התוספים, בלי תלות ב-scope: ההתראות אינן תלויות בחלון.
-  Future<List<CustomEvent>> loadAllPluginEvents() async =>
-      await _load((_) => true) ?? const [];
+  /// כשל קריאה חייב להתפשט, אחרת התזמון יפרש אותו כמחיקה ויבטל התראות.
+  Future<List<CustomEvent>> loadAllPluginEvents() async {
+    final events = await _load((_) => true);
+    if (events == null) {
+      throw StateError('Failed to load plugin calendar events');
+    }
+    return events;
+  }
 
   /// null = הטעינה נכשלה.
   Future<List<CustomEvent>?> _load(bool Function(String scope) visible) async {
@@ -107,12 +98,7 @@ class PluginCalendarAdapter {
     return false;
   }
 
-  /// ממיר spec payload → [CustomEvent] פנימי.
-  ///
-  /// ```json
-  /// { "title": "ערב שבת", "startsAt": "2026-03-27T16:00:00+02:00",
-  ///   "source": "my-plugin", "importance": "high" }
-  /// ```
+  /// ממיר פרטי אירוע מהתוסף לאירוע פנימי.
   CustomEvent? _fromPluginPayload(
     String pluginId,
     String key,
