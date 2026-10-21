@@ -272,6 +272,7 @@ class _TabbedCommentaryPanelState extends State<TabbedCommentaryPanel>
                     openBookCallback: widget.openBookCallback,
                     fontSize: widget.fontSize,
                     selectionSyncController: widget.selectionSyncController,
+                    isPaneOpen: widget.isPaneOpen,
                   ),
                   // כרטיסיית ההערות האישיות
                   PersonalNotesSidebar(
