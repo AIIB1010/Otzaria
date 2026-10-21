@@ -222,6 +222,9 @@ class CommentaryListBase extends StatefulWidget {
   /// דרך GlobalKey).
   final ValueListenable<CommentaryScrollRequest?>? scrollTargetListenable;
 
+  /// false כשהחלונית שמכילה את הרשימה סגורה אך נשארת בעץ.
+  final bool isPaneOpen;
+
   const CommentaryListBase({
     super.key,
     required this.openBookCallback,
@@ -256,6 +259,7 @@ class CommentaryListBase extends StatefulWidget {
     this.personalNotesLoader,
     this.contentMaxWidth,
     this.scrollTargetListenable,
+    this.isPaneOpen = true,
   });
 
   @override
@@ -1771,6 +1775,19 @@ class CommentaryListBaseState extends State<CommentaryListBase>
     textsByKey: _renderedTextByKey,
   );
 
+  Widget? _lastView;
+
+  /// חלונית סגורה נשארת בעץ; בלי זה כל גלילה בספר טוענת ובונה את מפרשי הקטע.
+  Widget Function(BuildContext, TextBookLoaded) _skipWhilePaneClosed(
+    Widget Function(BuildContext, TextBookLoaded) build,
+  ) => (context, state) {
+    if (widget.isPaneOpen || _lastView == null || _hasPendingAnchorScroll) {
+      return _lastView = build(context, state);
+    }
+    _syncSectionScroll(_currentIndexes(state));
+    return _lastView!;
+  };
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -1801,7 +1818,7 @@ class CommentaryListBaseState extends State<CommentaryListBase>
             _commentaryCopyProfile(previous) != _commentaryCopyProfile(current);
       },
       loadingWidget: const Center(),
-      builder: (context, state) {
+      builder: _skipWhilePaneClosed((context, state) {
         final selectedCommentators = _selectedCommentators(state);
         _syncSectionScroll(_currentIndexes(state));
         // איפוס ה-latch: ברגע שיש בחירה לא-ריקה, ריקון עתידי שלה צריך
@@ -2334,7 +2351,7 @@ class CommentaryListBaseState extends State<CommentaryListBase>
             ],
           );
         }
-      },
+      }),
     );
   }
 
