@@ -159,17 +159,13 @@ String? _existingAttachedFile(
   return resolved != null && File(resolved).existsSync() ? resolved : null;
 }
 
-/// שורות הקטלוג של seforim.db על חיבור משלו: על ה-UI isolate הן חוסמות
-/// כ-50-100ms מיד אחרי החשיפה. null — כתיבה חיצונית, ונקרא כמו קודם.
+/// שורות הקטלוג של seforim.db על חיבור משלו; null כשאין נתיב למסד.
+/// ביטול חייב להתפשט כדי לא לפתוח חיבור ראשי ששוחרר לכתיבה חיצונית.
 Future<CatalogRows?> _officialCatalogInIsolate(String dbPath) async {
   if (dbPath.isEmpty) return null;
-  try {
-    return await DbReadWorker.runOnFreshIsolate(
-      () => readOfficialCatalogSync(dbPath),
-    );
-  } on DbReadWorkerSuspended {
-    return null;
-  }
+  return DbReadWorker.runOnFreshIsolate(
+    () => readOfficialCatalogSync(dbPath),
+  );
 }
 
 typedef CatalogRows = ({
