@@ -204,6 +204,14 @@ class _Caps {
       'hasDefaultCommentators': books && has('default_commentator'),
       'hasDefaultTargums': books && has('default_targum'),
       'hasCategoryClosure': categories && has('category_closure'),
+      'hasBookBanners':
+          col('book', 'title') &&
+          col('banner', 'id') &&
+          col('banner', 'text') &&
+          col('book_banner', 'bookId') &&
+          col('book_banner', 'bannerId'),
+      'hasBookProtection':
+          col('book_protection', 'bookId') && col('book_protection', 'level'),
       'hasExternalLinks':
           books &&
           col('external_link', 'sourceBookId') &&
@@ -281,6 +289,12 @@ const List<(String, List<String>, List<String>, String)> _featureGroups = [
     ['category_closure'],
     ['category'],
     'hasCategoryClosure',
+  ),
+  (
+    'book banners',
+    ['banner', 'book_banner'],
+    ['book', 'banner', 'book_banner'],
+    'hasBookBanners',
   ),
 ];
 
