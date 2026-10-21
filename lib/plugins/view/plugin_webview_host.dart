@@ -643,7 +643,7 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
     required List<String> permissions,
     required Map<String, dynamic> theme,
     Map<String, dynamic>? reader,
-    String? fontFaceCss,
+    String? fontFaceJson,
   }) {
     final bootPayload = {
       'plugin': {'id': plugin.pluginId, 'version': plugin.version},
@@ -670,7 +670,7 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
     return buildPluginBootScript(
       nonceJson: jsonEncode(bridge.bridgeNonce),
       payloadJson: jsonEncode(bootPayload),
-      fontFaceJson: fontFaceCss == null ? null : jsonEncode(fontFaceCss),
+      fontFaceJson: fontFaceJson,
     );
   }
 

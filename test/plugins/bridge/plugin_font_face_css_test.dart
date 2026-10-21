@@ -1,3 +1,8 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:flutter/services.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:otzaria/plugins/bridge/plugin_bridge_adapter.dart';
@@ -59,6 +64,125 @@ void main() {
           .toList();
       expect(rules, hasLength(1));
       expect(rules.single, contains('font-weight:400'));
+    });
+  });
+
+  group('buildPluginFontFaceJson', () {
+    setUp(debugClearFontFaceCssCache);
+
+    test('זהה לקידוד JSON של buildPluginFontFaceCss', () async {
+      expect(
+        await buildPluginFontFaceJson(),
+        jsonEncode(await buildPluginFontFaceCss()),
+      );
+    });
+
+    test('הקידוד (~2MB) מחושב פעם אחת לאותן משפחות', () async {
+      final first = await buildPluginFontFaceJson();
+      expect(identical(await buildPluginFontFaceJson(), first), isTrue);
+    });
+
+    test('טעינה חלקית מאוחרת אינה דורסת מטמון של טעינה מקבילה מלאה', () async {
+      final firstFamily = AppFonts.fontPaths.keys.first;
+      final secondFamily = AppFonts.fontPaths.keys.elementAt(1);
+      final firstBuildPaused = Completer<void>();
+      final resumeFirstBuild = Completer<ByteData?>();
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      final bytes = ByteData.sublistView(Uint8List.fromList([1, 2, 3]));
+      var firstFamilyLoads = 0;
+      var secondFamilyLoads = 0;
+      messenger.setMockMessageHandler('flutter/assets', (message) async {
+        final path = utf8.decode(message!.buffer.asUint8List());
+        if (path == AppFonts.fontPaths[firstFamily] &&
+            ++firstFamilyLoads == 1) {
+          return null;
+        }
+        if (path == AppFonts.fontPaths[secondFamily] &&
+            ++secondFamilyLoads == 1) {
+          firstBuildPaused.complete();
+          return resumeFirstBuild.future;
+        }
+        return bytes;
+      });
+      addTearDown(
+        () => messenger.setMockMessageHandler('flutter/assets', null),
+      );
+
+      final first = buildPluginFontFaceJson();
+      await firstBuildPaused.future;
+      final complete = await buildPluginFontFaceJson();
+      resumeFirstBuild.complete(bytes);
+      final partial = await first;
+      expect(
+        jsonDecode(partial),
+        isNot(contains("font-family:'$firstFamily'")),
+      );
+      expect(jsonDecode(complete), contains("font-family:'$firstFamily'"));
+      expect(debugFontFaceCssCacheSize, AppFonts.fontPaths.length);
+      expect(await buildPluginFontFaceJson(), complete);
+      expect(identical(await buildPluginFontFaceJson(), complete), isTrue);
+      expect(complete, jsonEncode(await buildPluginFontFaceCss()));
+    });
+
+    test('כשל זמני נשלח שוב ונשמר רק לאחר טעינה מלאה', () async {
+      final family = AppFonts.fontPaths.keys.first;
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      final bytes = ByteData.sublistView(Uint8List.fromList([1, 2, 3]));
+      var loads = 0;
+      messenger.setMockMessageHandler('flutter/assets', (message) async {
+        final path = utf8.decode(message!.buffer.asUint8List());
+        if (path == AppFonts.fontPaths[family] && ++loads == 1) return null;
+        return bytes;
+      });
+      addTearDown(
+        () => messenger.setMockMessageHandler('flutter/assets', null),
+      );
+
+      final partial = await buildPluginFontFaceJson();
+      final complete = await buildPluginFontFaceJson();
+      expect(jsonDecode(partial), isNot(contains("font-family:'$family'")));
+      expect(jsonDecode(complete), contains("font-family:'$family'"));
+      expect(loads, 2);
+      expect(identical(await buildPluginFontFaceJson(), complete), isTrue);
+    });
+
+    for (final entry in {
+      SettingsRepository.keyFontFamily: AppFonts.defaultFont,
+      SettingsRepository.keyCommentatorsFontFamily:
+          AppFonts.defaultCommentatorsFont,
+    }.entries) {
+      test(
+        'המטמון מבחין בשינוי ${entry.key} ובחזרה למשפחות המקוריות',
+        () async {
+          addTearDown(() => Settings.setValue<String>(entry.key, entry.value));
+          final original = await buildPluginFontFaceJson();
+          await Settings.setValue<String>(entry.key, '');
+          final changed = await buildPluginFontFaceJson();
+          expect(changed, original);
+          expect(identical(changed, original), isFalse);
+          expect(identical(await buildPluginFontFaceJson(), changed), isFalse);
+          await Settings.setValue<String>(entry.key, entry.value);
+          expect(identical(await buildPluginFontFaceJson(), original), isTrue);
+        },
+      );
+    }
+
+    test('גופן שלא נטען אינו נשמר, ושינוי בהגדרות נקלט', () async {
+      await Settings.setValue<String>(
+        SettingsRepository.keyFontFamily,
+        'No Such Font For Test',
+      );
+      addTearDown(
+        () => Settings.setValue<String>(
+          SettingsRepository.keyFontFamily,
+          AppFonts.defaultFont,
+        ),
+      );
+      final first = await buildPluginFontFaceJson();
+      expect(identical(await buildPluginFontFaceJson(), first), isFalse);
+      expect(first, jsonEncode(await buildPluginFontFaceCss()));
     });
   });
 
