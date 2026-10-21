@@ -27,7 +27,17 @@ class WindowTabsSession {
   ///
   /// ⚠️ חלון בלי משבצת אינו שומר, ובשום מצב אינו נופל למשבצת של חלון אחר
   /// — זו הייתה דריסת הכרטיסיות שלו.
-  int? get slot => _slot();
+  int? get slot => _suspended ? null : _slot();
+
+  bool _suspended = false;
+
+  /// חלון מוסתר שהסשן שלו נמחק אינו שומר עד שיוצג שוב ([resume]).
+  void suspend() {
+    _suspended = true;
+    _cancelPendingIndex();
+  }
+
+  void resume() => _suspended = false;
 
   /// דור הסשן של החלון הזה: עולה בכל [TabsRepository.importRaw].
   int get generation => _generation;

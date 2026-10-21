@@ -16,6 +16,8 @@ import 'package:otzaria/core/windowing/app_window_id.dart';
 import 'package:otzaria/core/windowing/window_manager_app_window_controller.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
+import 'package:otzaria/core/windowing/multiview/view_window_opener.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/core/windowing/window_bus.dart';
 import 'package:otzaria/core/windowing/window_role.dart';
@@ -366,8 +368,15 @@ class AppWindowListener extends WindowListener {
           await TabsRepository().discardWindowSession();
         }
 
-        // המנוע נשאר חי, ולכן הכתיבות האחרונות לטיוטה ממשיכות אחרי ההסתרה.
-        PluginCorrectionSessionService.instance.endAll('window_closed');
+        if (MultiViewMode.enabled) {
+          // ה-flush של החלון האחרון ירוץ גם כאן (isolate אחד): בלי השהיה
+          // הסשן שנמחק היה נכתב מחדש. הטיוטות שייכות לכל החלונות ונשארות.
+          WindowTabsSession.current.suspend();
+          await ViewWindowOpener.instance.beforeMainWindowHides();
+        } else {
+          // המנוע נשאר חי, ולכן הכתיבות האחרונות לטיוטה ממשיכות אחרי ההסתרה.
+          PluginCorrectionSessionService.instance.endAll('window_closed');
+        }
 
         // מוסתר ולא נהרס: תוספים שממשיכים לרוץ היו צורכים משאבים ברקע.
         PluginRuntimeDispatcher.instance.setWindowShown(false);
@@ -385,6 +394,9 @@ class AppWindowListener extends WindowListener {
       _isClosing = false;
     }
   }
+
+  /// סגירת חלון ה-Dart האחרון כשהחלון הראשי מוסתר: יציאה מלאה מהתוכנה.
+  Future<void> quitFromLastViewWindow() => handleWindowClose(quit: true);
 
   /// הצעדים שקודמים ל-flush — כולם פר-תהליך.
   Future<void> _shutdownProcessUpToFlush() async {
@@ -657,6 +669,7 @@ class AppWindowListener extends WindowListener {
     AppWindowKeys.activateWindow(windowId);
     // חלון שהוחזר מהסתרה מקבל פוקוס — זה האות שהוא מוצג שוב.
     PluginRuntimeDispatcher.instance.setWindowShown(true);
+    if (MultiViewMode.enabled) WindowTabsSession.current.resume();
   }
 
   @override

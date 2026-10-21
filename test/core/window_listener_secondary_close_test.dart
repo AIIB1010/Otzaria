@@ -30,6 +30,9 @@ import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
 import 'package:otzaria/core/window_listener.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
+import 'package:otzaria/core/windowing/multiview/view_window_opener.dart';
+import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/core/windowing/window_bus.dart';
 import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/tabs/tabs_repository.dart';
@@ -221,6 +224,38 @@ void main() {
     expect(runner.closeSelfCalls, 1);
     expect(await sessions.load(slot), isNull);
   });
+
+  test(
+    'ריבוי תצוגות: הראשי מוסתר כשחלונות Dart פתוחים, והסשן שלו מושהה',
+    () async {
+      MultiViewMode.debugOverride = true;
+      WindowOpener.debugOverride = _TwoWindowsOpener();
+      addTearDown(() {
+        MultiViewMode.debugOverride = null;
+        WindowOpener.debugOverride = null;
+        WindowTabsSession.current.resume();
+      });
+      WindowBus.instance.register();
+      final slot = WindowBus.instance.slot!;
+      await TabsRepository().saveTabs(const [], 0);
+      final closedBefore = ViewWindowOpener.instance.closedCountForTest;
+
+      final listener = AppWindowListener();
+      await listener.handleWindowClose();
+
+      expect(runner.closeSelfCalls, 1, reason: 'הסתרה, לא יציאה (D1a)');
+      expect(await sessions.load(slot), isNull);
+      // ה-flush של החלון האחרון אינו כותב את הסשן שנמחק.
+      expect(WindowTabsSession.current.slot, isNull);
+      await TabsRepository().saveTabs(const [], 0);
+      expect(await sessions.load(slot), isNull);
+      expect(ViewWindowOpener.instance.closedCountForTest, closedBefore + 1);
+
+      // הוצג שוב (Ctrl+Shift+T): שומר שוב.
+      listener.onWindowFocus();
+      expect(WindowTabsSession.current.slot, slot);
+    },
+  );
 
   test('סגירה לעדכון כשחלון אחר עוד פתוח: הסשן נשמר (issue #2095)', () async {
     // `closePeers` אינו ממתין, ולכן החלון שמתקין רואה עוד חלון פתוח.
@@ -531,6 +566,12 @@ void main() {
 }
 
 /// ה-runner המדומה. `windowCount` מחזיר שניים כברירת מחדל — "אינך האחרון".
+class _TwoWindowsOpener extends Fake implements WindowOpener {
+  @override
+  Future<({int count, int max, int engines})?> windowCount() async =>
+      (count: 2, max: 8, engines: 1);
+}
+
 class _FakeRunner {
   int closeSelfCalls = 0;
   int windowCount = 2;
