@@ -711,17 +711,12 @@ class _PdfBookScreenState extends State<PdfBookScreen>
   // its queued turn play out).
   final Set<LogicalKeyboardKey> _heldArrowKeys = {};
 
-  // נעילת ציר לגלילת לוח מגע (issues #821, #969): מחווה שקרובה מאוד
-  // לציר ננעלת אליו עד שמרימים את האצבעות, כדי שהצופה לא ייסחף לצדדים
-  // בזמן קריאה; מחווה אלכסונית מוכרעת כחופשית ועוברת ללא קיצוץ.
-  // מופע אחד למסלול אירועי הגלילה (סוף מחווה = הפסקה בזרם האירועים),
-  // ומופע נפרד למסלול מחוות ה-pan של לוח מגע מדויק (סוף מחווה מפורש).
+  // הגלגלת מסיימת מחווה בהפסקת האירועים; pan מקבל סיום מפורש,
+  // ולכן כל מסלול צריך נעילת ציר נפרדת.
   final TrackpadAxisLock _trackpadAxisLock = TrackpadAxisLock();
   final TrackpadAxisLock _trackpadPanAxisLock = TrackpadAxisLock();
 
-  // מקדם המהירות שמוזן ל-pdfrx עבור גלילת גלגלת. מחוות pan של לוח מגע
-  // מדויק מוזרמות דרך אותו מסלול (ראו _handleTrackpadPanDelta), ושם
-  // מחלקים בו כדי שהתנועה תישאר 1:1 עם האצבעות.
+  // pan מוזרם במסלול הגלגלת, ולכן מחלקים במקדם הזה כדי לשמור על תנועה 1:1.
   static const double _kScrollByMouseWheel = 0.2;
 
   // Pre-rendered spread cache: lets the page-turn animation start instantly
@@ -888,11 +883,7 @@ class _PdfBookScreenState extends State<PdfBookScreen>
     });
   }
 
-  /// מחוות pan של לוח מגע מדויק (מ-TrackpadPanRecognizer): מעבירים את
-  /// ה-delta דרך נעילת הציר, ומזרימים כאירוע גלילה סינתטי לאותו מסלול
-  /// שאירועי הגלילה הרגילים עוברים בו (כולל זום ב-Ctrl והפיזיקה של
-  /// pdfrx). כיוון הגלילה הפוך לכיוון תנועת האצבעות, והחלוקה במקדם
-  /// הגלגלת משאירה את התנועה 1:1.
+  /// מזרים pan דרך נעילת הציר והפיזיקה של הגלגלת, עם תנועה 1:1 וזום ב-Ctrl.
   void _handleTrackpadPanDelta(Offset panDelta, Offset globalPosition) {
     final Offset scrollDelta;
     if (HardwareKeyboard.instance.isControlPressed) {
@@ -1687,9 +1678,7 @@ class _PdfBookScreenState extends State<PdfBookScreen>
       scrollByArrowKey: 25.0,
       scrollByMouseWheel: _kScrollByMouseWheel,
       textSelectionParams: PdfTextSelectionParams(enabled: !_isHandMode),
-      // גרירה ישירה (מגע, כלי היד) חופשית לכל הכיוונים; נעילת הציר
-      // לגלילת לוח מגע נאכפת ב-TrackpadAxisLock וב-TrackpadPanRecognizer
-      // (issues #821, #969) ולא דרך PanAxis, שמקצץ לציר אחד גם אלכסונים.
+      // נעילת הציר מתבצעת ב-TrackpadPanRecognizer; PanAxis נועל גם אלכסונים.
       panAxis: PanAxis.free,
       interactionDelegateProvider: _scrollPhysicsProvider,
       onDocumentLoadFinished: (documentRef, succeeded) {
@@ -1918,6 +1907,12 @@ class _PdfBookScreenState extends State<PdfBookScreen>
                         () => TrackpadPanRecognizer(
                           onPanDelta: _handleTrackpadPanDelta,
                           onPanEnd: _trackpadPanAxisLock.reset,
+                          onPanZoomEvent: (event) {
+                            final controller = widget.tab.pdfViewerController;
+                            if (controller.isReady) {
+                              controller.handlePointerPanZoomEvent(event);
+                            }
+                          },
                           canPanHorizontally: () =>
                               widget.tab.canPanHorizontally,
                         ),
