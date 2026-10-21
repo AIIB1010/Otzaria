@@ -4754,22 +4754,25 @@ class PluginBridgeAdapter {
   }) async {
     final canonicalTarget = canonicalizeNearestExisting(targetPath);
     if (canonicalTarget == null) return false;
-    bool inside(String root) =>
-        (allowRoot && p.equals(canonicalTarget, root)) ||
-        p.isWithin(root, canonicalTarget);
-    for (final root in _grantedFolders) {
+    bool inside(String root) {
       final canonicalRoot = canonicalizeNearestExisting(root);
-      if (canonicalRoot == null || !p.equals(canonicalRoot, root)) continue;
-      if (inside(canonicalRoot)) return true;
+      if (canonicalRoot == null || !p.equals(canonicalRoot, root)) return false;
+      return (allowRoot && p.equals(canonicalTarget, canonicalRoot)) ||
+          p.isWithin(canonicalRoot, canonicalTarget);
     }
-    for (final grant in await _folderGrants.list(plugin.pluginId)) {
-      final canonicalRoot = canonicalizeNearestExisting(grant.path);
-      if (canonicalRoot == null || !p.equals(canonicalRoot, grant.path)) {
-        continue;
-      }
-      if (inside(canonicalRoot)) return true;
+
+    if (_grantedFolders.any(inside)) return true;
+    final grants = await _folderGrants.list(plugin.pluginId);
+    return grants.any((grant) => inside(grant.path));
+  }
+
+  Future<void> _requireInGrantedFolder(
+    String path, {
+    bool allowRoot = true,
+  }) async {
+    if (!await _isPathInGrantedFolder(path, allowRoot: allowRoot)) {
+      throw Exception('error.forbidden: path outside a user-selected folder');
     }
-    return false;
   }
 
   // ----------------------------------------------------------------
@@ -4785,12 +4788,8 @@ class PluginBridgeAdapter {
             'error.invalid_params: zipPath and destFolder required',
           );
         }
-        if (!await _isPathInGrantedFolder(zipPath) ||
-            !await _isPathInGrantedFolder(destFolder)) {
-          throw Exception(
-            'error.forbidden: path outside a user-selected folder',
-          );
-        }
+        await _requireInGrantedFolder(zipPath);
+        await _requireInGrantedFolder(destFolder);
         await _fsService.extractZip(zipPath, destFolder);
         return true;
       case 'deleteFile':
@@ -4798,11 +4797,7 @@ class PluginBridgeAdapter {
         if (path == null) {
           throw Exception('error.invalid_params: path required');
         }
-        if (!await _isPathInGrantedFolder(path)) {
-          throw Exception(
-            'error.forbidden: path outside a user-selected folder',
-          );
-        }
+        await _requireInGrantedFolder(path);
         await _fsService.deleteFile(path);
         return true;
       case 'deleteFolder':
@@ -4810,11 +4805,7 @@ class PluginBridgeAdapter {
         if (folderPath == null) {
           throw Exception('error.invalid_params: path required');
         }
-        if (!await _isPathInGrantedFolder(folderPath, allowRoot: false)) {
-          throw Exception(
-            'error.forbidden: path outside a user-selected folder',
-          );
-        }
+        await _requireInGrantedFolder(folderPath, allowRoot: false);
         await _fsService.deleteFolder(folderPath);
         return true;
       case 'moveEntry':
@@ -4823,12 +4814,8 @@ class PluginBridgeAdapter {
         if (from == null || to == null) {
           throw Exception('error.invalid_params: from and to required');
         }
-        if (!await _isPathInGrantedFolder(from, allowRoot: false) ||
-            !await _isPathInGrantedFolder(to, allowRoot: false)) {
-          throw Exception(
-            'error.forbidden: path outside a user-selected folder',
-          );
-        }
+        await _requireInGrantedFolder(from, allowRoot: false);
+        await _requireInGrantedFolder(to, allowRoot: false);
         await _fsService.moveEntry(from, to);
         return true;
       case 'writeFile':
