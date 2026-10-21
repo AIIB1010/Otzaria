@@ -717,6 +717,11 @@ class FileSyncService {
           topics: generator.extractTopics(filePath),
         );
       }
+      // ה-worker משתמש בדיווח גם כפעימת חיים נגד זיהוי תקיעה שגוי.
+      _reportProgress(
+        0.4,
+        '${existingBook == null ? 'מעבד' : 'עודכן'} ספר: $title',
+      );
     }
 
     // תיקייה ממוזגת הבאה בסריקה חייבת לראות את הספר שנכתב כרגע.
