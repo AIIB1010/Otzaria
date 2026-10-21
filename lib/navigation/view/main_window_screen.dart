@@ -730,6 +730,15 @@ class MainWindowScreenState extends State<MainWindowScreen>
       // הזוכה שרירותי — לפעמים חלון שהמשתמש סגר קפץ בחזרה למסך.
       if (_duties.isProcessOwner) {
         unawaited(_initializeExternalActivationMonitoring());
+      } else if (_role.isViewWindow && mounted) {
+        // חלון Dart אינו מנקז; המארח מפנה אליו כשהוא החלון הפעיל.
+        final service = _externalActivationService = context
+            .read<ExternalActivationService>();
+        service.attachViewWindow(
+          _windowKeys.id,
+          _handleExternalActivationUriString,
+          isVisible: AppWindowScope.controllerOf(context).isVisible,
+        );
       }
 
       _tourCubit.registerSession();
@@ -1367,7 +1376,10 @@ class MainWindowScreenState extends State<MainWindowScreen>
     if (!mounted) return;
     final service = _externalActivationService = context
         .read<ExternalActivationService>();
-    service.attachWindow(_handleExternalActivationUriString);
+    service.attachWindow(
+      _handleExternalActivationUriString,
+      isVisible: AppWindowScope.controllerOf(context).isVisible,
+    );
     await service.start();
   }
 
@@ -1416,7 +1428,8 @@ class MainWindowScreenState extends State<MainWindowScreen>
     if (kIsWeb) return;
     if (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS) return;
     if (!mounted) return;
-    if (MultiWindowService.canOpenWindows) {
+    // `raiseSelf` מעלה את חלון ה-runner, כלומר את הראשי ולא חלון Dart.
+    if (MultiWindowService.canOpenWindows && !_role.isViewWindow) {
       await const MultiWindowService().raiseSelf();
       return;
     }
@@ -1835,9 +1848,9 @@ class MainWindowScreenState extends State<MainWindowScreen>
     }
     _splashFailsafeTimer?.cancel();
     _pluginInstallDialogQueue.clear();
-    _externalActivationService?.detachWindow(
-      _handleExternalActivationUriString,
-    );
+    _externalActivationService
+      ?..detachWindow(_handleExternalActivationUriString)
+      ..detachViewWindow(_windowKeys.id, _handleExternalActivationUriString);
     _calendarCubit.close();
     _removeTourOverlay();
     if (LibraryChangesNotes.instance.beforeAutoShow == _tourFinished) {

@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/app_scope/external_activation_service.dart';
 import 'package:otzaria/core/external_activation_channel.dart';
 import 'package:otzaria/core/external_activation_queue.dart';
+import 'package:otzaria/core/windowing/app_window_id.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
 import 'package:path/path.dart' as p;
 
@@ -46,6 +47,8 @@ void main() {
     Future<int?> Function()? lastActiveSlot,
     ExternalActivationChannel? channel,
     Stream<FileSystemEvent> Function(Directory)? watchDirectory,
+    bool multiView = false,
+    AppWindowId lastActiveWindow = AppWindowId.primary,
   }) => ExternalActivationService(
     queue: queue,
     channel: channel,
@@ -57,6 +60,8 @@ void main() {
       return forwardResult;
     },
     watchDirectory: watchDirectory,
+    multiView: () => multiView,
+    lastActiveWindow: () => lastActiveWindow,
   );
 
   group('drain', () {
@@ -209,5 +214,104 @@ void main() {
     await pumpEventQueue();
     await svc.processPending();
     expect(delivered, [_a, _b, _c]);
+  });
+
+  group('Dart windows in one isolate', () {
+    const viewA = AppWindowId('window-view-2');
+    const viewB = AppWindowId('window-view-3');
+    late List<(AppWindowId, String)> viewDelivered;
+    late Map<AppWindowId, bool> visible;
+    late Map<AppWindowId, ExternalUriHandler> viewHandlers;
+    var mainVisible = true;
+
+    setUp(() {
+      viewDelivered = [];
+      visible = {viewA: true, viewB: true};
+      viewHandlers = {
+        for (final id in [viewA, viewB])
+          id: (uri) async {
+            viewDelivered.add((id, uri));
+            return true;
+          },
+      };
+      mainVisible = true;
+    });
+
+    ExternalActivationService hybrid(AppWindowId lastActive) {
+      final svc = service(multiView: true, lastActiveWindow: lastActive)
+        ..attachWindow(handler, isVisible: () async => mainVisible);
+      for (final id in [viewA, viewB]) {
+        svc.attachViewWindow(
+          id,
+          viewHandlers[id]!,
+          isVisible: () async => visible[id]!,
+        );
+      }
+      return svc;
+    }
+
+    test('the last active Dart window gets the link, not the runner', () async {
+      await queue.enqueueUriString(_a);
+      await hybrid(viewA).processPending();
+
+      expect(viewDelivered, [(viewA, _a)]);
+      expect(delivered, isEmpty);
+      expect(forwarded, isEmpty);
+    });
+
+    test('main last active and visible keeps the link', () async {
+      await queue.enqueueUriString(_a);
+      await hybrid(AppWindowId.primary).processPending();
+
+      expect(delivered, [_a]);
+      expect(viewDelivered, isEmpty);
+    });
+
+    test(
+      'a hidden main is not raised while a Dart window is visible',
+      () async {
+        mainVisible = false;
+        visible[viewB] = false;
+        await queue.enqueueUriString(_a);
+        await hybrid(AppWindowId.primary).processPending();
+
+        expect(viewDelivered, [(viewA, _a)]);
+        expect(delivered, isEmpty);
+      },
+    );
+
+    test('with nothing visible main shows itself', () async {
+      mainVisible = false;
+      visible
+        ..[viewA] = false
+        ..[viewB] = false;
+      await queue.enqueueUriString(_a);
+      await hybrid(viewA).processPending();
+
+      expect(delivered, [_a]);
+      expect(viewDelivered, isEmpty);
+    });
+
+    test('a detached window no longer receives links', () async {
+      final svc = hybrid(viewA);
+      // ביטול עם handler אחר (חלון שנבנה מחדש) אינו מסיר את הרשום.
+      svc.detachViewWindow(viewA, handler);
+      await queue.enqueueUriString(_a);
+      await svc.processPending();
+      expect(viewDelivered, [(viewA, _a)]);
+
+      svc.detachViewWindow(viewA, viewHandlers[viewA]!);
+      await queue.enqueueUriString(_b);
+      await svc.processPending();
+      expect(delivered, [_b]);
+    });
+
+    test('"new window" is handled by main', () async {
+      await queue.enqueueUriString(_newWindow);
+      await hybrid(viewA).processPending();
+
+      expect(delivered, [_newWindow]);
+      expect(viewDelivered, isEmpty);
+    });
   });
 }

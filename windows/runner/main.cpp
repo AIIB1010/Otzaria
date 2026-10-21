@@ -20,6 +20,8 @@
 
 static const wchar_t* kSingleInstanceMutexName = L"OtzariaAppSingleInstance";
 static const wchar_t* kFlutterWindowClassName = L"FLUTTER_RUNNER_WIN32_WINDOW";
+// חלון Dart של המנוע (ריבוי תצוגות, OTZARIA_MULTIVIEW). בלי הדגל אין כזה.
+static const wchar_t* kDartHostWindowClassName = L"FLUTTER_HOST_WINDOW";
 static const wchar_t* kMainWindowTitle = L"אוצריא";
 
 // מאפיין חלון שמסמן את החלון **הראשי**, לזיהוי מתהליך אחר.
@@ -116,7 +118,13 @@ BOOL CALLBACK FindMainWindowProc(HWND hwnd, LPARAM param) {
   wchar_t class_name[64] = {0};
   ::GetClassNameW(hwnd, class_name,
                   sizeof(class_name) / sizeof(class_name[0]));
-  if (::wcscmp(class_name, kFlutterWindowClassName) != 0) return TRUE;
+  const bool is_runner_window =
+      ::wcscmp(class_name, kFlutterWindowClassName) == 0;
+  // חלון Dart גלוי הוא יעד כשהראשי מוסתר; הראשי הגלוי עדיין מועדף.
+  if (!is_runner_window &&
+      ::wcscmp(class_name, kDartHostWindowClassName) != 0) {
+    return TRUE;
+  }
   auto* search = reinterpret_cast<MainWindowSearch*>(param);
   if (!SameDataRoot(DataRootOfWindowProcess(hwnd), search->data_root)) {
     return TRUE;
@@ -134,7 +142,7 @@ BOOL CALLBACK FindMainWindowProc(HWND hwnd, LPARAM param) {
     }
     return TRUE;
   }
-  if (search->any == nullptr &&
+  if (is_runner_window && search->any == nullptr &&
       ::GetPropW(hwnd, kMainWindowPropName) != nullptr) {
     search->any = hwnd;
   }
