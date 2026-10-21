@@ -2618,7 +2618,10 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
         // תוכן
         Expanded(
           child: BlocBuilder<TextBookBloc, TextBookState>(
-            buildWhen: shouldRebuildReader,
+            // טור מפרש אינו מסמן את השורה הנבחרת; קשורותיה מגיעות ב-highlightedIndices.
+            buildWhen: widget.isMainText
+                ? shouldRebuildReader
+                : shouldRebuildIgnoringSelection,
             builder: (context, state) {
               if (state is! TextBookLoaded) {
                 return const Center(child: CircularProgressIndicator());
