@@ -18,6 +18,7 @@ import 'package:otzaria/core/windowing/last_active_window.dart';
 import 'package:otzaria/core/windowing/multiview/multi_view_host.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_close_flow.dart';
+import 'package:otzaria/core/windowing/multiview/view_window_opener.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_scope.dart';
 import 'package:otzaria/core/windowing/window_title_sync.dart';
@@ -293,6 +294,10 @@ void main() {
       windows.registry,
       closeFlow: (entry) => ViewWindowCloseFlow(
         entry: entry,
+        opener: ViewWindowOpener(
+          registry: windows.registry,
+          native: windows.native,
+        ),
         confirm: (context, tabs) async {
           asked.add(tabs);
           return allow;

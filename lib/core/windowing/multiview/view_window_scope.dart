@@ -82,6 +82,7 @@ class _ViewWindowScopeState extends State<ViewWindowScope> {
   @override
   void dispose() {
     _entry.handle.changes.removeListener(_onWindowChanged);
+    _persistence.dispose();
     WindowTitleSync.unbind(_entry.keys, _titleSync);
     if (_entry.closeHandler == _close) {
       _entry.closeHandler = null;

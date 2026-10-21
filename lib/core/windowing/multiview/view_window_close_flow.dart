@@ -1,10 +1,12 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otzaria/core/pre_close_registry.dart';
+import 'package:otzaria/core/user_state/window_session_store.dart';
+import 'package:otzaria/core/windowing/app_window_keys.dart';
+import 'package:otzaria/core/windowing/multiview/view_window_opener.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
 import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
 import 'package:otzaria/tabs/models/tab.dart';
-import 'package:otzaria/tabs/tabs_repository.dart';
 import 'package:otzaria/tabs/utils/confirm_close_tabs.dart';
 
 /// שואל אם מותר לסגור את [tabs], בתוך החלון של [context].
@@ -18,15 +20,17 @@ class ViewWindowCloseFlow {
     required this.entry,
     ViewWindowCloseConfirm? confirm,
     Future<void> Function()? flush,
-    Future<void> Function(WindowTabsSession session)? discardSession,
+    Future<void> Function(int slot)? discardSession,
+    this._opener,
   }) : _confirm = confirm ?? _confirmUnsavedTabs,
        _flush = flush ?? PreCloseRegistry.runAll,
-       _discardSession = discardSession ?? _discard;
+       _discardSession = discardSession ?? WindowSessionStore.instance.delete;
 
   final ViewWindowEntry entry;
   final ViewWindowCloseConfirm _confirm;
   final Future<void> Function() _flush;
-  final Future<void> Function(WindowTabsSession session) _discardSession;
+  final Future<void> Function(int slot) _discardSession;
+  final ViewWindowOpener? _opener;
   bool _running = false;
 
   static Future<bool> _confirmUnsavedTabs(
@@ -38,14 +42,19 @@ class ViewWindowCloseFlow {
     subtitle: unsavedChangesWindowCloseSubtitle,
   );
 
-  static Future<void> _discard(WindowTabsSession session) =>
-      TabsRepository(window: session).discardWindowSession();
-
   /// מחזיר false כשהמשתמש ביטל; לחיצה חוזרת בזמן ריצה אינה עושה דבר.
   Future<bool> run() async {
     if (_running) return false;
     _running = true;
     try {
+      final opener = _opener ?? ViewWindowOpener.instance;
+      final endProcess = opener.endProcess;
+      if (endProcess != null && await opener.isLastVisibleWindow(entry)) {
+        // החלון האחרון על המסך: יציאה מהתוכנה, עם השאלות של יציאה. אם חזרה — בוטלה.
+        AppWindowKeys.activateWindow(entry.id);
+        await endProcess();
+        return false;
+      }
       final context = entry.keys.navigator.currentContext;
       if (context != null && context.mounted) {
         final tabs = context.read<TabsBloc>().state.tabs;
@@ -57,9 +66,10 @@ class ViewWindowCloseFlow {
       } on PreCloseFlushFailure catch (e) {
         debugPrint('view window close: flush failed: $e');
       }
-      // סגירה מכוונת מוחקת את הסשן, כמו בחלון של ה-runner.
-      await _discardSession(entry.tabsSession);
+      await opener.rememberClosed(entry.slot);
+      // סגירה מכוונת מוחקת את הסשן; קודם endSession, ששמירה באמצע לא תחזיר אותו.
       entry.endSession();
+      await _discardSession(entry.slot);
       entry.handle.destroy();
       return true;
     } finally {

@@ -1,13 +1,19 @@
 import 'package:flutter/foundation.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
+import 'package:otzaria/core/windowing/multiview/view_window_opener.dart';
 import 'package:otzaria/tabs/models/tab.dart';
 
 /// פתיחת חלונות אוצריא נוספים — המשטח שהקוראים משתמשים בו בפועל.
 /// כל פתיחת חלון עוברת דרך [WindowOpener.current], ולא ישירות דרך המימוש.
 abstract interface class WindowOpener {
   /// המימוש הפעיל. ניתן להחלפה בבדיקות דרך [debugOverride].
+  /// עם ריבוי תצוגות — חלונות Dart באותו מנוע, ולעולם לא מנוע נוסף.
   static WindowOpener get current =>
-      debugOverride ?? const MultiWindowService();
+      debugOverride ??
+      (MultiViewMode.enabled
+          ? ViewWindowOpener.instance
+          : const MultiWindowService());
 
   @visibleForTesting
   static WindowOpener? debugOverride;

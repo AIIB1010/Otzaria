@@ -399,6 +399,14 @@ class WindowPersistenceBinding {
         dpr: _devicePixelRatio(),
       );
     }
+    // החלון נסגר בזמן השמירה: הכתיבה הייתה יוצרת מחדש את הסשן שנמחק.
+    if (_slot() != slot) return;
     await store.saveBounds(slot, next.encode());
+  }
+
+  /// מבטל שמירה ממתינה; החלון כבר לא קיים.
+  void dispose() {
+    _debounce?.cancel();
+    _debounce = null;
   }
 }
