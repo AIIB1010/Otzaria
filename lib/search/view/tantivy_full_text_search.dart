@@ -306,11 +306,14 @@ class _TantivyFullTextSearchState extends State<TantivyFullTextSearch>
   }) {
     final cs = Theme.of(context).colorScheme;
     final muted = TextStyle(fontSize: 14, color: cs.onSurfaceVariant);
-    final engineLine = state.totalGroups != null
+    final engineLine = state.isCounting
+        ? '${state.results.length} תוצאות (הספירה מתעדכנת)'
+        : state.totalGroups != null
         ? '${state.results.length}/${state.totalGroups} תוצאות מאוחדות (מתוך ${state.totalResults})'
         : '${state.results.length}/${state.totalResults} תוצאות';
-    final compactEngineLine =
-        '${state.results.length}/${state.totalGroups ?? state.totalResults}';
+    final compactEngineLine = state.isCounting
+        ? '${state.results.length}/…'
+        : '${state.results.length}/${state.totalGroups ?? state.totalResults}';
     return ValueListenableBuilder<ExternalSearchStatus?>(
       valueListenable: widget.tab.externalSearchStatus,
       builder: (context, status, _) {
