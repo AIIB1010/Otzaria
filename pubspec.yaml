@@ -136,12 +136,12 @@ dependency_overrides:
   pdfrx:
     git:
       url: https://github.com/palmoni5/pdfrx
-      ref: 1598298faa58d3c254230573061e18b3ff561fab
+      ref: 83e737ee1ffaaa9c162b02e3ef88ed2b9acb1f9d
       path: packages/pdfrx
   pdfrx_engine:
     git:
       url: https://github.com/palmoni5/pdfrx
-      ref: 1598298faa58d3c254230573061e18b3ff561fab
+      ref: 83e737ee1ffaaa9c162b02e3ef88ed2b9acb1f9d
       path: packages/pdfrx_engine
   # TODO: להחזיר ל-pub.dev כשיתמזג וישוחרר MaikuB/flutter_local_notifications#2826
   # (קריאות WinRT ב-thread ייעודי, כולל תיקון ה-deadlock ב-invoke). עד אז הפורק
