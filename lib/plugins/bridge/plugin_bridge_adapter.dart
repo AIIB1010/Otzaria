@@ -6419,6 +6419,7 @@ class PluginBridgeAdapter {
       );
     }
     final information = await BookDetailsService().getBookInformation(book);
+    final filePath = information.fileDetails['נתיב הקובץ'];
     final package = await PackageInfo.fromPlatform();
     final version = await DataCollectionService().readLibraryVersion();
     return _bookCorrectionService.submit(
@@ -6428,11 +6429,10 @@ class PluginBridgeAdapter {
         bookId: resolved.book.id,
         title: book.title,
         sourceFolder: information.source ?? '',
-        filePath:
-            libraryDisplayPath(
-              information.fileDetails['נתיב הקובץ'] ?? '',
-            ) ??
-            '',
+        // האתר מאתר את המקור לפי הנתיב המלא, עם `אוצריא/` והסיומת.
+        filePath: filePath == BookDetailsService.bookNotFoundText
+            ? ''
+            : filePath ?? '',
         libraryVersion: version,
         client: ReportClientInfo(
           appVersion: '${package.version}+${package.buildNumber}',
