@@ -29,7 +29,7 @@ class _FakeDatabase implements Database {
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
 }
 
-/// חיבור אמיתי שנכשל ב-BEGIN כמו WAL שאינו שמיש (IOERR_SHMOPEN).
+/// חיבור אמיתי שנכשל בבדיקת ה-WAL כמו WAL שאינו שמיש (IOERR_SHMOPEN).
 class _ShmFailingDatabase implements Database {
   _ShmFailingDatabase(this.inner);
 
@@ -37,7 +37,7 @@ class _ShmFailingDatabase implements Database {
 
   @override
   void execute(String sql, [List<Object?> parameters = const []]) {
-    if (sql.startsWith('BEGIN')) {
+    if (sql.contains('sqlite_schema')) {
       throw SqliteException(
         extendedResultCode: 4618,
         message: 'disk I/O error',
@@ -80,6 +80,26 @@ void main() {
     expect(db.select('PRAGMA journal_mode').first.values.first, 'wal');
     expect(db.select('PRAGMA synchronous').first.values.first, 1);
     expect(db.select('PRAGMA busy_timeout').first.values.first, 5000);
+  });
+
+  test('פתיחה בזמן שחיבור אחר כותב אינה ממתינה לנעילה ונשארת ב-WAL', () {
+    final dir = Directory.systemTemp.createTempSync('wal_writer_busy');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final path = p.join(dir.path, 'cache.db');
+    final writer = openWritableDatabase(path, 'writer')
+      ..execute('BEGIN IMMEDIATE');
+    addTearDown(() {
+      writer.execute('ROLLBACK');
+      writer.close();
+    });
+
+    final stopwatch = Stopwatch()..start();
+    final db = openWritableDatabase(path, 'test');
+    addTearDown(db.close);
+
+    expect(stopwatch.elapsed, lessThan(const Duration(seconds: 2)));
+    expect(db.select('PRAGMA journal_mode').first.values.first, 'wal');
+    expect(db.select('PRAGMA locking_mode').first.values.first, 'normal');
   });
 
   test('בלי WAL (מסד בזיכרון) synchronous נשאר FULL', () {
@@ -136,7 +156,7 @@ void main() {
     // SQLITE_IOERR_SHMOPEN (4618) — כרטיס SD ב-Android: ה-PRAGMA עובר,
     // ופתיחת ה-shared-memory נכשלת רק בטרנזקציה הראשונה.
     final db = _FakeDatabase(
-      failOn: (sql) => sql.startsWith('BEGIN'),
+      failOn: (sql) => sql.contains('sqlite_schema'),
       extendedResultCode: 4618,
     );
 

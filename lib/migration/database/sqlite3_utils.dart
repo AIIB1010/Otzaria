@@ -64,10 +64,9 @@ void tuneWritableDatabase(Database db, String label) {
 void enableWalBestEffort(Database db, String label) {
   try {
     db.execute('PRAGMA journal_mode=WAL');
-    // ה-PRAGMA מצליח גם כשהמצב אינו שמיש: קובץ ה-shared-memory של WAL נפתח
-    // רק בטרנזקציה הראשונה, וכרטיס SD ב-Android נכשל שם (IOERR_SHMOPEN).
-    db.execute('BEGIN IMMEDIATE');
-    db.execute('COMMIT');
+    // ה-PRAGMA מצליח גם כש-shm של WAL אינו נפתח (SD באנדרואיד): קריאה פותחת
+    // אותו. לא כתיבה — היא ממתינה לחיבור אחר שכותב ונכשלת עליו ב-BUSY.
+    db.execute('SELECT count(*) FROM sqlite_schema');
   } catch (e) {
     debugPrint('[$label] journal_mode=WAL failed: $e');
     _revertToRollbackJournal(db, label);
