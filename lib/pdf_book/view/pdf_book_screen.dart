@@ -4749,10 +4749,20 @@ class _PdfBookScreenState extends State<PdfBookScreen>
           prev.commentatorsFontSize != curr.commentatorsFontSize,
       builder: (context, settingsState) => ValueListenableBuilder<int>(
         valueListenable: _pageDataRevision,
-        builder: (context, _, _) => _buildCommentaryPanel(settingsState),
+        builder: (context, _, _) {
+          // חלונית שנסגרה נשארת בעץ; בלי זה כל דפדוף טוען ובונה את מפרשי העמוד.
+          final state = _bloc.state;
+          final isOpen = state is PdfBookLoaded && state.showRightPane;
+          if (!isOpen && _closedCommentaryPanel != null) {
+            return _closedCommentaryPanel!;
+          }
+          return _closedCommentaryPanel = _buildCommentaryPanel(settingsState);
+        },
       ),
     );
   }
+
+  Widget? _closedCommentaryPanel;
 
   Widget _buildCommentaryPanel(SettingsState settingsState) {
     // המפרשים אינם תנ"ך, ולכן החרגות התנ"ך אינן חלות עליהם.
