@@ -310,6 +310,14 @@ void main() {
         );
       });
     });
+
+    test('בחירה בלי מופעים אינה משאירה timer', () {
+      fakeAsync((async) {
+        unawaited(_d.dispatchEvent('reader.selection_changed', {'text': 't'}));
+        async.flushMicrotasks();
+        expect(async.pendingTimers, isEmpty);
+      });
+    });
   });
 
   group('השהיה לפי פלטפורמה', () {

@@ -1195,6 +1195,8 @@ class PluginRuntimeDispatcher {
   ) => _dispatchBroadcast(topic, payload, onlyPluginId: pluginId);
 
   Future<void> _throttleSelection(Map<String, dynamic> payload) {
+    // בלי מופע אין למי למסור, ו-timer היה נשאר תלוי אחרי כל בחירה.
+    if (_instancesByPlugin.isEmpty) return Future.value();
     if (_selectionTimer != null) {
       _pendingSelection = payload;
       return Future.value();
