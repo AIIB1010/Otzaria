@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
+import 'package:pdfrx/pdfrx.dart';
 import 'package:otzaria/bookmarks/models/bookmark.dart';
 import 'package:otzaria/bookmarks/utils/bookmark_from_tab.dart';
 import 'package:otzaria/history/bloc/history_bloc.dart';
@@ -16,10 +17,12 @@ import 'package:otzaria/settings/services/backup/backup_merge.dart';
 import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
 import 'package:otzaria/tabs/bloc/tabs_event.dart';
 import 'package:otzaria/tabs/models/pdf_tab.dart';
+import 'package:otzaria/tabs/models/combined_tab.dart';
 import 'package:otzaria/tabs/models/tab.dart';
 import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/tabs/tabs_repository.dart';
 import 'package:otzaria/utils/navigation/book_open_coordinator.dart';
+import 'package:otzaria/workspaces/workspace.dart';
 
 import '../helpers/memory_settings_cache.dart';
 
@@ -109,6 +112,45 @@ void main() {
 
       expect(bloc.state.history, [second, first]);
     });
+
+    test(
+      'לכידת PDF מפוצל ושמירת מקום שהתעדכן אינן דורסות את המקום השני',
+      () async {
+        final bloc = await loadedBloc();
+        final firstController = _ReadyPdfController(10);
+        final secondController = _ReadyPdfController(50);
+        final book = PdfBook(title: 'ספר', path: '/a.pdf');
+        final first = PdfBookTab(book: book, pageNumber: 10)
+          ..historySlot = 'a'
+          ..pdfViewerController = firstController;
+        final second = PdfBookTab(book: book, pageNumber: 50)
+          ..historySlot = 'b'
+          ..pdfViewerController = secondController;
+        final combined = CombinedTab(rightTab: first, leftTab: second);
+        addTearDown(combined.dispose);
+        bloc.add(AddHistory(combined));
+        await bloc.stream.firstWhere((s) => s.history.length == 2);
+        expect(
+          {
+            for (final entry in bloc.state.history)
+              entry.historySlot: entry.index,
+          },
+          {'a': 10, 'b': 50},
+        );
+        secondController.page = 60;
+        bloc.add(CaptureStateForHistory(second));
+        await pumpEventQueue();
+        bloc.add(FlushHistory());
+        await bloc.stream.firstWhere((s) => s.history.first.index == 60);
+        expect(
+          {
+            for (final entry in bloc.state.history)
+              entry.historySlot: entry.index,
+          },
+          {'a': 10, 'b': 60},
+        );
+      },
+    );
 
     test('אותו slot מעדכן את רשומתו ולא מוסיף', () async {
       final bloc = await loadedBloc();
@@ -232,6 +274,89 @@ void main() {
       expect(second.historySlot, isNotNull);
     });
 
+    test('פתיחה בחלונית צד אינה דורסת טאב פתוח אחר של אותו ספר', () async {
+      final open = TextBookTab(book: _book, index: 10)..historySlot = 'a';
+      tabsBloc.add(AddTab(open));
+      await pumpEventQueue();
+      tabsBloc.add(
+        AddTab(TextBookTab(book: TextBook(id: 8, title: 'אחר'), index: 0)),
+      );
+      await pumpEventQueue();
+      final incoming = TextBookTab(book: _book, index: 50)..historySlot = 'a';
+      tabsBloc.add(OpenTabInSidePane(incoming));
+      await pumpEventQueue();
+      expect(tabsBloc.state.tabs.last, isA<CombinedTab>());
+      expect(incoming.historySlot, isNot(open.historySlot));
+    });
+
+    for (final specific in [false, true]) {
+      test(
+        'סגירה, פתיחה מההיסטוריה ושחזור ${specific ? 'מפורש' : 'אחרון'} מפרידים מקומות',
+        () async {
+          final closed = TextBookTab(book: _book, index: 10)..historySlot = 'a';
+          tabsBloc.add(AddTab(closed));
+          await pumpEventQueue();
+          tabsBloc.add(RemoveTab(closed));
+          await pumpEventQueue();
+          final reopened = TextBookTab(book: _book, index: 50)
+            ..historySlot = 'a';
+          tabsBloc.add(AddTab(reopened));
+          await pumpEventQueue();
+          if (specific) {
+            tabsBloc.add(RestoreClosedTab(tabsBloc.recentlyClosedTabs.single));
+          } else {
+            tabsBloc.add(const RestoreLastClosedTab());
+          }
+          await pumpEventQueue();
+          expect(tabsBloc.state.tabs, hasLength(2));
+          expect(
+            tabsBloc.state.tabs.map((t) => t.historySlot).toSet(),
+            hasLength(2),
+          );
+          expect(reopened.historySlot, 'a');
+        },
+      );
+    }
+
+    test(
+      'פתיחה חוזרת של תבנית מוצמדת ישנה אינה צוברת רשומות היסטוריה',
+      () async {
+        final book = PdfBook(title: 'ספר', path: '/a.pdf');
+        final originals = [
+          PdfBookTab(book: book, pageNumber: 10),
+          PdfBookTab(book: book, pageNumber: 50),
+        ];
+        final raw = Workspace(
+          name: 'תבנית',
+          isPinned: true,
+          tabs: originals,
+        ).toJson();
+        for (final tab in originals) {
+          tab.dispose();
+        }
+        final history = HistoryBloc(_MemoryHistoryRepository());
+        addTearDown(history.close);
+        await history.stream.firstWhere((s) => s is HistoryLoaded);
+        int? firstCount;
+        for (var i = 0; i < 2; i++) {
+          final restored = Workspace.fromJson(raw);
+          expect(restored.isPinned, isTrue);
+          tabsBloc.add(ReplaceAllTabs(restored.tabs, 0));
+          await pumpEventQueue();
+          for (final tab in tabsBloc.state.tabs.cast<PdfBookTab>()) {
+            tab.pdfViewerController = _ReadyPdfController(tab.pageNumber);
+          }
+          final updated = history.stream.first;
+          history.add(AddHistoryForTabs(tabsBloc.state.tabs));
+          await updated;
+          firstCount ??= history.state.history.length;
+          expect(history.state.history, hasLength(firstCount));
+        }
+        expect(firstCount, 1);
+        expect(tabsBloc.state.tabs.map((t) => t.historySlot), [null, null]);
+      },
+    );
+
     test('טאב של ספר אחר אינו מקבל slot חדש', () async {
       tabsBloc.add(AddTab(TextBookTab(book: _book, index: 10)));
       final other = TextBookTab(
@@ -275,4 +400,13 @@ void main() {
     );
     expect(merged['history'] as List, hasLength(2));
   });
+}
+
+class _ReadyPdfController extends PdfViewerController {
+  _ReadyPdfController(this.page);
+  int page;
+  @override
+  bool get isReady => true;
+  @override
+  int? get pageNumber => page;
 }

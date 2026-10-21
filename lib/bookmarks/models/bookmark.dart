@@ -89,11 +89,8 @@ class Bookmark {
   /// [OpenedTab.historySlot] של הטאב שממנו נלכדה רשומת ההיסטוריה.
   final String? historySlot;
 
-  /// A stable key for history management, unique per [bookIdentity] and
-  /// [historySlot] — two tabs of one book are two places in the history.
-  ///
-  /// ⚠️ חייב להתאים לזהות שלפיה פתיחת ספר משחזרת מיקום: מפתח גס ממנה מדיח
-  /// את מיקום הקריאה של ספר אחר (למשל טקסט ו-PDF של אותה מסכת).
+  /// זהות מקום קריאה: סוג יעד, זהות ספר ו-slot; חיפוש מזוהה לפי השאילתה.
+  /// זהות הספר חייבת להתאים לשחזור המיקום, כדי לא לדרוס ספר אחר.
   String get historyKey => isSearch
       ? ref
       : '${targetKind.name}:${bookIdentity(book)}'

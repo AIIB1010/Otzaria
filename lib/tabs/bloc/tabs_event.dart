@@ -34,9 +34,10 @@ class OpenOrFocusTab extends TabsEvent {
   final String? targetTitle;
   final bool insertAdjacent;
 
-  /// כשטאב קיים מאותר ועושים לו focus - האם להעביר אליו את המיקום (index/page)
-  /// של הטאב הנכנס. משמש סימניות והיסטוריה - שם המשתמש בוחר מיקום ספציפי ולא
-  /// רק את הספר, ולכן רוצים שהטאב הקיים ייגלל לאותו מיקום.
+  /// רשומת היסטוריה ממוקדת לפי מקום הקריאה, גם כשכותרות המקומות זהות.
+  final bool matchHistorySlot;
+
+  /// מנווט את הטאב הממוחזר למיקום הנכנס כשנבחר יעד מפורש בסימניה או קישור.
   final bool navigateToPositionIfReused;
 
   /// פתיחה ברקע: תמיד טאב חדש (בלי מיקוד טאב קיים), והמשתמש נשאר על הנוכחי.
@@ -47,6 +48,7 @@ class OpenOrFocusTab extends TabsEvent {
     this.targetTitle,
     this.insertAdjacent = false,
     this.navigateToPositionIfReused = false,
+    this.matchHistorySlot = false,
     this.inBackground = false,
   });
 
@@ -56,6 +58,7 @@ class OpenOrFocusTab extends TabsEvent {
     targetTitle,
     insertAdjacent,
     navigateToPositionIfReused,
+    matchHistorySlot,
     inBackground,
   ];
 }
