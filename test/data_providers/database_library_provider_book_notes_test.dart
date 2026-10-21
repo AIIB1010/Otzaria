@@ -164,7 +164,7 @@ void main() {
       ]);
     }, skip: skip);
 
-    test('גוף BLOB במסד בלי zstd_dict — שגיאה, לא הערה שנעלמת', () {
+    test('הקורא זורק על גוף BLOB במסד בלי zstd_dict', () {
       createTable();
       db.execute('INSERT INTO line_note VALUES (10, 0, 4, NULL, ?)', [
         frame('גוף'),
