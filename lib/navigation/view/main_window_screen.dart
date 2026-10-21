@@ -634,7 +634,11 @@ class MainWindowScreenState extends State<MainWindowScreen>
   /// ובניית הקטלוג מעכבת את החשיפה בכ-700ms. `LibraryBrowser` טוען אותו
   /// ב-`initState` שלו כשנכנסים אליו, ולכן שום דבר לא אובד.
   bool get _skipsEagerLibraryLoad =>
-      WindowRole.isSecondary && WindowRole.openedWithTab;
+      !_role.isPrimaryView && _role.openedWithTab;
+
+  /// תפקיד החלון והעבודה פר-תהליך שלו; נקראים פעם אחת, ב-[initState].
+  late final AppWindowRole _role;
+  late final ProcessDuties _duties;
 
   StreamSubscription<Object?>? _semanticWorkStatusSub;
   SemanticWorkStatusReporter? _semanticWorkStatus;
@@ -656,6 +660,8 @@ class MainWindowScreenState extends State<MainWindowScreen>
   void initState() {
     super.initState();
     StartupTimeline.instance.markOnce('mainScreenInit');
+    _role = AppWindowScope.roleOf(context);
+    _duties = ProcessDuties.of(context);
     _indexUpdateMode = context.read<SettingsBloc>().state.indexUpdateMode;
     // מאזין לזרם סטטי בלבד: המאגר הסמנטי לא נוצר עד שמשתמשים בו.
     _semanticWorkStatusSub = SemanticSearchRepository.sharedAvailabilityChanges
@@ -710,7 +716,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
 
       // ⚠️ המארח בלבד: הניקוז הוא rename אטומי, וכשכל החלונות מנטרים
       // הזוכה שרירותי — לפעמים חלון שהמשתמש סגר קפץ בחזרה למסך.
-      if (ProcessDuties.current.isProcessOwner) {
+      if (_duties.isProcessOwner) {
         unawaited(_initializeExternalActivationMonitoring());
       }
 
@@ -718,7 +724,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
 
       // ⚠️ פר-תהליך: מונה ההפעלות שמכתיב מתי הפופאפ מוצג עולה פר-חלון,
       // והפופאפ עצמו הופיע בכל חלון שנפתח.
-      if (ProcessDuties.current.isProcessOwner) {
+      if (_duties.isProcessOwner) {
         AdPopupDialog.showIfNeeded(
           context,
           shouldSkip: () => _tourStartedAutomaticallyThisLaunch,
@@ -936,7 +942,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
   /// This avoids DB lock contention that caused 17s delays.
   void _initializeBackgroundSync() {
     // ⚠️ פר-תהליך: הסנכרון כותב ל-`seforim.db` ול-`user_books.db` המשותפים.
-    if (!ProcessDuties.current.isProcessOwner) return;
+    if (!_duties.isProcessOwner) return;
     BackgroundSyncInitializer.initializeAfterDelay(
       delaySeconds: 2, // Small delay to let UI settle after library load
       onComplete: (result) {
@@ -987,7 +993,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
         (Settings.getValue<bool>(SettingsRepository.keyAutoSync) ?? true) &&
         context.read<SettingsBloc>().state.canUseSoftwareAndBookUpdates &&
         // ⚠️ פר-תהליך: שני חלונות היו מורידים לאותו נתיב ונלחמים על seforim.db.
-        ProcessDuties.current.isProcessOwner &&
+        _duties.isProcessOwner &&
         isAutoUpdateCheckDue(SettingsRepository.keyLastLibraryUpdateCheck);
   }
 
@@ -1193,7 +1199,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
   ) async {
     // ⚠️ החלטה פר-תהליך: הענף `autoReindexThenStart` מוחק את האינדקס שכל
     // החלונות חולקים. החלון המשני רק מדווח על מצב האינדקס ופותח את השער.
-    if (!ProcessDuties.current.isProcessOwner) {
+    if (!_duties.isProcessOwner) {
       _startupWorkGate.markIndexingDecisionResolved(expectIndexing: false);
       _tryStartDeferredStartupWork();
       context.read<IndexingBloc>().add(CheckIndexStatus(library));
@@ -3992,7 +3998,8 @@ class MainWindowScreenState extends State<MainWindowScreen>
                           // host נסתר לתוספים שביקשו לרוץ ברקע עם עליית
                           // האפליקציה. הוא חי כל זמן שה-MainWindowScreen קיים,
                           // ולא תלוי במסך "כלים".
-                          const PluginBackgroundHost(),
+                          if (_duties.hostsPluginBackground)
+                            const PluginBackgroundHost(),
                           ContextOverlayPanel(
                             isOpen:
                                 _isReadingSettingsPanelOpen &&
