@@ -2289,6 +2289,8 @@ class _CombinedViewState extends State<CombinedView> {
                   estimationKey: estimationKey,
                   itemScrollController: widget.tab.lines.itemController,
                   itemPositionsListener: widget.tab.lines.positionsListener,
+                  notifyPositionsOnRebuild:
+                      widget.tab.lines.needsPositionsAfterRebuild,
                   scrollOffsetController: widget.tab.lines.offsetController,
                   itemCount: itemCount,
                   itemBuilder: (context, index) => wrapReaderItem(
@@ -2436,6 +2438,8 @@ class _CombinedViewState extends State<CombinedView> {
               end: ScrollablePositionedListScrollbar.trackWidth,
             ).resolve(Directionality.of(context)),
             itemPositionsListener: widget.tab.lines.positionsListener,
+            notifyPositionsOnRebuild:
+                widget.tab.lines.needsPositionsAfterRebuild,
             itemScrollController: widget.tab.lines.itemController,
             scrollOffsetController: widget.tab.lines.offsetController,
             itemCount: itemCount,
