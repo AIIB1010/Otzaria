@@ -617,7 +617,10 @@ void main() {
       final controller = ItemScrollController();
       addTearDown(width.dispose);
       addTearDown(layoutKey.dispose);
-      diagnostics.trackEstimateRefreshes(controller);
+      // שני מופעים על אותו בקר, כמו בהחלפת תצוגה באותו פריים.
+      diagnostics
+        ..trackEstimateRefreshes(controller)
+        ..trackEstimateRefreshes(controller);
       await tester.pumpWidget(
         Directionality(
           textDirection: TextDirection.rtl,
@@ -649,6 +652,7 @@ void main() {
       diagnostics.toggle();
       await tester.pump(const Duration(seconds: 1));
       expect(diagnostics.stats.value.estimates, isNull);
+      diagnostics.untrackEstimateRefreshes(controller);
 
       width.value = 360;
       await tester.pump();

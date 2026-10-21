@@ -256,7 +256,7 @@ class DeveloperDiagnostics {
   Future<bool>? _flushInFlight;
   static const int _maxPendingRecords = 4096;
   final Map<String, int> _rebuildsInWindow = {};
-  final Set<ItemScrollController> _estimateLists = {};
+  final Map<ItemScrollController, int> _estimateLists = {};
   Expando<EstimateRefreshStats> _lastEstimates = Expando();
   int _slowTotal = 0;
   int _peakRss = 0;
@@ -281,15 +281,23 @@ class DeveloperDiagnostics {
 
   /// רשימה שעלות רענון ההערכות שלה נכנסת ל-stats. נרשמת גם כשהאיסוף כבוי,
   /// כדי שהפעלה ב-Ctrl+Shift+I תכלול רשימות שכבר פתוחות.
-  void trackEstimateRefreshes(ItemScrollController controller) =>
-      _estimateLists.add(controller);
+  void trackEstimateRefreshes(ItemScrollController controller) => _estimateLists
+      .update(controller, (count) => count + 1, ifAbsent: () => 1);
 
-  void untrackEstimateRefreshes(ItemScrollController controller) =>
+  // נספר: מופע חדש נרשם ב-initState לפני ש-dispose של הקודם מסיר את אותו בקר.
+  void untrackEstimateRefreshes(ItemScrollController controller) {
+    final count = _estimateLists[controller];
+    if (count == null) return;
+    if (count > 1) {
+      _estimateLists[controller] = count - 1;
+    } else {
       _estimateLists.remove(controller);
+    }
+  }
 
   EstimateRefreshWindow _estimateRefreshesSinceLastTick() {
     final lists = <(EstimateRefreshStats?, EstimateRefreshStats)>[];
-    for (final controller in _estimateLists) {
+    for (final controller in _estimateLists.keys) {
       final list = controller.listController;
       final stats = list?.estimateRefreshStats;
       if (list == null || stats == null) continue;
