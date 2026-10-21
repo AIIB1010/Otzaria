@@ -1262,6 +1262,15 @@ Map<int, String> _loadDibburHamatchilInIsolate({
   }
 }
 
+/// תא שלם בשורת שם קודש; ערך אחר — FormatException, כמו span פגום.
+int _divineNameInt(sqlite3.Row row, String column) {
+  final value = row[column];
+  if (value is! int) {
+    throw FormatException('divine-name $column is not an integer: $value');
+  }
+  return value;
+}
+
 /// מופעי שמות הקודש של ספר (`line_divine_name`) לפי `lineIndex`, בשאילתה
 /// אחת. מסד ישן, בלי הטבלה, נותן [DivineNameSpans.empty].
 DivineNameSpans _loadDivineNamesInIsolate({
@@ -1292,13 +1301,10 @@ DivineNameSpans _loadDivineNamesInIsolate({
       [bookId],
     );
     for (final row in rows) {
-      final lineIndex = row['lineIndex'];
-      final start = row['charStart'];
-      final span = row['span'];
-      if (lineIndex is int && start is int && span is int) {
-        final name = decodeDivineNameSpan(start, span);
-        builder.add(lineIndex, start, name.end, name.kind);
-      }
+      final lineIndex = _divineNameInt(row, 'lineIndex');
+      final start = _divineNameInt(row, 'charStart');
+      final name = decodeDivineNameSpan(start, _divineNameInt(row, 'span'));
+      builder.add(lineIndex, start, name.end, name.kind);
     }
     return builder.build();
   } finally {
@@ -1389,31 +1395,38 @@ BookNotes _loadBookNotesInIsolate({
       }
     }
     if (capabilities.hasBookNoteDivineNames) {
-      final names = db.select(
-        'SELECT l.lineIndex AS lineIndex, d.noteIndex AS noteIndex, '
-        'd.charStart AS charStart, d.span AS span '
-        'FROM line l JOIN line_note_divine_name d ON d.lineId = l.id '
-        'WHERE l.bookId = ? ORDER BY l.lineIndex, d.noteIndex, d.charStart',
-        [bookId],
-      );
-      for (final row in names) {
-        final lineIndex = row['lineIndex'];
-        final noteIndex = row['noteIndex'];
-        final start = row['charStart'];
-        final span = row['span'];
-        if (lineIndex is int &&
-            noteIndex is int &&
-            start is int &&
-            span is int) {
-          final name = decodeDivineNameSpan(start, span);
+      // שכבת השמות נכשלת לבדה: גוף ההערות נשאר, בלי אף שם (לא חלקית).
+      try {
+        final names =
+            <({int lineIndex, int noteIndex, int start, int end, int kind})>[];
+        for (final row in db.select(
+          'SELECT l.lineIndex AS lineIndex, d.noteIndex AS noteIndex, '
+          'd.charStart AS charStart, d.span AS span '
+          'FROM line l JOIN line_note_divine_name d ON d.lineId = l.id '
+          'WHERE l.bookId = ? ORDER BY l.lineIndex, d.noteIndex, d.charStart',
+          [bookId],
+        )) {
+          final start = _divineNameInt(row, 'charStart');
+          final name = decodeDivineNameSpan(start, _divineNameInt(row, 'span'));
+          names.add((
+            lineIndex: _divineNameInt(row, 'lineIndex'),
+            noteIndex: _divineNameInt(row, 'noteIndex'),
+            start: start,
+            end: name.end,
+            kind: name.kind,
+          ));
+        }
+        for (final n in names) {
           builder.addDivineName(
-            lineIndex,
-            noteIndex,
-            start,
-            name.end,
-            name.kind,
+            n.lineIndex,
+            n.noteIndex,
+            n.start,
+            n.end,
+            n.kind,
           );
         }
+      } on Exception catch (e) {
+        debugPrint('⚠️ Error in getBookNotes divine names "$bookTitle": $e');
       }
     }
     return builder.build();

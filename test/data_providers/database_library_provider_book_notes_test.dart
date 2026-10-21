@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/data/data_providers/database_library_provider.dart';
 import 'package:otzaria/migration/database/db_capabilities.dart';
@@ -263,5 +263,43 @@ void main() {
     expect(notes.bodyDivineNames(1, 0), [(start: 4, end: 9, kind: 5)]);
     expect(notes.bodyDivineNames(1, 1), isEmpty);
     expect(notes.bodyDivineNames(0, 0), isEmpty);
+  });
+
+  group('שורת שם פגומה בגוף הערה — רק שכבת השמות נופלת', () {
+    late List<String> logs;
+    late DebugPrintCallback previousPrint;
+    setUp(() {
+      logs = [];
+      previousPrint = debugPrint;
+      debugPrint = (message, {wrapWidth}) => logs.add(message ?? '');
+    });
+    tearDown(() => debugPrint = previousPrint);
+
+    for (final (label, badRow) in [
+      ('span פגום', '(11, 1, 0, 5)'), // אורך 0
+      ('תא שאינו מספר', "(11, 1, 0, 'x677')"),
+    ]) {
+      test(label, () {
+        createTable();
+        createNamesTable();
+        lines({11: 'אב${sup('א')}ג${sup('ב')}'});
+        db.execute(
+          "INSERT INTO line_note VALUES (11, 0, 3, 1, 'אמר אלהים'), "
+          "(11, 1, 5, 1, 'שנייה')",
+        );
+        db.execute(
+          'INSERT INTO line_note_divine_name VALUES (11, 0, 4, 677), $badRow',
+        );
+
+        final notes = load();
+        expect(notes.notesAt(1), hasLength(2));
+        expect(notes.bodyDivineNames(1, 0), isEmpty);
+        expect(notes.bodyDivineNames(1, 1), isEmpty);
+        expect(
+          logs.where((l) => l.contains('getBookNotes divine names')),
+          hasLength(1),
+        );
+      });
+    }
   });
 }

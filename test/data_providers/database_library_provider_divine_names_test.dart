@@ -1,9 +1,13 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:otzaria/attached_libraries/models/attached_library.dart';
+import 'package:otzaria/attached_libraries/repository/attached_library_registry.dart';
 import 'package:otzaria/data/data_providers/database_library_provider.dart';
 import 'package:otzaria/divine_names/models/divine_name_spans.dart';
 import 'package:otzaria/migration/database/db_capabilities.dart';
+import 'package:otzaria/models/book_source.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqlite3/sqlite3.dart' as sqlite3;
 
@@ -99,5 +103,50 @@ void main() {
       'INSERT INTO line_divine_name VALUES (10, 11, 677), (11, 6, 5)', // אורך 0
     );
     expect(load, throwsFormatException);
+  });
+
+  test('תא שאינו מספר שלם — הטעינה נכשלת בקול, לא מדלגת על השורה', () {
+    createTable();
+    // טקסט לא מספרי: '677' היה מומר למספר בגלל זיקת INTEGER של העמודה.
+    db.execute(
+      "INSERT INTO line_divine_name VALUES (10, 11, 677), (11, 6, 'x677')",
+    );
+    expect(load, throwsFormatException);
+  });
+
+  test('דרך העטיפה האמיתית: span פגום — נרשם ביומן ומחזיר ריק', () async {
+    createTable();
+    db.execute(
+      'INSERT INTO line_divine_name VALUES (10, 11, 677), (11, 6, 5)', // אורך 0
+    );
+    final previousRegistry = AttachedLibraryRegistry.instance;
+    final registry = AttachedLibraryRegistry(idleTimeout: null)
+      ..update([
+        AttachedLibrary(
+          slug: 'divine-bad',
+          displayName: 'divine-bad',
+          path: dbPath,
+          addedAt: DateTime(2026),
+        ),
+      ]);
+    AttachedLibraryRegistry.instance = registry;
+    final logs = <String>[];
+    final previousPrint = debugPrint;
+    debugPrint = (message, {wrapWidth}) => logs.add(message ?? '');
+    try {
+      final spans = await DatabaseLibraryProvider.instance.getDivineNameSpans(
+        'בראשית',
+        source: BookSource.attached('divine-bad'),
+      );
+      expect(spans.isEmpty, isTrue);
+      expect(
+        logs.where((l) => l.contains('getDivineNameSpans "בראשית"')),
+        hasLength(1),
+      );
+    } finally {
+      debugPrint = previousPrint;
+      await registry.closeAll();
+      AttachedLibraryRegistry.instance = previousRegistry;
+    }
   });
 }
