@@ -9,6 +9,7 @@ import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:otzaria/core/messages/library_messages.dart';
 import 'package:otzaria/core/messages/window_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
+import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/windowing/cross_window_tab_drag.dart';
 import 'package:otzaria/core/windowing/drag_preview_colors.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
@@ -108,6 +109,7 @@ ReadingTabStrip buildTabsReadingTabStrip(
         DragPreviewColors.of(context),
         tabsBloc: context.read<TabsBloc>(),
         cancelDrag: cancelDrag,
+        sourceWindow: AppWindowKeys.of(context).id,
       );
     },
     onTabSnapshot: (_, snapshot, generation) =>

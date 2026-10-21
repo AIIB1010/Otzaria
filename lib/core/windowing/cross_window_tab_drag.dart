@@ -4,8 +4,11 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:otzaria/core/messages/window_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
+import 'package:otzaria/core/windowing/app_window_id.dart';
 import 'package:otzaria/core/windowing/drag_preview_colors.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/multiview/in_process_tab_drop.dart';
+import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/core/windowing/tab_drag_preview.dart';
 import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
@@ -23,6 +26,21 @@ import 'package:otzaria/tabs/utils/confirm_close_tabs.dart';
 /// Flutter אינו יודע דבר מחוץ לחלון שלו, ולכן שני חלקים נייטיביים מגשרים:
 /// תצוגת הגרירה (`beginTabDrag`) וזיהוי מה נמצא תחת הסמן (`windowAtCursor`).
 class CrossWindowTabDrag {
+  CrossWindowTabDrag({@visibleForTesting InProcessTabDrops? inProcess})
+    : _inProcessOverride = inProcess;
+
+  final InProcessTabDrops? _inProcessOverride;
+
+  /// ריבוי תצוגות: היעדים הם חלונות התהליך, וההעברה ישירה ולא דרך האפיק.
+  InProcessTabDrops? get _inProcess => MultiViewMode.enabled
+      ? (_inProcessOverride ?? InProcessTabDrops.instance)
+      : null;
+
+  /// החלון שהרצועה יושבת בו; מולו נמדד "שחרור מעל החלון עצמו".
+  AppWindowId _sourceWindow = AppWindowId.primary;
+
+  int? get _selfHwnd => _inProcess?.hwndOf(_sourceWindow);
+
   /// ⚠️ קצב קבוע ולא `onDragUpdate`: `Draggable` מדווח עשרות עדכונים
   /// בשנייה, וכל אחד היה קריאת ערוץ ובקשת אפיק. 60ms מספיקים כדי שהחיווי
   /// ירגיש רציף, ומורידים את התעבורה בסדר גודל.
@@ -109,8 +127,10 @@ class CrossWindowTabDrag {
     DragPreviewColors colors, {
     TabsBloc? tabsBloc,
     VoidCallback? cancelDrag,
+    AppWindowId? sourceWindow,
   }) {
     if (!MultiWindowService.canDragTabsOut) return;
+    _sourceWindow = sourceWindow ?? AppWindowId.primary;
     _draggedTitle = tab.title;
     _draggedTab = tab;
     _sourceBloc = tabsBloc;
@@ -133,7 +153,9 @@ class CrossWindowTabDrag {
     final title = tab.title;
     // התצוגה מוצגת רק כשהסמן יוצא מחלון המקור, ולכן אין כפילות מול
     // ה-feedback של `Draggable`.
-    unawaited(_service.beginTabDrag(title, colors: colors));
+    unawaited(
+      _service.beginTabDrag(title, colors: colors, sourceHwnd: _selfHwnd),
+    );
     _timer?.cancel();
     _timer = Timer.periodic(_pollInterval, (_) => unawaited(_poll()));
   }
@@ -222,7 +244,7 @@ class CrossWindowTabDrag {
     _timer?.cancel();
     _timer = null;
     final last = _lastDragOverSlot;
-    if (last != null) _service.notifyDragLeave(last);
+    if (last != null) _notifyDragLeave(last);
     _lastDragOverSlot = null;
     _draggedTitle = null;
     // צילום שלא נשלח (הגרירה נשארה בתוך החלון) אינו נחוץ יותר.
@@ -253,7 +275,7 @@ class CrossWindowTabDrag {
     final title = _draggedTitle;
     if (title == null || _handedOff) return;
     _pollsSinceStart++;
-    final target = await _service.windowAtCursor();
+    final target = await _windowAtCursor();
     // ⚠️ כשל בירור אינו "שולחן העבודה" — פשוט מדלגים על הפעימה.
     if (target == null) return;
     // תשובה מאוחרת אינה רשאית לעדכן גרירה שכבר הסתיימה או הוחלפה.
@@ -263,7 +285,7 @@ class CrossWindowTabDrag {
     final slot = target.isSelf ? null : target.slot;
 
     if (_lastDragOverSlot != null && _lastDragOverSlot != slot) {
-      _service.notifyDragLeave(_lastDragOverSlot!);
+      _notifyDragLeave(_lastDragOverSlot!);
       _remoteDropIndex = null;
     }
     _lastDragOverSlot = slot;
@@ -320,7 +342,7 @@ class CrossWindowTabDrag {
   /// דוגם את מיקום הסמן בתחילת הגרירה, לפני פעימת המעקב הראשונה.
   /// ה-generation מונע מדגימה מאוחרת לזרוע עומק של גרירה קודמת.
   Future<void> _captureDragOrigin(int generation) async {
-    final target = await _service.windowAtCursor();
+    final target = await _windowAtCursor();
     if (target == null || generation != _dragGeneration) return;
     _trackDepth(target.y);
   }
@@ -345,7 +367,7 @@ class CrossWindowTabDrag {
     _timer?.cancel();
     _timer = null;
     final last = _lastDragOverSlot;
-    if (last != null) _service.notifyDragLeave(last);
+    if (last != null) _notifyDragLeave(last);
     _lastDragOverSlot = null;
     _draggedTitle = null;
     _hidePreview();
@@ -394,12 +416,12 @@ class CrossWindowTabDrag {
 
     _handedOff = true;
     final last = _lastDragOverSlot;
-    if (last != null) _service.notifyDragLeave(last);
+    if (last != null) _notifyDragLeave(last);
     _lastDragOverSlot = null;
     _draggedTitle = null;
 
     _cancelFlutterDrag?.call();
-    final outcome = await _service.dragOutToSystem();
+    final outcome = await _dragOutToSystem();
     _timer?.cancel();
     _timer = null;
 
@@ -469,6 +491,7 @@ class CrossWindowTabDrag {
           : null,
     );
     if (moved) {
+      _hideAfterViewOpened();
       bloc.add(RemoveTab(tab));
       return;
     }
@@ -490,17 +513,22 @@ class CrossWindowTabDrag {
     int x,
     int y,
   ) async {
+    final drops = _inProcess;
     final index =
         _remoteDropIndex ??
-        await _service.notifyDragOver(slot, x, y, tab.title);
+        await (drops != null
+            ? drops.notifyDragOver(slot, x, y, tab.title)
+            : _service.notifyDragOver(slot, x, y, tab.title));
     _remoteDropIndex = null;
-    final moved = await _service.sendTabToWindow(slot, tab, index: index);
+    final moved = await (drops != null
+        ? drops.sendTabToWindow(slot, tab, index: index)
+        : _service.sendTabToWindow(slot, tab, index: index));
     if (moved == true) {
       bloc.add(RemoveTab(tab));
       return;
     }
     // החיווי ביעד הודלק על ידי `notifyDragOver` — יש לכבות אותו.
-    _service.notifyDragLeave(slot);
+    _notifyDragLeave(slot);
     UiSnack.showError(
       moved == false
           ? WindowMessages.transferFailed
@@ -524,7 +552,7 @@ class CrossWindowTabDrag {
     // בלי היציאה הזו אותה כרטיסיה הייתה מטופלת פעמיים.
     if (_handedOff) return;
 
-    final target = await _service.windowAtCursor();
+    final target = await _windowAtCursor();
 
     // ⚠️ כל יציאה מוקדמת מכאן חייבת להסתיר את הרוח שהוקפאה ב-[end].
     // רק המסלול שפותח חלון משאיר אותה, כדי שהיא תוחלף במשהו אמיתי.
@@ -568,6 +596,7 @@ class CrossWindowTabDrag {
       origin: (x: target.x, y: target.y),
     );
     if (moved) {
+      _hideAfterViewOpened();
       tabsBloc.add(RemoveTab(tab));
       return;
     }
@@ -576,4 +605,64 @@ class CrossWindowTabDrag {
   }
 
   void _hidePreview() => unawaited(_service.endTabDrag());
+
+  /// ה-runner מסתיר את הרוח כשחלון מנוע נחשף, אבל אינו מכיר חלונות Dart.
+  void _hideAfterViewOpened() {
+    if (_inProcess != null) _hidePreview();
+  }
+
+  void _notifyDragLeave(int slot) {
+    final drops = _inProcess;
+    if (drops != null) return drops.notifyDragLeave(slot);
+    _service.notifyDragLeave(slot);
+  }
+
+  /// מה שתחת הסמן. בריבוי תצוגות המשבצת היא של חלון התהליך שה-HWND שלו
+  /// תחת הסמן, ו-isSelf נמדד מול חלון המקור ולא תמיד מול החלון הראשי.
+  Future<CursorTarget?> _windowAtCursor() async {
+    final drops = _inProcess;
+    final target = await _service.windowAtCursor(
+      selfHwnd: _selfHwnd,
+      withHwnd: drops != null,
+    );
+    if (target == null || drops == null) return target;
+    final slot = drops.resolve(hwnd: target.hwnd, busSlot: target.slot);
+    return (
+      slot: slot,
+      isSelf: target.isSelf || _isSourceSlot(drops, slot),
+      isShellTray: target.isShellTray,
+      approachingTop: target.approachingTop,
+      minUpwardTravel: target.minUpwardTravel,
+      x: target.x,
+      y: target.y,
+      hwnd: target.hwnd,
+    );
+  }
+
+  Future<SystemDragOutcome?> _dragOutToSystem() async {
+    final drops = _inProcess;
+    final outcome = await _service.dragOutToSystem(
+      selfHwnd: _selfHwnd,
+      withHwnd: drops != null,
+    );
+    if (outcome == null || drops == null) return outcome;
+    final slot = drops.resolve(hwnd: outcome.hwnd, busSlot: outcome.slot);
+    return (
+      ran: outcome.ran,
+      snapped: outcome.snapped,
+      left: outcome.left,
+      top: outcome.top,
+      width: outcome.width,
+      height: outcome.height,
+      x: outcome.x,
+      y: outcome.y,
+      slot: slot,
+      isSelf: outcome.isSelf || _isSourceSlot(drops, slot),
+      isShellTray: outcome.isShellTray,
+      hwnd: outcome.hwnd,
+    );
+  }
+
+  bool _isSourceSlot(InProcessTabDrops drops, int? slot) =>
+      slot != null && slot == drops.slotOf(_sourceWindow);
 }
