@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
+import 'package:otzaria/app_scope/external_activation_service.dart';
 import 'package:otzaria/bookmarks/bloc/bookmark_bloc.dart';
 import 'package:otzaria/bookmarks/repository/bookmark_repository.dart';
 import 'package:otzaria/core/startup_timeline.dart';
@@ -110,6 +111,12 @@ class AppScopeProviders extends StatelessWidget {
           BlocProvider<PluginUpdatesCubit>(
             lazy: true,
             create: (_) => PluginUpdatesCubit(),
+          ),
+          // נוצר רק כשהחלון המארח מבקש אותו — חלון משני אינו מנקז.
+          Provider<ExternalActivationService>(
+            lazy: true,
+            create: (_) => ExternalActivationService(),
+            dispose: (_, service) => service.dispose(),
           ),
         ],
         child: child,

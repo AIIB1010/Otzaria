@@ -32,7 +32,6 @@ import 'package:otzaria/indexing/indexing_work_status.dart';
 import 'package:otzaria/indexing/models/index_update_mode.dart';
 import 'package:otzaria/indexing/repository/indexing_repository.dart';
 import 'package:otzaria/core/windowing/window_title_sync.dart';
-import 'package:otzaria/core/windowing/window_bus.dart';
 import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/navigation/utils/refresh_indexing_plan.dart';
 import 'package:otzaria/navigation/bloc/navigation_bloc.dart';
@@ -123,8 +122,7 @@ import 'package:otzaria/plugins/bridge/plugin_bridge_adapter.dart'
     show buildThemePayloadFromScheme;
 import 'package:otzaria/theme/app_theme_data.dart' show AppThemeData;
 import 'package:otzaria/core/sequential_dialog_queue.dart';
-import 'package:otzaria/core/external_activation_queue.dart';
-import 'package:otzaria/core/external_activation_channel.dart';
+import 'package:otzaria/app_scope/external_activation_service.dart';
 import 'package:otzaria/core/external_uri_router.dart';
 import 'package:otzaria/find_ref/find_ref_deep_link.dart';
 import 'package:otzaria/core/info/app_info_service.dart';
@@ -337,11 +335,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
 
   late final CalendarCubit _calendarCubit;
   late final SettingsScreenController _settingsScreenController;
-  final ExternalActivationQueue _externalActivationQueue =
-      const ExternalActivationQueue();
   late final TourCubit _tourCubit;
-  final ExternalActivationChannel _externalActivationChannel =
-      ExternalActivationChannel();
   ReaderLocationTracker? _readerLocationTracker;
   Orientation? _previousOrientation;
   int _currentPageIndex = 0;
@@ -421,14 +415,12 @@ class MainWindowScreenState extends State<MainWindowScreen>
   _pluginInstallDialogQueue = SequentialDialogQueue(_showPluginInstallDialog);
 
   bool _hasInitializedPageController = false;
-  late final CoalescingDrainRunner _externalActivationDrainRunner =
-      CoalescingDrainRunner(_drainPendingExternalActivations);
 
   /// מונע הערמת פופאפים כשמגיעים כמה קישורי `info` בזה אחר זה.
   bool _isShowingInfoReport = false;
   bool _isShowingAppReport = false;
-  StreamSubscription<FileSystemEvent>? _externalActivationWatchSub;
-  StreamSubscription<String>? _externalActivationChannelSub;
+  // השירות של התהליך; החלון רק פותח את מה שהוא מפנה אליו.
+  ExternalActivationService? _externalActivationService;
 
   static const List<
     ({
@@ -1352,86 +1344,12 @@ class MainWindowScreenState extends State<MainWindowScreen>
     }
   }
 
-  Future<void> _processPendingExternalActivations() =>
-      _externalActivationDrainRunner.run();
-
-  Future<void> _drainPendingExternalActivations() async {
-    if (!mounted) return;
-    try {
-      final pendingUris = await _externalActivationQueue.drainUriStrings();
-      for (final uriString in pendingUris) {
-        await _routeDrainedExternalUri(uriString);
-      }
-    } catch (e, stackTrace) {
-      debugPrint('External activation polling failed: $e\n$stackTrace');
-    }
-  }
-
   Future<void> _initializeExternalActivationMonitoring() async {
-    await _externalActivationChannel.initialize();
-    await _externalActivationChannelSub?.cancel();
-    _externalActivationChannelSub = _externalActivationChannel.uriStrings
-        .listen((uriString) {
-          unawaited(_handleExternalActivationUriString(uriString));
-        });
-
-    final pendingPlatformUris = await _externalActivationChannel
-        .takePendingUriStrings();
-    for (final uriString in pendingPlatformUris) {
-      await _handleExternalActivationUriString(uriString);
-    }
-
-    final queuePath = await _externalActivationQueue.resolveQueueFilePath();
-    final queueFile = File(queuePath);
-    await queueFile.parent.create(recursive: true);
-
-    await _externalActivationWatchSub?.cancel();
-    _externalActivationWatchSub = queueFile.parent.watch().listen(
-      (event) {
-        final normalizedPath = event.path.replaceAll('\\', '/');
-        final normalizedQueuePath = queuePath.replaceAll('\\', '/');
-        if (normalizedPath != normalizedQueuePath) {
-          return;
-        }
-
-        unawaited(_processPendingExternalActivations());
-      },
-      onError: (error, stackTrace) {
-        debugPrint('External activation watch failed: $error\n$stackTrace');
-      },
-    );
-
-    await _processPendingExternalActivations();
-  }
-
-  /// מפנה קישור שנוקז אל החלון הגלוי שהיה פעיל אחרון, או מטפל בו כאן.
-  ///
-  /// המארח הוא המנקז היחיד, ולכן בלי ההפניה הזו הקישור היה נפתח תמיד בו —
-  /// גם כשהמשתמש עובד בחלון אחר.
-  Future<void> _routeDrainedExternalUri(String uriString) async {
-    final uri = Uri.tryParse(uriString);
-    final action = uri == null ? null : ExternalUriRouter.parseUri(uri);
-    // "חלון חדש" לא ביקש חלון קיים — אין למי להפנות.
-    if (action is OpenNewWindowAction || !MultiWindowService.canOpenWindows) {
-      await _handleExternalActivationUriString(uriString);
-      return;
-    }
-
-    final slot = await const MultiWindowService().lastActiveSlot();
     if (!mounted) return;
-    // null = אין חלון גלוי; אז המארח מוצג בכוונה — משהו חייב להופיע.
-    if (slot == null || slot == WindowBus.instance.slot) {
-      await _handleExternalActivationUriString(uriString);
-      return;
-    }
-
-    final handled = await WindowBus.instance.request(slot, {
-      'type': MultiWindowService.requestOpenUri,
-      'uri': uriString,
-    }, timeout: const Duration(seconds: 5));
-    if (handled == true || !mounted) return;
-    // היעד לא ענה או סירב — עדיף שהקישור ייפתח כאן מאשר שייעלם.
-    await _handleExternalActivationUriString(uriString);
+    final service = _externalActivationService = context
+        .read<ExternalActivationService>();
+    service.attachWindow(_handleExternalActivationUriString);
+    await service.start();
   }
 
   Future<bool> _handleExternalActivationUriString(String uriString) async {
@@ -1754,7 +1672,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
   /// הוא שאילתה, לא יעד.
   ///
   /// הדיאלוג נדחה לפוסט-פריים ואינו מומתן: המתנה לסגירתו הייתה חוסמת את
-  /// `_processPendingExternalActivations` (שמתנקז רק בעקבות אירוע קובץ), וכן
+  /// `ExternalActivationService.processPending` (מתנקז רק באירוע קובץ), וכן
   /// גורמת ל-`Navigator.pop` של הקורא — דיאלוג איתור מקורות — לסגור את
   /// הפופאפ הזה במקום את עצמו.
   Future<bool> _showInfoReport(ShowInfoAction action) async {
@@ -1891,9 +1809,9 @@ class MainWindowScreenState extends State<MainWindowScreen>
     appWindowListener?.onWindowResizeOccurred = null;
     _splashFailsafeTimer?.cancel();
     _pluginInstallDialogQueue.clear();
-    _externalActivationWatchSub?.cancel();
-    _externalActivationChannelSub?.cancel();
-    _externalActivationChannel.dispose();
+    _externalActivationService?.detachWindow(
+      _handleExternalActivationUriString,
+    );
     _calendarCubit.close();
     _removeTourOverlay();
     if (LibraryChangesNotes.instance.beforeAutoShow == _tourFinished) {

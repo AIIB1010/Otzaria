@@ -77,6 +77,7 @@ import 'package:otzaria/core/windowing/app_window_scope.dart';
 import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/core/user_state/window_bounds.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
+import 'package:otzaria/core/windowing/dock_progress_listener.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
 import 'package:otzaria/core/windowing/window_bus_host.dart';
 import 'package:otzaria/core/windowing/window_bus.dart';
@@ -1596,12 +1597,15 @@ class _AppBootstrapState extends State<AppBootstrap> {
 
     return AppScopeProviders(
       settingsRepository: settingsRepository,
-      child: WindowScopeProviders(
-        historyRepository: historyRepository,
-        // מתחת לכל ה-blocs: האפיק עונה על בקשות מחלונות אחרים, ושתי
-        // הבקשות הנתמכות — "תאר את עצמך" ו"קלוט כרטיסיה" — זקוקות
-        // ל-TabsBloc ול-NavigationBloc.
-        child: const WindowBusHost(child: App()),
+      // הדוק שייך לתהליך: מאזין אחד מעל היקף החלון.
+      child: DockProgressListener(
+        child: WindowScopeProviders(
+          historyRepository: historyRepository,
+          // מתחת לכל ה-blocs: האפיק עונה על בקשות מחלונות אחרים, ושתי
+          // הבקשות הנתמכות — "תאר את עצמך" ו"קלוט כרטיסיה" — זקוקות
+          // ל-TabsBloc ול-NavigationBloc.
+          child: const WindowBusHost(child: App()),
+        ),
       ),
     );
   }

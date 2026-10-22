@@ -13,7 +13,6 @@ import 'package:otzaria/navigation/bloc/navigation_bloc.dart';
 import 'package:otzaria/plugins/bloc/plugin_system_bloc.dart';
 import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
-import 'package:otzaria/core/windowing/dock_progress_listener.dart';
 import 'package:otzaria/core/windowing/mac_menu_bar.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:otzaria/navigation/view/main_window_screen.dart';
@@ -114,7 +113,6 @@ class App extends StatelessWidget {
               // מתחת למסגרת החלון כדי שכפתורי המסגרת יישארו לחיצים.
               content = MiddleClickAutoScroll(child: content);
 
-              content = DockProgressListener(child: content);
               content = MacMenuBar(child: content);
               content = FrameStatsOverlay(
                 contextProvider: () => _diagnosticsContext(context),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/app_scope/app_scope_providers.dart';
+import 'package:otzaria/app_scope/external_activation_service.dart';
 import 'package:otzaria/app_scope/window_scope_providers.dart';
 import 'package:otzaria/history/history_repository.dart';
 import 'package:otzaria/plugins/bloc/plugin_updates_cubit.dart';
@@ -46,6 +47,13 @@ void main() {
     expect(
       identical(a.read<WorkStatusCubit>(), b.read<WorkStatusCubit>()),
       isFalse,
+    );
+    expect(
+      identical(
+        a.read<ExternalActivationService>(),
+        b.read<ExternalActivationService>(),
+      ),
+      isTrue,
     );
 
     // פירוק העץ סוגר את כל הבלוקים שנוצרו, כמו באתחול מחדש.
