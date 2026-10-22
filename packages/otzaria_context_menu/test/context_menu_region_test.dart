@@ -240,6 +240,90 @@ void main() {
     },
   );
 
+  Future<void> mountNested(
+    WidgetTester tester, {
+    required List<AppContextMenuEntry> innerEntries,
+  }) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ContextMenuRegion(
+            presentation: _presentation(),
+            registerEscape: escapes.register,
+            menuBuilder: (_, _) => [
+              AppContextMenuEntry(label: 'חיצוני', onTap: () {}),
+            ],
+            child: Center(
+              child: SizedBox.square(
+                dimension: 200,
+                child: ContextMenuRegion(
+                  presentation: _presentation(),
+                  registerEscape: escapes.register,
+                  menuBuilder: (_, _) => innerEntries,
+                  child: const SizedBox.expand(),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    final mouse = await tester.createGesture(
+      kind: PointerDeviceKind.mouse,
+      buttons: kSecondaryButton,
+    );
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+    await mouse.down(tester.getCenter(find.byType(Center)));
+    await mouse.up();
+    await tester.pumpAndSettle();
+  }
+
+  // issue #3037: כרטיס מפרשים בתוך פסקה רציפה פתח גם את תפריט הפסקה.
+  testWidgets('right click in a nested region opens only the inner menu', (
+    tester,
+  ) async {
+    await mountNested(
+      tester,
+      innerEntries: [AppContextMenuEntry(label: 'פנימי', onTap: () {})],
+    );
+    expect(find.text('פנימי'), findsOneWidget);
+    expect(find.text('חיצוני'), findsNothing);
+  });
+
+  testWidgets('a nested region with no entries leaves the click to the outer', (
+    tester,
+  ) async {
+    await mountNested(tester, innerEntries: const []);
+    expect(find.text('חיצוני'), findsOneWidget);
+  });
+
+  testWidgets('a second right click with the same pointer opens again', (
+    tester,
+  ) async {
+    var built = 0;
+    await _mount(
+      tester,
+      escapes: escapes,
+      entries: () {
+        built++;
+        return [AppContextMenuEntry(label: 'פעולה', onTap: () {})];
+      },
+    );
+    final mouse = await tester.createGesture(
+      kind: PointerDeviceKind.mouse,
+      buttons: kSecondaryButton,
+    );
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+    for (var i = 0; i < 2; i++) {
+      await mouse.down(const Offset(100, 100));
+      await mouse.up();
+      await tester.pumpAndSettle();
+    }
+    expect(built, 2);
+  });
+
   for (final direction in TextDirection.values) {
     testWidgets('menu inherits the opener direction: $direction', (
       tester,
