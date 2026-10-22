@@ -116,9 +116,15 @@ class PluginHighlightRegistry extends ChangeNotifier {
     final current = _revealService.highlight;
     _revealed = current;
     _notifySections([
-      for (final record in [?previous, ?current])
-        for (final bookKey in _sectionBookKeys(record))
-          (bookId: bookKey, sectionIndex: record.sectionIndex),
+      // הציור חושף לפי highlightId, כולל עותקים של תוספים ומופעים אחרים.
+      for (final key in _sectionChannels.keys)
+        if (_recordsBySection[key]?.values.any(
+              (record) =>
+                  record.highlightId == previous?.highlightId ||
+                  record.highlightId == current?.highlightId,
+            ) ??
+            false)
+          key,
     ]);
   }
 
@@ -609,8 +615,6 @@ class PluginHighlightRegistry extends ChangeNotifier {
     final previous = records[record.highlightId];
     if (previous != null) _removeFromSection(ownerKey, previous);
     records[record.highlightId] = record;
-    // הדגשה חשופה שהועברה לקטע אחר: סיום החשיפה חייב לבנות מחדש את הקטע החדש.
-    if (_revealed?.highlightId == record.highlightId) _revealed = record;
     final recordKey = (
       ownerPluginId: ownerKey.pluginId,
       ownerInstanceId: ownerKey.instanceId,
