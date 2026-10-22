@@ -66,6 +66,28 @@ void main() {
     expect(controller.offset, 200);
   });
 
+  testWidgets('קפיצה לסוף הרשימה לא בונה את כל השורות שבדרך (#3022)', (
+    tester,
+  ) async {
+    await openDialog(tester, buildBooks(3000));
+    final controller = tester
+        .widget<ListView>(find.byType(ListView))
+        .controller!;
+
+    var builtRows = 0;
+    debugOnRebuildDirtyWidget = (element, _) {
+      if (element.widget.runtimeType.toString() == '_BookListRow') builtRows++;
+    };
+    addTearDown(() => debugOnRebuildDirtyWidget = null);
+
+    // כמו גרירת ה-thumb לסוף: קפיצה רחוקה בפריים אחד.
+    controller.jumpTo(controller.position.maxScrollExtent);
+    await tester.pump();
+
+    expect(builtRows, lessThan(100));
+    expect(find.text('ספר 2999'), findsOneWidget);
+  });
+
   testWidgets('הסינון זהה להשוואה נאיבית של כל שדה באותיות קטנות', (
     tester,
   ) async {
