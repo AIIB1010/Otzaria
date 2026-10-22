@@ -73,8 +73,12 @@ class StubWindowController extends RegularWindowController {
 }
 
 class StubWindowHandle extends ViewWindowHandle {
-  StubWindowHandle(this.stub, this._onCloseRequested, {this.fakeHwnd})
-    : super.forTesting(stub);
+  StubWindowHandle(
+    this.stub,
+    this._onCloseRequested, {
+    this.fakeHwnd,
+    super.defersDestroy,
+  }) : super.forTesting(stub);
 
   final StubWindowController stub;
   final void Function(ViewWindowHandle handle) _onCloseRequested;
@@ -98,6 +102,7 @@ class FakeViewWindowNative implements ViewWindowNative {
   final List<int> focused = [];
   final List<int> dragged = [];
   final List<int> frameless = [];
+  final List<int> hidden = [];
   final List<(int, ResizeEdge)> resized = [];
   final List<int> maximizedVertically = [];
   int? foreground;
@@ -126,6 +131,8 @@ class FakeViewWindowNative implements ViewWindowNative {
   @override
   void show(int hwnd) {}
   @override
+  void hide(int hwnd) => hidden.add(hwnd);
+  @override
   void focus(int hwnd) => focused.add(hwnd);
   @override
   void startDragging(int hwnd) => dragged.add(hwnd);
@@ -153,6 +160,9 @@ class FakeViewWindows {
   final List<StubWindowHandle> handles = [];
   var _nextId = 100;
 
+  /// כמו ב-Linux: הסתרה ופירוק מיד, הריסה אחרי כמה פריימים.
+  bool defersDestroy = false;
+
   ViewWindowHandle _create({
     required Size size,
     required String title,
@@ -161,7 +171,12 @@ class FakeViewWindows {
   }) {
     final id = _nextId++;
     final stub = StubWindowController(SecondTestView(tester.view, viewId: id));
-    final handle = StubWindowHandle(stub, onCloseRequested, fakeHwnd: id);
+    final handle = StubWindowHandle(
+      stub,
+      onCloseRequested,
+      fakeHwnd: id,
+      defersDestroy: defersDestroy,
+    );
     stub.onDestroy = () => onDestroyed(handle);
     handles.add(handle);
     return handle;

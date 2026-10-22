@@ -1,9 +1,11 @@
 // ignore_for_file: implementation_imports, invalid_use_of_internal_member
 // הקובץ היחיד שנוגע ב-API הפנימי של Flutter לחלונות; כל השאר עובר דרכו.
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' show FlutterView, PlatformDispatcher;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/src/foundation/_features.dart' as features;
 import 'package:flutter/src/widgets/_window.dart';
 import 'package:flutter/src/widgets/_window_linux.dart'
@@ -17,8 +19,8 @@ abstract final class MultiViewMode {
   static bool? _override;
   static bool _ownerInstalled = false;
 
-  /// ב-Windows תמיד ריבוי תצוגות. Linux/macOS עדיין במודל A (מנוע לכל חלון).
-  static bool get supported => Platform.isWindows;
+  /// ב-Windows וב-Linux תמיד ריבוי תצוגות. macOS עדיין במודל A (מנוע לכל חלון).
+  static bool get supported => Platform.isWindows || Platform.isLinux;
 
   /// פעיל רק אחרי ש-[installWindowingOwner] התקין בעלים אמיתי.
   static bool get enabled => _override ?? (supported && _ownerInstalled);
@@ -70,13 +72,23 @@ bool hasRealPlatformDispatcher() {
 
 /// חלון נייטיב שנוצר מ-Dart. עוטף את הבקר הפנימי כדי שהוא לא ידלוף החוצה.
 class ViewWindowHandle {
-  ViewWindowHandle._(this._controller);
+  ViewWindowHandle._(this._controller, {required this._defersDestroy});
 
   @visibleForTesting
-  ViewWindowHandle.forTesting(RegularWindowController controller)
-    : _controller = controller;
+  ViewWindowHandle.forTesting(
+    RegularWindowController controller, {
+    this._defersDestroy = false,
+  }) : _controller = controller;
 
   final RegularWindowController _controller;
+
+  /// Linux 3.47.2: הריסה עם פריים בדרך קורסת (flutter#192873), ולכן קודם
+  /// מסתירים ומפרקים את התצוגה, והורסים רק אחרי כמה פריימים.
+  final bool _defersDestroy;
+  bool _retiring = false;
+
+  /// בהריסה נדחית: נקרא מיד, כדי להסתיר את החלון ולהוציא אותו מהעץ.
+  VoidCallback? onRetire;
 
   FlutterView get view => _controller.rootView;
 
@@ -137,7 +149,30 @@ class ViewWindowHandle {
   }
 
   /// מותר לקרוא כמה פעמים; `onDestroyed` נקרא כשהחלון באמת נהרס.
-  void destroy() => _controller.destroy();
+  void destroy() {
+    if (!_defersDestroy) return _controller.destroy();
+    if (_retiring) return;
+    _retiring = true;
+    onRetire?.call();
+    unawaited(_destroyAfterFrames());
+  }
+
+  /// הריסה נדחית שהתחילה: החלון כבר מחוץ לעץ וממתין להריסה.
+  bool get isRetiring => _retiring;
+
+  Future<void> _destroyAfterFrames() async {
+    final scheduler = SchedulerBinding.instance;
+    for (var i = 0; i < 3; i++) {
+      // כפוי: חלון מוסתר עשוי להעביר את האפליקציה ל-hidden ולעצור פריימים.
+      scheduler.scheduleForcedFrame();
+      // בלי פריימים אין גם פריים בדרך, ואפשר להמשיך.
+      await scheduler.endOfFrame.timeout(
+        const Duration(milliseconds: 500),
+        onTimeout: () {},
+      );
+    }
+    _controller.destroy();
+  }
 
   /// אחרי WM_DESTROY: שאילתות מחזירות ערך ברירת מחדל ופעולות אינן עושות דבר.
   void markDestroyed() => _destroyed = true;
@@ -163,7 +198,10 @@ ViewWindowHandle createViewWindow({
       delegate: delegate,
     ),
   );
-  return delegate.handle = ViewWindowHandle._(controller);
+  return delegate.handle = ViewWindowHandle._(
+    controller,
+    defersDestroy: Platform.isLinux,
+  );
 }
 
 // בלי super: מימושי ברירת המחדל זורקים כשהדגל כבוי, והוא כבוי כשהודעה מגיעה.

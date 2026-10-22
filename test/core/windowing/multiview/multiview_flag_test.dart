@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:otzaria/core/windowing/multiview/gtk_view_window_native.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_native.dart';
 
@@ -15,10 +16,11 @@ void main() {
     MultiViewMode.debugResetOwnerInstalled();
   });
 
-  test('רק Windows נתמך, ושם אין מנוע לכל חלון', () {
+  test('Windows ו-Linux נתמכות, ושם אין מנוע לכל חלון', () {
     MultiViewMode.debugOverride = null;
-    expect(MultiViewMode.supported, Platform.isWindows);
-    expect(MultiViewMode.usesEngineWindows, !Platform.isWindows);
+    final supported = Platform.isWindows || Platform.isLinux;
+    expect(MultiViewMode.supported, supported);
+    expect(MultiViewMode.usesEngineWindows, !supported);
   });
 
   test('binding של בדיקות: הבעלים לא מותקן וריבוי התצוגות כבוי', () {
@@ -63,8 +65,9 @@ void main() {
     expect(handle.nativeHandle, isNull);
   });
 
-  test('ViewWindowNative.platform: win32 ב-Windows', () {
+  test('ViewWindowNative.platform: win32 ב-Windows, GTK ב-Linux', () {
     final native = ViewWindowNative.platform();
     if (Platform.isWindows) expect(native, isA<Win32ViewWindowNative>());
+    if (Platform.isLinux) expect(native, isA<GtkViewWindowNative>());
   });
 }

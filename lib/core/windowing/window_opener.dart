@@ -8,7 +8,7 @@ import 'package:otzaria/tabs/models/tab.dart';
 /// כל פתיחת חלון עוברת דרך [WindowOpener.current], ולא ישירות דרך המימוש.
 abstract interface class WindowOpener {
   /// המימוש הפעיל. ניתן להחלפה בבדיקות דרך [debugOverride].
-  /// ב-Windows תמיד חלונות Dart; בלי בעלים הם פשוט אינם נפתחים.
+  /// ב-Windows וב-Linux תמיד חלונות Dart; בלי בעלים הם פשוט אינם נפתחים.
   static WindowOpener get current =>
       debugOverride ??
       (MultiViewMode.usesEngineWindows

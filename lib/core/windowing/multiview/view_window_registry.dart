@@ -131,6 +131,7 @@ class ViewWindowRegistry extends ChangeNotifier {
       _native,
       initialTab,
     );
+    handle.onRetire = () => _retire(entry);
     AppWindowKeys.register(entry.keys);
     _windows.add(entry);
     notifyListeners();
@@ -156,16 +157,28 @@ class ViewWindowRegistry extends ChangeNotifier {
   }
 
   void _remove(ViewWindowEntry entry) {
-    if (!_windows.remove(entry)) return;
-    entry.handle.markDestroyed();
-    entry.endSession();
-    entry.closeHandler = null;
-    AppWindowKeys.unregister(entry.keys);
-    notifyListeners();
+    if (!_detach(entry) && !entry.handle.isRetiring) return;
     // הבקר משוחרר רק אחרי שהעץ שלו פורק בפריים הבא.
     SchedulerBinding.instance.addPostFrameCallback(
       (_) => entry.handle.dispose(),
     );
     SchedulerBinding.instance.scheduleFrame();
+  }
+
+  /// הריסה נדחית: החלון יוצא מהרשימה ומהעץ ומוסתר עכשיו, ונהרס אחר כך.
+  void _retire(ViewWindowEntry entry) {
+    final native = entry.handle.nativeHandle;
+    _detach(entry);
+    if (native != null) _native.hide(native);
+  }
+
+  bool _detach(ViewWindowEntry entry) {
+    if (!_windows.remove(entry)) return false;
+    entry.handle.markDestroyed();
+    entry.endSession();
+    entry.closeHandler = null;
+    AppWindowKeys.unregister(entry.keys);
+    notifyListeners();
+    return true;
   }
 }

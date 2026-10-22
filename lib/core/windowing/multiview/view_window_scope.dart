@@ -4,6 +4,7 @@ import 'package:otzaria/app_scope/window_scope_providers.dart';
 import 'package:otzaria/core/window_persistence.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
+import 'package:otzaria/core/windowing/multiview/view_focus_sync.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_close_flow.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
 import 'package:otzaria/core/windowing/window_role.dart';
@@ -88,6 +89,7 @@ class _ViewWindowScopeState extends State<ViewWindowScope> {
     if (_entry.handle.isActivated && AppWindowKeys.current.id != _entry.id) {
       AppWindowKeys.activateWindow(_entry.id);
     }
+    if (_entry.handle.isActivated) ViewFocusSync.windowActivated(_viewId);
     // אין הודעה על הזזה בלבד: מיקום חדש נשמר בשינוי הבא.
     _persistence.scheduleSave();
   }

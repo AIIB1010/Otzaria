@@ -1,7 +1,8 @@
 import 'dart:async';
-import 'dart:ui' show Rect, Size;
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart' show WidgetsBinding;
 import 'package:otzaria/core/messages/window_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
@@ -93,6 +94,12 @@ class ViewWindowOpener implements WindowOpener {
 
   static Future<int?> _windowManagerHwnd() async {
     try {
+      // ל-window_manager אין getId ב-Linux; ה-runner מחזיר את ה-GtkWindow*.
+      if (Platform.isLinux) {
+        return await const MethodChannel(
+          'otzaria/multiwindow',
+        ).invokeMethod<int>('mainWindowHandle');
+      }
       return await windowManager.getId();
     } catch (e) {
       debugPrint('main window hwnd failed: $e');
