@@ -271,21 +271,23 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
         );
       },
       pickFolder: ({String? title}) async {
-        if (await _verifiedDialogContext() == null) return null;
+        final ctx = await _verifiedDialogContext();
+        if (ctx == null || !ctx.mounted) return null;
         return FilePicker.getDirectoryPath(
-          windowsOptions: modalWindowsOptions(),
+          windowsOptions: modalWindowsOptions(ctx),
           linuxOptions: kModalLinuxOptions,
           dialogTitle: title,
         );
       },
       onBackgroundInstanceDone: onBackgroundInstanceDone,
       pickFile: ({List<String>? allowedExtensions, String? title}) async {
-        if (await _verifiedDialogContext() == null) return null;
+        final ctx = await _verifiedDialogContext();
+        if (ctx == null || !ctx.mounted) return null;
         final hasExtensions =
             allowedExtensions != null && allowedExtensions.isNotEmpty;
         final result = await FilePicker.pickFile(
           dialogTitle: title,
-          windowsOptions: modalWindowsOptions(),
+          windowsOptions: modalWindowsOptions(ctx),
           linuxOptions: kModalLinuxOptions,
           type: hasExtensions ? FileType.custom : FileType.any,
           allowedExtensions: hasExtensions ? allowedExtensions : null,
@@ -299,10 +301,10 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
             String? title,
           }) async {
             final ctx = await _verifiedDialogContext();
-            if (ctx == null) return null;
+            if (ctx == null || !ctx.mounted) return null;
             final folder = await FilePicker.getDirectoryPath(
               dialogTitle: pluginSaveFolderDialogTitle(title),
-              windowsOptions: modalWindowsOptions(),
+              windowsOptions: modalWindowsOptions(ctx),
               linuxOptions: kModalLinuxOptions,
             );
             if (folder == null || !ctx.mounted) return null;
