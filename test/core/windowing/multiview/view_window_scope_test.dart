@@ -26,7 +26,6 @@ import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_scope.dart';
 import 'package:otzaria/core/windowing/window_title_sync.dart';
 import 'package:otzaria/core/windowing/window_fullscreen_cubit.dart';
-import 'package:otzaria/history/history_repository.dart';
 import 'package:otzaria/history/bloc/history_bloc.dart';
 import 'package:otzaria/history/bloc/history_event.dart';
 import 'package:otzaria/history/bloc/history_state.dart';
