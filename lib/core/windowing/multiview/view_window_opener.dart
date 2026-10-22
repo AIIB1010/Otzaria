@@ -412,6 +412,15 @@ class ViewWindowOpener implements WindowOpener {
     await Future.wait(pending).timeout(firstFrameTimeout, onTimeout: () => []);
   }
 
+  /// יציאה מהתוכנה, אחרי השטיפה: הסשנים נשארים להפעלה הבאה והחלונות נהרסים.
+  /// הסשן מסתיים קודם: המסדים כבר נסגרו, ופירוק העץ לא יפתח אותם מחדש.
+  void destroyAllForQuit() {
+    for (final entry in registry.windows) {
+      entry.endSession();
+      entry.handle.destroy();
+    }
+  }
+
   void _push(_ClosedWindow closed) {
     _closed.add(closed);
     if (_closed.length > closedLimit) _closed.removeAt(0);
