@@ -100,10 +100,23 @@ class _ReadingScreenState extends State<ReadingScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    PluginTextReaderRegistry.instance.addListener(_onTextReaderChanged);
+  }
+
+  /// התצוגה (החלון) שהמסך יושב בה; הנראות של התוספים נשמרת לפיה.
+  int? _viewId;
+  bool _viewResolved = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final viewId = View.maybeOf(context)?.viewId;
+    if (_viewResolved && viewId == _viewId) return;
+    _viewResolved = true;
+    _viewId = viewId;
     // זריעה מיידית ולא רק מה-listener: בעלייה עם טאב תוסף משוחזר, קבוצה ריקה
     // הייתה גורמת ל-onForegroundInstanceReady להשהות מיד את התוסף שעל המסך.
     _syncVisiblePluginTabs(context.read<TabsBloc>().state);
-    PluginTextReaderRegistry.instance.addListener(_onTextReaderChanged);
   }
 
   void _onTextReaderChanged() {
@@ -124,6 +137,7 @@ class _ReadingScreenState extends State<ReadingScreen>
                   instanceId: registry.instanceIdFor(tab),
                 ),
       },
+      viewId: _viewId,
     );
   }
 

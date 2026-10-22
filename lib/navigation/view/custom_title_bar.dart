@@ -13,6 +13,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:otzaria_icons/otzaria_icons.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
@@ -689,7 +690,10 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
     return IconButton(
       icon: const Icon(FluentIcons.add_24_regular, size: 18),
       tooltip: context.settingsText('כרטיסייה חדשה'),
-      onPressed: PluginNewTabPageRegistry.instance.open,
+      onPressed: () => PluginNewTabPageRegistry.instance.open(
+        windowKeys: AppWindowKeys.of(context),
+        viewId: View.of(context).viewId,
+      ),
       style: _kIconButtonStyle,
     );
   }

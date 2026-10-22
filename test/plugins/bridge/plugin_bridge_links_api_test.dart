@@ -138,6 +138,13 @@ InstalledPlugin _buildInstalledPlugin({List<String> permissions = const []}) {
 /// adapter פיקטיבי לבדיקת מיפוי ההרשאות בלבד — execute לא אמור להיקרא
 /// כשההרשאה חסרה.
 class _FakeAdapter implements PluginBridgeAdapter {
+  @override
+  Future<T> withWindowDependencies<T>(
+    Future<T> Function() action, {
+    String? domain,
+    String? rpcAction,
+  }) => action();
+
   int executeCalls = 0;
 
   @override

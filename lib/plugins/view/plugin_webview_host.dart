@@ -6,6 +6,8 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:otzaria/core/windowing/app_window_keys.dart';
+import 'package:otzaria/plugins/plugin_constants.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:otzaria/bookmarks/bloc/bookmark_bloc.dart';
@@ -124,6 +126,8 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
   late final PluginRegistryRepository pluginRegistryRepository;
   late final PluginSystemBloc pluginSystemBloc;
   late final FindRefRepository _findRefRepository;
+  late final PluginBridgeWindowDependencies Function()
+  _initialWindowDependencies;
   DateTime? _lastFileServerDenialLogAt;
   Future<PluginNetworkPolicy>? _networkPolicy;
   StreamSubscription<String?>? _networkPolicyChanges;
@@ -181,6 +185,7 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
     final findRefRepository = _findRefRepository;
 
     final dependencies = PluginBridgeDependencies(
+      windowContext: context,
       historyBloc: historyBloc,
       tabsBloc: tabsBloc,
       navigationBloc: navigationBloc,
@@ -215,8 +220,8 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
             required String title,
             required String content,
           }) async {
-            final ctx = dialogContext;
-            if (ctx == null) return false;
+            final ctx = adapter.rpcWindowContext ?? dialogContext;
+            if (ctx == null || !ctx.mounted) return false;
             return await showTwoActionsDialog(
                   context: ctx,
                   title: title,
@@ -232,8 +237,8 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
             required String content,
             required String subtitle,
           }) async {
-            final ctx = dialogContext;
-            if (ctx == null) return false;
+            final ctx = adapter.rpcWindowContext ?? dialogContext;
+            if (ctx == null || !ctx.mounted) return false;
             return await showWarningDialog(
                   context: ctx,
                   title: title,
@@ -317,10 +322,14 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
           },
     );
 
+    _initialWindowDependencies = () => dependencies.window;
     pluginRegistryRepository = PluginRegistryRepository();
     adapter = PluginBridgeAdapter(
       plugin,
       dependencies: dependencies,
+      windowDependenciesResolver: instanceId == PluginInstanceIds.background
+          ? _activeWindowDependencies
+          : null,
       instanceId: instanceId,
       readerTab: readerTab,
       pluginRepository: pluginRegistryRepository,
@@ -348,6 +357,43 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
       }
     });
     unawaited(_refreshContentBlockers());
+  }
+
+  PluginBridgeWindowDependencies _activeWindowDependencies() {
+    final owner = AppWindowKeys.current.navigator.currentContext;
+    if (owner == null || !owner.mounted) {
+      return _initialWindowDependencies();
+    }
+    final tabs = owner.read<TabsBloc>();
+    final history = owner.read<HistoryBloc>();
+    final navigation = owner.read<NavigationBloc>();
+    final library = owner.read<LibraryBloc>();
+    return (
+      context: owner,
+      viewId: View.of(owner).viewId,
+      windowKeys: AppWindowKeys.of(owner),
+      tabsBloc: tabs,
+      historyBloc: history,
+      navigationBloc: navigation,
+      workspaceBloc: owner.read<WorkspaceBloc>(),
+      customFoldersBloc: owner.read<CustomFoldersBloc>(),
+      bookOpenCoordinator: BookOpenCoordinator(
+        tabsBloc: tabs,
+        historyBloc: history,
+        navigationBloc: navigation,
+        layoutWidth: readingLayoutWidthResolverOf(owner),
+      ),
+      waitForLibraryRefresh: (requestId) async {
+        final state = await library.stream.firstWhere(
+          (state) =>
+              state.completedRefreshRequestIds?.contains(requestId) == true ||
+              (!state.isLoading && state.error != null),
+        );
+        if (state.completedRefreshRequestIds?.contains(requestId) != true) {
+          throw StateError(state.error!);
+        }
+      },
+    );
   }
 
   Future<void> _refreshContentBlockers() async {
@@ -388,8 +434,10 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
 
   /// ה-context אחרי אימות סיסמת "מצב בטוח", או null.
   Future<BuildContext?> _verifiedDialogContext() async {
-    final ctx = dialogContext;
-    if (ctx == null || !await verifySaferModePassword(ctx)) return null;
+    final ctx = adapter.rpcWindowContext ?? dialogContext;
+    if (ctx == null || !ctx.mounted || !await verifySaferModePassword(ctx)) {
+      return null;
+    }
     return ctx.mounted ? ctx : null;
   }
 
@@ -464,6 +512,7 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
         plugin.pluginId,
         controller,
         instanceId: instanceId,
+        viewId: View.of(context).viewId,
       );
       bridge.register(controller);
       unawaited(_pushContentBlockers());
@@ -486,8 +535,8 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
     InAppWebViewController controller,
     ShowFileChooserRequest request,
   ) async {
-    final ctx = dialogContext;
-    if (ctx == null || !await verifySaferModePassword(ctx)) {
+    final ctx = adapter.rpcWindowContext ?? dialogContext;
+    if (ctx == null || !ctx.mounted || !await verifySaferModePassword(ctx)) {
       return ShowFileChooserResponse(handledByClient: true, filePaths: null);
     }
     return null;

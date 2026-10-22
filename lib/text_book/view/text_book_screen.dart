@@ -1,3 +1,4 @@
+import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'dart:io';
 
 import 'package:otzaria/text_book/repository/book_notes_repository.dart';
@@ -3453,6 +3454,8 @@ Future<void> _dispatchPluginShortcut({
     'app.command',
     {'command': target.command, 'shortcutId': target.shortcutId},
     preferBackground: true,
+    viewId: View.of(context).viewId,
+    windowKeys: AppWindowKeys.of(context),
   );
 }
 
@@ -3466,6 +3469,8 @@ Future<void> _dispatchContextMenuShortcut({
   required int? selectedLineIndex,
   required int? selectedColumn,
 }) async {
+  final window = AppWindowKeys.of(context);
+  final viewId = View.of(context).viewId;
   final item = ContextMenuRegistry.instance.findItem(
     target.pluginId,
     target.contextMenuItemId ?? '',
@@ -3573,6 +3578,8 @@ Future<void> _dispatchContextMenuShortcut({
 
   await dispatchPluginContextMenuItemClick(
     dispatcher: PluginRuntimeDispatcher.instance,
+    viewId: viewId,
+    windowKeys: window,
     pluginId: target.pluginId,
     item: item,
     selection: selection,

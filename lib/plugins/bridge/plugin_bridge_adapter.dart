@@ -16,6 +16,7 @@ import 'package:otzaria/models/book_source.dart';
 import 'package:otzaria/utils/file/file_picker_dialog_options.dart';
 import 'package:otzaria/widgets/dialogs/input_dialog.dart';
 import 'package:flutter/material.dart';
+import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:flutter/foundation.dart' show compute;
 import 'package:otzaria_report_contract/otzaria_report_contract.dart';
 import 'package:path/path.dart' as p;
@@ -262,7 +263,22 @@ typedef AltTocEntryRow = ({
   String text,
 });
 
+/// מצב החלון שנלכד בתחילת RPC; אינו משתנה כשבקשה אסינכרונית ממתינה.
+typedef PluginBridgeWindowDependencies = ({
+  BuildContext? context,
+  int? viewId,
+  AppWindowKeys? windowKeys,
+  HistoryBloc historyBloc,
+  TabsBloc tabsBloc,
+  NavigationBloc navigationBloc,
+  WorkspaceBloc workspaceBloc,
+  BookOpenCoordinator bookOpenCoordinator,
+  CustomFoldersBloc? customFoldersBloc,
+  Future<void> Function(int requestId)? waitForLibraryRefresh,
+});
+
 class PluginBridgeDependencies {
+  final BuildContext? windowContext;
   final HistoryBloc historyBloc;
   final TabsBloc tabsBloc;
   final NavigationBloc navigationBloc;
@@ -439,7 +455,21 @@ class PluginBridgeDependencies {
   /// כבר נראים לקריאה הבאה של התוסף.
   final Future<void> Function(int requestId)? waitForLibraryRefresh;
 
+  PluginBridgeWindowDependencies get window => (
+    context: windowContext,
+    viewId: windowContext == null ? null : View.of(windowContext!).viewId,
+    windowKeys: windowContext == null ? null : AppWindowKeys.of(windowContext!),
+    historyBloc: historyBloc,
+    tabsBloc: tabsBloc,
+    navigationBloc: navigationBloc,
+    workspaceBloc: workspaceBloc,
+    bookOpenCoordinator: bookOpenCoordinator,
+    customFoldersBloc: customFoldersBloc,
+    waitForLibraryRefresh: waitForLibraryRefresh,
+  );
+
   const PluginBridgeDependencies({
+    this.windowContext,
     required this.historyBloc,
     required this.tabsBloc,
     required this.navigationBloc,
@@ -530,6 +560,42 @@ class PluginBridgeAdapter {
   final String instanceId;
   final PluginRegistryRepository _pluginRepo;
   final PluginBridgeDependencies _dependencies;
+  final PluginBridgeWindowDependencies Function()? windowDependenciesResolver;
+  late final _defaultWindowDependencies = _dependencies.window;
+  final _windowScopeKey = Object();
+  PluginBridgeWindowDependencies get _windowDependencies =>
+      Zone.current[_windowScopeKey] as PluginBridgeWindowDependencies? ??
+      _defaultWindowDependencies;
+
+  BuildContext? get rpcWindowContext => _windowDependencies.context;
+
+  /// ברקע החלון הפעיל הוא יעד ה-RPC; בקשות חופפות שומרות כל אחת על היעד שלה.
+  Future<T> withWindowDependencies<T>(
+    Future<T> Function() action, {
+    String? domain,
+    String? rpcAction,
+  }) {
+    if (const {
+          'app',
+          'fonts',
+          'storage',
+          'settings',
+          'calendar',
+          'bookmarks',
+          'database',
+          'network',
+          'shortcut',
+        }.contains(domain) ||
+        (domain == 'notifications' && rpcAction != 'showInApp')) {
+      return action();
+    }
+    final resolve = windowDependenciesResolver;
+    if (resolve == null || Zone.current[_windowScopeKey] != null) {
+      return action();
+    }
+    return runZoned(action, zoneValues: {_windowScopeKey: resolve()});
+  }
+
   final CalendarAlertsClient _alerts;
   final PluginDatabaseService _databaseService;
   final PluginHighlightRegistry _highlightRegistry;
@@ -538,6 +604,7 @@ class PluginBridgeAdapter {
   PluginBridgeAdapter(
     this.plugin, {
     required this._dependencies,
+    this.windowDependenciesResolver,
     this.instanceId = PluginInstanceIds.defaultForeground,
     this.readerTab,
     PluginRegistryRepository? pluginRepository,
@@ -822,6 +889,17 @@ class PluginBridgeAdapter {
     String action,
     Map<String, dynamic> args, {
     PluginRpcEventSink? eventSink,
+  }) => withWindowDependencies(
+    () => _execute(domain, action, args, eventSink: eventSink),
+    domain: domain,
+    rpcAction: action,
+  );
+
+  Future<dynamic> _execute(
+    String domain,
+    String action,
+    Map<String, dynamic> args, {
+    PluginRpcEventSink? eventSink,
   }) async {
     switch (domain) {
       case 'app':
@@ -1010,7 +1088,7 @@ class PluginBridgeAdapter {
   /// אילו תיקיות ייסרקו נקבע מהגדרות המשתמש בלבד — התוסף אינו מעביר נתיב,
   /// ולכן אינו יכול לגרום לסריקה של תיקייה שהמשתמש לא הגדיר.
   Future<Map<String, dynamic>> _refreshUserBooks() async {
-    final bloc = _dependencies.customFoldersBloc;
+    final bloc = _windowDependencies.customFoldersBloc;
     if (bloc == null) {
       throw Exception(
         'error.unavailable: personal books refresh is not available',
@@ -1023,7 +1101,7 @@ class PluginBridgeAdapter {
     final completed = bloc.stream
         .firstWhere((state) => state.completedScan?.requestId == requestId)
         .timeout(_userBooksRefreshTimeout);
-    final waitForRefresh = _dependencies.waitForLibraryRefresh;
+    final waitForRefresh = _windowDependencies.waitForLibraryRefresh;
     final libraryRefreshCompleted = waitForRefresh == null
         ? null
         : waitForRefresh(requestId).timeout(_userBooksRefreshTimeout);
@@ -1255,7 +1333,7 @@ class PluginBridgeAdapter {
             identities.add(Map<String, dynamic>.from(item));
           }
           final access = DeclarativeLibraryBookAccess.otzaria(
-            _dependencies.bookOpenCoordinator,
+            _windowDependencies.bookOpenCoordinator,
           );
           final books = await access.findUniqueBooks(identities);
           return [
@@ -1295,7 +1373,7 @@ class PluginBridgeAdapter {
           ];
         }
       case 'listRecentBooks':
-        final historyState = _dependencies.historyBloc.state;
+        final historyState = _windowDependencies.historyBloc.state;
         if (historyState is! HistoryLoaded) return [];
         return historyState.history
             .where((b) => !b.isSearch)
@@ -2500,7 +2578,7 @@ class PluginBridgeAdapter {
         tab.lines.reportExternalLine(index);
         final ref = args['ref'];
         if (ref is String && ref.length <= 500) tab.currentTitle.value = ref;
-        _dependencies.tabsBloc.add(const SaveTabs());
+        _windowDependencies.tabsBloc.add(const SaveTabs());
         return true;
       case 'openBook':
         // spec: openBook({ id?, bookId?, type?, index?, searchQuery?,
@@ -2516,7 +2594,7 @@ class PluginBridgeAdapter {
           if (args['external'] == null) _requireBookIdentity(args);
           if (args['external'] != null && args['reader'] != 'native') {
             final access = DeclarativeLibraryBookAccess.otzaria(
-              _dependencies.bookOpenCoordinator,
+              _windowDependencies.bookOpenCoordinator,
             );
             return access.openUnique(
               _identityFields(args),
@@ -2529,7 +2607,7 @@ class PluginBridgeAdapter {
           }
           final book = args['external'] != null
               ? (await DeclarativeLibraryBookAccess.otzaria(
-                  _dependencies.bookOpenCoordinator,
+                  _windowDependencies.bookOpenCoordinator,
                 ).findUniqueBooks([_identityFields(args)])).single
               : _findPluginBook(
                   await DataRepository.instance.library,
@@ -2538,7 +2616,7 @@ class PluginBridgeAdapter {
           if (book == null) return false;
           if (args['reader'] == 'native' && book is TextBook) {
             final registry = PluginTextReaderRegistry.instance;
-            final coordinator = _dependencies.bookOpenCoordinator;
+            final coordinator = _windowDependencies.bookOpenCoordinator;
             final tab = coordinator.buildTab(
               book,
               index,
@@ -2547,7 +2625,7 @@ class PluginBridgeAdapter {
             );
             if (tab is TextBookTab) registry.useNative(tab);
             for (final existing
-                in _dependencies.tabsBloc.state.tabs
+                in _windowDependencies.tabsBloc.state.tabs
                     .expand(leafPanes)
                     .whereType<TextBookTab>()) {
               if (PluginBookIdentity.uidOf(existing.book) ==
@@ -2562,7 +2640,7 @@ class PluginBridgeAdapter {
             );
             return true;
           }
-          _dependencies.bookOpenCoordinator.openBook(
+          _windowDependencies.bookOpenCoordinator.openBook(
             book,
             index,
             searchQuery,
@@ -2648,7 +2726,7 @@ class PluginBridgeAdapter {
             query: query,
           );
           return openPluginSearchTab(
-            coordinator: _dependencies.bookOpenCoordinator,
+            coordinator: _windowDependencies.bookOpenCoordinator,
             query: query,
             autoSearch: autoSearch,
             settings: settings,
@@ -2729,7 +2807,7 @@ class PluginBridgeAdapter {
               try {
                 final lineIndex = await resolveLine(book, ref);
                 if (lineIndex != null) {
-                  _dependencies.bookOpenCoordinator.openBook(
+                  _windowDependencies.bookOpenCoordinator.openBook(
                     book,
                     lineIndex,
                     '',
@@ -2779,7 +2857,7 @@ class PluginBridgeAdapter {
           }
           // חיפוש רק כ-fallback: אם מצאנו את הכותרת וקפצנו אליה,
           // אין טעם להשאיר אותה גם בתיבת החיפוש.
-          _dependencies.bookOpenCoordinator.openBook(
+          _windowDependencies.bookOpenCoordinator.openBook(
             book,
             index,
             refFound ? '' : (ref ?? ''),
@@ -2843,7 +2921,7 @@ class PluginBridgeAdapter {
                 await (_dependencies.textBookRepository ??
                         TextBookRepository(fileSystem: FileSystemData.instance))
                     .getAvailableCommentators(book);
-            final pane = _dependencies.tabsBloc.state.readingPane;
+            final pane = _windowDependencies.tabsBloc.state.readingPane;
             final state =
                 pane is TextBookTab &&
                     PluginBookIdentity.uidOf(pane.book) ==
@@ -2873,7 +2951,7 @@ class PluginBridgeAdapter {
           });
         }
       case 'getCurrentState':
-        final tabsState = _dependencies.tabsBloc.state;
+        final tabsState = _windowDependencies.tabsBloc.state;
         final tabs = tabsState.tabs;
         final panes = tabs.map(_paneForPlugins).toList();
         // Use the same resolver as getCurrentRef for consistent currentRef values
@@ -2979,13 +3057,13 @@ class PluginBridgeAdapter {
             );
             if (!confirmed) return false;
           }
-          _dependencies.tabsBloc.add(RemoveTab(target));
+          _windowDependencies.tabsBloc.add(RemoveTab(target));
           return true;
         }
       case 'activateTab':
         // spec: activateTab({ index })
         {
-          final tabsBloc = _dependencies.tabsBloc;
+          final tabsBloc = _windowDependencies.tabsBloc;
           tabsBloc.add(
             SetCurrentTab(tabsBloc.state.tabs.indexOf(_tabAt(args))),
           );
@@ -2993,7 +3071,7 @@ class PluginBridgeAdapter {
         }
       case 'getCurrentRef':
         final snapshot = await resolveReaderLocation(
-          _dependencies.tabsBloc.state.readingPane,
+          _windowDependencies.tabsBloc.state.readingPane,
         );
         if (snapshot == null) {
           return {
@@ -3032,11 +3110,11 @@ class PluginBridgeAdapter {
             );
           }
           return PluginReaderScrollService(
-            _dependencies.tabsBloc,
+            _windowDependencies.tabsBloc,
           ).scrollToSection(sectionIndex, highlight: args['highlight'] == true);
         }
       case 'getSelection':
-        final currentPane = _dependencies.tabsBloc.state.readingPane;
+        final currentPane = _windowDependencies.tabsBloc.state.readingPane;
         final paneState = currentPane is TextBookTab
             ? currentPane.bloc.state
             : null;
@@ -3233,7 +3311,7 @@ class PluginBridgeAdapter {
           return item.title == highlight.bookId;
         }, orElse: () => null);
         if (book == null) return false;
-        _dependencies.bookOpenCoordinator.openBook(
+        _windowDependencies.bookOpenCoordinator.openBook(
           book,
           highlight.sectionIndex,
           '',
@@ -3446,10 +3524,10 @@ class PluginBridgeAdapter {
     // סריקת חלוניות ולא טאבים: ספר שיושב רק בחלונית של טאב מפוצל לא נמצא,
     // והקריאה נפלה למסלול ה-DB שמאבד את מצב הניקוד החי. החלונית הפעילה
     // ראשונה, כי אותו ספר בשתי חלוניות יכול להיות בהגדרות ניקוד שונות.
-    final activePane = _dependencies.tabsBloc.state.readingPane;
+    final activePane = _windowDependencies.tabsBloc.state.readingPane;
     final panes = <OpenedTab>[
       ?activePane,
-      ..._dependencies.tabsBloc.state.tabs.expand(leafPanes),
+      ..._windowDependencies.tabsBloc.state.tabs.expand(leafPanes),
     ];
     for (final tab in panes) {
       if (tab is! TextBookTab || !matchesBook(tab.book)) continue;
@@ -3464,7 +3542,7 @@ class PluginBridgeAdapter {
         );
       }
       final snapshot =
-          identical(tab, _dependencies.tabsBloc.state.readingPane) &&
+          identical(tab, _windowDependencies.tabsBloc.state.readingPane) &&
               tab.index == sectionIndex
           ? await resolveReaderLocation(tab)
           : null;
@@ -3519,7 +3597,9 @@ class PluginBridgeAdapter {
   }
 
   TextBookTab _correctionTab(String id) {
-    for (final tab in _dependencies.tabsBloc.state.tabs.expand(leafPanes)) {
+    for (final tab in _windowDependencies.tabsBloc.state.tabs.expand(
+      leafPanes,
+    )) {
       if (tab is TextBookTab &&
           PluginCorrectionSessionService.tabIdFor(tab) == id) {
         return tab;
@@ -3706,7 +3786,7 @@ class PluginBridgeAdapter {
     final service = PluginCorrectionSessionService.instance;
     final id = args['sessionId'] as String;
     final owner = plugin.pluginId;
-    final tab = _dependencies.tabsBloc.state.tabs
+    final tab = _windowDependencies.tabsBloc.state.tabs
         .expand(leafPanes)
         .whereType<TextBookTab>()
         .where(
@@ -3930,7 +4010,7 @@ class PluginBridgeAdapter {
     String action,
     Map<String, dynamic> args,
   ) async {
-    final bloc = _dependencies.workspaceBloc;
+    final bloc = _windowDependencies.workspaceBloc;
     switch (action) {
       case 'list':
         final activeId = bloc.state.activeWorkspaceId;
@@ -3941,7 +4021,7 @@ class PluginBridgeAdapter {
                 'name': workspace.name,
                 'isActive': workspace.id == activeId,
                 'tabCount': bloc.state
-                    .tabsOf(workspace, _dependencies.tabsBloc.state.tabs)
+                    .tabsOf(workspace, _windowDependencies.tabsBloc.state.tabs)
                     .length,
               },
             )
@@ -4000,7 +4080,7 @@ class PluginBridgeAdapter {
   /// יוצר שולחן עבודה חדש ומחזיר אותו. ה-`AddWorkspace` אינו מחזיר את המזהה
   /// שנוצר, ולכן מאתרים אותו במצב הראשון שבו נוסף שולחן שלא היה קודם.
   Future<Workspace?> _createWorkspace(String name) async {
-    final bloc = _dependencies.workspaceBloc;
+    final bloc = _windowDependencies.workspaceBloc;
     final knownIds = bloc.state.workspaces
         .map((workspace) => workspace.id)
         .toSet();
@@ -4023,9 +4103,9 @@ class PluginBridgeAdapter {
   /// נמסרים לאירוע כי ה-UI הוא מקור האמת עליהם — בלעדיהם המעבר מוחק אותם.
   /// נמסרת רשימת הטאבים **המלאה**, כולל `ToolTab`, ולא הרשימה שהתוסף רואה.
   Future<bool> _switchWorkspace(String id) async {
-    final bloc = _dependencies.workspaceBloc;
+    final bloc = _windowDependencies.workspaceBloc;
     if (bloc.state.activeWorkspaceId == id) return true;
-    final tabsState = _dependencies.tabsBloc.state;
+    final tabsState = _windowDependencies.tabsBloc.state;
     final state = await _awaitWorkspaceState(
       (workspaceState) => workspaceState.activeWorkspaceId == id,
       () => bloc.add(
@@ -4046,7 +4126,7 @@ class PluginBridgeAdapter {
     bool Function(WorkspaceState state) test,
     void Function() trigger,
   ) async {
-    final bloc = _dependencies.workspaceBloc;
+    final bloc = _windowDependencies.workspaceBloc;
     final settled = bloc.stream.firstWhere(
       (state) => test(state) || state.error != null,
       orElse: () => bloc.state,
@@ -4082,7 +4162,9 @@ class PluginBridgeAdapter {
             screen = Screen.reading;
             break;
           case 'more':
-            ToolsLauncherController.instance.open();
+            ToolsLauncherController.instance.open(
+              windowKeys: _windowDependencies.windowKeys,
+            );
             return true;
           case 'settings':
             screen = Screen.settings;
@@ -4092,7 +4174,7 @@ class PluginBridgeAdapter {
               "error.invalid_params: Invalid navigation target: $target. Valid: library, reading, more, settings",
             );
         }
-        _dependencies.navigationBloc.add(NavigateToScreen(screen));
+        _windowDependencies.navigationBloc.add(NavigateToScreen(screen));
         return true;
       default:
         throw Exception(
@@ -4199,18 +4281,21 @@ class PluginBridgeAdapter {
       case 'showMessage':
         UiSnack.show(
           args['message'] as String? ?? '',
+          window: _windowDependencies.windowKeys,
           onTap: _messageTapHandler(args),
         );
         return true;
       case 'showSuccess':
         UiSnack.showSuccess(
           args['message'] as String? ?? '',
+          window: _windowDependencies.windowKeys,
           onTap: _messageTapHandler(args),
         );
         return true;
       case 'showError':
         UiSnack.showError(
           args['message'] as String? ?? '',
+          window: _windowDependencies.windowKeys,
           onTap: _messageTapHandler(args),
         );
         return true;
@@ -4331,11 +4416,15 @@ class PluginBridgeAdapter {
     }
     final payload = <String, dynamic>{'payload': args['tapPayload']};
     if (openPlugin) {
+      final viewId = _windowDependencies.viewId;
+      final windowKeys = _windowDependencies.windowKeys;
       // ניווט לדף התוסף עם מסירת האירוע — כמו openPlugin בתפריט ההקשר.
       return () => PluginPageLauncher.instance.open(
         plugin.pluginId,
         topic: topic,
         payload: payload,
+        viewId: viewId,
+        windowKeys: windowKeys,
       );
     }
     final dispatch =
@@ -4522,7 +4611,7 @@ class PluginBridgeAdapter {
     return result != 'inactive';
   }
 
-  /// מסך ההדפסה של הקורא, כדיאלוג מעל החלון הראשי (`reader.printRange`).
+  /// מסך ההדפסה של הקורא מעל חלון הבקשה (`reader.printRange`).
   Future<bool> _defaultPrintBookRange(
     TextBook book, {
     required int startLine,
@@ -4531,7 +4620,10 @@ class PluginBridgeAdapter {
     required List<String> availableCommentators,
   }) async {
     final toc = await book.tableOfContents;
-    final context = navigatorKey.currentContext;
+    final context =
+        rpcWindowContext ??
+        (_windowDependencies.windowKeys?.navigator ?? navigatorKey)
+            .currentContext;
     if (context == null || !context.mounted) {
       throw Exception('error.unavailable: No window to show the print screen');
     }
@@ -4552,25 +4644,15 @@ class PluginBridgeAdapter {
     return printed ?? false;
   }
 
-  /// מסך ההדפסה של הקורא על קובץ PDF, כדיאלוג מעל החלון הראשי
-  /// (`ui.printFile`) — אותה הגדרה כמו `_handlePrintPress` בקורא ה-PDF:
-  /// [PrintingScreen] עם `createPdfOverride`, בלי טווח שורות או מפרשים.
-  ///
-  /// הקובץ נקרא פעם אחת לפני הפתיחה, כך ש-`fs.revokeFile`, פינוי המטמון או
-  /// הסרת התוסף בזמן שהדיאלוג פתוח אינם מוחקים אותו מתחת למסך.
-  ///
-  /// קורא ה-PDF מנתק את ה-`PdfViewer` שלו כל עוד המסך פתוח (pdfrx מנהל worker
-  /// יחיד), ופה אין ניתוק דומה. הניתוק נכתב כשהתצוגה המקדימה הייתה `PdfViewer`
-  /// ופתחה מסמכים במקביל, והתקיעה תוקנה אחר כך בשורש (פתיחה בזיכרון, `await`
-  /// ל-`dispose`, הסדרת כל פעולות ה-pdfrx בתוך המסך). שאר הכניסות למסך רצות
-  /// כשיש `PdfViewer` חי ואינן מנתקות אותו: הדפסה מקורא טקסט (טאב PDF ברקע
-  /// נשמר ב-keep-alive) והדפסת מפרשים מתוך טאב PDF פעיל. ובקריאה מתוסף הטאב
-  /// הפעיל הוא טאב התוסף, כך שאין `PdfViewer` גלוי שמרנדר.
+  /// קורא את קובץ ה-PDF לפני פתיחת מסך ההדפסה בחלון הבקשה.
   Future<bool> _defaultPrintPluginFile(
     File file, {
     required String jobName,
   }) async {
-    final context = navigatorKey.currentContext;
+    final context =
+        rpcWindowContext ??
+        (_windowDependencies.windowKeys?.navigator ?? navigatorKey)
+            .currentContext;
     if (context == null || !context.mounted) {
       throw Exception('error.unavailable: No window to show the print screen');
     }
@@ -6300,7 +6382,7 @@ class PluginBridgeAdapter {
     switch (action) {
       case 'list':
         final limit = args['limit'] as int? ?? 50;
-        final historyState = _dependencies.historyBloc.state;
+        final historyState = _windowDependencies.historyBloc.state;
         if (historyState is! HistoryLoaded) return [];
 
         return historyState.history
@@ -6319,7 +6401,7 @@ class PluginBridgeAdapter {
 
       case 'listSearches':
         final limit = args['limit'] as int? ?? 50;
-        final historyState = _dependencies.historyBloc.state;
+        final historyState = _windowDependencies.historyBloc.state;
         if (historyState is! HistoryLoaded) return [];
 
         return historyState.history
@@ -6335,7 +6417,7 @@ class PluginBridgeAdapter {
             .toList();
 
       case 'clear':
-        _dependencies.historyBloc.add(ClearHistory());
+        _windowDependencies.historyBloc.add(ClearHistory());
         return true;
 
       case 'remove':
@@ -6352,7 +6434,7 @@ class PluginBridgeAdapter {
               'error.invalid_params: id, bookUid or bookId required',
             );
           }
-          final historyState = _dependencies.historyBloc.state;
+          final historyState = _windowDependencies.historyBloc.state;
           if (historyState is! HistoryLoaded) return false;
 
           final historyList = historyState.history;
@@ -6376,7 +6458,7 @@ class PluginBridgeAdapter {
           }
 
           if (indexToRemove != null) {
-            _dependencies.historyBloc.add(RemoveHistory(indexToRemove));
+            _windowDependencies.historyBloc.add(RemoveHistory(indexToRemove));
             return true;
           }
           return false;
@@ -6609,14 +6691,26 @@ class PluginBridgeAdapter {
         final onTap = _messageTapHandler(args);
         switch (type) {
           case 'success':
-            UiSnack.showSuccess(message, onTap: onTap);
+            UiSnack.showSuccess(
+              message,
+              onTap: onTap,
+              window: _windowDependencies.windowKeys,
+            );
             break;
           case 'error':
-            UiSnack.showError(message, onTap: onTap);
+            UiSnack.showError(
+              message,
+              onTap: onTap,
+              window: _windowDependencies.windowKeys,
+            );
             break;
           case 'info':
           default:
-            UiSnack.show(message, onTap: onTap);
+            UiSnack.show(
+              message,
+              onTap: onTap,
+              window: _windowDependencies.windowKeys,
+            );
             break;
         }
         return true;
@@ -6864,7 +6958,7 @@ class PluginBridgeAdapter {
   /// מצב המפרשים של טאב הקריאה כפי שהוא כבר טעון בטאב — בלי שאילתה נוספת.
   /// `null` כשאין טאב קריאה, כשמצב הטאב עדיין לא נטען או כשאין בו מפרשים.
   Map<String, dynamic>? _getActiveCommentators() {
-    final pane = _dependencies.tabsBloc.state.readingPane;
+    final pane = _windowDependencies.tabsBloc.state.readingPane;
     if (pane is TextBookTab) {
       final state = pane.bloc.state;
       if (state is! TextBookLoaded) return null;
@@ -6906,7 +7000,7 @@ class PluginBridgeAdapter {
     if (add.isEmpty && remove.isEmpty) {
       throw Exception('error.invalid_params: add or remove is required');
     }
-    final pane = _dependencies.tabsBloc.state.readingPane;
+    final pane = _windowDependencies.tabsBloc.state.readingPane;
     if (pane is! TextBookTab) return null;
     final state = pane.bloc.state;
     if (state is! TextBookLoaded) return null;
@@ -6935,7 +7029,7 @@ class PluginBridgeAdapter {
   }
 
   Map<String, dynamic>? _getPageShapeLayout() {
-    final pane = _dependencies.tabsBloc.state.readingPane;
+    final pane = _windowDependencies.tabsBloc.state.readingPane;
     if (pane is! TextBookTab) return null;
     final state = pane.bloc.state;
     if (state is! TextBookLoaded || !state.showPageShapeView) return null;
@@ -6954,7 +7048,7 @@ class PluginBridgeAdapter {
       throw Exception('error.invalid_params: visible must be a boolean');
     }
 
-    final pane = _dependencies.tabsBloc.state.readingPane;
+    final pane = _windowDependencies.tabsBloc.state.readingPane;
     if (pane is! TextBookTab) return null;
     final state = pane.bloc.state;
     if (state is! TextBookLoaded || !state.showPageShapeView) return null;
@@ -6988,7 +7082,7 @@ class PluginBridgeAdapter {
   /// מה נתמך **בפועל** בהקשר הקריאה הנוכחי. הדגשות מצוירות רק בטור הטקסט
   /// הראשי (תצוגה משולבת וצורת הדף), ואין ב-PDF הדגשות ובחירה דרך ה-API.
   Map<String, dynamic> _getHighlightCapabilities() {
-    final pane = _dependencies.tabsBloc.state.readingPane;
+    final pane = _windowDependencies.tabsBloc.state.readingPane;
     if (pane is TextBookTab) {
       final state = pane.bloc.state;
       final pageShape = state is TextBookLoaded && state.showPageShapeView;
@@ -7025,7 +7119,7 @@ class PluginBridgeAdapter {
       throw Exception('error.invalid_params: index must be an integer');
     }
     final index = rawIndex.toInt();
-    final tabs = _dependencies.tabsBloc.state.tabs;
+    final tabs = _windowDependencies.tabsBloc.state.tabs;
     if (index < 0 || index >= tabs.length) {
       throw Exception(
         'error.invalid_params: index $index out of range '
@@ -7037,7 +7131,7 @@ class PluginBridgeAdapter {
 
   OpenedTab _paneForPlugins(OpenedTab tab) {
     if (tab is! CombinedTab) return tab;
-    final state = _dependencies.tabsBloc.state;
+    final state = _windowDependencies.tabsBloc.state;
     if (identical(tab, state.currentTab)) return state.activePane ?? tab;
     return leafPanes(tab).first;
   }
@@ -7104,19 +7198,19 @@ class PluginBridgeAdapter {
   }
 
   String? _currentBookId() {
-    return _dependencies.tabsBloc.state.readingPane?.title;
+    return _windowDependencies.tabsBloc.state.readingPane?.title;
   }
 
   /// מזהה יציב של הספר בחלונית הקריאה, ל-scope של `book:<bookUid>`.
   String? _currentBookUid() {
-    final pane = _dependencies.tabsBloc.state.readingPane;
+    final pane = _windowDependencies.tabsBloc.state.readingPane;
     if (pane is TextBookTab) return PluginBookIdentity.uidOf(pane.book);
     if (pane is PdfBookTab) return PluginBookIdentity.uidOf(pane.book);
     return null;
   }
 
   String? _currentWorkspaceId() {
-    return _dependencies.workspaceBloc.state.activeWorkspaceId;
+    return _windowDependencies.workspaceBloc.state.activeWorkspaceId;
   }
 
   // ----------------------------------------------------------------
@@ -7255,6 +7349,8 @@ class PluginBridgeAdapter {
           plugin.pluginId,
           topic: 'plugin.page_opened',
           payload: {'param': args['param']},
+          viewId: _windowDependencies.viewId,
+          windowKeys: _windowDependencies.windowKeys,
         );
         return true;
       case 'openOther':
@@ -7273,6 +7369,8 @@ class PluginBridgeAdapter {
           targetId,
           topic: 'plugin.page_opened',
           payload: {'param': args['param'], 'openedBy': plugin.pluginId},
+          viewId: _windowDependencies.viewId,
+          windowKeys: _windowDependencies.windowKeys,
         );
         return true;
       case 'backgroundDone':

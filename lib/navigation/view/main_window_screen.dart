@@ -951,9 +951,13 @@ class MainWindowScreenState extends State<MainWindowScreen>
   Future<void> _presentWindow() =>
       _role.isViewWindow ? Future<void>.value() : presentMainWindow();
 
+  /// התצוגה (החלון) של המסך; הנראות של התוספים נשמרת לפיה.
+  int? _viewId;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _viewId = View.maybeOf(context)?.viewId;
 
     // אתחול PageController פעם אחת עם initialPage הנכון
     if (!_hasInitializedPageController) {
@@ -2157,6 +2161,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
       PluginRuntimeDispatcher.instance.setReaderScreenVisible(
         state.currentScreen == Screen.reading ||
             state.currentScreen == Screen.search,
+        viewId: _viewId,
       );
       // בקשת מיקוד אזור הקריאה שייכת למסך העיון בלבד; בעזיבתו היא מתבטלת כדי
       // שלא תירה מאוחר יותר, כשהתוכן נרשם, ותחטוף פוקוס משדה במסך הנוכחי.

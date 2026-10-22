@@ -3,6 +3,7 @@ import 'dart:collection';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:otzaria/plugins/plugin_constants.dart';
 import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
@@ -74,6 +75,7 @@ class _PluginInstance {
   final PluginInstanceId instanceId;
 
   InAppWebViewController? controller;
+  int? viewId;
   Future<void> Function()? reloadCallback;
   Object? reloadToken;
   PluginInstanceHost? host;
@@ -119,6 +121,16 @@ class _PluginInstance {
     queued.clear();
     queuedOneShots = 0;
   }
+}
+
+/// מצב הנראות של חלון אחד (תצוגה אחת).
+class _WindowVisibility {
+  Set<PluginInstanceKey> visibleKeys = const {};
+  bool readerScreenVisible = true;
+  bool shown = true;
+  bool minimized = false;
+
+  bool get isForeground => readerScreenVisible && shown && !minimized;
 }
 
 class PluginRuntimeDispatcher {
@@ -207,12 +219,32 @@ class PluginRuntimeDispatcher {
   // לא נוגעים במופע הרקע ('background') — הוא הוער כדי לרוץ בלי דף נראה.
   //
   // קבוצה ולא מפתח יחיד: טאב מפוצל בעיון יכול להציג שני מופעים בו-זמנית.
-  Set<PluginInstanceKey> _visibleInstanceKeys = const {};
-  bool _readerScreenVisible = true;
-  bool _windowShown = true;
-  bool _windowMinimized = false;
+  //
+  // הנראות נשמרת לכל חלון לפי viewId: מופע רץ אם הוא מוצג בחלון כלשהו שמסך
+  // העיון שלו גלוי והוא עצמו מוצג. בלי ריבוי חלונות קיים רק החלון הראשי.
+  final Map<int, _WindowVisibility> _windows = {
+    mainViewId: _WindowVisibility(),
+  };
   bool _appVisible = true;
   Set<PluginInstanceKey> _runningForegroundKeys = const {};
+
+  /// התצוגה של החלון הראשי (ה-implicit view).
+  static const int mainViewId = 0;
+
+  _WindowVisibility _window(int? viewId) =>
+      _windows.putIfAbsent(viewId ?? mainViewId, _WindowVisibility.new);
+
+  Set<PluginInstanceKey> get _visibleInstanceKeys => _windows.length == 1
+      ? _windows.values.single.visibleKeys
+      : {for (final window in _windows.values) ...window.visibleKeys};
+
+  /// מסך העיון של החלון שמציג את [key]; מופע שאינו מוצג — של החלון הראשי.
+  bool _readerScreenVisibleFor(PluginInstanceKey key) {
+    for (final window in _windows.values) {
+      if (window.visibleKeys.contains(key)) return window.readerScreenVisible;
+    }
+    return _window(mainViewId).readerScreenVisible;
+  }
 
   // מסדר את כל פעולות מחזור-החיים בשרשרת אחת. בלי זה, שני reconciles
   // חופפים (מעבר מהיר בין תוספים/מסכים) מ-await בו-זמנית את pause/resume,
@@ -268,7 +300,7 @@ class PluginRuntimeDispatcher {
 
   /// המופע הקדמי ה"ראשי" של [pluginId]: הגלוי כרגע, ואם אין גלוי —
   /// האחרון שנרשם (סדר ההכנסה באינדקס).
-  PluginInstanceKey? _primaryForegroundKey(String pluginId) {
+  PluginInstanceKey? _primaryForegroundKey(String pluginId, {int? viewId}) {
     final keys = _instancesByPlugin[pluginId];
     if (keys == null) return null;
     PluginInstanceKey? lastRegistered;
@@ -276,7 +308,8 @@ class PluginRuntimeDispatcher {
       final instance = _instances[key];
       if (instance == null ||
           instance.isBackground ||
-          instance.controller == null) {
+          instance.controller == null ||
+          (viewId != null && instance.viewId != viewId)) {
         continue;
       }
       if (_visibleInstanceKeys.contains(key)) return key;
@@ -299,18 +332,23 @@ class PluginRuntimeDispatcher {
   /// בלי instanceId תבחר כרגיל (רקע / החייאה).
   PluginInstanceId? pickContributionTarget(
     String pluginId,
-    Iterable<PluginInstanceId> registrantInstanceIds,
-  ) {
+    Iterable<PluginInstanceId> registrantInstanceIds, {
+    int? viewId,
+  }) {
     PluginInstanceId? fallback;
     for (final instanceId in registrantInstanceIds) {
       final key = _keyOf(pluginId, instanceId);
       final instance = _instances[key];
       if (instance == null ||
           instance.isBackground ||
-          instance.controller == null) {
+          instance.controller == null ||
+          (viewId != null && instance.viewId != viewId)) {
         continue;
       }
-      if (isInstanceVisible(key)) return instanceId;
+      if ((viewId == null ? _visibleInstanceKeys : _window(viewId).visibleKeys)
+          .contains(key)) {
+        return instanceId;
+      }
       fallback = instanceId;
     }
     return fallback;
@@ -320,6 +358,7 @@ class PluginRuntimeDispatcher {
     String pluginId,
     InAppWebViewController controller, {
     PluginInstanceId instanceId = PluginInstanceIds.defaultForeground,
+    int? viewId,
   }) {
     if (_shutdownMode == _PluginRuntimeShutdownMode.exit) {
       debugPrint(
@@ -333,6 +372,7 @@ class PluginRuntimeDispatcher {
     // בקשת פוקוס ממתינה אינה מבוצעת כאן אלא ב-onForegroundInstanceReady:
     // העברת פוקוס ל-WebView שהדף בו עוד לא נטען מקדימה את ה-autofocus שלו.
     _instanceFor(pluginId, instanceId)
+      ..viewId = viewId
       ..controller = controller
       ..busyCount = 0
       ..released = false
@@ -438,7 +478,7 @@ class PluginRuntimeDispatcher {
           hasController: true,
           isVisible: isInstanceVisible(key),
           isSuspended: instance.suspended,
-          readerScreenVisible: _readerScreenVisible,
+          readerScreenVisible: _readerScreenVisibleFor(key),
           platformNeedsHandoff: platformNeedsHandoff,
           appIsActive: appIsActiveNow(),
           flutterOwnsKeyboard: deferred && flutterOwnsKeyboardNow(),
@@ -453,7 +493,7 @@ class PluginRuntimeDispatcher {
     if (shouldRememberKeyboardFocusRequest(
       isBackground: isBackground,
       isVisible: isInstanceVisible(key),
-      readerScreenVisible: _readerScreenVisible,
+      readerScreenVisible: _readerScreenVisibleFor(key),
       platformNeedsHandoff: platformNeedsHandoff,
     )) {
       final pending = _instanceFor(pluginId, instanceId);
@@ -585,6 +625,7 @@ class PluginRuntimeDispatcher {
     PluginPageLauncher.instance.markPageClosed(
       pluginId,
       instanceId: instanceId,
+      viewId: instance.viewId,
     );
     PluginSearchFieldSessionService.instance.onInstanceUnregistered(
       pluginId,
@@ -616,32 +657,37 @@ class PluginRuntimeDispatcher {
     return {'reason': reason.name, 'state': store.stateOf(key)};
   }
 
-  /// מעדכן אילו מופעי תוספים מוצגים כעת בטאב העיון הפעיל (ריק = אף אחד).
-  void setVisiblePluginInstances(Set<PluginInstanceKey> keys) {
-    if (setEquals(_visibleInstanceKeys, keys)) return;
-    _visibleInstanceKeys = Set.unmodifiable(keys);
+  /// מעדכן אילו מופעי תוספים מוצגים כעת בטאב העיון הפעיל (ריק = אף אחד)
+  /// של החלון [viewId] (`null` — החלון הראשי).
+  void setVisiblePluginInstances(Set<PluginInstanceKey> keys, {int? viewId}) {
+    final window = _window(viewId);
+    if (setEquals(window.visibleKeys, keys)) return;
+    window.visibleKeys = Set.unmodifiable(keys);
     unawaited(_serializeLifecycle(_reconcileForeground));
   }
 
   /// מעדכן אם מסך העיון גלוי. ביציאה משהים את המופעים המוצגים, בחזרה מחדשים.
-  void setReaderScreenVisible(bool visible) {
-    if (_readerScreenVisible == visible) return;
-    _readerScreenVisible = visible;
+  void setReaderScreenVisible(bool visible, {int? viewId}) {
+    final window = _window(viewId);
+    if (window.readerScreenVisible == visible) return;
+    window.readerScreenVisible = visible;
     unawaited(_serializeLifecycle(_reconcileForeground));
   }
 
   /// מעדכן אם החלון עצמו מוצג. חלון שנסגר מוסתר ולא נהרס, ובלי זה
   /// התוספים שבו היו ממשיכים לרוץ ברקע.
-  void setWindowShown(bool shown) {
-    if (_windowShown == shown) return;
-    _windowShown = shown;
+  void setWindowShown(bool shown, {int? viewId}) {
+    final window = _window(viewId);
+    if (window.shown == shown) return;
+    window.shown = shown;
     unawaited(_serializeLifecycle(_reconcileForeground));
   }
 
   /// חלון ממוזער אינו מוצג: התוספים שבו מושהים עד השחזור.
-  void setWindowMinimized(bool minimized) {
-    if (_windowMinimized == minimized) return;
-    _windowMinimized = minimized;
+  void setWindowMinimized(bool minimized, {int? viewId}) {
+    final window = _window(viewId);
+    if (window.minimized == minimized) return;
+    window.minimized = minimized;
     unawaited(_serializeLifecycle(_reconcileForeground));
   }
 
@@ -652,16 +698,30 @@ class PluginRuntimeDispatcher {
     unawaited(_serializeLifecycle(_reconcileForeground));
   }
 
-  Set<PluginInstanceKey> get _desiredForegroundKeys =>
-      _readerScreenVisible && _windowShown && !_windowMinimized && _appVisible
-      ? _visibleInstanceKeys
-      : const {};
+  /// חלון Dart נסגר: המופעים שהציג כבר אינם מוצגים בו. החלון הראשי נשאר תמיד.
+  void forgetWindow(int viewId) {
+    PluginPageLauncher.instance.forgetWindow(viewId);
+    if (viewId == mainViewId || _windows.remove(viewId) == null) return;
+    unawaited(_serializeLifecycle(_reconcileForeground));
+  }
+
+  Set<PluginInstanceKey> get _desiredForegroundKeys {
+    if (!_appVisible) return const {};
+    if (_windows.length == 1) {
+      final window = _windows.values.single;
+      return window.isForeground ? window.visibleKeys : const {};
+    }
+    return {
+      for (final window in _windows.values)
+        if (window.isForeground) ...window.visibleKeys,
+    };
+  }
 
   /// מאפס את מצב הנראות בלבד (בלי לגעת ב-controllers). הדיספצ'ר הוא singleton,
   /// ובלי איפוס מפורש מצב מטסט אחד דולף לבא אחריו.
   @visibleForTesting
   void resetVisibilityForTesting() {
-    _visibleInstanceKeys = const {};
+    _resetWindows();
     _runningForegroundKeys = const {};
     for (final instance in _instances.values) {
       instance.suspended = false;
@@ -673,9 +733,6 @@ class PluginRuntimeDispatcher {
       instance.graceTimer?.cancel();
       instance.graceTimer = null;
     }
-    _readerScreenVisible = true;
-    _windowShown = true;
-    _windowMinimized = false;
     _appVisible = true;
     _lifecycleLock = Future.value();
     _cancelTimers();
@@ -690,6 +747,10 @@ class PluginRuntimeDispatcher {
     _selectionTimer = null;
     _pendingSelection = null;
   }
+
+  void _resetWindows() => _windows
+    ..clear()
+    ..[mainViewId] = _WindowVisibility();
 
   /// נקרא ע"י [PluginTabPage] כשה-WebView שלו סיים להיטען (אחרי boot).
   /// אם המופע נטען בזמן שאינו מוצג (למשל המשתמש עבר לטאב אחר לפני שהטעינה
@@ -1105,11 +1166,8 @@ class PluginRuntimeDispatcher {
     _instancesByPlugin.clear();
     _enabledCache.clear();
     _permissionCache.clear();
-    _visibleInstanceKeys = const {};
+    _resetWindows();
     _runningForegroundKeys = const {};
-    _readerScreenVisible = true;
-    _windowShown = true;
-    _windowMinimized = false;
     _appVisible = true;
     _lifecycleLock = Future.value();
     _cancelTimers();
@@ -1397,6 +1455,8 @@ class PluginRuntimeDispatcher {
     bool preferBackground = false,
     bool resumeForegroundIfNeeded = false,
     PluginInstanceId? instanceId,
+    int? viewId,
+    AppWindowKeys? windowKeys,
   }) async {
     await PluginSafeMode.ready;
     if (PluginSafeMode.isActive) return;
@@ -1414,7 +1474,10 @@ class PluginRuntimeDispatcher {
       debugPrint('PluginRuntimeDispatcher: $topic → queued (boot pending)');
       return;
     }
-    if (!_hasAnyController(pluginId)) {
+    if (!_hasAnyController(pluginId) ||
+        (viewId != null &&
+            _backgroundControllerOf(pluginId) == null &&
+            _primaryForegroundKey(pluginId, viewId: viewId) == null)) {
       // תנאי `when` שלא מתקיים = התוסף לא ביקש את האירוע; לא מעירים מנוע
       // וגם לא פותחים את דף התוסף.
       if (PluginLazyActivationService.instance.isActivationBlocked(
@@ -1439,6 +1502,8 @@ class PluginRuntimeDispatcher {
           pluginId,
           topic: topic,
           payload: payload,
+          viewId: viewId,
+          windowKeys: windowKeys,
         );
       } else {
         debugPrint('PluginRuntimeDispatcher: $topic → dropped (no engine)');
@@ -1453,7 +1518,7 @@ class PluginRuntimeDispatcher {
       _enabledCache[pluginId] = isEnabled;
       if (!isEnabled) return;
       final background = _backgroundControllerOf(pluginId);
-      final primaryKey = _primaryForegroundKey(pluginId);
+      final primaryKey = _primaryForegroundKey(pluginId, viewId: viewId);
       final primary = primaryKey == null ? null : _instances[primaryKey];
       final primarySuspended = primary?.suspended ?? false;
       final shouldResumeForeground =

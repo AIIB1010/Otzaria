@@ -12,6 +12,13 @@ import 'package:otzaria/plugins/services/plugin_extended_validator.dart';
 /// adapter פיקטיבי: מיישם רק את execute (השאר דרך noSuchMethod), סופר קריאות
 /// ומחזיר ערך מוגדר מראש — כך אפשר לוודא אם execute נקרא בכלל ובאילו ארגומנטים.
 class _FakeAdapter implements PluginBridgeAdapter {
+  @override
+  Future<T> withWindowDependencies<T>(
+    Future<T> Function() action, {
+    String? domain,
+    String? rpcAction,
+  }) => action();
+
   _FakeAdapter({this.result, this.errorToThrow});
 
   final dynamic result;

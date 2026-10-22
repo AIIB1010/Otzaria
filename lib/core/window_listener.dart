@@ -427,8 +427,8 @@ class AppWindowListener extends WindowListener {
           // הסשן שנמחק היה נכתב מחדש. הטיוטות שייכות לכל החלונות ונשארות.
           WindowTabsSession.current.suspend();
           await ViewWindowOpener.instance.beforeMainWindowHides();
-          // בלי setWindowShown(false): הדגל משותף לכל החלונות, והתוספים
-          // בחלונות הגלויים היו מושהים. נראות לפי חלון — P1g.
+          // הנראות נשמרת לפי חלון: רק התוספים של הראשי מושהים.
+          PluginRuntimeDispatcher.instance.setWindowShown(false);
         } else {
           // המנוע נשאר חי, ולכן הכתיבות האחרונות לטיוטה ממשיכות אחרי ההסתרה.
           PluginCorrectionSessionService.instance.endAll('window_closed');

@@ -1358,6 +1358,8 @@ class _SearchDialogState extends State<SearchDialog> {
             pluginId,
             topic: 'search.requested',
             payload: payload,
+            viewId: View.of(context).viewId,
+            windowKeys: AppWindowKeys.of(context),
           );
         };
     for (final target in targets) {

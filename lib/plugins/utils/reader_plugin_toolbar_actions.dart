@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otzaria/plugins/bloc/plugin_system_bloc.dart';
 import 'package:otzaria/plugins/services/plugin_toolbar_registry.dart';
@@ -17,18 +18,20 @@ List<ActionButtonData> buildReaderPluginActions(
 }) {
   final records = [
     ...PluginToolbarRegistry.instance.getAll(),
-    ...?context.read<PluginSystemBloc>().toolbarRegistry?.getAll(),
+    ...?context.read<PluginSystemBloc?>()?.toolbarRegistry?.getAll(),
   ];
   if (records.isEmpty) return const [];
   return buildPluginToolbarActions(
     records: records,
+    viewId: View.of(context).viewId,
+    windowKeys: AppWindowKeys.of(context),
     context: pluginContext,
     compact: context.read<SettingsBloc>().state.compactMenuMode,
     locationPayload: () async =>
         (await resolveReaderLocation(tab))?.toJson() ?? const {},
     hostActionDispatcher: context
-        .read<PluginSystemBloc>()
-        .declarativeHost
+        .read<PluginSystemBloc?>()
+        ?.declarativeHost
         ?.dispatchAction,
   );
 }
@@ -41,18 +44,20 @@ List<(int, ActionButtonData)> buildReaderPluginOverflowActions(
 }) {
   final records = [
     ...PluginToolbarRegistry.instance.getAll(),
-    ...?context.read<PluginSystemBloc>().toolbarRegistry?.getAll(),
+    ...?context.read<PluginSystemBloc?>()?.toolbarRegistry?.getAll(),
   ];
   if (records.isEmpty) return const [];
   return buildOrderedPluginOverflowActions(
     records: records,
+    viewId: View.of(context).viewId,
+    windowKeys: AppWindowKeys.of(context),
     context: pluginContext,
     compact: context.read<SettingsBloc>().state.compactMenuMode,
     locationPayload: () async =>
         (await resolveReaderLocation(tab))?.toJson() ?? const {},
     hostActionDispatcher: context
-        .read<PluginSystemBloc>()
-        .declarativeHost
+        .read<PluginSystemBloc?>()
+        ?.declarativeHost
         ?.dispatchAction,
   );
 }
@@ -61,5 +66,5 @@ List<(int, ActionButtonData)> buildReaderPluginOverflowActions(
 Listenable readerPluginToolbarListenable(BuildContext context) =>
     Listenable.merge([
       PluginToolbarRegistry.instance,
-      context.read<PluginSystemBloc>().toolbarRegistry,
+      context.read<PluginSystemBloc?>()?.toolbarRegistry,
     ]);
