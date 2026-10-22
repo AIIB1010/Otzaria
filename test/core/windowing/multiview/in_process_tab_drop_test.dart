@@ -230,6 +230,52 @@ void main() {
       drops.unregister(a.id, t.target);
       expect(await drops.sendTabToWindow(a.slot, tab), isFalse);
     });
+
+    testWidgets('peers: הראשי ושאר החלונות, בלי החלון עצמו ובלי חלון בלי עץ', (
+      tester,
+    ) async {
+      final windows = FakeViewWindows(tester);
+      final a = windows.registry.open(size: const Size(800, 600))!;
+      final b = windows.registry.open(size: const Size(800, 600))!;
+      windows.registry.open(size: const Size(800, 600));
+      final drops = makeDrops(windows.registry);
+      InProcessTabDropTarget described(String title, String? workspace) =>
+          InProcessTabDropTarget(
+            dragState: ExternalTabDragState(),
+            devicePixelRatio: () => 1,
+            receive: (_, _) => true,
+            describe: () => (
+              title: title,
+              tabCount: 3,
+              activeWorkspaceId: workspace,
+            ),
+          );
+      drops.register(AppWindowId.primary, described('ראשי', 'ws1'));
+      drops.register(b.id, described('שני', 'ws2'));
+      drops.register(a.id, described('ראשון', null));
+
+      expect(drops.peers(a.id).map((p) => (p.slot, p.title, p.isOwner)), [
+        (1, 'ראשי', true),
+        (b.slot, 'שני', false),
+      ]);
+      expect(drops.peers(AppWindowId.primary).map((p) => p.slot), [
+        a.slot,
+        b.slot,
+      ]);
+      expect(drops.peers(a.id).first.tabCount, 3);
+      expect(drops.isWorkspaceOpenElsewhere(a.id, 'ws2'), isTrue);
+      expect(drops.isWorkspaceOpenElsewhere(b.id, 'ws2'), isFalse);
+
+      // ראשי שנסגר מוסתר: לא יעד, לא נספר באזהרה, ומסרב לקלוט.
+      drops.setMainShown(false);
+      expect(drops.peers(a.id).first.isVisible, isFalse);
+      expect(drops.transferTargets(a.id).map((p) => p.slot), [b.slot]);
+      expect(drops.isWorkspaceOpenElsewhere(a.id, 'ws1'), isFalse);
+      final tab = ToolTab(toolId: 'builtin.calendar', title: 'לוח שנה');
+      expect(await drops.sendTabToWindow(1, tab), isFalse);
+      drops.setMainShown(true);
+      expect(drops.transferTargets(a.id).map((p) => p.slot), [1, b.slot]);
+    });
   });
 
   group('InProcessTabDropReceiver', () {
@@ -323,6 +369,13 @@ void main() {
       );
       final state = ExternalTabDragState.of(inner);
       expect(state, isNot(same(ExternalTabDragState.current)));
+      // התיאור לתפריט נקרא מה-TabsBloc; בלי WorkspaceBloc — בלי שולחן.
+      final described = drops.peers(AppWindowId.primary).single;
+      expect(
+        (described.slot, described.title, described.tabCount),
+        (entry.slot, 'חלון ריק', 0),
+      );
+      expect(described.activeWorkspaceId, isNull);
 
       // הראשי אינו רשום, ולכן גרירה מעליו אינה נוגעת בחלון הזה.
       expect(await drops.notifyDragOver(1, 10, 10, 'x'), isNull);

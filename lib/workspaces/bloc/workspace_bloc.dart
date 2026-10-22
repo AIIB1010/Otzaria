@@ -40,9 +40,13 @@ class WorkspaceBloc extends Bloc<WorkspaceEvent, WorkspaceState> {
   /// הופיע בתפריט, ושולחן שנמחק שם עוד הוצג ולחיצה עליו זרקה.
   StreamSubscription<void>? _remoteChanges;
 
+  /// האם חלון מוצג אחר עומד על השולחן; null — לפי האפיק (מודל A).
+  final bool Function(String workspaceId)? isOpenInOtherWindow;
+
   WorkspaceBloc({
     required this._repository,
     this.onWorkspaceTabsChanged,
+    this.isOpenInOtherWindow,
   }) : super(WorkspaceState.initial()) {
     _remoteChanges = _repository.remoteChanges.listen((_) {
       if (!isClosed) add(LoadWorkspaces());
@@ -64,9 +68,12 @@ class WorkspaceBloc extends Bloc<WorkspaceEvent, WorkspaceState> {
   /// מזהירים — אבל לא חוסמים; זו בחירה של המשתמש.
   void _warnIfOpenElsewhere(String workspaceId) {
     if (!MultiWindowService.canOpenWindows) return;
-    final taken = MultiWindowService.knownPeers.any(
-      (peer) => peer.isVisible && peer.activeWorkspaceId == workspaceId,
-    );
+    final check = isOpenInOtherWindow;
+    final taken = check != null
+        ? check(workspaceId)
+        : MultiWindowService.knownPeers.any(
+            (peer) => peer.isVisible && peer.activeWorkspaceId == workspaceId,
+          );
     if (taken) UiSnack.show(WindowMessages.workspaceOpenInOtherWindow);
   }
 

@@ -17,6 +17,7 @@ import 'package:otzaria/core/windowing/app_window_id.dart';
 import 'package:otzaria/core/windowing/window_manager_app_window_controller.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/multiview/in_process_tab_drop.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_opener.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
@@ -428,6 +429,7 @@ class AppWindowListener extends WindowListener {
           // הסשן שנמחק היה נכתב מחדש. הטיוטות שייכות לכל החלונות ונשארות.
           WindowTabsSession.current.suspend();
           await ViewWindowOpener.instance.beforeMainWindowHides();
+          InProcessTabDrops.instance.setMainShown(false);
           // הנראות נשמרת לפי חלון: רק התוספים של הראשי מושהים.
           PluginRuntimeDispatcher.instance.setWindowShown(false);
         } else {
@@ -728,7 +730,10 @@ class AppWindowListener extends WindowListener {
     AppWindowKeys.activateWindow(windowId);
     // חלון שהוחזר מהסתרה מקבל פוקוס — זה האות שהוא מוצג שוב.
     PluginRuntimeDispatcher.instance.setWindowShown(true);
-    if (MultiViewMode.enabled) WindowTabsSession.current.resume();
+    if (MultiViewMode.enabled) {
+      WindowTabsSession.current.resume();
+      InProcessTabDrops.instance.setMainShown(true);
+    }
   }
 
   @override

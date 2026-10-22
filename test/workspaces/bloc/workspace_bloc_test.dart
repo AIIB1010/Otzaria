@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
+import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/window_bus.dart' show WindowPeer;
 import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/tabs/models/tab.dart';
@@ -223,6 +225,43 @@ void main() {
       await reopen.close();
       pinnedTab.dispose();
       extraTab.dispose();
+    });
+
+    test('אזהרת "פתוח בחלון אחר" שואלת את המקור שהוזרק (ריבוי תצוגות)', () async {
+      MultiWindowService.debugSupportedOverride = true;
+      addTearDown(() => MultiWindowService.debugSupportedOverride = null);
+      final first = Workspace(name: 'א', tabs: const []);
+      final second = Workspace(name: 'ב', tabs: const []);
+      final repository = _FakeWorkspaceRepository(
+        workspaces: [first, second],
+        activeWorkspaceId: first.id,
+      );
+      // מטמון האפיק אינו נשאל כשיש מקור מוזרק.
+      MultiWindowService.publishKnownPeers([
+        WindowPeer(slot: 2, title: 'x', tabCount: 1, activeWorkspaceId: '?'),
+      ]);
+      addTearDown(() => MultiWindowService.publishKnownPeers(const []));
+      final asked = <String>[];
+      final bloc = WorkspaceBloc(
+        repository: repository,
+        isOpenInOtherWindow: (id) {
+          asked.add(id);
+          return true;
+        },
+      )..add(LoadWorkspaces());
+      await bloc.stream.firstWhere((s) => !s.isLoading);
+
+      bloc.add(
+        SwitchToWorkspace(
+          targetWorkspaceId: second.id,
+          currentTabsToSave: const [],
+          currentTabIndexToSave: 0,
+        ),
+      );
+      await bloc.stream.firstWhere((s) => s.activeWorkspaceId == second.id);
+
+      expect(asked, [second.id]);
+      await bloc.close();
     });
 
     test('קיבוע השולחן הפעיל שומר את הכרטיסיות החיות כתמונה הקבועה', () async {
