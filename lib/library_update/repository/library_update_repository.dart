@@ -16,7 +16,7 @@ import 'package:otzaria/utils/file/zstd_stream_extractor.dart';
 import 'package:path/path.dart' as p;
 import 'package:otzaria/data/sqlite/sqlite3_api.dart' as sqlite3;
 import 'package:otzaria/empty_library/services/library_space_estimate.dart'
-    show comparableVolumeId;
+    show isSameVolume;
 import 'package:seforim_library_updater/seforim_library_updater.dart';
 
 import '../services/library_access_gate.dart';
@@ -651,7 +651,13 @@ class LibraryUpdateRepository implements LibraryUpdateService {
     final dbInfo = await diskSpaceProvider(dbDir);
     String gb(int bytes) => (bytes / (1 << 30)).toStringAsFixed(1);
 
-    final sameVolume = _sameVolume(cacheDir.path, cacheInfo, dbDir, dbInfo);
+    final sameVolume = isSameVolume(
+      cacheDir.path,
+      cacheInfo,
+      dbDir,
+      dbInfo,
+      isAndroid: isAndroid,
+    );
     if (sameVolume) {
       final needed = cacheNeeded + walNeeded;
       if (cacheInfo.freeBytes >= 0 && cacheInfo.freeBytes < needed) {
@@ -674,17 +680,6 @@ class LibraryUpdateRepository implements LibraryUpdateService {
         'ליד הספרייה, פנוי ${gb(dbInfo.freeBytes)}GB',
       );
     }
-  }
-
-  bool _sameVolume(
-    String a,
-    DiskSpaceInfo aInfo,
-    String b,
-    DiskSpaceInfo bInfo,
-  ) {
-    final aId = comparableVolumeId(a, aInfo.volumeId, isAndroid: isAndroid);
-    return aId != null &&
-        aId == comparableVolumeId(b, bInfo.volumeId, isAndroid: isAndroid);
   }
 
   int _resumablePatchBytes(File partial, PatchFileEntry patchFile) {
@@ -853,11 +848,12 @@ class LibraryUpdateRepository implements LibraryUpdateService {
     final extractInfo = await diskSpaceProvider(dbDir);
     String gb(int bytes) => (bytes / (1 << 30)).toStringAsFixed(1);
 
-    final sameVolume = _sameVolume(
+    final sameVolume = isSameVolume(
       p.dirname(archivePath),
       archiveInfo,
       dbDir,
       extractInfo,
+      isAndroid: isAndroid,
     );
     if (sameVolume) {
       final needed = archiveNeeded + _extractedDbSizeEstimate;
