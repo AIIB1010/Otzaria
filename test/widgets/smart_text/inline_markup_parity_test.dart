@@ -67,6 +67,8 @@ final Map<String, List<String>> _cases = {
     '<span style="font-size: smaller">א</span><span style="font-size: larger">ב</span><span style="font-size: 1.5em">ג</span><span style="font-size: x-large">ד</span><span style="font-size: 12">ה</span>',
     '<span style="color: hsl(120, 100%, 25%)">ירוק</span> <span style="color: #f00a">שקוף</span> <span style="font-style: normal"><i>נטוי</i></span> <i><span style="font-style: normal">ישר</span></i>',
     '<u><span style="text-decoration: none">לא מוסר</span></u> <span style="text-decoration: underline"><span style="text-decoration-color: #00ff00">צבע</span></span>',
+    '<span style="text-decoration: underline; text-decoration: line-through">קו מוחלף</span>',
+    '<a href="https://example.com" style="text-decoration: line-through">קישור מחוק</a>',
     '<small><big>א</big></small> <big><big>ב</big></big> <span style="font-size:2em"><span style="font-size:smaller">ג</span><span style="font-size:x-small">ד</span></span>',
     '<B>רישיות</B> <SPAN STYLE="COLOR: RED; Font-Size: 1.2EM">תג</SPAN> <span style="text-decoration: underline; text-decoration-thickness: 200%;">עבה</span> <span style="text-decoration: line-through double;">כפול</span>',
   ],

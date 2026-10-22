@@ -404,15 +404,15 @@ class _InlineBuilder {
     final root = _Tree(null, rootProps);
     try {
       _addNodes(root, nodes);
+      final runs = _flatten(root);
+      if (runs == null) return null;
+      return InlineHtmlDocument._(
+        List.unmodifiable(runs),
+        List.unmodifiable(_links),
+      );
     } on _Unsupported {
       return null;
     }
-    final runs = _flatten(root);
-    if (runs == null) return null;
-    return InlineHtmlDocument._(
-      List.unmodifiable(runs),
-      List.unmodifiable(_links),
-    );
   }
 
   void _addNodes(_Tree tree, List<dom.Node> nodes) {
@@ -854,20 +854,17 @@ class _InlineBuilder {
     if (!hasLine) return;
     props.hasCallbacks = true;
 
-    // צאצא אינו יכול להסיר קו של האב; קו שלא צוין נשאר כפי שהוא באלמנט.
+    // כל הצהרה מחליפה את קווי האלמנט, אך צאצא אינו יכול להסיר קו של האב.
     final parentDecoration = parent.decoration;
-    final current = props.decoration;
     bool has(TextDecoration? decoration, TextDecoration line) =>
         decoration?.contains(line) == true;
     final list = <TextDecoration>[
-      if (has(parentDecoration, TextDecoration.overline) ||
-          (over ?? has(current, TextDecoration.overline)))
+      if (has(parentDecoration, TextDecoration.overline) || (over ?? false))
         TextDecoration.overline,
       if (has(parentDecoration, TextDecoration.lineThrough) ||
-          (strike ?? has(current, TextDecoration.lineThrough)))
+          (strike ?? false))
         TextDecoration.lineThrough,
-      if (has(parentDecoration, TextDecoration.underline) ||
-          (under ?? has(current, TextDecoration.underline)))
+      if (has(parentDecoration, TextDecoration.underline) || (under ?? false))
         TextDecoration.underline,
     ];
     props.decoration = TextDecoration.combine(list);
