@@ -36,6 +36,8 @@ class AppWindowKeys {
   /// widget או bloc משתמשים ב-[of], כדי שבנייה בחלון ברקע לא תפנה לחלון שבפוקוס.
   static AppWindowKeys get current => _current;
 
+  static Iterable<AppWindowKeys> get registered => _windows.values;
+
   static void activate(AppWindowKeys keys) => _current = keys;
 
   /// רושם חלון כדי ש-[activateWindow] יוכל להפעיל אותו (שלב 1: יצירת חלון).
