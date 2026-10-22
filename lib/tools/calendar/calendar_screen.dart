@@ -405,7 +405,6 @@ class CalendarWidgetState extends State<CalendarWidget> {
                     // ── גוף: Topbar + תוכן ──────────────────────────────
                     body: Column(
                       children: [
-                        // סרגל עליון חדש (לא appBar)
                         CalendarTopBar(
                           state: state,
                           onJumpToToday: () =>
