@@ -100,12 +100,14 @@ class ViewWindowOpener implements WindowOpener {
     bool inheritPlacement = true,
   }) => _serialized(() async {
     if (!registry.canOpenAnotherWindow) return false;
+    // ⚠️ עותק ולא אותו מופע: הקורא שולח `RemoveTab` במקור, שמשחרר את שלו.
+    final copy = tab == null ? null : OpenedTab.fromJson(tab.toJson());
     final slot = registry.freeSlot(excluding: _pendingRestore);
     // שארית מקריסה במשבצת הזו אינה שייכת לחלון החדש.
     await _store.delete(slot);
     return _open(
       slot: slot,
-      tab: tab,
+      tab: copy,
       origin: origin,
       bounds: bounds,
       deleteRowOnTimeout: true,
@@ -223,13 +225,18 @@ class ViewWindowOpener implements WindowOpener {
       initialTab: tab,
       slot: slot,
     );
-    if (entry == null) return false;
+    if (entry == null) {
+      tab?.dispose();
+      return false;
+    }
     _place(entry, origin: origin, bounds: bounds);
     try {
       await entry.firstFrame.timeout(firstFrameTimeout);
     } on TimeoutException {
       // הקורא לא יסיר את הכרטיסיה מהמקור, ולכן החלון לא יוצג אחר כך עם עותק.
       entry.endSession();
+      // עותק שלא נקלט עדיין בעץ החלון אינו של אף אחד.
+      entry.takeInitialTab()?.dispose();
       entry.handle.destroy();
       // סשן משוחזר נשאר: הוא יאומץ בהפעלה הבאה.
       if (deleteRowOnTimeout) await _store.delete(slot);

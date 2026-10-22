@@ -11,9 +11,13 @@ import 'package:otzaria/core/windowing/multiview/view_window_close_flow.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_opener.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
+import 'package:otzaria/models/books.dart';
+import 'package:otzaria/settings/engine/app_settings_store.dart';
+import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/tabs/models/tool_tab.dart';
 
 import '../../../test_helpers/fake_view_window.dart';
+import '../../../test_helpers/memory_cache_provider.dart';
 
 /// סשנים בזיכרון: בלי קובץ אמיתי בתוך FakeAsync.
 class _MemorySessions extends WindowSessionStore {
@@ -91,6 +95,10 @@ class _FailingDeleteSessions extends _MemorySessions {
 }
 
 void main() {
+  setUpAll(() async {
+    await Settings.init(cacheProvider: MemoryCacheProvider());
+  });
+
   setUp(() => MultiViewMode.debugOverride = true);
 
   tearDown(() {
@@ -167,6 +175,26 @@ void main() {
     expect(windows.native.hooked, [windows.handleOf(entry).fakeHwnd]);
     final count = (await opener.windowCount())!;
     expect((count.count, count.max, count.engines), (2, 8, 1));
+  });
+
+  testWidgets('openWindow: החלון מקבל עותק, ושחרור המקור אינו סוגר אותו', (
+    tester,
+  ) async {
+    final opener = makeOpener(tester);
+    await pumpHost(tester);
+    final source = TextBookTab(book: TextBook(title: 'בראשית'), index: 12);
+
+    expect(await settle(tester, opener.openWindow(tab: source)), isTrue);
+    final moved = windows.registry.windows.single.takeInitialTab();
+
+    // כמו `RemoveTab` במקור אחרי שהחלון נפתח.
+    source.dispose();
+    expect(moved, isA<TextBookTab>());
+    expect(moved, isNot(same(source)));
+    final text = moved! as TextBookTab;
+    expect(text.index, 12);
+    expect(text.bloc.isClosed, isFalse, reason: 'BUG-1: ספינר אינסופי');
+    text.dispose();
   });
 
   testWidgets('מיקום לפני הפריים הראשון: מסגרת, מסגרת קטנה מדי, פינה', (
