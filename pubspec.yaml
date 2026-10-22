@@ -173,14 +173,12 @@ dependency_overrides:
       url: https://github.com/Otzaria/sentry-dart
       ref: e31f9068de53d0dd826d217e4dc7c8ccd7dd5261
       path: packages/flutter
-  # TODO: לחזור ל-pub.dev אחרי שחרור DavBfr/dart_pdf#1984, #1985, #1986, #1987, #1988
-  # (הדפסה ב-Windows ב-thread נפרד, PDFium עצל ופרטי, השלמת עבודה שנכשלה ב-Linux). קומיט שילוב.
-  # TODO(ריבוי חלונות, S5): דיאלוגי ההדפסה בבעלות החלון הפעיל (ענף fix/windows-dialog-owner-active-window)
-  # טרם נדחף ל-palmoni5/dart_pdf; אחרי הדחיפה וה-PR לאפסטרים — לעדכן כאן את ה-ref.
+  # TODO: לחזור ל-pub.dev אחרי שחרור DavBfr/dart_pdf#1984, #1985, #1986, #1987, #1988, #1993
+  # (הדפסה ב-Windows ב-thread נפרד, PDFium עצל ופרטי, השלמת עבודה שנכשלה ב-Linux, בעלי הדיאלוג בריבוי חלונות). קומיט שילוב.
   printing:
     git:
       url: https://github.com/palmoni5/dart_pdf
-      ref: f5efa21c2237002280f1ba056971ec1bf1e8cfd7
+      ref: 27dcb223ebd6f75d0ba73118c84c8fb3f700e6ea
       path: printing
   # TODO: לחזור ל-pub.dev אחרי מיזוג ושחרור daohoangson/flutter_widget_from_html#1658, #1659,
   # #1660, #1661, #1662, #1663 (מטמון CSS, מיזוג margins, מחרוזות debug עצלות, Flattener,
