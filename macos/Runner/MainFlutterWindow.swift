@@ -58,7 +58,7 @@ class MainFlutterWindow: OtzariaWindow {
   private var splashChannel: FlutterMethodChannel?
   private var splashShownAt: Date?
   private var terminationChannel: FlutterMethodChannel?
-  private var isDartCloseHandlingEnabled = false
+  private(set) var isDartCloseHandlingEnabled = false
   private var isDartTerminationAllowed = false
 
   // אטימות הסמל (~70%) וזמן תצוגה מינימלי (מונע הבזק אם החשיפה מוקדמת).
@@ -72,6 +72,8 @@ class MainFlutterWindow: OtzariaWindow {
     self.setFrame(windowFrame, display: true)
 
     RegisterGeneratedPlugins(registry: flutterViewController)
+    // אחרי שה-controller נרשם כתצוגה המרומזת (0): חלונות Dart יקבלו מזהים ≥1.
+    OtzariaViewWindows.shared.attach(mainController: flutterViewController)
 
     // מציגים מיד את ה-splash הנייטיב (סמל צף) — משוב ויזואלי מיידי.
     showSplash()
