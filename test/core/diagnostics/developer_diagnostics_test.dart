@@ -3,12 +3,14 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' show FrameTiming;
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/rendering.dart';
 import 'package:otzaria/core/error_log_file.dart';
 import 'package:otzaria/core/diagnostics/developer_diagnostics.dart';
 import 'package:otzaria/core/diagnostics/process_tree_sampler.dart';
 import 'package:otzaria/core/startup_timeline.dart';
+import 'package:positioned_sliver_list/positioned_list.dart';
 
 class _BlockedFile extends Fake implements File {
   _BlockedFile(this.delegate);
@@ -110,6 +112,78 @@ void main() {
     expect(stats.rasterMaxMs, 4.0);
     expect(stats.slowInWindow, 1);
     expect(stats.slowTotal, 7);
+  });
+
+  group('estimateRefreshDelta', () {
+    const before = EstimateRefreshStats(
+      refreshCount: 2,
+      lastRefreshItemCount: 50,
+      deferredResizeCount: 1,
+      skippedResizeCount: 3,
+    );
+
+    test('sums the change of every list, counting a new list from zero', () {
+      final window = estimateRefreshDelta(const [
+        (
+          before,
+          EstimateRefreshStats(
+            refreshCount: 3,
+            lastRefreshItemCount: 50,
+            lastRefreshDuration: Duration(microseconds: 1500),
+            deferredResizeCount: 2,
+            skippedResizeCount: 3,
+          ),
+        ),
+        (
+          null,
+          EstimateRefreshStats(
+            refreshCount: 1,
+            lastRefreshItemCount: 1000,
+            lastRefreshDuration: Duration(microseconds: 2500),
+            skippedResizeCount: 4,
+          ),
+        ),
+      ]);
+      expect(window.toJson(), {
+        'count': 2,
+        'totalMs': 4.0,
+        'items': 1050,
+        'deferred': 1,
+        'skipped': 4,
+      });
+    });
+
+    test('omits the duration when a list refreshed more than once', () {
+      final window = estimateRefreshDelta(const [
+        (
+          before,
+          EstimateRefreshStats(
+            refreshCount: 5,
+            lastRefreshItemCount: 50,
+            lastRefreshDuration: Duration(milliseconds: 2),
+            deferredResizeCount: 1,
+            skippedResizeCount: 3,
+          ),
+        ),
+      ]);
+      expect(window.count, 3);
+      expect(window.items, 150);
+      expect(window.totalMs, isNull);
+      expect(window.toJson(), isNot(contains('totalMs')));
+    });
+
+    test('a tick without changes is left out of the stats', () {
+      final window = estimateRefreshDelta(const [(before, before)]);
+      expect(window.isEmpty, isTrue);
+      final stats = computeFrameStats(
+        const [],
+        window: const Duration(seconds: 2),
+        slowTotal: 0,
+        estimates: window,
+      );
+      expect(stats.estimates, isNull);
+      expect(stats.toJson(), isNot(contains('estimates')));
+    });
   });
 
   group('DeveloperDiagnostics', () {
@@ -534,6 +608,73 @@ void main() {
           },
         );
       });
+    });
+
+    testWidgets('stats count the estimate refreshes of a tracked list since '
+        'collection started', (tester) async {
+      final width = ValueNotifier(400.0);
+      final layoutKey = ValueNotifier<Object?>(null);
+      final controller = ItemScrollController();
+      addTearDown(width.dispose);
+      addTearDown(layoutKey.dispose);
+      // שני מופעים על אותו בקר, כמו בהחלפת תצוגה באותו פריים.
+      diagnostics
+        ..trackEstimateRefreshes(controller)
+        ..trackEstimateRefreshes(controller);
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.rtl,
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: ListenableBuilder(
+              listenable: Listenable.merge([width, layoutKey]),
+              builder: (_, _) => SizedBox(
+                width: width.value,
+                height: 300,
+                child: ScrollablePositionedList.builder(
+                  itemScrollController: controller,
+                  itemCount: 100,
+                  crossAxisLayoutKey: layoutKey.value == null
+                      ? null
+                      : (_) => layoutKey.value,
+                  estimateExtent: (_, crossAxis) => 40000 / crossAxis,
+                  itemBuilder: (_, index) => SizedBox(height: 100.0 + index),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      // לפני תחילת האיסוף: אינו נספר.
+      width.value = 380;
+      await tester.pump();
+
+      diagnostics.toggle();
+      await tester.pump(const Duration(seconds: 1));
+      expect(diagnostics.stats.value.estimates, isNull);
+      diagnostics.untrackEstimateRefreshes(controller);
+
+      width.value = 360;
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      final refreshed = diagnostics.stats.value.estimates!;
+      expect(refreshed.count, 1);
+      expect(refreshed.items, 100);
+      expect(refreshed.totalMs, isNotNull);
+      expect(refreshed.skipped, 0);
+
+      layoutKey.value = 'same';
+      await tester.pump();
+      width.value = 340;
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      final skipped = diagnostics.stats.value.estimates!;
+      expect(skipped.count, 0);
+      expect(skipped.skipped, 1);
+
+      diagnostics
+        ..untrackEstimateRefreshes(controller)
+        ..toggle();
     });
 
     test('toggling it off stops collecting', () {

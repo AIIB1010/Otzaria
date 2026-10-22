@@ -2273,7 +2273,7 @@ class _CombinedViewState extends State<CombinedView> {
         child: _trackReadingScroll(
           _withReadingExtentEstimation(
             state,
-            builder: (estimateExtent, estimationKey) =>
+            builder: (estimateExtent, estimationKey, _) =>
                 ScrollablePositionedList.builder(
                   key: ValueKey((widget.tab, _textBookBloc)),
                   initialScrollIndex: clampedInitial,
@@ -2331,9 +2331,16 @@ class _CombinedViewState extends State<CombinedView> {
     );
   }
 
+  /// [builder] מקבל גם את רוחב עמודת הטקסט לפי רוחב הפריט (null בתצוגה מקדימה).
   Widget _withReadingExtentEstimation(
     TextBookLoaded state, {
-    required Widget Function(ItemExtentEstimator, Object) builder,
+    double crossAxisPadding = 0,
+    required Widget Function(
+      ItemExtentEstimator,
+      Object,
+      double Function(double)? columnWidth,
+    )
+    builder,
   }) => Builder(
     builder: (context) {
       final metrics = context.select(
@@ -2344,11 +2351,23 @@ class _CombinedViewState extends State<CombinedView> {
           textMaxWidth: bloc.state.textMaxWidth,
         ),
       );
-      // נקרא ב-build ולא בכל הערכה: התלות נרשמת פעם אחת והבסיס נכנס ל-styleKey.
+      // נקרא ב-build ולא בכל הערכה. הבסיס נכנס למפתח הפריסה של הרשימה ולא
+      // ל-styleKey, כדי שגרירת חלון תידחה כמו שינוי רוחב.
       final baseWidth = widget.isPreviewMode
           ? null
           : ReadingAreaWidth.maybeOf(context);
       final setting = metrics.textMaxWidth;
+      // בלי הגבלה (0) כל הפריט ברוחב מלא, כולל כרטיס המפרשים — אז העמודה היא הרוחב.
+      double columnWidth(double width) {
+        final column = resolveTextColumnMaxWidth(
+          setting: setting,
+          availableWidth: width,
+          baseWidth: baseWidth ?? width,
+        );
+        return column > 0 ? column : width;
+      }
+
+      final columnWidthOrNull = widget.isPreviewMode ? null : columnWidth;
       return ReadingExtentEstimation(
         segments: readingSegmentsOf(state),
         controller: widget.tab.lines.itemController,
@@ -2360,15 +2379,11 @@ class _CombinedViewState extends State<CombinedView> {
           metrics.fontBold ? FontWeight.bold : FontWeight.normal,
         ),
         lineHeight: metrics.lineHeight,
-        styleKey: (setting, setting < 0 ? baseWidth : null),
-        textWidth: widget.isPreviewMode
-            ? null
-            : (availableWidth) => resolveTextColumnMaxWidth(
-                setting: setting,
-                availableWidth: availableWidth,
-                baseWidth: baseWidth ?? availableWidth,
-              ),
-        builder: builder,
+        styleKey: setting,
+        textWidth: columnWidthOrNull,
+        crossAxisPadding: crossAxisPadding,
+        builder: (estimator, estimationKey) =>
+            builder(estimator, estimationKey, columnWidthOrNull),
       );
     },
   );
@@ -2396,11 +2411,17 @@ class _CombinedViewState extends State<CombinedView> {
         ? 0
         : initialIndex.clamp(0, itemCount - 1);
 
+    // מרווח ברוחב המסילה בקצה הנגדי ממרכז את הטקסט; הוא בתוך הרשימה ולא
+    // סביבה, כדי שטעם שבולט אחרי המילה האחרונה בשורה לא ייחתך בגבול שלה.
+    final padding = const EdgeInsetsDirectional.only(
+      end: ScrollablePositionedListScrollbar.trackWidth,
+    ).resolve(Directionality.of(context));
     // המצב ב-key מאלץ יצירת רשימה חדשה בהחלפת מצב רציף, כך שהפריים הראשון
     // כבר מצויר ב-initialScrollIndex הנכון — בלי הבזק של מיקום שגוי.
     final list = _withReadingExtentEstimation(
       state,
-      builder: (estimateExtent, estimationKey) =>
+      crossAxisPadding: padding.horizontal,
+      builder: (estimateExtent, estimationKey, columnWidth) =>
           ScrollablePositionedList.builder(
             key: ValueKey(
               (widget.tab, _textBookBloc, state.continuousReadingMode),
@@ -2416,11 +2437,13 @@ class _CombinedViewState extends State<CombinedView> {
                 : 0,
             estimateExtent: estimateExtent,
             estimationKey: estimationKey,
-            // מרווח ברוחב המסילה בקצה הנגדי ממרכז את הטקסט; הוא בתוך הרשימה ולא
-            // סביבה, כדי שטעם שבולט אחרי המילה האחרונה בשורה לא ייחתך בגבול שלה.
-            padding: const EdgeInsetsDirectional.only(
-              end: ScrollablePositionedListScrollbar.trackWidth,
-            ).resolve(Directionality.of(context)),
+            // הגבהים תלויים ברוחב העמודה בלבד; הבאנר שבפריט 0 פרוס ברוחב המלא.
+            crossAxisLayoutKey: columnWidth == null
+                ? null
+                : state.protection.hasBanner
+                ? (width) => (width, columnWidth(width))
+                : columnWidth,
+            padding: padding,
             itemPositionsListener: widget.tab.lines.positionsListener,
             itemScrollController: widget.tab.lines.itemController,
             scrollOffsetController: widget.tab.lines.offsetController,

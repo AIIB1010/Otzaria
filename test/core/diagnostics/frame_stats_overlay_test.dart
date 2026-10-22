@@ -254,6 +254,25 @@ void main() {
     expect(formatFrameStats(const FrameStats()), isNot(contains('webview')));
   });
 
+  test('formatFrameStats shows estimate refreshes when there were any', () {
+    final text = formatFrameStats(
+      const FrameStats(
+        estimates: EstimateRefreshWindow(
+          count: 2,
+          totalMs: 12.5,
+          items: 380000,
+          deferred: 1,
+          skipped: 3,
+        ),
+      ),
+    );
+    expect(
+      text,
+      contains('estimates 2x  12.5 ms  380000 items  deferred 1  skipped 3'),
+    );
+    expect(formatFrameStats(const FrameStats()), isNot(contains('estimates')));
+  });
+
   test('formatFrameStats handles an idle window', () {
     final text = formatFrameStats(const FrameStats());
     expect(text, contains('frames/s  0'));

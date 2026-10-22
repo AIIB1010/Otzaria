@@ -377,6 +377,8 @@ Future<void> saveCommentaryNoteToRepository({
   );
 }
 
+const _readerListPadding = EdgeInsets.all(4);
+
 /// תצוגת טקסט פשוטה - משמשת גם לטקסט המרכזי וגם למפרשים
 class SimpleTextViewer extends StatefulWidget {
   final List<String> content;
@@ -2948,7 +2950,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
               : 0,
           estimateExtent: estimate,
           estimationKey: estimationKey,
-          padding: const EdgeInsets.all(4),
+          padding: _readerListPadding,
           itemBuilder: (context, index) {
             final item = _buildLineItem(
               context,
@@ -2986,6 +2988,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
           ),
           lineHeight: settings.lineHeight,
           textWidth: (width) => width > 8 ? width - 8 : width,
+          crossAxisPadding: _readerListPadding.horizontal,
           builder: buildList,
         );
       },

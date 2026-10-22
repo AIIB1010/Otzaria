@@ -7,6 +7,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:otzaria/book_protection/models/book_protection.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/models/books.dart';
@@ -30,10 +31,13 @@ import '../../../test_helpers/memory_cache_provider.dart';
 
 const int _lineCount = 40;
 
-List<String> _content() =>
-    List.generate(_lineCount, (i) => List.filled(40, 'מילה$i').join(' '));
+List<String> _content([int lineCount = _lineCount]) =>
+    List.generate(lineCount, (i) => List.filled(40, 'מילה$i').join(' '));
 
-TextBookLoaded _loadedState(List<String> content) => TextBookLoaded(
+TextBookLoaded _loadedState(
+  List<String> content, {
+  BookProtection protection = BookProtection.none,
+}) => TextBookLoaded(
   book: TextBook(title: 'ספר בדיקה'),
   showLeftPane: false,
   content: content,
@@ -52,6 +56,7 @@ TextBookLoaded _loadedState(List<String> content) => TextBookLoaded(
   selectedIndex: null,
   pinLeftPane: false,
   searchText: '',
+  protection: protection,
 );
 
 class _TestTextBookBloc extends Bloc<TextBookEvent, TextBookState>
@@ -133,13 +138,17 @@ void main() {
     required double textMaxWidth,
     Size size = const Size(900, 700),
     ValueNotifier<double>? readingAreaWidth,
+    BookProtection protection = BookProtection.none,
+    int lineCount = _lineCount,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    final content = _content();
-    final textBookBloc = _TestTextBookBloc(_loadedState(content));
+    final content = _content(lineCount);
+    final textBookBloc = _TestTextBookBloc(
+      _loadedState(content, protection: protection),
+    );
     final personalNotesBloc = _TestPersonalNotesBloc(
       const PersonalNotesState.initial(),
     );
@@ -275,6 +284,94 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       expect(tester.getSize(find.byType(ScrollablePositionedList)), listWidth);
       expect(list.extentForIndex(farItem).$1, greaterThan(before * 1.5));
+    });
+
+    testWidgets('גרירת חלון בהגדרה יחסית ברשימה גדולה נדחית עד שהרוחב מתייצב', (
+      tester,
+    ) async {
+      final base = ValueNotifier<double>(900);
+      addTearDown(base.dispose);
+      final tab = await pumpView(
+        tester,
+        isPreviewMode: false,
+        textMaxWidth: -11,
+        readingAreaWidth: base,
+        lineCount: 5000,
+      );
+      final list = tab.lines.itemController.listController!;
+      Object? estimationKey() => tester
+          .widget<ScrollablePositionedList>(
+            find.byType(ScrollablePositionedList),
+          )
+          .estimationKey;
+      final key = estimationKey();
+      final refreshes = list.estimateRefreshStats!.refreshCount;
+      final before = list.extentForIndex(4999).$1;
+
+      for (var frame = 1; frame <= 10; frame++) {
+        final width = 900.0 - 30 * frame;
+        tester.view.physicalSize = Size(width, 700);
+        base.value = width;
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(
+          list.estimateRefreshStats!.refreshCount,
+          refreshes,
+          reason: 'פריים $frame',
+        );
+      }
+      expect(estimationKey(), same(key));
+      await tester.pump();
+      await tester.pump();
+      expect(list.estimateRefreshStats!.refreshCount, refreshes + 1);
+      expect(list.extentForIndex(4999).$1, greaterThan(before));
+    });
+
+    /// מודד את פריט 0, קופץ לסוף ומצר את הרשימה בלי לשנות את עמודת הטקסט.
+    Future<(double, bool)> firstItemAfterNarrowing(
+      WidgetTester tester, {
+      BookProtection protection = BookProtection.none,
+    }) async {
+      final base = ValueNotifier<double>(1200);
+      addTearDown(base.dispose);
+      final tab = await pumpView(
+        tester,
+        isPreviewMode: false,
+        textMaxWidth: -11,
+        readingAreaWidth: base,
+        protection: protection,
+      );
+      final list = tab.lines.itemController.listController!;
+      final firstLine = find.byKey(const ValueKey('html_ספר בדיקה_0'));
+      expect(firstLine, findsOneWidget);
+      expect(list.extentForIndex(0).$2, isFalse);
+
+      tab.lines.itemController.jumpTo(index: _lineCount - 1);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(firstLine, findsNothing, reason: 'פריט 0 מחוץ לאזור המטמון');
+
+      tester.view.physicalSize = const Size(800, 700);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      return list.extentForIndex(0);
+    }
+
+    testWidgets(
+      'שינוי רוחב שאינו משנה את עמודת הטקסט שומר מדידות של פריטים מחוץ למסך',
+      (tester) async {
+        final (_, estimated) = await firstItemAfterNarrowing(tester);
+        expect(estimated, isFalse);
+      },
+    );
+
+    testWidgets('עם באנר מקור ברוחב מלא שינוי הרוחב מרענן את ההערכות', (
+      tester,
+    ) async {
+      final (_, estimated) = await firstItemAfterNarrowing(
+        tester,
+        protection: const BookProtection(bannerText: 'מקור הספר'),
+      );
+      expect(estimated, isTrue);
     });
 
     testWidgets('טעם שבולט אחרי המילה האחרונה בשורה אינו נחתך (issue #1791)', (
