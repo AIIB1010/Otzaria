@@ -1111,7 +1111,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
     // שחזור פוקוס לאחר אירועי מצב חלון דיסקרטיים (maximize/unmaximize/fullscreen/restore)
     appWindowListener?.onWindowStateChanged = () {
       if (!mounted) return;
-      FocusRepository().scheduleRestore();
+      FocusRepository.of(context).scheduleRestore();
     };
 
     // ה-WebView של תוסף אינו חלק מעץ הפוקוס של Flutter, ולכן השחזור שמעל
@@ -1137,7 +1137,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
     // שחזור פוקוס בזמן resize רציף — עם debounce כדי למנוע הצפת קריאות
     appWindowListener?.onWindowResizeOccurred = () {
       if (!mounted) return;
-      FocusRepository().scheduleRestoreDebounced();
+      FocusRepository.of(context).scheduleRestoreDebounced();
     };
   }
 
@@ -4095,6 +4095,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
 
     if (!_closeRootOverlayRoutes(context)) return;
     final navigationBloc = context.read<NavigationBloc>();
+    final focusRepository = FocusRepository.of(context);
     setState(() => _isSearchOpen = true);
 
     showDialog(
@@ -4105,7 +4106,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
       setState(() => _isSearchOpen = false);
       // Restore focus to the screen below (dialog restorer was already removed
       // by SearchDialog.dispose → unregisterActiveRestorer)
-      FocusRepository().scheduleRestore();
+      focusRepository.scheduleRestore();
       final currentScreen = navigationBloc.state.currentScreen;
       if (currentScreen == Screen.reading || currentScreen == Screen.search) {
         _syncPageWithState();
@@ -4129,6 +4130,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
 
     if (!_closeRootOverlayRoutes(context)) return;
     final navigationBloc = context.read<NavigationBloc>();
+    final focusRepository = FocusRepository.of(context);
     setState(() => _isFindRefOpen = true);
 
     showDialog(
@@ -4141,7 +4143,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
       setState(() => _isFindRefOpen = false);
       // Restore focus to the screen below (dialog restorer was already removed
       // by FindRefDialog.dispose → unregisterActiveRestorer)
-      FocusRepository().scheduleRestore();
+      focusRepository.scheduleRestore();
       final currentScreen = navigationBloc.state.currentScreen;
       if (currentScreen == Screen.reading || currentScreen == Screen.search) {
         _syncPageWithState();

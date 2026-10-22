@@ -69,6 +69,9 @@ class ToolTabScreen extends StatefulWidget {
 
 class ToolTabScreenState extends State<ToolTabScreen>
     with AutomaticKeepAliveClientMixin {
+  /// מאגר הפוקוס של החלון; נשמר כאן כי ב-dispose אסור לחפש ב-context.
+  late final FocusRepository _focus;
+
   static const int _calendarFocusRetryCount = 6;
 
   final GlobalKey<CalendarWidgetState> _calendarKey =
@@ -93,7 +96,8 @@ class ToolTabScreenState extends State<ToolTabScreen>
   @override
   void initState() {
     super.initState();
-    FocusRepository().registerTabContentFocusRequester(
+    _focus = FocusRepository.of(context);
+    _focus.registerTabContentFocusRequester(
       widget.tab,
       _requestContentFocus,
     );
@@ -101,7 +105,7 @@ class ToolTabScreenState extends State<ToolTabScreen>
 
   @override
   void dispose() {
-    FocusRepository().unregisterTabContentFocusRequester(widget.tab);
+    _focus.unregisterTabContentFocusRequester(widget.tab);
     _contentFocusNode.dispose();
     super.dispose();
   }
