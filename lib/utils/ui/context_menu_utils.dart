@@ -66,9 +66,18 @@ class ContextMenuUtils {
     final service = WindowOpener.current;
     // ⚠️ נבדק לפני הפעולה: `openWindow` ממתין עד 20 שניות, והמשתמש היה מקבל
     // את הודעת התקרה רק בסופן.
-    if (!await service.canOpenAnotherWindow() ||
-        !await service.openWindow(tab: _targetTabFromLink(link))) {
+    if (!await service.canOpenAnotherWindow()) {
       await service.reportOpenWindowFailure();
+      return;
+    }
+    // החלון החדש מקבל עותק בשני המודלים, ולכן הכרטיסיה הזו נשארת שלנו.
+    final tab = _targetTabFromLink(link);
+    try {
+      if (!await service.openWindow(tab: tab)) {
+        await service.reportOpenWindowFailure();
+      }
+    } finally {
+      tab.dispose();
     }
   }
 

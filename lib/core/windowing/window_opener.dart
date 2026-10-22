@@ -18,6 +18,8 @@ abstract interface class WindowOpener {
   @visibleForTesting
   static WindowOpener? debugOverride;
 
+  /// [tab] נשאר של הקורא — החלון החדש מקבל עותק. מעבר מחלון מסיר אותה שם
+  /// (`RemoveTab`); כרטיסיה שלא הוצגה בשום חלון הקורא משחרר בעצמו.
   Future<bool> openWindow({
     OpenedTab? tab,
     ({int x, int y})? origin,
