@@ -25,7 +25,10 @@ void main() {
     await Settings.init(cacheProvider: MemoryCacheProvider());
   });
 
-  setUp(debugResetPluginFonts);
+  setUp(() {
+    debugResetPluginFonts();
+    debugPluginFontsFromFileServer = true;
+  });
 
   tearDown(() => debugPluginFontsFromFileServer = null);
 
@@ -37,7 +40,7 @@ void main() {
       .toList();
 
   String sourceOf(String rule) =>
-      RegExp(r'src:url\("([^"]+)"\)').firstMatch(rule)!.group(1)!;
+      RegExp(r'src:url\("?([^"\)]+)"?\)').firstMatch(rule)!.group(1)!;
 
   group('buildPluginFontFaceCss', () {
     test('כל הגופנים המובנים נשלחים, לא רק שני הנבחרים בהגדרות', () async {
@@ -115,6 +118,22 @@ void main() {
       );
     });
 
+    test('fallback מטביע את כל הבייטים גם כששרת הקבצים זמין', () async {
+      final css = await buildPluginFontFaceCss(embedded: true);
+      expect(css, isNot(contains('http:')));
+      for (final rule in css.split('\n')) {
+        expect(sourceOf(rule), startsWith('data:font/ttf;base64,'));
+      }
+      final regular = rulesOf(css, 'Shofar').single;
+      final expected = (await rootBundle.load(
+        AppFonts.fontPaths['Shofar']!,
+      )).buffer.asUint8List();
+      expect(
+        sourceOf(regular),
+        'data:font/ttf;base64,${base64Encode(expected)}',
+      );
+    });
+
     test('בלי שרת קבצים (iOS) הבייטים מוטבעים כ-data:', () async {
       debugPluginFontsFromFileServer = false;
       final rule = rulesOf(await buildPluginFontFaceCss(), 'Shofar').single;
@@ -181,6 +200,26 @@ void main() {
 
       final rules = rulesOf(await buildPluginFontFaceCss(), 'Test System Font');
       expect(rules.single, contains('font-weight:100 900'));
+    });
+
+    test('RPC אינו שומר בייטים של גופני מערכת בין בקשות', () async {
+      final file = File('${dir.path}/regular.ttf');
+      await file.writeAsBytes([1, 2, 3]);
+      debugPluginSystemFaces = (family) =>
+          family == 'Test System Font' ? faces() : null;
+      Future<String> resolve() async =>
+          (await resolvePluginFontFamilies([
+                {
+                  'name': 'Alias',
+                  'substitutes': ['Test System Font'],
+                },
+              ]))['css']
+              as String;
+      final first = await resolve();
+      await file.writeAsBytes([4, 5, 6]);
+      final second = await resolve();
+      expect(first, contains(base64Encode([1, 2, 3])));
+      expect(second, contains(base64Encode([4, 5, 6])));
     });
 
     test('קובץ רגיל שנמחק — אין כלל', () async {
@@ -301,6 +340,21 @@ void main() {
       );
     });
 
+    for (final outcome in ['loaded', 'blocked', 'pending']) {
+      test('תוצאת טעינת הגופן ב-JS: $outcome', () async {
+        final controller = _ScriptController(outcome);
+        expect(
+          await installPluginFonts(
+            controller,
+            css: 'X',
+            targets: ['16px "A"'],
+            timeout: const Duration(milliseconds: 10),
+          ),
+          outcome == 'loaded',
+        );
+      });
+    }
+
     test('בלי שרת קבצים (iOS) אינו נוגע בדף', () async {
       debugPluginFontsFromFileServer = false;
       final controller = _FakeController(
@@ -336,11 +390,17 @@ void main() {
       expect(result['resolved'], ['Missing Document Font']);
       final css = result['css'] as String;
       expect(css, contains("font-family:'Missing Document Font'"));
-      expect(css, isNot(contains('base64')));
+      expect(css, contains('data:font/ttf;base64,'));
     });
 
-    test('הכינוי מקבל את אותו URL של התחליף', () async {
-      final own = rulesOf(await buildPluginFontFaceCss(), 'FrankRuhlCLM');
+    test('הכינוי מחזיר בייטים עצמאיים של התחליף', () async {
+      final own = [
+        for (final asset in [
+          AppFonts.fontPaths['FrankRuhlCLM']!,
+          AppFonts.boldFontPaths['FrankRuhlCLM']!,
+        ])
+          'data:font/ttf;base64,${base64Encode((await rootBundle.load(asset)).buffer.asUint8List())}',
+      ];
       final result = await resolvePluginFontFamilies([
         {
           'name': 'Alias',
@@ -348,7 +408,7 @@ void main() {
         },
       ]);
       final alias = rulesOf(result['css'] as String, 'Alias');
-      expect(alias.map(sourceOf), own.map(sourceOf));
+      expect(alias.map(sourceOf), own);
     });
 
     test('מגביל את מספר המשפחות בבקשה אחת', () async {
@@ -464,5 +524,44 @@ class _FakeController extends Fake implements InAppWebViewController {
     if (throws) throw PlatformException(code: 'unsupported');
     if (hangs) await Completer<void>().future;
     return result;
+  }
+}
+
+class _ScriptController extends Fake implements InAppWebViewController {
+  _ScriptController(this.outcome);
+
+  final String outcome;
+
+  @override
+  Future<CallAsyncJavaScriptResult?> callAsyncJavaScript({
+    required String functionBody,
+    Map<String, dynamic> arguments = const <String, dynamic>{},
+    ContentWorld? contentWorld,
+  }) async {
+    final result = await Process.run('node', [
+      '-e',
+      """
+const document = {
+  createElement: () => ({setAttribute() {}, remove() {}}),
+  head: {appendChild() {}},
+  fonts: {load() {
+    if (${jsonEncode(outcome)} === 'blocked') return Promise.reject(new Error('CSP'));
+    if (${jsonEncode(outcome)} === 'pending') return new Promise(() => {});
+    return Promise.resolve([{}]);
+  }}
+};
+(async function(css, targets, timeoutMs) {
+$functionBody
+})(...Object.values(${jsonEncode(arguments)}))
+  .then(value => console.log(JSON.stringify({value})))
+  .catch(error => console.log(JSON.stringify({error: String(error)})));
+""",
+    ]);
+    expect(result.exitCode, 0, reason: result.stderr.toString());
+    final response = jsonDecode(result.stdout.toString()) as Map;
+    return CallAsyncJavaScriptResult(
+      value: response['value'],
+      error: response['error'],
+    );
   }
 }

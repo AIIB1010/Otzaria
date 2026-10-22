@@ -13,10 +13,9 @@ import 'package:otzaria/theme/app_fonts.dart';
 import 'package:path/path.dart' as p;
 
 /// האם הגופנים מוגשים כקבצים משרת הקבצים, או מוטבעים כ-`data:` בכלל עצמו.
-///
-/// iOS: ב-Info.plist אין היתר ATS ל-HTTP אל loopback, ו-WKWebView אינו מאפשר
-/// יירוט של `file:`/`http:` — לכן שם נשארים הבייטים בתוך הכלל.
-bool get pluginFontsFromFileServer => kIsWeb || !Platform.isIOS;
+/// ב-WKWebView נשארים עם data: כדי לא להרחיב את הרשאות ה-ATS של האפליקציה.
+bool get pluginFontsFromFileServer =>
+    kIsWeb || (!Platform.isIOS && !Platform.isMacOS);
 
 @visibleForTesting
 bool? debugPluginFontsFromFileServer;
@@ -115,28 +114,41 @@ Future<List<_Face>> _faces(String family) async {
 
 final Map<String, String> _dataSources = {};
 
-Future<String> _source(_Face face) async {
-  if (_fromFileServer) {
+Future<String> _source(
+  _Face face, {
+  required bool embedded,
+  required bool cache,
+}) async {
+  if (!embedded && _fromFileServer) {
     return PluginFileServer.instance.fontUrl(face.id, face.load);
   }
-  final cached = _dataSources[face.id];
+  final cached = cache ? _dataSources[face.id] : null;
   if (cached != null) return cached;
   final source = 'data:font/ttf;base64,${base64Encode(await face.load())}';
-  return _dataSources[face.id] = source;
+  if (cache) _dataSources[face.id] = source;
+  return source;
 }
 
 String _rule(String family, String source, String weight) =>
     "@font-face{font-family:'$family';font-style:normal;"
-    'font-weight:$weight;src:url("$source") format(\'truetype\');'
+    'font-weight:$weight;src:url($source) format(\'truetype\');'
     'font-display:block;}';
 
 /// [asFamily] מגיש את הגופן תחת שם אחר. כך `fonts.resolveFamilies` עונה על
 /// בקשה לגופן שאינו במכונה: הגופן של תחליף, בשם שהמסמך מבקש.
-Future<List<String>> _familyRules(String family, {String? asFamily}) async {
+Future<List<String>> _familyRules(
+  String family, {
+  String? asFamily,
+  bool embedded = false,
+}) async {
   try {
     return [
       for (final face in await _faces(family))
-        _rule(asFamily ?? family, await _source(face), face.weight),
+        _rule(
+          asFamily ?? family,
+          await _source(face, embedded: embedded, cache: asFamily == null),
+          face.weight,
+        ),
     ];
   } catch (error) {
     // משפחה שאינה נטענת נופלת בדף לשרשרת ה-fallback של התוסף.
@@ -145,19 +157,19 @@ Future<List<String>> _familyRules(String family, {String? asFamily}) async {
   }
 }
 
-/// כללי `@font-face` לכל [pluginFontFamilies]. הבייטים מוגשים בנפרד, משרת
-/// הקבצים — חוץ מ-iOS (ראו [pluginFontsFromFileServer]).
-Future<String> buildPluginFontFaceCss() async {
+/// כללי `@font-face` לכל [pluginFontFamilies]. [embedded] מטביע את הבייטים
+/// כשהדף אינו יכול לטעון משרת הקבצים, למשל בגלל CSP משלו.
+Future<String> buildPluginFontFaceCss({bool embedded = false}) async {
   final rules = <String>[];
   for (final family in pluginFontFamilies()) {
-    rules.addAll(await _familyRules(family));
+    rules.addAll(await _familyRules(family, embedded: embedded));
   }
   return rules.join('\n');
 }
 
 ({String css, String json})? _jsonCache;
 
-/// [css] מקודד ל-JSON לסקריפט ה-boot. ב-iOS הוא כ-2MB, ולכן נשמר לאותו CSS.
+/// [css] מקודד ל-JSON לסקריפט ה-boot. הבייטים המוטבעים הם כ-2MB ונשמרים לאותו CSS.
 String pluginFontFaceJson(String css) {
   final cached = _jsonCache;
   if (cached != null && cached.css == css) return cached.json;
@@ -189,7 +201,11 @@ Future<Map<String, dynamic>> resolvePluginFontFamilies(
         ? substitutes.whereType<String>().take(_maxResolveSubstitutes)
         : const <String>[];
     for (final candidate in candidates) {
-      final rules = await _familyRules(candidate, asFamily: name);
+      final rules = await _familyRules(
+        candidate,
+        asFamily: name,
+        embedded: true,
+      );
       if (rules.isEmpty) continue;
       css.addAll(rules);
       resolved.add(name);
@@ -229,13 +245,16 @@ if (css) {
   style.textContent = css;
   (document.head || document.documentElement).appendChild(style);
 }
-await Promise.race([
+var loaded = await Promise.race([
   Promise.all(targets.map(function (t) {
-    return document.fonts.load(t).catch(function () {});
-  })),
-  new Promise(function (resolve) { setTimeout(resolve, timeoutMs); })
+    return document.fonts.load(t);
+  })).then(function () { return true; }, function () { return false; }),
+  new Promise(function (resolve) {
+    setTimeout(function () { resolve(false); }, timeoutMs);
+  })
 ]);
-return true;
+if (!loaded && style) style.remove();
+return loaded;
 ''';
 
 /// רושם את [css] בדף וממתין עד [timeout] ל-[targets], כדי שתוסף שמודד טקסט

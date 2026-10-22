@@ -758,6 +758,10 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
           );
           // דף שנטען מחדש בזמן ההמתנה מקבל boot מהזרימה שלו בלבד.
           if (stale()) return;
+          final fallbackCss = fontsInstalled
+              ? null
+              : await buildPluginFontFaceCss(embedded: true);
+          if (stale()) return;
           // Real SDK — injected after load, calls _boot() which re-plays queued
           // Otzaria.on() calls and then fires plugin.boot
           await controller.evaluateJavascript(
@@ -775,9 +779,9 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
                 instanceId: widget.instanceId,
                 firstBoot: !_bootedOnce,
               ),
-              fontFaceJson: fontsInstalled
+              fontFaceJson: fallbackCss == null
                   ? null
-                  : pluginFontFaceJson(fontFaceCss),
+                  : pluginFontFaceJson(fallbackCss),
             ),
           );
           if (stale()) return;
