@@ -1127,12 +1127,12 @@ class _InlineBuilder {
       final str = strings[i];
       if (str.isWhitespace) {
         if (nowrap) {
-          buffer.write(' ');
+          buffer.write('\u00A0');
         } else if (!str.swallowed) {
           buffer.write(' ');
         }
       } else {
-        buffer.write(nowrap ? str.data.replaceAll(' ', ' ') : str.data);
+        buffer.write(nowrap ? str.data.replaceAll(' ', '\u00A0') : str.data);
       }
     }
     final result = buffer.toString();

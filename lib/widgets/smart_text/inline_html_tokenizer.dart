@@ -30,8 +30,8 @@ const Set<String> _inlineTags = {
 const Set<String> _headingTags = {'h1', 'h2', 'h3', 'h4', 'h5', 'h6'};
 
 const Map<String, String> _namedEntities = {
-  'nbsp': ' ',
-  'thinsp': ' ',
+  'nbsp': '\u00A0',
+  'thinsp': '\u2009',
   'amp': '&',
   'lt': '<',
   'gt': '>',
