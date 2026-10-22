@@ -7,6 +7,7 @@ import 'package:otzaria/app_scope/process_duties.dart';
 import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/multiview/in_process_tab_drop.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
 import 'package:otzaria/core/windowing/window_bus.dart';
@@ -225,7 +226,7 @@ void main() {
         expect(TabsRepository.maxWindowSlot, WindowBus.slotCount);
       });
 
-      test('סשן במשבצת 7 נשמר ונדחס, ולא נמחק כבמודל A', () async {
+      test('סשן במשבצת 7 נשאר חלון נפרד, ונדחס למשבצת פנויה', () async {
         WindowBus.instance.register();
         final host = WindowBus.instance.slot!;
         expect(host, 1);
@@ -296,7 +297,7 @@ void main() {
     test('שחזור כל החלונות: סשני 2-4 נשארים במקומם לחלונות ה-Dart', () async {
       MultiViewMode.debugOverride = true;
       WindowBus.instance.register();
-      expect(WindowTabsSession.current.slot, 1);
+      expect(WindowTabsSession.current.slot, InProcessTabDrops.mainSlot);
       await modelASessions();
 
       final slots = await TabsRepository.compactWindowSessions();
