@@ -2074,10 +2074,11 @@ packages:
   window_manager:
     dependency: "direct main"
     description:
-      name: window_manager
-      sha256: "05c231fd7b23d2380f14c5cc10b7b93d60d4fa4a2fb4e0f032de27e44b5560e9"
-      url: "https://pub.dev"
-    source: hosted
+      path: "packages/window_manager"
+      ref: "38cb5a5f5f33ba6acffc3770dcd8aeec7ed5797d"
+      resolved-ref: "38cb5a5f5f33ba6acffc3770dcd8aeec7ed5797d"
+      url: "https://github.com/Otzaria/window_manager"
+    source: git
     version: "0.5.2"
   windows_file_picker:
     dependency: transitive

@@ -79,6 +79,9 @@ import 'package:otzaria/core/windowing/app_window_scope.dart';
 import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/core/user_state/window_bounds.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
+import 'package:otzaria/core/windowing/multiview/multi_view_host.dart';
+import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
+import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
 import 'package:otzaria/core/windowing/dock_progress_listener.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
@@ -340,6 +343,7 @@ void main(List<String> args) async {
   Pdfrx.decodeLegacyHebrewText = true;
 
   SentryWidgetsFlutterBinding.ensureInitialized();
+  if (MultiViewMode.enabled) installWindowingOwner();
 
   // אישור קבלה מוקדם לאתר החנות עבור קישורי התקנת תוסף שהגיעו כארגומנטים —
   // נורה כאן, לפני כל אתחול כבד ולפני עליית החלון, כדי שדף החנות יידע תוך
@@ -1605,13 +1609,16 @@ class _AppBootstrapState extends State<AppBootstrap> {
       settingsRepository: settingsRepository,
       // הדוק שייך לתהליך: מאזין אחד מעל היקף החלון.
       child: DockProgressListener(
-        child: WindowScopeProviders(
-          historyRepository: historyRepository,
-          initialTab: _initialTab,
-          // מתחת לכל ה-blocs: האפיק עונה על בקשות מחלונות אחרים, ושתי
-          // הבקשות הנתמכות — "תאר את עצמך" ו"קלוט כרטיסיה" — זקוקות
-          // ל-TabsBloc ול-NavigationBloc.
-          child: const WindowBusHost(child: App()),
+        // בלי הדגל מחזיר את child כמו שהוא.
+        child: MultiViewHost(
+          child: WindowScopeProviders(
+            historyRepository: historyRepository,
+            initialTab: _initialTab,
+            // מתחת לכל ה-blocs: האפיק עונה על בקשות מחלונות אחרים, ושתי
+            // הבקשות הנתמכות — "תאר את עצמך" ו"קלוט כרטיסיה" — זקוקות
+            // ל-TabsBloc ול-NavigationBloc.
+            child: const WindowBusHost(child: App()),
+          ),
         ),
       ),
     );
@@ -1859,10 +1866,31 @@ void _maybeScheduleDebugSecondWindow() {
     Platform.environment['OTZARIA_DEBUG_OPEN_WINDOW_MS'] ?? '',
   );
   if (ms == null || ms <= 0) return;
+  if (MultiViewMode.enabled) {
+    Timer(Duration(milliseconds: ms), _debugOpenViewWindow);
+    return;
+  }
   Timer(Duration(milliseconds: ms), () async {
     final opened = await WindowOpener.current.openWindow();
     debugPrint('[debug] openWindow -> $opened');
   });
+}
+
+/// חלון Dart בגודל החלון הראשי, עם תוכן זמני.
+Future<void> _debugOpenViewWindow() async {
+  final view = WidgetsBinding.instance.platformDispatcher.implicitView!;
+  final stopwatch = Stopwatch()..start();
+  final entry = ViewWindowRegistry.instance.open(
+    size: view.physicalSize / view.devicePixelRatio,
+  );
+  await entry?.firstFrame.timeout(
+    const Duration(seconds: 20),
+    onTimeout: () {},
+  );
+  debugPrint(
+    '[debug] openViewWindow -> slot ${entry?.slot}, '
+    'view ${entry?.handle.view.viewId}, ${stopwatch.elapsedMilliseconds}ms',
+  );
 }
 
 /// נותן לחלון הזה **עותק פרטי של `pdfium.dll`**, ומכוון אליו את pdfrx.
