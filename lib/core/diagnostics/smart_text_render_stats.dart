@@ -1,45 +1,27 @@
 import 'dart:developer' show Timeline;
 import 'dart:typed_data';
 
-import 'package:otzaria/widgets/smart_text/raised_markers.dart';
-
-/// הסיבה ששורה נפלה מהמסלול המהיר של SmartTextWidget ל-HtmlWidget, לפי התג
-/// הראשון שהמסלול המהיר אינו מקבל.
+/// הסיבה ששורה נפלה ממסלול הספאנים של SmartTextWidget ל-HtmlWidget.
 enum SmartTextFullPathReason {
-  /// `<a class="link-anchor …">` — סמן-אות של מפרש.
-  linkAnchor,
-
-  /// `link-anchor-range` — טווח-ציטוט של הלינקר.
-  linkAnchorRange,
-
-  /// `<a>` אחר עם href (קישור פנימי, הערה, סמן-מספר).
-  link,
-
-  /// `<a>` בלי href.
-  otherAnchor,
-
-  /// `<span style=…>` שאינו הדגשת חיפוש מוכרת.
-  styledSpan,
-
-  /// `<span class=…>` שאינו סימון מורם או מקרא על פי המסורה.
-  classSpan,
-
-  /// `<sup>` / `<sub>` שנותרו אחרי processText.
-  supSub,
-
-  /// תג בלוק: div, p, רשימה, טבלה, ציטוט, pre, כותרת בתוך השורה.
+  /// תג בלוק: div, p, רשימה, טבלה, ציטוט, pre, כותרת עם attributes או באמצע שורה.
   block,
 
   /// `<img>` / `<svg>`.
   image,
 
-  /// ישות HTML שהמסלול המהיר אינו מפענח.
-  entity,
+  /// `<sup>` / `<sub>` שנותרו אחרי processText (fwfh מממש אותם כ-WidgetSpan).
+  supSub,
 
-  /// כל תג אחר.
+  /// attribute של `id` או `name` (עוגן ניווט של fwfh).
+  anchorId,
+
+  /// `style` עם תכונה שמסלול הספאנים אינו מתרגם (margin, line-height, px…).
+  unsupportedStyle,
+
+  /// תג inline שמסלול הספאנים אינו מכיר (font, code, q…).
   otherTag,
 
-  /// כל התגים מוכרים: מבנה שבור או הדגשה בתוך הדגשה.
+  /// מבנה: שורה שכולה `<br>`, או markup שאינו מתאים לאף סיבה אחרת.
   structure,
 
   /// RenderMode שאינו column — המסלול המהיר לא נוסה.
@@ -152,16 +134,23 @@ class SmartTextRenderStats {
   static final RegExp _tagRegex = RegExp(
     r'<(/?)([a-zA-Z][a-zA-Z0-9]*)([^>]*)>',
   );
-  static final RegExp _entityRegex = RegExp(
-    r'&[a-zA-Z]{2,10};|&#x?[0-9a-fA-F]{1,6};',
-  );
-  static final RegExp _mamClassRegex = RegExp(r'^class="mam-[a-z-]+"$');
-  static const Set<String> _simpleTags = {
+  static final RegExp _idRegex = RegExp(r'(^|\s)(id|name)\s*=');
+  static const Set<String> _inlineTags = {
+    'span',
+    'a',
     'b',
     'strong',
     'i',
     'em',
+    'cite',
+    'dfn',
+    'var',
     'u',
+    'ins',
+    's',
+    'strike',
+    'del',
+    'mark',
     'big',
     'small',
     'br',
@@ -185,62 +174,30 @@ class SmartTextRenderStats {
     'h5',
     'h6',
     'hr',
+    'details',
+    'center',
   };
 
-  /// הסיבה לנפילה של [html] שהמסלול המהיר דחה, לפי התג הראשון שאינו מקבל.
-  /// משקף את כללי SimpleInlineHtml בקירוב, לאבחון בלבד.
+  /// הסיבה לנפילה של [html] שמסלול הספאנים דחה; תג מבני גובר על עיצוב.
+  /// משקף את כללי `InlineHtmlDocument` בקירוב, לאבחון בלבד.
   static SmartTextFullPathReason classifyFullPath(String html) {
+    SmartTextFullPathReason? weaker;
     for (final match in _tagRegex.allMatches(html)) {
+      if (match[1] == '/') continue;
       final name = match[2]!.toLowerCase();
-      final attributes = match[3]!.trim();
-      final closing = match[1] == '/';
-      if (closing || attributes.isEmpty || attributes == '/') {
-        if (_simpleTags.contains(name) || name == 'span') continue;
+      final attributes = match[3]!;
+      if (_blockTags.contains(name)) return SmartTextFullPathReason.block;
+      if (name == 'img' || name == 'svg') return SmartTextFullPathReason.image;
+      if (name == 'sup' || name == 'sub') return SmartTextFullPathReason.supSub;
+      if (_idRegex.hasMatch(attributes)) {
+        return SmartTextFullPathReason.anchorId;
       }
-      if (name == 'i' && attributes.startsWith('data-')) continue;
-      switch (name) {
-        case 'a':
-          if (attributes.contains('link-anchor-range')) {
-            return SmartTextFullPathReason.linkAnchorRange;
-          }
-          if (attributes.contains('link-anchor')) {
-            return SmartTextFullPathReason.linkAnchor;
-          }
-          return attributes.contains('href')
-              ? SmartTextFullPathReason.link
-              : SmartTextFullPathReason.otherAnchor;
-        case 'span':
-          if (attributes.contains('link-anchor-range')) {
-            return SmartTextFullPathReason.linkAnchorRange;
-          }
-          if (attributes.contains('link-anchor')) {
-            return SmartTextFullPathReason.linkAnchor;
-          }
-          if (_isFastPathSpan(attributes)) continue;
-          return attributes.startsWith('style')
-              ? SmartTextFullPathReason.styledSpan
-              : SmartTextFullPathReason.classSpan;
-        case 'sup' || 'sub':
-          return SmartTextFullPathReason.supSub;
-        case 'img' || 'svg':
-          return SmartTextFullPathReason.image;
+      if (!_inlineTags.contains(name)) {
+        weaker ??= SmartTextFullPathReason.otherTag;
+      } else if (attributes.contains('style=')) {
+        weaker ??= SmartTextFullPathReason.unsupportedStyle;
       }
-      return _blockTags.contains(name)
-          ? SmartTextFullPathReason.block
-          : SmartTextFullPathReason.otherTag;
     }
-    final decoded = html.contains('&')
-        ? html.replaceAll('&nbsp;', '').replaceAll('&thinsp;', '')
-        : html;
-    if (_entityRegex.hasMatch(decoded)) return SmartTextFullPathReason.entity;
-    return SmartTextFullPathReason.structure;
+    return weaker ?? SmartTextFullPathReason.structure;
   }
-
-  static bool _isFastPathSpan(String attributes) =>
-      attributes == 'class="$kFootnoteMarkerClass"' ||
-      attributes == 'class="$kRaisedSupClass"' ||
-      _mamClassRegex.hasMatch(attributes) ||
-      (attributes.startsWith('style="') &&
-          (attributes.contains('color: red') ||
-              attributes.contains('rgba(255, 255, 0, 0.8)')));
 }

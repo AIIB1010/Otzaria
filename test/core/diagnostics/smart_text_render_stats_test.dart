@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/diagnostics/smart_text_render_stats.dart';
 import 'package:otzaria/widgets/smart_text/render_settings.dart';
-import 'package:otzaria/widgets/smart_text/simple_inline_html.dart';
+import 'package:otzaria/widgets/smart_text/inline_html_document.dart';
 import 'package:otzaria/widgets/smart_text/smart_text_widget.dart';
 import 'package:otzaria/widgets/smart_text/text_renderer_service.dart';
 
 const _anchorLine =
     'בראשית<a class="link-anchor link-anchor-0" '
     'href="otzaria://anchor?id=1">א</a> ברא';
+const _blockLine = '<ul><li>א</li></ul>';
 
 Widget _wrap(List<Widget> children) => MaterialApp(
   home: Scaffold(body: Column(children: children)),
@@ -37,14 +38,14 @@ void main() {
     expect(SmartTextRenderStats.takeAndReset(), isNull);
   });
 
-  test('סיבת הנפילה נספרת רק בהחטאת מטמון של SimpleInlineHtml', () {
+  test('סיבת הנפילה נספרת רק בהחטאת מטמון של מסלול הספאנים', () {
     const style = TextStyle(fontSize: 17.25);
-    expect(SimpleInlineHtml.tryParse(_anchorLine, style), isNull);
-    expect(SimpleInlineHtml.tryParse(_anchorLine, style), isNull);
-    expect(SimpleInlineHtml.tryParse('<b>א</b> ב', style), isNotNull);
+    expect(InlineHtmlDocument.parseLine(_blockLine, style), isNull);
+    expect(InlineHtmlDocument.parseLine(_blockLine, style), isNull);
+    expect(InlineHtmlDocument.parseLine(_anchorLine, style), isNotNull);
 
     final stats = SmartTextRenderStats.takeAndReset()!;
-    expect(stats['fullReasons'], {'linkAnchor': 1});
+    expect(stats['fullReasons'], {'block': 1});
     expect(SmartTextRenderStats.takeAndReset(), isNull);
   });
 
@@ -69,44 +70,43 @@ void main() {
           settings: RenderSettings(),
         ),
         SmartTextWidget(text: _anchorLine, settings: RenderSettings()),
+        SmartTextWidget(text: _blockLine, settings: RenderSettings()),
       ]),
     );
 
     final stats = SmartTextRenderStats.takeAndReset()!;
-    expect(stats['fastInline'], 1);
+    expect(stats['fastInline'], 2);
     expect(stats['fastHeading'], 1);
     expect(stats['fullHtml'], 1);
     expect(stats['fwfhBuilds'], 1);
-    expect(stats['fullReasons'], {'linkAnchor': 1});
+    expect(stats['fullReasons'], {'block': 1});
   });
 
   group('classifyFullPath', () {
     SmartTextFullPathReason classify(String html) =>
         SmartTextRenderStats.classifyFullPath(html);
 
-    test('מזהה את התג הראשון שהמסלול המהיר דוחה', () {
-      expect(classify(_anchorLine), SmartTextFullPathReason.linkAnchor);
+    test('תג מבני גובר על עיצוב שאינו נתמך', () {
+      expect(classify(_blockLine), SmartTextFullPathReason.block);
       expect(
-        classify('<b>א</b><span class="link-anchor-range">ב</span>'),
-        SmartTextFullPathReason.linkAnchorRange,
+        classify('<span style="margin: 4px">א</span><ul><li>ב</li></ul>'),
+        SmartTextFullPathReason.block,
       );
-      expect(
-        classify('<a href="otzaria://book?x">ב</a>'),
-        SmartTextFullPathReason.link,
-      );
-      expect(
-        classify('<span style="color: green">ב</span>'),
-        SmartTextFullPathReason.styledSpan,
-      );
-      expect(
-        classify('<span class="mam-kq">א</span><span class="x">ב</span>'),
-        SmartTextFullPathReason.classSpan,
-      );
-      expect(classify('א<sup>1</sup>'), SmartTextFullPathReason.supSub);
-      expect(classify('<div>א</div>'), SmartTextFullPathReason.block);
       expect(classify('<img src="a.png">'), SmartTextFullPathReason.image);
-      expect(classify('א &amp; ב'), SmartTextFullPathReason.entity);
-      expect(classify('א</span>'), SmartTextFullPathReason.structure);
+      expect(
+        classify('א<sup class="x">1</sup>'),
+        SmartTextFullPathReason.supSub,
+      );
+      expect(classify('<a name="x">א</a>'), SmartTextFullPathReason.anchorId);
+      expect(
+        classify('<span style="line-height: 2">ב</span>'),
+        SmartTextFullPathReason.unsupportedStyle,
+      );
+      expect(
+        classify('<font color="red">ב</font>'),
+        SmartTextFullPathReason.otherTag,
+      );
+      expect(classify('<br>'), SmartTextFullPathReason.structure);
     });
   });
 }

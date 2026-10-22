@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:otzaria/plugins/services/plugin_highlight_registry.dart';
 import 'package:otzaria/plugins/services/plugin_highlight_reveal_service.dart';
 import 'package:otzaria/plugins/view/plugin_highlight_frame_overlay.dart';
@@ -45,21 +45,24 @@ Map<String, dynamic> _payload({required String id, required int section}) => {
   'style': {'backgroundColor': '#FFE066'},
 };
 
-Widget _lines(int count) => MaterialApp(
-  home: Scaffold(
-    body: Column(
-      children: [
-        for (var i = 0; i < count; i++)
-          SmartTextWidget(
-            text: _text,
-            settings: const RenderSettings(fontSize: 20),
-            highlightBookId: _bookTitle,
-            highlightSectionIndex: i,
-          ),
-      ],
+Widget _lines(int count, {bool forceHtmlWidget = false}) {
+  SmartTextWidget.debugForceHtmlWidget = forceHtmlWidget;
+  return MaterialApp(
+    home: Scaffold(
+      body: Column(
+        children: [
+          for (var i = 0; i < count; i++)
+            SmartTextWidget(
+              text: _text,
+              settings: const RenderSettings(fontSize: 20),
+              highlightBookId: _bookTitle,
+              highlightSectionIndex: i,
+            ),
+        ],
+      ),
     ),
-  ),
-);
+  );
+}
 
 /// הקטעים שה-ListenableBuilder של השורה שלהם נבנה מחדש.
 final _rebuiltSections = <int>{};
@@ -88,28 +91,45 @@ Set<int> _drawnSections(WidgetTester tester) => tester
     .map((range) => range.highlight.sectionIndex)
     .toSet();
 
+bool _hasRevealDecoration(
+  TextSpan span, [
+  TextStyle inherited = const TextStyle(),
+]) {
+  final style = inherited.merge(span.style);
+  final decoration = style.decoration;
+  if (span.text?.contains('טקסט') == true &&
+      decoration?.contains(TextDecoration.underline) == true &&
+      decoration?.contains(TextDecoration.overline) == true) {
+    return true;
+  }
+  return span.children?.whereType<TextSpan>().any(
+        (child) => _hasRevealDecoration(child, style),
+      ) ??
+      false;
+}
+
 Set<int> _revealedSections(WidgetTester tester) => {
   for (var section = 0; section < 5; section++)
     if (tester
-        .widgetList<HtmlWidget>(
+        .renderObjectList<RenderParagraph>(
           find.descendant(
             of: find.byWidgetPredicate(
               (widget) =>
                   widget is SmartTextWidget &&
                   widget.highlightSectionIndex == section,
             ),
-            matching: find.byType(HtmlWidget),
+            matching: find.byType(RichText),
           ),
         )
         .any(
-          (widget) =>
-              widget.html.contains('text-decoration-line: underline overline'),
+          (paragraph) => _hasRevealDecoration(paragraph.text as TextSpan),
         ))
       section,
 };
 
 void main() {
   setUp(() {
+    SmartTextWidget.debugForceHtmlWidget = false;
     PluginHighlightRegistry.instance.removePlugin(_pluginId);
     PluginHighlightRegistry.instance.removePlugin(_otherPluginId);
     PluginHighlightRevealService.instance.clear();
@@ -118,6 +138,7 @@ void main() {
   });
 
   tearDown(() {
+    SmartTextWidget.debugForceHtmlWidget = false;
     debugOnRebuildDirtyWidget = null;
     PluginHighlightRevealService.instance.clear();
     PluginHighlightRegistry.instance.removePlugin(_pluginId);
@@ -203,122 +224,138 @@ void main() {
     expect(_takeRebuilt(), isEmpty);
     expect(tester.takeException(), isNull);
   });
-  for (final otherInstance in [false, true]) {
-    for (final presentBeforeReveal in [false, true]) {
-      testWidgets(
-        'חשיפה מסתיימת בכל הקטעים עם מזהה משותף: '
-        'מופע אחר=$otherInstance, נרשם מראש=$presentBeforeReveal',
-        (tester) async {
-          final registry = PluginHighlightRegistry.instance;
-          final reveal = PluginHighlightRevealService.instance;
-          final highlight = registry.setHighlight(
-            ownerPluginId: _pluginId,
-            payload: _payload(id: 'shared', section: 1),
-          );
-          void setOther() => registry.setHighlight(
-            ownerPluginId: otherInstance ? _pluginId : _otherPluginId,
-            ownerInstanceId: 'other-instance',
-            payload: _payload(id: 'shared', section: 3),
-          );
-          if (presentBeforeReveal) setOther();
-          await tester.pumpWidget(_lines(5));
-          await tester.pumpAndSettle();
-          _takeRebuilt();
-
-          reveal.reveal(highlight);
-          await tester.pump();
-          expect(_takeRebuilt(), presentBeforeReveal ? {1, 3} : {1});
-          if (!presentBeforeReveal) {
-            setOther();
+  for (final forceHtmlWidget in [false, true]) {
+    for (final otherInstance in [false, true]) {
+      for (final presentBeforeReveal in [false, true]) {
+        testWidgets(
+          'חשיפה מסתיימת בכל הקטעים עם מזהה משותף: '
+          'מופע אחר=$otherInstance, נרשם מראש=$presentBeforeReveal, '
+          'HtmlWidget=$forceHtmlWidget',
+          (tester) async {
+            final registry = PluginHighlightRegistry.instance;
+            final reveal = PluginHighlightRevealService.instance;
+            final highlight = registry.setHighlight(
+              ownerPluginId: _pluginId,
+              payload: _payload(id: 'shared', section: 1),
+            );
+            void setOther() => registry.setHighlight(
+              ownerPluginId: otherInstance ? _pluginId : _otherPluginId,
+              ownerInstanceId: 'other-instance',
+              payload: _payload(id: 'shared', section: 3),
+            );
+            if (presentBeforeReveal) setOther();
+            await tester.pumpWidget(
+              _lines(5, forceHtmlWidget: forceHtmlWidget),
+            );
             await tester.pumpAndSettle();
-            expect(_takeRebuilt(), {3});
-          }
-          expect(_revealedSections(tester), {1, 3});
+            _takeRebuilt();
 
-          reveal.clear();
-          await tester.pump();
-          expect(_revealedSections(tester), isEmpty);
-          expect(_takeRebuilt(), {1, 3});
-        },
-      );
+            reveal.reveal(highlight);
+            await tester.pump();
+            expect(_takeRebuilt(), presentBeforeReveal ? {1, 3} : {1});
+            if (!presentBeforeReveal) {
+              setOther();
+              await tester.pumpAndSettle();
+              expect(_takeRebuilt(), {3});
+            }
+            expect(_revealedSections(tester), {1, 3});
+
+            reveal.clear();
+            await tester.pump();
+            expect(_revealedSections(tester), isEmpty);
+            expect(_takeRebuilt(), {1, 3});
+          },
+        );
+      }
     }
   }
 
-  testWidgets('העברה, הסרה ורישום מחדש בזמן חשיפה מעדכנים רק קטעים מושפעים', (
-    tester,
-  ) async {
-    final registry = PluginHighlightRegistry.instance;
-    final reveal = PluginHighlightRevealService.instance;
-    final highlight = registry.setHighlight(
-      ownerPluginId: _pluginId,
-      payload: _payload(id: 'shared', section: 1),
-    );
-    await tester.pumpWidget(_lines(5));
-    await tester.pumpAndSettle();
-    reveal.reveal(highlight);
-    registry.setHighlight(
-      ownerPluginId: _otherPluginId,
-      payload: _payload(id: 'shared', section: 3),
-    );
-    await tester.pumpAndSettle();
-    _takeRebuilt();
-    registry.setHighlight(
-      ownerPluginId: _otherPluginId,
-      payload: _payload(id: 'shared', section: 4),
-    );
-    await tester.pumpAndSettle();
-    expect(_takeRebuilt(), {3, 4});
-    expect(_revealedSections(tester), {1, 4});
+  for (final forceHtmlWidget in [false, true]) {
+    testWidgets(
+      'העברה, הסרה ורישום מחדש בזמן חשיפה מעדכנים רק קטעים מושפעים, '
+      'HtmlWidget=$forceHtmlWidget',
+      (tester) async {
+        final registry = PluginHighlightRegistry.instance;
+        final reveal = PluginHighlightRevealService.instance;
+        final highlight = registry.setHighlight(
+          ownerPluginId: _pluginId,
+          payload: _payload(id: 'shared', section: 1),
+        );
+        await tester.pumpWidget(_lines(5, forceHtmlWidget: forceHtmlWidget));
+        await tester.pumpAndSettle();
+        reveal.reveal(highlight);
+        registry.setHighlight(
+          ownerPluginId: _otherPluginId,
+          payload: _payload(id: 'shared', section: 3),
+        );
+        await tester.pumpAndSettle();
+        _takeRebuilt();
+        registry.setHighlight(
+          ownerPluginId: _otherPluginId,
+          payload: _payload(id: 'shared', section: 4),
+        );
+        await tester.pumpAndSettle();
+        expect(_takeRebuilt(), {3, 4});
+        expect(_revealedSections(tester), {1, 4});
 
-    registry.clearHighlight(ownerPluginId: _pluginId, highlightId: 'shared');
-    await tester.pumpAndSettle();
-    expect(_takeRebuilt(), {1});
-    expect(_revealedSections(tester), {4});
-    registry.setHighlight(
-      ownerPluginId: _pluginId,
-      payload: _payload(id: 'shared', section: 2),
-    );
-    await tester.pumpAndSettle();
-    expect(_takeRebuilt(), {2});
-    expect(_revealedSections(tester), {2, 4});
+        registry.clearHighlight(
+          ownerPluginId: _pluginId,
+          highlightId: 'shared',
+        );
+        await tester.pumpAndSettle();
+        expect(_takeRebuilt(), {1});
+        expect(_revealedSections(tester), {4});
+        registry.setHighlight(
+          ownerPluginId: _pluginId,
+          payload: _payload(id: 'shared', section: 2),
+        );
+        await tester.pumpAndSettle();
+        expect(_takeRebuilt(), {2});
+        expect(_revealedSections(tester), {2, 4});
 
-    reveal.clear();
-    await tester.pump();
-    expect(_revealedSections(tester), isEmpty);
-    expect(_takeRebuilt(), {2, 4});
-  });
+        reveal.clear();
+        await tester.pump();
+        expect(_revealedSections(tester), isEmpty);
+        expect(_takeRebuilt(), {2, 4});
+      },
+    );
+  }
 
-  testWidgets('החלפת מזהה החשיפה מעדכנת את כל עותקי המזהה הקודם והחדש', (
-    tester,
-  ) async {
-    final registry = PluginHighlightRegistry.instance;
-    final reveal = PluginHighlightRevealService.instance;
-    final first = registry.setHighlight(
-      ownerPluginId: _pluginId,
-      payload: _payload(id: 'shared', section: 1),
-    );
-    registry.setHighlight(
-      ownerPluginId: _otherPluginId,
-      payload: _payload(id: 'shared', section: 3),
-    );
-    final second = registry.setHighlight(
-      ownerPluginId: _pluginId,
-      payload: _payload(id: 'second', section: 2),
-    );
-    await tester.pumpWidget(_lines(5));
-    await tester.pumpAndSettle();
-    reveal.reveal(first);
-    await tester.pump();
-    expect(_revealedSections(tester), {1, 3});
-    _takeRebuilt();
+  for (final forceHtmlWidget in [false, true]) {
+    testWidgets(
+      'החלפת מזהה החשיפה מעדכנת את כל עותקי המזהה הקודם והחדש, '
+      'HtmlWidget=$forceHtmlWidget',
+      (tester) async {
+        final registry = PluginHighlightRegistry.instance;
+        final reveal = PluginHighlightRevealService.instance;
+        final first = registry.setHighlight(
+          ownerPluginId: _pluginId,
+          payload: _payload(id: 'shared', section: 1),
+        );
+        registry.setHighlight(
+          ownerPluginId: _otherPluginId,
+          payload: _payload(id: 'shared', section: 3),
+        );
+        final second = registry.setHighlight(
+          ownerPluginId: _pluginId,
+          payload: _payload(id: 'second', section: 2),
+        );
+        await tester.pumpWidget(_lines(5, forceHtmlWidget: forceHtmlWidget));
+        await tester.pumpAndSettle();
+        reveal.reveal(first);
+        await tester.pump();
+        expect(_revealedSections(tester), {1, 3});
+        _takeRebuilt();
 
-    reveal.reveal(second);
-    await tester.pump();
-    expect(_revealedSections(tester), {2});
-    expect(_takeRebuilt(), {1, 2, 3});
-    reveal.clear();
-    await tester.pump();
-    expect(_revealedSections(tester), isEmpty);
-    expect(_takeRebuilt(), {2});
-  });
+        reveal.reveal(second);
+        await tester.pump();
+        expect(_revealedSections(tester), {2});
+        expect(_takeRebuilt(), {1, 2, 3});
+        reveal.clear();
+        await tester.pump();
+        expect(_revealedSections(tester), isEmpty);
+        expect(_takeRebuilt(), {2});
+      },
+    );
+  }
 }
