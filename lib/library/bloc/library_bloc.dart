@@ -598,6 +598,7 @@ class LibraryBloc extends Bloc<LibraryEvent, LibraryState> {
       DataRepository.instance.invalidateExternalBooksCache();
 
       await _emitLibraryRoot(emit, changedHebrewBooksPath: event.path);
+      _announceCatalogChanged();
     } catch (e) {
       emit(
         state.copyWith(
@@ -626,6 +627,7 @@ class LibraryBloc extends Bloc<LibraryEvent, LibraryState> {
       DataRepository.instance.invalidateExternalBooksCache();
 
       await _emitLibraryRoot(emit, changedHebrewBooksPath: '');
+      _announceCatalogChanged();
 
       developer.log(
         'Hebrew books path removed successfully',

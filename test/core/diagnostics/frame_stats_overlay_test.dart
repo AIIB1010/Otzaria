@@ -57,6 +57,55 @@ void main() {
     await tester.pump();
   }
 
+  testWidgets(
+    'diagnostics describe the active window across focus and disposal',
+    (
+      tester,
+    ) async {
+      final first = AppWindowKeys();
+      final second = AppWindowKeys(id: AppWindowId('view:2'));
+      AppWindowKeys.register(first);
+      AppWindowKeys.register(second);
+      addTearDown(AppWindowKeys.resetForTest);
+
+      Widget window(AppWindowKeys keys, String title) => AppWindowScope(
+        controller: _FakeWindow(),
+        geometry: _FakeWindow(),
+        keys: keys,
+        child: FrameStatsOverlay(
+          contextProvider: () => {'title': title},
+          child: const SizedBox(),
+        ),
+      );
+      Widget host({bool showSecond = true}) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: Column(
+          children: [
+            window(first, 'ראשון'),
+            if (showSecond) window(second, 'שני'),
+          ],
+        ),
+      );
+
+      AppWindowKeys.activate(first);
+      await tester.pumpWidget(host());
+      expect(
+        DeveloperDiagnostics.instance.contextProvider!()['title'],
+        'ראשון',
+      );
+      AppWindowKeys.activate(second);
+      expect(DeveloperDiagnostics.instance.contextProvider!()['title'], 'שני');
+      AppWindowKeys.unregister(second);
+      await tester.pumpWidget(host(showSecond: false));
+      expect(
+        DeveloperDiagnostics.instance.contextProvider!()['title'],
+        'ראשון',
+      );
+      await tester.pumpWidget(const SizedBox());
+      expect(DeveloperDiagnostics.instance.contextProvider!(), isEmpty);
+    },
+  );
+
   testWidgets('Ctrl+Shift+I turns developer mode on and off', (tester) async {
     await tester.pumpWidget(host());
     expect(find.byType(FrameStatsPanel), findsNothing);

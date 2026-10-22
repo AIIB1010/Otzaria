@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
+import 'package:otzaria/data/data_providers/file_system_data_provider.dart';
 import 'package:otzaria/data/repository/data_repository.dart';
 import 'package:otzaria/library/bloc/library_bloc.dart';
 import 'package:otzaria/library/bloc/library_event.dart';
@@ -15,6 +18,14 @@ import '../../helpers/memory_settings_cache.dart';
 class _Store extends HiddenLibraryStore {
   @override
   HiddenLibrarySelection load() => const HiddenLibrarySelection();
+}
+
+class _Files extends Fake implements FileSystemData {
+  _Files(this.library);
+  final Library library;
+
+  @override
+  Future<Library> getLibrary() async => library;
 }
 
 Library _library(String title) {
@@ -54,6 +65,47 @@ void main() {
 
   Future<void> settle() =>
       Future<void>.delayed(const Duration(milliseconds: 50));
+
+  for (final remove in [false, true]) {
+    test(
+      'שינוי נתיב היברובוקס מסנכרן את העץ בחלון האחר: remove=$remove',
+      () async {
+        MultiViewMode.debugOverride = true;
+        final oldFiles = FileSystemData.instance;
+        final oldLibrary =
+            DataRepository.instance.cachedLibraryFutureForTesting;
+        final folder = Directory.systemTemp.createTempSync('hebrew-books-path');
+        addTearDown(() {
+          FileSystemData.instance = oldFiles;
+          if (oldLibrary != null) {
+            DataRepository.instance.library = oldLibrary;
+          } else {
+            DataRepository.instance.invalidateLibraryCache();
+          }
+          folder.deleteSync();
+        });
+        repo = DataRepository.instance..library = Future.value(before);
+        final after = _library('אחרי');
+        FileSystemData.instance = _Files(after);
+        final a = loaded();
+        final b = loaded();
+        addTearDown(a.close);
+        addTearDown(b.close);
+        final sourceUpdated = a.stream.firstWhere(
+          (state) => identical(state.library, after) && !state.isLoading,
+        );
+        a.add(
+          remove
+              ? const RemoveHebrewBooksPath()
+              : UpdateHebrewBooksPath(folder.path),
+        );
+        await sourceUpdated;
+        await settle();
+
+        expect(b.state.library!.subCategories.single.title, 'אחרי');
+      },
+    );
+  }
 
   test('עץ שנבנה מחדש בחלון אחד נבנה מחדש גם בשני, בלי הד חוזר', () async {
     MultiViewMode.debugOverride = true;
