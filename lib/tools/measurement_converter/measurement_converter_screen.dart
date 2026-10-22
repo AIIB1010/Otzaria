@@ -1,10 +1,4 @@
 // lib/tools/measurement_converter/measurement_converter_screen.dart
-//
-// שינויים עיצוביים (מ-PR mdb2-devsh):
-//  • ניווט קטגוריות: AppTopBar + AdaptiveSidePane + SidebarNavItem (במקום כרטיסים עליונים)
-//  • יחידות: כרטיסי chip (במקום רשימות אנכיות/אופקיות)
-//  • שדות קלט ותוצאה: בסרגל העליון (AppTopBar)
-//  • UiSnack להעתקה, CallbackShortcuts לקיצור Ctrl+F
 
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
@@ -23,7 +17,6 @@ import 'package:otzaria/widgets/text/rtl_text_field.dart';
 import 'package:otzaria/widgets/navigation/sidebar_nav_item.dart';
 import 'package:otzaria/core/ui_snack.dart';
 
-// START OF ADDITIONS - MODERN UNITS
 const List<String> modernLengthUnits = ['מ"מ', 'ס"מ', 'מטר', 'ק"מ'];
 const List<String> modernAreaUnits = ['ס"מ רבוע', 'מ"ר', 'ק"מ רבוע', 'דונם'];
 const List<String> modernVolumeUnits = [
@@ -53,7 +46,6 @@ const List<String> complexAncientTimeUnits = [
   'הילוך ארבעה מילים',
   'הילוך עשרה פרסאות',
 ];
-// END OF ADDITIONS
 
 class MeasurementConverterScreen extends StatefulWidget {
   const MeasurementConverterScreen({super.key});
@@ -87,7 +79,6 @@ class _MeasurementConverterScreenState
   final Map<String, String> _rememberedOpinions = {};
   final Map<String, String> _rememberedInputValues = {};
 
-  // Updated to include modern units
   final Map<String, List<String>> _units = {
     'אורך': lengthConversionFactors.keys.toList()..addAll(modernLengthUnits),
     'שטח': areaConversionFactors.keys.toList()..addAll(modernAreaUnits),

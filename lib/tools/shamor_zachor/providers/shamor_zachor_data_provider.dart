@@ -22,9 +22,6 @@ typedef ShamorZachorCategoryTreeLoader =
 
 /// Provider for managing book data in Shamor Zachor
 /// This provider is scoped locally within the ShamorZachorWidget
-///
-/// OPTIMIZED: Uses shared cache from SqliteDataProvider to avoid duplicate queries
-/// and loads TOC on demand only when needed
 class ShamorZachorDataProvider with ChangeNotifier {
   static final Logger _logger = Logger('ShamorZachorDataProvider');
 
@@ -32,12 +29,12 @@ class ShamorZachorDataProvider with ChangeNotifier {
   final SqliteDataProvider? _sqliteDataProvider;
   final ShamorZachorCategoryTreeLoader _categoryTreeLoader;
 
-  // State - now uses shared cache
+  // State
   Map<String, BookCategory> _allBookData = {};
   bool _isLoading = false;
   ShamorZachorError? _error;
 
-  // OPTIMIZATION 3: Cache for TOC data - loaded on demand only
+  // Cache for TOC data - loaded on demand only
   final Map<int, List<BookSection>> _tocCache = {};
 
   // Tracked books list - stored in Hive via Settings
@@ -126,20 +123,16 @@ class ShamorZachorDataProvider with ChangeNotifier {
         );
       }
 
-      // OPTIMIZATION 1 & 2: Use existing getAllBooks() query with in-memory filter
-      // Show baseBooks OR books that are in the tracked list
       final allBooks = await repository.database.bookDao.getAllBooks();
       final relevantBooks = allBooks
           .where((book) => book.isBaseBook || _trackedBookIds.contains(book.id))
           .toList();
 
-      // OPTIMIZATION 2: Reuse categories from SqliteDataProvider cache if available
-      // This avoids duplicate category queries
       final allCategories = await repository.database.categoryDao
           .getAllCategories();
       final categoryMap = {for (var c in allCategories) c.id: c};
 
-      // 3. Build Category Tree Structure
+      // Build Category Tree Structure
       final Map<String, BookCategory> resultData = {};
 
       // Group Books by their Category ID first
@@ -284,8 +277,6 @@ class ShamorZachorDataProvider with ChangeNotifier {
       }
     }
 
-    // If no books and no subcats with content, skip this category?
-    // Or keep it? Usually better to prune empty branches.
     if (validBooks.isEmpty && validSubCats.isEmpty) {
       return null;
     }
@@ -346,7 +337,7 @@ class ShamorZachorDataProvider with ChangeNotifier {
     );
   }
 
-  /// OPTIMIZATION 3: Load TOC for a specific book on demand
+  /// Load TOC for a specific book on demand
   /// This is called only when the user actually needs the TOC
   Future<List<BookSection>> getTocForBook(int bookId) async {
     // Check cache first
@@ -383,13 +374,7 @@ class ShamorZachorDataProvider with ChangeNotifier {
     List<db_models.TocEntry> entries,
     int totalLines,
   ) {
-    // Map DB entries to BookSection
-    // DB entries are flat list. We need to rebuild tree.
-    // `TocDao` usually handles relationships.
-
-    // Naive reconstruction:
-    // Filter roots (parentId == null)
-    // Filter roots (parentId == null)
+    // DB entries are a flat list; the tree is rebuilt by parentId.
     final childMap = <int, List<db_models.TocEntry>>{};
 
     for (var e in entries) {
@@ -527,9 +512,7 @@ class ShamorZachorDataProvider with ChangeNotifier {
     return null;
   }
 
-  // searchBooks needs to work on _allBookData. copy-paste existing logic or keep it.
   List<BookSearchResult> searchBooks(String query) {
-    // ... (Keep existing implementation logic)
     if (query.isEmpty) return [];
     final results = <BookSearchResult>[];
     final queryLower = query.toLowerCase();
