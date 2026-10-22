@@ -148,6 +148,7 @@ import 'package:otzaria/tools/calendar/helpers/calendar_date_helpers.dart'
     show getDafYomi, formatAmud;
 import 'package:otzaria/tools/calendar/helpers/daf_yomi_navigation.dart'
     show openDafYomiBook;
+import 'package:otzaria/utils/ui/reading_left_pane_policy.dart';
 
 /// פריט מאוחד לסרגל הניווט הראשי — מייצג תוסף או כלי-מובנה שהוצמד לסרגל.
 ///
@@ -1760,6 +1761,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
         tabsBloc: context.read<TabsBloc>(),
         historyBloc: context.read<HistoryBloc>(),
         navigationBloc: context.read<NavigationBloc>(),
+        layoutWidth: readingLayoutWidthResolverOf(context),
       ),
     );
     return true;
@@ -1785,6 +1787,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
         tabsBloc: context.read<TabsBloc>(),
         historyBloc: context.read<HistoryBloc>(),
         navigationBloc: context.read<NavigationBloc>(),
+        layoutWidth: readingLayoutWidthResolverOf(context),
       ),
     );
     return true;

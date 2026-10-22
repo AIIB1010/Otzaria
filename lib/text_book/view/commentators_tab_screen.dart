@@ -42,6 +42,7 @@ import 'package:otzaria/widgets/navigation/app_top_bar.dart';
 import 'package:otzaria/widgets/widgets_exports.dart';
 import 'package:otzaria/utils/text/text_manipulation.dart' as utils;
 import 'package:positioned_sliver_list/positioned_list.dart';
+import 'package:otzaria/utils/ui/reading_left_pane_policy.dart';
 
 const _kAllChapter = -1;
 
@@ -476,6 +477,7 @@ class _CommentatorsTabScreenState extends State<CommentatorsTabScreen>
           showSplitView: false,
           removeNikud: settings.defaultRemoveNikud,
           loadCommentators: true,
+          screenWidth: readingLayoutWidthOf(context),
         ),
       );
     });

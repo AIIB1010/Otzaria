@@ -120,6 +120,7 @@ import 'package:otzaria/widgets/widgets_exports.dart';
 import 'package:otzaria/widgets/navigation/nav_panel_search.dart';
 import 'package:otzaria/widgets/navigation/nav_side_panel.dart';
 import 'package:otzaria/widgets/navigation/app_top_bar.dart';
+import 'package:otzaria/utils/ui/reading_left_pane_policy.dart';
 
 // קבועים למצבי תצוגה (למניעת magic strings)
 const String _viewModeSplit = 'split';
@@ -912,6 +913,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
         showSplitView: currentState.showSplitView,
         removeNikud: settings.defaultRemoveNikud,
         forceCloseLeftPane: widget.isInCombinedView,
+        screenWidth: readingLayoutWidthOf(context),
         preserveState: true,
         preserveRemoveNikud: !nikudSettingsChanged,
         preserveRemovePunctuation: !punctuationSettingsChanged,
@@ -1109,6 +1111,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
         preserveState: true,
         // בתצוגה משולבת, חלונית הצד תמיד סגורה
         forceCloseLeftPane: widget.isInCombinedView,
+        screenWidth: readingLayoutWidthOf(context),
       ),
     );
 
@@ -1338,6 +1341,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
                   removeNikud: settingsState.defaultRemoveNikud,
                   // בתצוגה משולבת, חלונית הצד תמיד סגורה
                   forceCloseLeftPane: widget.isInCombinedView,
+                  screenWidth: readingLayoutWidthOf(context),
                 ),
               );
             }

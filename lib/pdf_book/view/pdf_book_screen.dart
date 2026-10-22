@@ -1809,6 +1809,7 @@ class _PdfBookScreenState extends State<PdfBookScreen>
           pdf_events.DocumentReady(
             documentRef: documentRef,
             totalPages: totalPages,
+            screenWidth: mounted ? readingLayoutWidthOf(context) : null,
           ),
         );
 
@@ -1860,6 +1861,7 @@ class _PdfBookScreenState extends State<PdfBookScreen>
         final shouldShowLeftPane = resolveInitialReadingLeftPaneVisibility(
           explicitOpen: widget.tab.showLeftPane.value,
           hasSearchText: widget.tab.searchText.isNotEmpty,
+          screenWidth: mounted ? readingLayoutWidthOf(context) : null,
         );
         if (mounted) {
           if (shouldShowLeftPane) {
@@ -2114,7 +2116,9 @@ class _PdfBookScreenState extends State<PdfBookScreen>
                     _pdfViewFocusNode.requestFocus();
                   },
                   child: MouseRegion(
-                    cursor: _isHandMode ? AppCursors.grab : MouseCursor.defer,
+                    cursor: _isHandMode
+                        ? AppCursors.grabOf(context)
+                        : MouseCursor.defer,
                     child: PdfViewer(
                       _pdfDocumentRef,
                       controller: widget.tab.pdfViewerController,
@@ -2403,7 +2407,10 @@ class _PdfBookScreenState extends State<PdfBookScreen>
           // את סמן הגרירה עד לשחרור.
           if (_isInteractivePageTurn)
             Positioned.fill(
-              child: MouseRegion(cursor: AppCursors.grabbing, opaque: false),
+              child: MouseRegion(
+                cursor: AppCursors.grabbingOf(context),
+                opaque: false,
+              ),
             ),
         ],
       ),
@@ -2492,7 +2499,9 @@ class _PdfBookScreenState extends State<PdfBookScreen>
   /// שאר המחוות (בחירת טקסט, פאן, קליק) ממשיכות לעבור אל ה-viewer שמתחת.
   Widget _buildPageTurnDragZone(_BookPageTurnDirection direction) {
     return MouseRegion(
-      cursor: _isInteractivePageTurn ? AppCursors.grabbing : AppCursors.grab,
+      cursor: _isInteractivePageTurn
+          ? AppCursors.grabbingOf(context)
+          : AppCursors.grabOf(context),
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
         onHorizontalDragStart: (_) => _onPageTurnDragStart(direction),
@@ -3888,6 +3897,7 @@ class _PdfBookScreenState extends State<PdfBookScreen>
           documentRef: documentRef,
           outline: outline,
           totalPages: totalPages,
+          screenWidth: readingLayoutWidthOf(context),
         ),
       );
     } catch (e, stackTrace) {

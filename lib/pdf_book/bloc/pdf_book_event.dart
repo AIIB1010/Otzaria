@@ -29,14 +29,23 @@ class DocumentReady extends PdfBookEvent {
   final List<PdfOutlineNode>? outline;
   final int totalPages;
 
+  /// רוחב החלון של הקורא, למדיניות החלונית השמאלית; null — ברירת המחדל.
+  final double? screenWidth;
+
   const DocumentReady({
     required this.documentRef,
     this.outline,
     required this.totalPages,
+    this.screenWidth,
   });
 
   @override
-  List<Object?> get props => [documentRef, outline?.length, totalPages];
+  List<Object?> get props => [
+    documentRef,
+    outline?.length,
+    totalPages,
+    screenWidth,
+  ];
 }
 
 /// Called when document loading fails
