@@ -5,7 +5,69 @@
 
 ---
 
-## המודל
+## שני מודלים: ריבוי תצוגות (ברירת המחדל ב-Windows) ומודל A
+
+**ב-Windows ברירת המחדל היא ריבוי תצוגות:** מנוע אחד ו-isolate אחד, וכל
+חלון נוסף הוא חלון Dart (`RegularWindowController`) עם `FlutterView` משלו
+באותו מנוע. הקוד ב-`lib/core/windowing/multiview/`; תקרה של 8 חלונות כולל
+הראשי (`ViewWindowRegistry.maxWindows`).
+
+**מודל A** (מנוע לכל חלון, כל שאר המסמך) נשאר:
+
+* ב-Linux וב-macOS — עד שריבוי התצוגות יועבר גם אליהן;
+* ב-Windows כ**פתח מילוט בזמן בנייה** בלבד:
+  `flutter build windows --dart-define=OTZARIA_MULTIVIEW=false`. אין מתג
+  בזמן ריצה, משתנה סביבה או הגדרה נסתרת.
+
+### איך נקבע המצב
+
+* `kMultiView` = `bool.fromEnvironment('OTZARIA_MULTIVIEW', defaultValue: true)`.
+* `MultiViewMode.supported` = `kMultiView` ו-Windows. זהה ב-debug וב-release.
+* `installWindowingOwner()` (ב-`main` מיד אחרי `ensureInitialized`) מתקין
+  את בעלי החלונות של המסגרת **רק** כש-`supported` וה-binding משתמש
+  ב-`PlatformDispatcher.instance` האמיתי.
+* `MultiViewMode.enabled` = `supported` ובעלים הותקן בפועל. בלי בעלים —
+  מודל A, ו-`createViewWindow` זורק `StateError` במקום לקרוס.
+
+⚠️ **למה השמירה על ה-binding:** ב-integration_test ה-binding הוא
+`IntegrationTestWidgetsFlutterBinding`, ו-`TestPlatformDispatcher.engineId`
+מחזיר `1` קבוע. `WindowingOwnerWin32` מעביר את המזהה למנוע, ו-`GetEngineForId`
+מפרש אותו כמצביע — גישה ל-`0x1` וקריסה. לכן integration tests רצים היום
+במודל A; כיסוי ריבוי תצוגות בהם הוא שלב נפרד.
+
+**בדיקות יחידה:** `test/flutter_test_config.dart` מצמיד
+`MultiViewMode.debugOverride = false`, ובדיקות ריבוי התצוגות מדליקות אותו
+בעצמן (`debugOverride = true`).
+
+**Sentry:** בריבוי תצוגות כל החלונות מדווחים דרך ה-Sentry של ה-isolate
+היחיד; כל אירוע מתויג `window` = החלון הפעיל האחרון (`LastActiveWindow`).
+
+### רשימת בדיקה בעדכון גרסת Flutter
+
+ריבוי התצוגות נשען על API פנימי (`@internal`) שעלול להישבר גם בגרסת תיקון.
+בכל עדכון SDK:
+
+1. `isWindowingEnabled` ב-`packages/flutter/lib/src/foundation/_features.dart`
+   עדיין **משתנה גלובלי שניתן לכתיבה בזמן ריצה** (לא `const`), וכל השערים
+   עליו הם `if (!isWindowingEnabled) throw` בזמן קריאה ולא `assert`.
+   `withWindowing` מדליק אותו רק לזמן הקריאה.
+2. סמנטיקת `engineId`: `PlatformDispatcher.engineId` הוא עדיין מצביע המנוע
+   ש-`GetEngineForId` מפרש, ו-`TestPlatformDispatcher.engineId` עדיין מזויף —
+   השמירה ב-`hasRealPlatformDispatcher` חייבת להמשיך לתפוס אותו.
+3. הסרת view 0 ([flutter#193174](https://github.com/flutter/flutter/issues/193174)):
+   כל עוד אינה נתמכת, החלון הראשי **מוסתר** ולא נהרס, ותוספים הקשורים ל-view 0
+   (תוספי רקע, הדפסה) נשארים חיים. אם התיקון נכנס — לבדוק מחדש את
+   "שחזור החלון האחרון" (`view_window_opener.dart`) ואת יציאת התהליך.
+4. לעולם לא להשתמש בווידג'טים `RegularWindow`/`WindowScope`: הבנאים שלהם
+   בודקים את הדגל וזורקים מחוץ ל-`withWindowing`. משתמשים ב-`View(view: ...)`.
+5. `flutter_internal_imports_test` עובר — `package:flutter/src/` מיובא רק
+   ב-`multiview_flag.dart`, ושם בלבד יש לתקן.
+6. בניית release בלי define פותחת חלון Dart; עם `OTZARIA_MULTIVIEW=false`
+   פותחת מנוע נוסף.
+
+---
+
+## המודל (מודל A)
 
 כל חלון הוא `FlutterEngine` נפרד ב-isolate נפרד, **באותו תהליך**.
 
