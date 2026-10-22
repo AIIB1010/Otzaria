@@ -67,8 +67,8 @@ void main() {
     expect(repository.isEconomyIndexing, isFalse);
     final baselineCounts = await baseline.countDocumentsByFilePath();
     expect(
-      baselineCounts.keys,
-      unorderedEquals(['book:0', 'book:1', 'book:2', 'book:3']),
+      baselineCounts,
+      {'book:0': 1500, 'book:1': 1500, 'book:2': 1500, 'book:3': 1500},
     );
     expect(await changing.countDocumentsByFilePath(), baselineCounts);
     expect(
@@ -81,7 +81,7 @@ void main() {
       matchNikud: false,
       matchTaamim: false,
     );
-    expect(expectedHits, greaterThan(0));
+    expect(expectedHits, 6000);
     expect(
       await changing.countExact(
         query: 'ייחודי',

@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
+
 import 'package:otzaria_search_engine/otzaria_search_engine.dart';
 
 /// מאתר את שורש חבילת המנוע דרך package_config.json (תחת `flutter test`
@@ -145,9 +147,16 @@ Object? _lastInitError;
 /// מ-`flutter_test_config.dart` וגם מ-`main` של כל טסט.
 Future<bool> tryInitSearchEngine() async {
   if (_initResult != null) return _initResult!;
+  final expectedDigest =
+      Platform.environment['OTZARIA_EXPECTED_SEARCH_ENGINE_SHA256'];
   for (final path in searchEngineLibraryCandidates()) {
     try {
       final loadPath = _testLoadCopy(path) ?? path;
+      if (expectedDigest != null &&
+          sha256.convert(File(loadPath).readAsBytesSync()).toString() !=
+              expectedDigest) {
+        throw StateError('Native search engine SHA-256 mismatch: $loadPath');
+      }
       await RustLib.init(externalLibrary: ExternalLibrary.open(loadPath));
       searchEngineLoadedLibraryPath = File(loadPath).absolute.path;
       // מנקים רק אחרי טעינה מוצלחת — מועמד שנדחה לא ימחק עותק תקין.
@@ -161,6 +170,11 @@ Future<bool> tryInitSearchEngine() async {
         RustLib.dispose();
       } catch (_) {}
     }
+  }
+  if (expectedDigest != null) {
+    throw StateError(
+      'No native search engine matches $expectedDigest: $_lastInitError',
+    );
   }
   return _initResult = false;
 }
