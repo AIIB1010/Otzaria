@@ -422,7 +422,6 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
   bool _showSearchField = false;
   final Map<String, bool> _expansionStates = {};
 
-  // Anti-jitter search stats
   Map<String, int> get _searchResultsPerLink => _searchBloc.state.counts;
 
   /// הטקסט המרונדר של כל מפרש מוצג — לשחזור מעברי שורה בהעתקה רב-שורתית,
@@ -1310,7 +1309,7 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
             constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
             iconSize: 20,
           ),
-          // 2. הרחב/כווץ הכל — רק כשיש מפרשים פעילים (לוגיקה מקורית)
+          // 2. הרחב/כווץ הכל — רק כשיש מפרשים פעילים
           if (widget.tab.activeCommentators.isNotEmpty) ...[
             const SizedBox(width: gap),
             IconButton(
@@ -1893,7 +1892,6 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
     );
   }
 
-  // Helper method used in _scrollToSearchResult to inject keys
   Key? _getLinkKeyObject(Link link) {
     return _itemKeys[_getLinkKey(link)];
   }
