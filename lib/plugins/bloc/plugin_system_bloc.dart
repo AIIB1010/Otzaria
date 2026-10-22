@@ -45,7 +45,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:path/path.dart' as path;
-import 'package:otzaria/core/windowing/window_role.dart';
+import 'package:otzaria/app_scope/process_duties.dart';
 import 'package:flutter/foundation.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/messages/plugin_messages.dart';
@@ -70,6 +70,11 @@ class PluginSystemBloc extends Bloc<PluginSystemEvent, PluginSystemState> {
 
   final PluginInstallResultsLog _installResultsLog;
 
+  /// `null` — [ProcessDuties.current], שנקרא בכל אירוע ולא נלכד ביצירה.
+  final ProcessDuties? processDuties;
+  bool get _isProcessOwner =>
+      (processDuties ?? ProcessDuties.current).isProcessOwner;
+
   /// התקנות מקישור install-local שממתינות להחלטת המשתמש, לפי תיקיית ה-temp.
   final Map<String, ({String path, String pluginId, String version})>
   _pendingLocalInstalls = {};
@@ -89,6 +94,7 @@ class PluginSystemBloc extends Bloc<PluginSystemEvent, PluginSystemState> {
     TabsState? initialReaderState,
     PluginInstallResultsLog? installResultsLog,
     CalendarAlertsClient? alertsClient,
+    this.processDuties,
   }) : _alertsOverride = alertsClient,
        _installResultsLog =
            installResultsLog ?? PluginInstallResultsLog.instance,
@@ -221,7 +227,7 @@ class PluginSystemBloc extends Bloc<PluginSystemEvent, PluginSystemState> {
     Emitter<PluginSystemState> emit,
   ) async {
     // פר-מחשב: חלון משני היה מתקין במקביל לראשי לאותה תיקייה ו-DB.
-    if (WindowRole.isSecondary) return;
+    if (!_isProcessOwner) return;
     await PluginSafeMode.ready;
     if (PluginSafeMode.isActive) return;
     try {
@@ -1037,7 +1043,7 @@ class PluginSystemBloc extends Bloc<PluginSystemEvent, PluginSystemState> {
     Emitter<PluginSystemState> emit,
   ) async {
     // הרשומה משותפת לכל החלונות; חלון משני היה כותב אותה שוב על אותם נתונים.
-    if (WindowRole.isSecondary) return;
+    if (!_isProcessOwner) return;
     final devPlugins = await repository.getDevelopmentPlugins();
     for (final plugin in devPlugins) {
       // localhost_dev נטען מ-HTTP (HMR) ואין לו תיקייה לקרוא ממנה.

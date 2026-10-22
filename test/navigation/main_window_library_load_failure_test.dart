@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:otzaria/app_scope/process_duties.dart';
 import 'package:otzaria/core/app_paths.dart';
 import 'package:otzaria/core/focus_repository.dart';
 import 'package:otzaria/core/windowing/app_window_controller.dart';
@@ -91,6 +92,32 @@ void main() {
       () => harness.indexing.add(any(that: isA<ReconcileHiddenIndex>())),
     ).called(1);
   });
+
+  testWidgets(
+    'החלטת האינדוקס בעלייה שואלת את ProcessDuties ולא את WindowRole',
+    (
+      tester,
+    ) async {
+      final harness = await _pumpMainWindow(
+        tester,
+        Future.value(Library(categories: [])),
+      );
+      // החלון "ראשי", אבל אינו בעלי התהליך — הענף של מי שאינו בעלים חייב לרוץ.
+      WindowRole.isSecondary = false;
+      ProcessDuties.debugOverride = ProcessDuties(isProcessOwner: () => false);
+      addTearDown(() => ProcessDuties.debugOverride = null);
+      harness.libraryChanges.add(
+        harness.initialState.copyWith(isLoading: false),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      verify(
+        () => harness.indexing.add(any(that: isA<CheckIndexStatus>())),
+      ).called(1);
+    },
+  );
 
   testWidgets('סוף רצף העלייה מכבה את סימון ההמתנה כשהאינדוקס מתחיל (#2646)', (
     tester,
