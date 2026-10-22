@@ -1188,6 +1188,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
   }
 
   bool _handleCommentaryKeyEvent(KeyEvent event) {
+    if (!AppWindowKeys.isActiveWindow(context)) return false;
     // קיצור דינמי על אותו צירוף גובר, ו-KeyboardShortcuts מפעיל אותו.
     if (DynamicShortcutRegistry.instance.match(event) != null) return false;
     final addNoteShortcut =

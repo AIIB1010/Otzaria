@@ -36,9 +36,13 @@ class AppWindowKeys {
   /// widget או bloc משתמשים ב-[of], כדי שבנייה בחלון ברקע לא תפנה לחלון שבפוקוס.
   static AppWindowKeys get current => _current;
 
-  static Iterable<AppWindowKeys> get registered => _windows.values;
-
   static void activate(AppWindowKeys keys) => _current = keys;
+
+  /// המפתחות של החלון [id], אם הוא רשום.
+  static AppWindowKeys? byId(AppWindowId id) => _windows[id];
+
+  /// כל החלונות הרשומים, כולל הראשי.
+  static Iterable<AppWindowKeys> get registered => _windows.values;
 
   /// רושם חלון כדי ש-[activateWindow] יוכל להפעיל אותו (שלב 1: יצירת חלון).
   static void register(AppWindowKeys keys) => _windows[keys.id] = keys;
@@ -67,6 +71,11 @@ class AppWindowKeys {
       ..[AppWindowId.primary] = _primary;
     _current = _primary;
   }
+
+  /// האם [context] יושב בחלון הפעיל. `HardwareKeyboard` מעביר מקשים מכל
+  /// החלונות לכל המאזינים, ולכן מאזין גלובלי פועל רק כשזה נכון.
+  static bool isActiveWindow(BuildContext context) =>
+      identical(of(context), _current);
 
   /// מפתחות החלון ש-[context] יושב בו, או [current] אם אין scope מעליו.
   /// בלי רישום תלות: המפתחות קבועים לחיי החלון, וכך מותר לקרוא גם מ-callback.

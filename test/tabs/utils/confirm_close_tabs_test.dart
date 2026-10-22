@@ -274,6 +274,24 @@ void main() {
       }
     }
 
+    testWidgets('סגירת הראשי כשחלון Dart פתוח היא "סגירת החלון", בחלון שנסגר', (
+      tester,
+    ) async {
+      await pumpWindows(tester);
+      final primary = AppWindowKeys.registered.firstWhere(
+        (keys) => keys.id == AppWindowId.primary,
+      );
+      AppWindowKeys.activate(view);
+      final result = confirmAppCloseWithUnsavedChanges(window: primary);
+      await tester.pumpAndSettle();
+
+      expect(find.text(unsavedChangesWindowCloseSubtitle), findsOneWidget);
+      expect(find.textContaining('עורך'), findsOneWidget);
+      await tester.tap(find.text('ביטול'));
+      await tester.pumpAndSettle();
+      expect(await result, isFalse);
+    });
+
     for (final dirtyInMain in [false, true]) {
       testWidgets(
         'יציאה מלאה אוספת תוספים מכל חלון ונשארת במקור: dirtyInMain=$dirtyInMain',
@@ -324,5 +342,19 @@ void main() {
         },
       );
     }
+
+    testWidgets('חלון Dart האחרון שנסגר אינו סופר את עצמו', (tester) async {
+      await pumpWindows(tester);
+      viewTabs.add(ReplaceAllTabs([pluginTab('p.editor', 'עורך')], 0));
+      await tester.pump();
+      AppWindowKeys.activate(view);
+      final result = confirmAppCloseWithUnsavedChanges();
+      await tester.pumpAndSettle();
+
+      expect(find.text(unsavedChangesAppCloseSubtitle), findsOneWidget);
+      await tester.tap(find.text(unsavedChangesCloseAnyway));
+      await tester.pumpAndSettle();
+      expect(await result, isTrue);
+    });
   });
 }

@@ -11,6 +11,7 @@ import 'package:otzaria_icons/otzaria_icons.dart';
 import 'package:otzaria/app_report/view/app_report_dialog.dart';
 import 'package:otzaria/app_scope/process_duties.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
+import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
 import 'package:otzaria/core/startup_timeline.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
@@ -636,6 +637,14 @@ class MainWindowScreenState extends State<MainWindowScreen>
   bool get _skipsEagerLibraryLoad =>
       !_role.isPrimaryView && _role.openedWithTab;
 
+  /// עבודה של bloc ברמת התהליך: עם חלונות Dart כל המסכים מאזינים לו.
+  bool get _ownsSharedLibraryUpdate =>
+      !MultiViewMode.enabled || _duties.isProcessOwner;
+
+  /// דיאלוג שנולד מ-bloc משותף מוצג רק בחלון שהמשתמש עובד בו.
+  bool get _showsSharedPrompts =>
+      !MultiViewMode.enabled || identical(AppWindowKeys.current, _windowKeys);
+
   /// תפקיד החלון והעבודה פר-תהליך שלו; נקראים פעם אחת, ב-[initState].
   late final AppWindowRole _role;
   late final ProcessDuties _duties;
@@ -721,6 +730,15 @@ class MainWindowScreenState extends State<MainWindowScreen>
       // הזוכה שרירותי — לפעמים חלון שהמשתמש סגר קפץ בחזרה למסך.
       if (_duties.isProcessOwner) {
         unawaited(_initializeExternalActivationMonitoring());
+      } else if (_role.isViewWindow && mounted) {
+        // חלון Dart אינו מנקז; המארח מפנה אליו כשהוא החלון הפעיל.
+        final service = _externalActivationService = context
+            .read<ExternalActivationService>();
+        service.attachViewWindow(
+          _windowKeys.id,
+          _handleExternalActivationUriString,
+          isVisible: AppWindowScope.controllerOf(context).isVisible,
+        );
       }
 
       _tourCubit.registerSession();
@@ -1358,7 +1376,10 @@ class MainWindowScreenState extends State<MainWindowScreen>
     if (!mounted) return;
     final service = _externalActivationService = context
         .read<ExternalActivationService>();
-    service.attachWindow(_handleExternalActivationUriString);
+    service.attachWindow(
+      _handleExternalActivationUriString,
+      isVisible: AppWindowScope.controllerOf(context).isVisible,
+    );
     await service.start();
   }
 
@@ -1407,7 +1428,8 @@ class MainWindowScreenState extends State<MainWindowScreen>
     if (kIsWeb) return;
     if (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS) return;
     if (!mounted) return;
-    if (MultiWindowService.canOpenWindows) {
+    // `raiseSelf` מעלה את חלון ה-runner, כלומר את הראשי ולא חלון Dart.
+    if (MultiWindowService.canOpenWindows && !_role.isViewWindow) {
       await const MultiWindowService().raiseSelf();
       return;
     }
@@ -1826,9 +1848,9 @@ class MainWindowScreenState extends State<MainWindowScreen>
     }
     _splashFailsafeTimer?.cancel();
     _pluginInstallDialogQueue.clear();
-    _externalActivationService?.detachWindow(
-      _handleExternalActivationUriString,
-    );
+    _externalActivationService
+      ?..detachWindow(_handleExternalActivationUriString)
+      ..detachViewWindow(_windowKeys.id, _handleExternalActivationUriString);
     _calendarCubit.close();
     _removeTourOverlay();
     if (LibraryChangesNotes.instance.beforeAutoShow == _tourFinished) {
@@ -2912,6 +2934,9 @@ class MainWindowScreenState extends State<MainWindowScreen>
               if ((state.status == LibraryUpdateStatus.completed ||
                       state.status == LibraryUpdateStatus.error) &&
                   state.hasUpdate) {
+                // ה-bloc משותף לחלונות ה-Dart: הבעלים מרענן ומאנדקס פעם אחת,
+                // והשאר מקבלים את העץ מ-LibraryChangedInOtherWindow.
+                if (!_ownsSharedLibraryUpdate) return;
                 final requestId = _nextIndexRequestId++;
                 _startupRefreshWait.attachRequest(requestId);
                 _pendingIndexRequests[requestId] = (
@@ -2939,7 +2964,8 @@ class MainWindowScreenState extends State<MainWindowScreen>
                   );
                 }
               } else if (state.status ==
-                  LibraryUpdateStatus.needsFullConfirmation) {
+                      LibraryUpdateStatus.needsFullConfirmation &&
+                  _showsSharedPrompts) {
                 _promptFullDownload(context, state);
               }
             },

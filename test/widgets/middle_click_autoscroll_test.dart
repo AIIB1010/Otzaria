@@ -2,12 +2,19 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:otzaria/core/windowing/app_window_controller.dart';
+import 'package:otzaria/core/windowing/app_window_id.dart';
+import 'package:otzaria/core/windowing/app_window_keys.dart';
+import 'package:otzaria/core/windowing/app_window_scope.dart';
 import 'package:otzaria/widgets/misc/middle_click_autoscroll.dart';
 import 'package:otzaria/widgets/misc/smooth_wheel_scroll.dart';
 
 const _itemHeight = 40.0;
 const _itemCount = 500;
 const _viewportHeight = 600.0;
+
+class _FakeWindow extends Fake
+    implements AppWindowController, AppWindowGeometry {}
 
 void main() {
   testWidgets('החלפות רבות של רשימות שומרות זיהוי של הרשימה המחוברת בלבד', (
@@ -293,6 +300,39 @@ void main() {
     await tester.pump();
     expect(anchor(), findsOneWidget);
 
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(anchor(), findsNothing);
+  });
+
+  testWidgets('Esc מחלון אחר אינו מסיים את הגלילה בחלון שאינו פעיל', (
+    tester,
+  ) async {
+    final view = AppWindowKeys(id: const AppWindowId('view-2'));
+    AppWindowKeys.register(view);
+    addTearDown(AppWindowKeys.resetForTest);
+    await tester.pumpWidget(
+      AppWindowScope(
+        controller: _FakeWindow(),
+        geometry: _FakeWindow(),
+        keys: view,
+        child: buildApp(),
+      ),
+    );
+    final gesture = await middleClick(
+      tester,
+      tester.getCenter(find.byType(ListView)),
+    );
+    await gesture.up();
+    await tester.pump();
+    expect(anchor(), findsOneWidget);
+
+    // הראשי פעיל: ה-ESC שלו, ואינו נבלע כאן.
+    expect(await tester.sendKeyEvent(LogicalKeyboardKey.escape), isFalse);
+    await tester.pump();
+    expect(anchor(), findsOneWidget);
+
+    AppWindowKeys.activateWindow(view.id);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
     expect(anchor(), findsNothing);

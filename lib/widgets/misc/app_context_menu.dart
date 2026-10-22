@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:otzaria_context_menu/otzaria_context_menu.dart' as menu;
+import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/theme/theme_exports.dart';
 import 'package:otzaria/widgets/misc/app_menu_presentation.dart';
 import 'package:otzaria/widgets/misc/app_popup_menu.dart';
@@ -57,7 +58,12 @@ class AppContextMenuRegionState extends State<AppContextMenuRegion> {
     return menu.ContextMenuRegion(
       key: _menuKey,
       presentation: presentation,
-      registerEscape: _registerMenuEscape,
+      // ESC מחלון אחר (אותו FocusManager) לא סוגר תפריט בחלון הזה.
+      registerEscape: (handler) => _registerMenuEscape(
+        (event) => mounted && !AppWindowKeys.isActiveWindow(context)
+            ? KeyEventResult.ignored
+            : handler(event),
+      ),
       menuBuilder: widget.menuBuilder,
       menuItemKeysByLabel: widget.menuItemKeysByLabel,
       onSecondaryTapDown: widget.onSecondaryTapDown,
