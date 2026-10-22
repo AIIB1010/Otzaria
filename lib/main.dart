@@ -15,6 +15,7 @@ import 'package:path/path.dart' as p;
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hive_ce/hive.dart';
+import 'package:otzaria/app_scope/process_duties.dart';
 import 'package:otzaria/plugins/view/safe_mode_controls.dart';
 import 'package:otzaria/plugins/services/startup_crash_counter.dart';
 import 'package:otzaria/plugins/services/webview2_creation_diagnostics.dart';
@@ -142,7 +143,9 @@ void _markMainWindowRevealed() {
   if (!_mainWindowRevealedCompleter.isCompleted) {
     _mainWindowRevealedCompleter.complete();
   }
-  if (!WindowRole.isSecondary) StartupTimeline.instance.finishAtReveal();
+  if (ProcessDuties.current.isProcessOwner) {
+    StartupTimeline.instance.finishAtReveal();
+  }
 }
 
 /// Cosmetic: until it finishes, drag handles show the system hand cursor.
@@ -601,7 +604,7 @@ Future<void> _closeNativeSplash() async {
 /// מופיע בבת אחת עם תוכן והסמל הצף מתפוגג, ללא קפיצה וללא פער. נקרא אחרי שהתוכן
 /// נחשף ונצבע.
 Future<void> presentMainWindow() async {
-  if (!WindowRole.isSecondary) {
+  if (ProcessDuties.current.isProcessOwner) {
     StartupTimeline.instance.markOnce('presentMainWindow');
   }
   if (kIsWeb || !(Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
@@ -678,7 +681,7 @@ Future<void> _initializeProcessSingletons() async {
     // ⚠️ פר-תהליך, לא פר-חלון. ניקוי יומן השגיאות בשינוי גרסה ורישום
     // ההפעלה מתארים את **התהליך**; חלון נוסף שרושם "הפעלה" מזייף את
     // הנתונים, וניקוי היומן פעם שנייה עלול למחוק שגיאות שנרשמו בינתיים.
-    if (!WindowRole.isSecondary) {
+    if (ProcessDuties.current.isProcessOwner) {
       _clearErrorLogOnVersionChange();
       await AppInstallTimelineStore.recordLaunch(ErrorLogFile.appVersion);
     }
@@ -735,7 +738,7 @@ Future<void> _initializeProcessSingletons() async {
   // ⚠️ פר-תהליך. המיגרציה משכתבת נתיבים אבסולוטיים בהגדרות המשותפות;
   // החלון הראשון כבר ביצע אותה, וחלון משני שיריץ אותה שוב יעבוד על
   // ה-Hive הפרטי שלו ולא על המשותף — כלומר בזבוז במקרה הטוב.
-  if (!WindowRole.isSecondary) {
+  if (ProcessDuties.current.isProcessOwner) {
     await _timedPhase('portablePaths', PortablePaths.migrateIfMoved);
     // נתיב הספרייה נרשם לקובץ טקסט שה-uninstaller קורא; ההגדרות עצמן
     // ב-Hive בינארי שאינו נגיש לו (issue #1020). פר-תהליך — קובץ אחד.
@@ -743,7 +746,7 @@ Future<void> _initializeProcessSingletons() async {
   }
 
   // ⚠️ פר-תהליך: בחלון משני הם היו מתזמנים התראות ושולחים דיווחים פעם שנייה.
-  if (!WindowRole.isSecondary) {
+  if (ProcessDuties.current.isProcessOwner) {
     unawaited(_runDeferredNotificationService());
     unawaited(_runDeferredErrorReportFlush());
   } else {
@@ -841,7 +844,7 @@ Future<void> _initializeRestartableRuntime() async {
   // חלונות שמריצים אותם במקביל היו מתנגשים על אותם קבצים — כולל אותה
   // העתקה של ~5.5GB פעמיים. החלון הראשון כבר ביצע אותם לפני שהחלון הזה
   // בכלל נוצר.
-  if (!WindowRole.isSecondary) {
+  if (ProcessDuties.current.isProcessOwner) {
     // ראשון: כל שאר השלבים כאן קוראים את נתיב ה-DB מההגדרות, וספרייה
     // שהגיעה למחשב מחוץ לאוצריא עדיין אינה רשומה בהן (issue #1436).
     // חלון משני מקבל את ההגדרה בזריעה מהחלון שפתח אותו.
@@ -928,7 +931,10 @@ Future<void> _runDeferredBookOrderWarmUp() async {
 /// סגירת התוכנה ונועלים את פרופיל ה-WebView2 (תוספים ריקים) — נרשם ל-errors.txt.
 Future<void> _logJobObjectContainmentFailure() async {
   // פר-תהליך: ה-Job Object אחד לתהליך, ורישום מכל חלון משכפל את אותה שורה.
-  if (kIsWeb || !Platform.isWindows || kDebugMode || WindowRole.isSecondary) {
+  if (kIsWeb ||
+      !Platform.isWindows ||
+      kDebugMode ||
+      !ProcessDuties.current.isProcessOwner) {
     return;
   }
   try {
@@ -958,7 +964,7 @@ Future<void> _initializeTimeZonesOnly() async {
 }
 
 Future<void> _runDeferredNotificationService() async {
-  if (WindowRole.isSecondary) return;
+  if (!ProcessDuties.current.isProcessOwner) return;
   await _initializeTimeZonesOnly();
 
   // קריאת אירועי התוספים נוגעת ב-SQLite סינכרוני; אין לעקוף את החשיפה.
@@ -1006,7 +1012,7 @@ Future<void> _runDeferredPdfrxCacheInit() async {
 Future<void> _runDeferredAutoBackup() async {
   // ⚠️ פר-תהליך. הגיבוי קורא `Hive.box` ישירות — בחלון משני זהו שורש פרטי
   // בלי תורי הדיווחים — ומשדר `key-last-auto-backup` שדורס את מועד הבעלים.
-  if (WindowRole.isSecondary) return;
+  if (!ProcessDuties.current.isProcessOwner) return;
   // קריאות SQLite וקידוד ה-JSON רצים ב-main isolate ומתחרים בפריים הראשון.
   try {
     await _mainWindowRevealedCompleter.future.timeout(
@@ -1047,7 +1053,9 @@ Future<void> _runDeferredDataRootWritabilityWarning() async {
 /// קריאת לוג ופענוח למסלול העלייה.
 Future<void> _runDeferredCrashCheck() async {
   // פר-תהליך: הנעילה היא של התהליך, וחלון משני היה דורס אותה.
-  if (WindowRole.isSecondary || !AppCrashSession.isSupported) return;
+  if (!ProcessDuties.current.isProcessOwner || !AppCrashSession.isSupported) {
+    return;
+  }
   try {
     await _mainWindowRevealedCompleter.future.timeout(
       const Duration(seconds: 20),
@@ -1071,7 +1079,9 @@ Future<void> _runDeferredCrashCheck() async {
 
 /// ANR של הפעלה קודמת באנדרואיד, מ-ApplicationExitInfo של המערכת.
 Future<void> _runDeferredAnrCheck() async {
-  if (kIsWeb || !Platform.isAndroid || WindowRole.isSecondary) return;
+  if (kIsWeb || !Platform.isAndroid || !ProcessDuties.current.isProcessOwner) {
+    return;
+  }
   try {
     await _mainWindowRevealedCompleter.future.timeout(
       const Duration(seconds: 20),
@@ -1111,7 +1121,7 @@ Future<void> _runDeferredPluginSafeMode(Future<void> previousDecision) async {
     await _timedPhase(
       'pluginSafeMode',
       () => PluginSafeMode.initializeSession(
-        isSecondary: WindowRole.isSecondary,
+        isSecondary: !ProcessDuties.current.isProcessOwner,
         onError: (error, stackTrace) => _logNonFatalInitializationError(
           'Plugin safe mode',
           error,
@@ -1142,7 +1152,7 @@ Future<void> _runDeferredPluginSafeMode(Future<void> previousDecision) async {
 /// a safe mode that was entered because of it.
 Future<void> _runDeferredStartupStability() async {
   // Per process: the count belongs to the main window's launch.
-  if (WindowRole.isSecondary) return;
+  if (!ProcessDuties.current.isProcessOwner) return;
   try {
     await _mainWindowRevealedCompleter.future.timeout(
       const Duration(seconds: 20),
@@ -1176,7 +1186,7 @@ Future<void> _runDeferredStartupStability() async {
 /// להערות שעוד לא פורסמו.
 Future<void> _runDeferredLibraryChangesNotes() async {
   // פר-תהליך: ההערות מוצגות פעם אחת, בחלון הראשי.
-  if (WindowRole.isSecondary) return;
+  if (!ProcessDuties.current.isProcessOwner) return;
   try {
     await _mainWindowRevealedCompleter.future.timeout(
       const Duration(seconds: 20),
@@ -1195,7 +1205,7 @@ Future<void> _runDeferredLibraryChangesNotes() async {
 /// שנוסף). שינוי משודר ל-AttachedLibrariesBloc, שמרענן את עץ הספרייה.
 Future<void> _runDeferredAttachedLibraries() async {
   // פר-תהליך: הסריקה שומרת את הרשימה בהגדרות; חלון משני קורא אותה בלבד.
-  if (WindowRole.isSecondary) return;
+  if (!ProcessDuties.current.isProcessOwner) return;
   try {
     await _mainWindowRevealedCompleter.future.timeout(
       const Duration(seconds: 20),
@@ -1224,7 +1234,7 @@ Future<void> _runDeferredAttachedLibraries() async {
 
 Future<void> _runDeferredCapabilitiesWrite() async {
   // פר-תהליך: קובץ אחד לשורש הנתונים, וחלון משני היה כותב אותו שוב.
-  if (WindowRole.isSecondary) return;
+  if (!ProcessDuties.current.isProcessOwner) return;
   try {
     await _mainWindowRevealedCompleter.future.timeout(
       const Duration(seconds: 20),
@@ -1243,7 +1253,7 @@ Future<void> _runDeferredCapabilitiesWrite() async {
 /// service itself applies the official gates (offline, updates, cadence).
 Future<void> _runDeferredAttachedLibraryUpdates() async {
   // Per machine: a second window would contact the same sources again.
-  if (WindowRole.isSecondary) return;
+  if (!ProcessDuties.current.isProcessOwner) return;
   try {
     await _mainWindowRevealedCompleter.future.timeout(
       const Duration(seconds: 20),
@@ -1273,7 +1283,7 @@ Future<void> _syncExternalLinkIndex({bool autoResume = false}) async {
 
 Future<void> _runDeferredProtocolRegistration() async {
   // פר-תהליך: רישום ברג'יסטרי של המשתמש, שחלון משני היה חוזר עליו.
-  if (WindowRole.isSecondary) return;
+  if (!ProcessDuties.current.isProcessOwner) return;
   // הכתיבה עצמה ב-isolate; ההמתנה רק כדי שהפעלתו לא תתחרה בעלייה.
   await _mainWindowRevealedCompleter.future;
   await Future<void>.delayed(const Duration(seconds: 2));
@@ -1306,7 +1316,7 @@ Future<void> _runDeferredCacheWarmups() async {
   // ⚠️ חלון משני מדלג: לכל השאר יש חימום לפי דרישה באתרי הקריאה, והרצתו
   // כאן שכפלה `VACUUM` על `cache.db` המשותף ושני isolates לכל חלון נוסף.
   // הגופנים נשארים, כי הנפילה שלהם היא סריקה סינכרונית על ה-thread הראשי.
-  if (WindowRole.isSecondary) {
+  if (!ProcessDuties.current.isProcessOwner) {
     unawaited(
       AppFonts.warmUpSystemFontsCache().catchError((e) {
         if (kDebugMode) debugPrint('Failed to warm up system fonts: $e');
@@ -1635,7 +1645,8 @@ class _AppBootstrapState extends State<AppBootstrap> {
 Future<void> initHive() async {
   // שורשי חלונות ישנים נמחקים רק כשאין חלון משני חי שמשתמש בקבצים,
   // גם באתחול מחדש דרך RestartWidget.
-  if (!WindowRole.isSecondary && !WindowBus.instance.hasOtherWindows) {
+  if (ProcessDuties.current.isProcessOwner &&
+      !WindowBus.instance.hasOtherWindows) {
     await deleteStaleWindowRoots();
   }
   // בחלון משני הגדרות Hive יושבות בשורש פרטי; שאר הנתונים משותפים.
@@ -1644,7 +1655,9 @@ Future<void> initHive() async {
   // המסד נפתח כאן ולא בעצלות: `TabsRepository.loadTabs` קורא אותו
   // סינכרונית מבנאי של bloc.
   await UserStateDatabase.instance.database;
-  if (!WindowRole.isSecondary) await PersonalDataMissingWarning.detect();
+  if (ProcessDuties.current.isProcessOwner) {
+    await PersonalDataMissingWarning.detect();
+  }
   // סידור הסשנים חייב לרוץ פעם אחת לפני TabsBloc ו-NavigationBloc,
   // כי שניהם טוענים כרטיסיות וסדר הטעינה ביניהם תלוי בתזמון.
   if (_restoresAllWindows) {
@@ -1657,7 +1670,7 @@ Future<void> initHive() async {
 /// "שחזר את כל החלונות בהפעלה" — כל סשן שנשאר נפתח בחלון משלו במקום
 /// להתמזג לחלון הראשון. רק בהפעלה קרה של התהליך.
 bool get _restoresAllWindows =>
-    !WindowRole.isSecondary &&
+    ProcessDuties.current.isProcessOwner &&
     MultiWindowService.canOpenWindows &&
     !WindowBus.instance.hasOtherWindows &&
     (Settings.getValue<bool>(SettingsRepository.keyRestoreAllWindows) ?? false);
@@ -1672,7 +1685,9 @@ List<int> _windowSlotsToRestore = const [];
 /// חברו.
 Future<void> _runDeferredRestoreWindows() async {
   // פר-תהליך: חלון משני אינו פותח חלונות בשם ההפעלה.
-  if (WindowRole.isSecondary || _windowSlotsToRestore.isEmpty) return;
+  if (!ProcessDuties.current.isProcessOwner || _windowSlotsToRestore.isEmpty) {
+    return;
+  }
   final slots = _windowSlotsToRestore;
   _windowSlotsToRestore = const [];
   // חלון שנפתח בזמן ההמתנה היה מוחק את השורה של משבצת פנויה.
@@ -1997,7 +2012,7 @@ void _claimWindowBusSlot() {
   // בעלים בשביל אפיק שאף אחד לא ידבר בו.
   if (!MultiWindowService.canOpenWindows) return;
   final slot = LibraryAccessGate.instance.registerWindow(
-    asOwner: !WindowRole.isSecondary,
+    asOwner: ProcessDuties.current.isProcessOwner,
   );
   if (slot == null) {
     debugPrint('⚠️ כל משבצות האפיק תפוסות — החלון הזה לא יוכל לשתף מצב');
@@ -2060,7 +2075,7 @@ OpenedTab? _takeSecondaryWindowInitialTab() {
 /// עצמו רץ במעדכן אחרי יציאת אוצריא, כי ההתקנה החיה נעולה כל עוד היא רצה.
 Future<void> _runDeferredSwapRecovery() async {
   // פר-תהליך: ההתקנה אחת, וחלון נוסף היה משגר מעדכן שני על אותם קבצים.
-  if (WindowRole.isSecondary || !Platform.isWindows) return;
+  if (!ProcessDuties.current.isProcessOwner || !Platform.isWindows) return;
   final planFile = pendingInterruptedSwapPlan(differentialWorkDirectory());
   if (planFile == null) return;
   try {
