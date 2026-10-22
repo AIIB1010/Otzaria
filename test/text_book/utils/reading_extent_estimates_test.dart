@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:html/parser.dart' as html;
+import 'package:otzaria/text_book/utils/inline_notes_utils.dart' as notes;
 import 'package:otzaria/text_book/utils/reading_extent_estimates.dart';
 import 'package:otzaria/text_book/utils/reading_segments.dart';
 import 'package:otzaria/text_book/utils/reading_extent_worker_queue.dart';
@@ -86,6 +89,59 @@ void main() {
       5,
     );
     expect(visibleReadingCharCount('<b>אב</b><span>גד</span>'), 4);
+  });
+
+  test('זהה לספירה ב-RegExp וב-runes על כל תו ועל צירופים אקראיים (perf)', () {
+    // אורקל: המימוש הקודם.
+    final tags = RegExp(r'<[^>]*>');
+    final combining = RegExp(r'\p{M}', unicode: true);
+    int oracle(String text) {
+      var plain = notes.stripInlineNotes(text);
+      if (plain.contains('<')) plain = plain.replaceAll(tags, '');
+      if (plain.contains('&')) plain = html.parseFragment(plain).text ?? plain;
+      var count = 0;
+      for (final code in plain.runes) {
+        if ((code >= 0x591 && code <= 0x5BD) ||
+            code == 0x5BF ||
+            code == 0x5C1 ||
+            code == 0x5C2 ||
+            code == 0x5C4 ||
+            code == 0x5C5 ||
+            code == 0x5C7) {
+          continue;
+        }
+        if (code < 0x300 || (code >= 0x5D0 && code < 0x600)) {
+          count++;
+        } else if (!combining.hasMatch(String.fromCharCode(code))) {
+          count++;
+        }
+      }
+      return count;
+    }
+
+    final inputs = <String>[
+      for (var c = 0; c <= 0xFFFF; c++) 'א<b>${String.fromCharCode(c)}</b>ב',
+      for (final c in const [0x1F600, 0x1D167, 0xE0100, 0x10FFFF])
+        'א${String.fromCharCode(c)}<b>ב',
+    ];
+    const pieces = [
+      '<', '>', '<b>', '</b>', '<span class="x">', '<br>', '&amp;', '&lt;', //
+      '&nbsp;', '&#x5BE;', '&#1472;', '&', ';', ' ', 'א', 'בְּ', 'רֵאשִׁ֖ית', //
+      '־', '׀', '׃', '׆', '׈', 'é', '😀', '\uD83D', '\uDE00', //
+      '<sup class="footnote-marker">1</sup><i class="footnote">הערה</i>', //
+    ];
+    final random = Random(7);
+    for (var i = 0; i < 20000; i++) {
+      inputs.add(
+        [
+          for (var j = random.nextInt(12); j > 0; j--)
+            pieces[random.nextInt(pieces.length)],
+        ].join(),
+      );
+    }
+    for (final input in inputs) {
+      expect(visibleReadingCharCount(input), oracle(input), reason: input);
+    }
   });
 
   test('מידות השורות ורוחב העמודה משפיעים על ההערכה', () {
