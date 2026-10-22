@@ -168,10 +168,9 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
   });
 
-  testWidgets('בלי מסך הפתיחה, עצי החלונות היו מועברים ולא נבנים מחדש', (
-    tester,
-  ) async {
-    // ל-View יש GlobalKey לפי ה-FlutterView: באותו פריים העץ שלו מועבר כמו שהוא.
+  testWidgets('גם בלי מסך הפתיחה, עצי החלונות נבנים מחדש', (tester) async {
+    // ל-View יש GlobalKey לפי ה-FlutterView: באותו פריים הוא מועבר, ורק המפתח
+    // של MultiViewHost מכריח לבנות מחדש את העץ שבתוכו.
     final windows = FakeViewWindows(tester);
     final contexts = await pumpApp(
       tester,
@@ -180,12 +179,19 @@ void main() {
     );
     final (a, _) = await openTwo(tester, windows);
     final oldTabsA = contexts[a.slot]!.read<TabsBloc>();
+    expect(await savedTitles(a.slot), ['לוח שנה']);
 
     AppQuit.restartAll(contexts[a.slot]!);
     await tester.pump();
-
-    expect(oldTabsA.isClosed, isFalse);
-    expect(contexts[a.slot]!.read<TabsBloc>(), same(oldTabsA));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump(const Duration(seconds: 1));
+    expect(oldTabsA.isClosed, isTrue);
+    final tabsA = contexts[a.slot]!.read<TabsBloc>();
+    // הסשן לא נדרס בסגירת ה-bloc הישן, והחדש טוען ממנו.
+    expect(await savedTitles(a.slot), ['לוח שנה']);
+    expect(identical(tabsA, oldTabsA), isFalse);
+    expect(tabsA.state.tabs.map((t) => t.title), ['לוח שנה']);
+    expect(windows.stubOf(a).destroyed, isFalse);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 1));
