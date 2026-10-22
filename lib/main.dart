@@ -1604,6 +1604,8 @@ class _AppBootstrapState extends State<AppBootstrap> {
 
   @override
   Widget build(BuildContext context) {
+    // ⚠️ גם לחלונות ה-Dart: ל-View יש GlobalKey לפי ה-FlutterView, ובלי פריים
+    // בלעדיהם אתחול מחדש היה מעביר את העצים שלהם כמו שהם ולא בונה אותם מחדש.
     if (!_ready) return const SplashApp();
 
     if (_error != null) {
