@@ -680,7 +680,10 @@ class MainWindowScreenState extends State<MainWindowScreen>
     _calendarCubit = CalendarCubit();
     _settingsScreenController = SettingsScreenController();
     _tourCubit = TourCubit();
-    LibraryChangesNotes.instance.beforeAutoShow = _tourFinished;
+    // ה-singletons האלה שייכים לחלון הראשי; חלון Dart אינו דורס אותם.
+    if (!_role.isViewWindow) {
+      LibraryChangesNotes.instance.beforeAutoShow = _tourFinished;
+    }
     _lastScreen = context.read<NavigationBloc>().state.currentScreen;
 
     // כשהמסך ההתחלתי אינו קריאה (אין טאבים שמורים) אין ספר להמתין לו, ולכן
@@ -903,7 +906,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
       if (!mounted) {
         _initialContentReady = true;
         _splashOverlayVisible = false;
-        await presentMainWindow();
+        await _presentWindow();
         await WidgetsBinding.instance.endOfFrame;
         if (!_skipsEagerLibraryLoad) libraryBloc.add(LoadLibrary());
         return;
@@ -919,11 +922,16 @@ class MainWindowScreenState extends State<MainWindowScreen>
       StartupTimeline.instance.mark('reveal:contentShown');
       await WidgetsBinding.instance.endOfFrame;
       StartupTimeline.instance.mark('reveal:firstFrame');
-      await presentMainWindow();
+      await _presentWindow();
       await WidgetsBinding.instance.endOfFrame;
       if (!_skipsEagerLibraryLoad) libraryBloc.add(LoadLibrary());
     }());
   }
+
+  /// חלון Dart נחשף לבד בפריים הראשון שלו; [presentMainWindow] הוא של החלון
+  /// הראשי (show, maximize שמור, סגירת ה-splash).
+  Future<void> _presentWindow() =>
+      _role.isViewWindow ? Future<void>.value() : presentMainWindow();
 
   @override
   void didChangeDependencies() {
@@ -1105,6 +1113,8 @@ class MainWindowScreenState extends State<MainWindowScreen>
         (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS)) {
       return;
     }
+    // ה-listener הוא של החלון הראשי.
+    if (_role.isViewWindow) return;
 
     // Listen for fullscreen changes from the window manager (e.g., user presses F11 in OS)
     appWindowListener?.onFullscreenChanged = (isFullscreen) {
@@ -1807,11 +1817,13 @@ class MainWindowScreenState extends State<MainWindowScreen>
       _windowKeys,
       _openToolsLauncher,
     );
-    // Clean up fullscreen callback
-    appWindowListener?.onFullscreenChanged = null;
-    appWindowListener?.onWindowStateChanged = null;
-    appWindowListener?.onWindowRestoredFromMinimize = null;
-    appWindowListener?.onWindowResizeOccurred = null;
+    if (!_role.isViewWindow) {
+      // Clean up fullscreen callback
+      appWindowListener?.onFullscreenChanged = null;
+      appWindowListener?.onWindowStateChanged = null;
+      appWindowListener?.onWindowRestoredFromMinimize = null;
+      appWindowListener?.onWindowResizeOccurred = null;
+    }
     _splashFailsafeTimer?.cancel();
     _pluginInstallDialogQueue.clear();
     _externalActivationService?.detachWindow(
@@ -3389,7 +3401,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
                 previous.currentTabIndex != current.currentTabIndex ||
                 previous.currentTab?.title != current.currentTab?.title,
             listener: (context, state) => unawaited(
-              WindowTitleSync.update(
+              WindowTitleSync.of(context).syncIfSupported(
                 state.currentTab?.title,
                 tabCount: state.tabs.length,
               ),

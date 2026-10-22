@@ -82,6 +82,7 @@ import 'package:otzaria/core/user_state/window_session_store.dart';
 import 'package:otzaria/core/windowing/multiview/multi_view_host.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
+import 'package:otzaria/core/windowing/multiview/view_window_scope.dart';
 import 'package:otzaria/core/windowing/dock_progress_listener.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
@@ -1605,21 +1606,30 @@ class _AppBootstrapState extends State<AppBootstrap> {
     final historyRepository = _historyRepository!;
     final settingsRepository = _settingsRepository!;
 
+    final mainWindow = WindowScopeProviders(
+      historyRepository: historyRepository,
+      initialTab: _initialTab,
+      // מתחת לכל ה-blocs: האפיק עונה על בקשות מחלונות אחרים, ושתי
+      // הבקשות הנתמכות — "תאר את עצמך" ו"קלוט כרטיסיה" — זקוקות
+      // ל-TabsBloc ול-NavigationBloc.
+      child: const WindowBusHost(child: App()),
+    );
+
     return AppScopeProviders(
       settingsRepository: settingsRepository,
       // הדוק שייך לתהליך: מאזין אחד מעל היקף החלון.
       child: DockProgressListener(
-        // בלי הדגל מחזיר את child כמו שהוא.
-        child: MultiViewHost(
-          child: WindowScopeProviders(
-            historyRepository: historyRepository,
-            initialTab: _initialTab,
-            // מתחת לכל ה-blocs: האפיק עונה על בקשות מחלונות אחרים, ושתי
-            // הבקשות הנתמכות — "תאר את עצמך" ו"קלוט כרטיסיה" — זקוקות
-            // ל-TabsBloc ול-NavigationBloc.
-            child: const WindowBusHost(child: App()),
-          ),
-        ),
+        // בלי הדגל הענף נגזם מהבנייה, יחד עם כל קוד חלונות ה-Dart.
+        child: MultiViewMode.enabled
+            ? MultiViewHost(
+                contentBuilder: (context, entry) => ViewWindowScope(
+                  entry: entry,
+                  historyRepository: historyRepository,
+                  child: const App(),
+                ),
+                child: mainWindow,
+              )
+            : mainWindow,
       ),
     );
   }

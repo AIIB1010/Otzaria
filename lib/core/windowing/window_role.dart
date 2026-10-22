@@ -30,7 +30,16 @@ class AppWindowRole {
   const AppWindowRole({
     required this.isPrimaryView,
     this.openedWithTab = false,
+    this.isViewWindow = false,
   });
+
+  /// חלון Dart באותו isolate עם החלון הראשי (ריבוי תצוגות).
+  const AppWindowRole.view({bool openedWithTab = false})
+    : this(
+        isPrimaryView: false,
+        openedWithTab: openedWithTab,
+        isViewWindow: true,
+      );
 
   /// התפקיד מתוך [WindowRole], נקרא מחדש בכל גישה.
   static AppWindowRole get current => AppWindowRole(
@@ -44,12 +53,17 @@ class AppWindowRole {
   /// האם החלון נפתח עם כרטיסיה שהועברה אליו ([WindowRole.openedWithTab]).
   final bool openedWithTab;
 
+  /// חלון Dart ולא חלון של ה-runner: מסגרת מערכת, ובלי ה-singletons של החלון
+  /// הראשי (`windowManager`, חשיפת ה-splash, ה-listener שלו).
+  final bool isViewWindow;
+
   @override
   bool operator ==(Object other) =>
       other is AppWindowRole &&
       other.isPrimaryView == isPrimaryView &&
-      other.openedWithTab == openedWithTab;
+      other.openedWithTab == openedWithTab &&
+      other.isViewWindow == isViewWindow;
 
   @override
-  int get hashCode => Object.hash(isPrimaryView, openedWithTab);
+  int get hashCode => Object.hash(isPrimaryView, openedWithTab, isViewWindow);
 }

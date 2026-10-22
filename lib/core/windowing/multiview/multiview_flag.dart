@@ -6,6 +6,8 @@ import 'dart:ui' show FlutterView;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/src/foundation/_features.dart' as features;
 import 'package:flutter/src/widgets/_window.dart';
+import 'package:flutter/src/widgets/_window_win32.dart'
+    show WindowControllerWin32;
 import 'package:flutter/widgets.dart';
 
 /// חלונות Dart באותו מנוע (ריבוי תצוגות). נבנה עם
@@ -54,8 +56,54 @@ class ViewWindowHandle {
 
   FlutterView get view => _controller.rootView;
 
+  /// מודיע על שינוי גודל, הפעלה, כותרת ומגבלות; לא על הזזה בלבד.
+  Listenable get changes => _controller;
+
+  bool _destroyed = false;
+
+  /// האם החלון כבר נהרס (WM_DESTROY).
+  bool get isDestroyed => _destroyed;
+
+  /// ה-HWND של החלון העליון; null מחוץ ל-Windows או אחרי ההריסה.
+  int? get hwnd {
+    final controller = _controller;
+    if (_destroyed || controller is! WindowControllerWin32) return null;
+    return (controller as WindowControllerWin32).windowHandle.address;
+  }
+
+  bool get isActivated => !_destroyed && _controller.isActivated;
+  bool get isMaximized => !_destroyed && _controller.isMaximized;
+  bool get isMinimized => !_destroyed && _controller.isMinimized;
+  bool get isFullscreen => !_destroyed && _controller.isFullscreen;
+
+  void setTitle(String title) {
+    if (!_destroyed) _controller.setTitle(title);
+  }
+
+  void setMaximized(bool value) {
+    if (!_destroyed) _controller.setMaximized(value);
+  }
+
+  void setMinimized(bool value) {
+    if (!_destroyed) _controller.setMinimized(value);
+  }
+
+  void setFullscreen(bool value) {
+    if (!_destroyed) _controller.setFullscreen(value);
+  }
+
+  void setMinimumSize(Size size) {
+    if (_destroyed) return;
+    _controller.setConstraints(
+      BoxConstraints(minWidth: size.width, minHeight: size.height),
+    );
+  }
+
   /// מותר לקרוא כמה פעמים; `onDestroyed` נקרא כשהחלון באמת נהרס.
   void destroy() => _controller.destroy();
+
+  /// אחרי WM_DESTROY: שאילתות מחזירות ערך ברירת מחדל ופעולות אינן עושות דבר.
+  void markDestroyed() => _destroyed = true;
 
   void dispose() => _controller.dispose();
 }

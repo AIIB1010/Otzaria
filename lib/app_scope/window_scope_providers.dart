@@ -24,6 +24,7 @@ import 'package:otzaria/plugins/declarative/services/declarative_library_book_ac
 import 'package:otzaria/plugins/declarative/services/declarative_plugin_host_service.dart';
 import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
 import 'package:otzaria/plugins/services/plugin_reader_actions.dart';
+import 'package:otzaria/plugins/services/plugin_toolbar_registry.dart';
 import 'package:otzaria/settings/services/custom_folders/bloc/custom_folders_bloc.dart';
 import 'package:otzaria/tools/calendar/services/calendar_alerts_client.dart';
 import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
@@ -47,6 +48,7 @@ class WindowScopeProviders extends StatelessWidget {
     this.initialTab,
     this.tabsSession,
     this.duties,
+    this.initialFullscreen,
     required this.child,
   });
 
@@ -61,6 +63,9 @@ class WindowScopeProviders extends StatelessWidget {
   /// `null` — [ProcessDuties.current], וה-`PluginSystemBloc` קורא אותו בכל אירוע.
   final ProcessDuties? duties;
 
+  /// מצב החלון בפועל; null משמר את שחזור חלון ה־window_manager מההגדרות.
+  final bool? initialFullscreen;
+
   final Widget child;
 
   @override
@@ -72,8 +77,10 @@ class WindowScopeProviders extends StatelessWidget {
           create: (_) => _WindowUiLifetime(AppWindowKeys.of(context)),
           dispose: (lifetime) => lifetime.dispose(),
         ),
+        // של החלון הזה ולא של החלון הפעיל, שבזמן היצירה עשוי להיות אחר.
         RepositoryProvider<FocusRepository>(
-          create: (_) => FocusRepository(),
+          create: (context) =>
+              FocusRepository.forWindow(AppWindowKeys.of(context)),
         ),
         RepositoryProvider<ProcessDuties>.value(
           value: duties ?? ProcessDuties.current,
@@ -209,7 +216,7 @@ class WindowScopeProviders extends StatelessWidget {
             create: (_) => WorkStatusCubit(),
           ),
           BlocProvider<WindowFullscreenCubit>(
-            create: (_) => WindowFullscreenCubit(),
+            create: (_) => WindowFullscreenCubit(initial: initialFullscreen),
           ),
           BlocProvider<PluginSystemBloc>(
             create: (context) => StartupTimeline.instance.phaseSync(
@@ -249,7 +256,9 @@ PluginSystemBloc _createPluginSystemBloc(
   final bookAccess = DeclarativeLibraryBookAccess.otzaria(
     coordinator,
   );
+  final toolbar = PluginToolbarRegistry.forWindow();
   final host = DeclarativePluginHostService(
+    toolbarRegistry: toolbar,
     loadPlugin: repository.getPlugin,
     loadPermissions: (pluginId) async =>
         (await repository.getGrantedPermissionNames(
@@ -270,6 +279,7 @@ PluginSystemBloc _createPluginSystemBloc(
       repository: repository,
       alertsClient: CalendarAlertsClient.forCurrentWindow(),
       declarativeHost: host,
+      toolbarRegistry: toolbar,
       readerStates: tabsBloc.stream,
       initialReaderState: tabsBloc.state,
       processDuties: duties,
