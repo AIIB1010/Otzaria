@@ -1140,7 +1140,10 @@ const { data } = await Otzaria.call('library.getCommentators', {
 - `targetTitlePrefixes` — סינון לספרי יעד ששמם פותח באחת התחיליות. כשהוא
   ניתן יחד עם `targetTitles`, קישור עובר אם כותרת היעד מופיעה ברשימה **או**
   פותחת באחת התחיליות (איחוד).
-- `includeAnchors` — כשהוא `true`, קישור בעל עוגן-מילה מקבל שדה `anchor`.
+- `includeAnchors` — כשהוא `true`, קישור בעל עוגן-מילה מקבל שדה `anchor`:
+  אופסטים בתווים גלויים של טקסט השורה כפי ש-`getBookContent` מחזיר אותו. בספר
+  שהערות השוליים שלו בטבלה נפרדת, גופי ההערות אינם בטקסט הזה; עוגן שכולו בתוך
+  גוף הערה אינו מוחזר, וטווח שחוצה הערה מוחזר בלי החלק שבה.
 
 ```javascript
 const { data } = await Otzaria.call('library.getLinks', {

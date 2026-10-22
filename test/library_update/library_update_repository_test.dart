@@ -2517,6 +2517,7 @@ Map<String, String> _tableHashes(String dbPath, {int schemaVersion = 4}) {
         .computeReport(
           db,
           tableOrder: hashTableOrderForSchemaVersion(schemaVersion),
+          rowOrder: hashRowOrderForSchemaVersion(schemaVersion),
         )
         .tableHashes;
   } finally {
@@ -2531,6 +2532,7 @@ String _logicalHash(String dbPath) {
     return const LogicalContentHasher().compute(
       db,
       tableOrder: hashTableOrderForSchemaVersion(4),
+      rowOrder: hashRowOrderForSchemaVersion(4),
     );
   } finally {
     db.close();

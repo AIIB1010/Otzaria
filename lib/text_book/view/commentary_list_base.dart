@@ -52,6 +52,7 @@ import 'package:otzaria/book_common/utils/commentator_group_builder.dart';
 import 'package:otzaria/book_common/utils/link_anchor_markers.dart';
 import 'package:otzaria/text_book/view/commentators_list_screen.dart';
 import 'package:otzaria/widgets/misc/commentators_filter_button.dart';
+import 'package:otzaria/widgets/misc/link_preview_overlay.dart';
 import 'package:otzaria/widgets/layout/commentators_filter_screen.dart';
 import 'package:otzaria/widgets/lists/commentators_selection_panel.dart';
 import 'package:otzaria/widgets/feedback/otzaria_empty_state.dart';
@@ -1901,6 +1902,8 @@ class CommentaryListBaseState extends State<CommentaryListBase>
                   state.content,
                   currentIndexes,
                   dbNotes: state.bookNotes,
+                  decorateBody: (line, note, body) =>
+                      noteBodyWithAnchors(state, line, note, body),
                 );
                 if (relevantNotes.isNotEmpty) {
                   notesWidget = _NotesCommentaryWidget(
@@ -2831,6 +2834,36 @@ class _CommentaryLinkItemState extends State<_CommentaryLinkItem> {
   }
 }
 
+/// עוגני הקישורים של שורה [lineIndex] בספר, בסדר שה-href של הסמנים מפנה אליו.
+List<Link> _bookAnchorLinksAt(TextBookLoaded state, int lineIndex) =>
+    (state.linksByLine[lineIndex + 1] ?? const <Link>[])
+        .where((link) => link.anchorStart != null)
+        .toList();
+
+/// גוף ההערה [note] של שורה [lineIndex] עם חלקי עוגני השורה שבו, כמו בגוף הספר.
+@visibleForTesting
+String noteBodyWithAnchors(
+  TextBookLoaded state,
+  int lineIndex,
+  int note,
+  String body,
+) {
+  if (!state.bodyDisplayProfile.showAnchorMarkers ||
+      state.book.versionTitle != null) {
+    return body;
+  }
+  final anchorLinks = _bookAnchorLinksAt(state, lineIndex);
+  if (anchorLinks.isEmpty) return body;
+  return injectLinkAnchorMarkers(
+    rawLine: body,
+    anchorLinks: anchorLinks,
+    styleIndexByCommentator: anchorStyleIndexByCommentator(anchorLinks),
+    lineIndex: lineIndex,
+    notes: state.bookNotes.notesAt(lineIndex),
+    note: note,
+  );
+}
+
 /// תצוגת המפרש הוירטואלי 'הערות' — מציגה את גוף ההערות ה-inline
 /// (<i class="footnote">) של השורות הנבחרות כאילו היו רשימת מפרשים.
 class _NotesCommentaryWidget extends StatefulWidget {
@@ -2886,6 +2919,38 @@ class _NotesCommentaryWidgetState extends State<_NotesCommentaryWidget> {
   void dispose() {
     widget.selectionSyncController?.clear(_selectionOwner);
     super.dispose();
+  }
+
+  /// הקישור של סמן `otzaria://anchor?ref=<line>_<i>` שבגוף הערה.
+  Link? _anchorLink(String url) {
+    final parts = Uri.tryParse(url)?.queryParameters['ref']?.split('_');
+    if (parts == null || parts.length != 2) return null;
+    final line = int.tryParse(parts[0]);
+    final index = int.tryParse(parts[1]);
+    if (line == null || index == null || index < 0) return null;
+    final links = _bookAnchorLinksAt(widget.state, line);
+    return index < links.length ? links[index] : null;
+  }
+
+  void _openAnchor(String url) {
+    final link = _anchorLink(url);
+    if (link == null) return;
+    LinkPreviewOverlay.dismiss();
+    openLinkTarget(link, (tab) => widget.openBookCallback(tab));
+  }
+
+  void _previewAnchor(String url, Offset globalPosition) {
+    final link = _anchorLink(url);
+    if (link == null) return;
+    LinkPreviewOverlay.cancelScheduledHide();
+    LinkPreviewOverlay.show(
+      context,
+      link: link,
+      globalPosition: globalPosition,
+      hoverMode: true,
+      displayProfile: widget.displayProfile,
+      onOpen: () => _openAnchor(url),
+    );
   }
 
   /// ההערות הן טקסט הספר עצמו: בספר מוגן Ctrl+C עובר דרך מגבלת ההעתקה.
@@ -3025,6 +3090,10 @@ class _NotesCommentaryWidgetState extends State<_NotesCommentaryWidget> {
                                 widget.openBookCallback(tab);
                               }
                             },
+                            onAnchorTap: _openAnchor,
+                            onAnchorHover: _previewAnchor,
+                            onAnchorHoverExit: (_) =>
+                                LinkPreviewOverlay.scheduleHide(),
                           ),
                         );
                       }),

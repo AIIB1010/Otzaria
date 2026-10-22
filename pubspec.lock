@@ -1200,11 +1200,11 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "v5.0.0"
-      resolved-ref: "0d7a33fc8c7a843ae05c0606c4fdf06782252477"
+      ref: "v5.0.1"
+      resolved-ref: e155cabb9bbe02de8ceac4d10da746c579f78a47
       url: "https://github.com/Otzaria/otzaria_search_engine.git"
     source: git
-    version: "5.0.0"
+    version: "5.0.1"
   package_config:
     dependency: transitive
     description:
@@ -1596,8 +1596,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "445744d354d40bde3c042f898c6f93c8f455ff40"
-      resolved-ref: "445744d354d40bde3c042f898c6f93c8f455ff40"
+      ref: a9257039324cf98c8be0648b35675b3be9ba3494
+      resolved-ref: a9257039324cf98c8be0648b35675b3be9ba3494
       url: "https://github.com/Otzaria/otzaria_library_updater"
     source: git
     version: "0.8.1"

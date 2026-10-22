@@ -239,6 +239,9 @@ class InlineBookNotePreviewContent extends StatelessWidget {
   /// גודל הטקסט שעליו נפתחה החלונית; ראה [previewFontSize].
   final double? maxFontSize;
 
+  /// לחיצה על עוגן-קישור (`otzaria://anchor`) שבגוף ההערה.
+  final void Function(String url)? onAnchorTap;
+
   const InlineBookNotePreviewContent({
     super.key,
     required this.content,
@@ -246,6 +249,7 @@ class InlineBookNotePreviewContent extends StatelessWidget {
     this.removeNikud,
     this.removePunctuation,
     this.maxFontSize,
+    this.onAnchorTap,
   });
 
   @override
@@ -270,6 +274,7 @@ class InlineBookNotePreviewContent extends StatelessWidget {
                   : null,
               lineHeight: settings.lineHeight,
             ),
+            onAnchorTap: onAnchorTap,
           ),
         ),
       ),

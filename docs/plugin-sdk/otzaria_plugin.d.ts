@@ -533,7 +533,11 @@ export type GetCommentatorsResult =
   | { commentators: CommentatorInfo[] }
   | { groups: CommentatorGroup[] };
 
-/** עוגן-מילה של קישור בשורת המקור (אופסטים בתווים גלויים). */
+/**
+ * עוגן-מילה של קישור בשורת המקור, באופסטים בתווים גלויים של הטקסט ש-`getBookContent`
+ * מחזיר. גוף הערה שבטבלה נפרדת אינו בטקסט הזה: עוגן שכולו בגוף הערה אינו מוחזר,
+ * וטווח שחוצה הערה מוחזר בלי החלק שבה.
+ */
 export interface LinkAnchor {
   start: number;
   end: number | null;

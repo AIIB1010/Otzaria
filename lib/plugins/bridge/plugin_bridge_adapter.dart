@@ -6,6 +6,9 @@ import 'dart:io' hide Link;
 import 'dart:math' as math;
 import 'package:collection/collection.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:otzaria/book_common/utils/link_anchor_markers.dart';
+import 'package:otzaria/text_book/models/book_notes.dart';
+import 'package:otzaria/text_book/repository/book_notes_repository.dart';
 import 'package:otzaria/book_protection/models/book_protection.dart';
 import 'package:otzaria/book_protection/repository/book_protection_repository.dart';
 import 'package:otzaria/book_protection/utils/copy_guard.dart';
@@ -1670,6 +1673,17 @@ class PluginBridgeAdapter {
       targetBookTitles: targetTitlePrefixes == null ? targetTitles : null,
     );
 
+    // העוגנים נמדדים על השורה המלאה; התוסף מקבל את הטקסט השמור, בלי גופי ההערות.
+    final notes = includeAnchors
+        ? await BookNotesRepository.instance.notesFor(
+            book.title,
+            categoryId: book.categoryId,
+            source: book.source,
+            fileType: book.fileType,
+            versionTitle: book.versionTitle,
+          )
+        : BookNotes.empty;
+
     final filtered = _filterLinkRecords(
       links,
       targetTitles: targetTitles,
@@ -1689,7 +1703,8 @@ class PluginBridgeAdapter {
         'targetIsUserBook': link.targetIsUserBook,
         'targetSource': link.targetSource.wireKey,
         'targetCategoryId': link.targetCategoryId,
-        if (includeAnchors) ...?_linkAnchorJson(link),
+        if (includeAnchors)
+          ...?_linkAnchorJson(link, notes.notesAt(link.index1 - 1)),
       },
     );
     return {'links': filtered.records, 'truncated': filtered.truncated};
@@ -1803,16 +1818,16 @@ class PluginBridgeAdapter {
     return (records: records, truncated: truncated);
   }
 
-  Map<String, dynamic>? _linkAnchorJson(Link link) {
-    final span = link.anchorSpans.firstOrNull;
-    final start = span?.start ?? link.anchorStart;
-    if (start == null) return null;
+  /// העוגן הראשון של [link] בטקסט השמור של השורה ([notes] — הערותיה); עוגן
+  /// שכולו בגוף הערה אינו מוחזר.
+  Map<String, dynamic>? _linkAnchorJson(Link link, List<BookNote> notes) {
+    final spans = linkAnchorSpans(link);
+    final span =
+        (link.anchorOffsetsAreRaw ? spans : projectAnchorSpans(spans, notes))
+            .firstOrNull;
+    if (span == null) return null;
     return {
-      'anchor': {
-        'start': start,
-        'end': span?.end ?? link.anchorEnd,
-        'label': span?.label ?? link.anchorLabel,
-      },
+      'anchor': {'start': span.start, 'end': span.end, 'label': span.label},
     };
   }
 
