@@ -81,6 +81,7 @@ import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/core/user_state/window_bounds.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
 import 'package:otzaria/core/windowing/multiview/multi_view_host.dart';
+import 'package:otzaria/core/windowing/last_active_window.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_opener.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_scope.dart';
@@ -487,6 +488,10 @@ Future<void> _initializeSentry() async {
         options.tracesSampleRate = 0.0;
 
         options.beforeSend = (event, hint) {
+          // כל החלונות ב-isolate אחד; החלון הפעיל האחרון מקרב את המקור.
+          if (MultiViewMode.enabled) {
+            event.tags = {...?event.tags, 'window': LastActiveWindow.id.value};
+          }
           return shouldReportSentryEvent(
                 event: event,
                 currentBuild: currentBuild,
