@@ -1140,14 +1140,7 @@ class PluginBridgeAdapter {
         // spec: accepts id, bookId (= title in otzaria), type — all optional,
         // all supplied fields must match the same book.
         {
-          final bookId = (args['bookId'] ?? args['title']) as String?;
-          if (PluginBookIdentity.parseId(args['id']) == null &&
-              bookId == null &&
-              (args['bookUid'] as String?)?.trim().isNotEmpty != true) {
-            throw Exception(
-              'error.invalid_params: id, bookUid or bookId required',
-            );
-          }
+          _requireBookIdentity(args);
           final book = _findPluginBook(library, args);
           if (book == null) return null;
           return {
@@ -1161,14 +1154,7 @@ class PluginBridgeAdapter {
         // spec: אותם שדות זהות כמו getBookMetadata, ומחזיר את נתוני
         // חלון "אודות הספר" — אותו מקור נתונים, כדי שהתצוגות לא ייפרדו.
         {
-          final bookId = (args['bookId'] ?? args['title']) as String?;
-          if (PluginBookIdentity.parseId(args['id']) == null &&
-              bookId == null &&
-              (args['bookUid'] as String?)?.trim().isNotEmpty != true) {
-            throw Exception(
-              'error.invalid_params: id, bookUid or bookId required',
-            );
-          }
+          _requireBookIdentity(args);
           final book = _findPluginBook(library, args);
           if (book == null) return null;
           final info = await BookDetailsService().getBookInformation(book);
@@ -2064,12 +2050,7 @@ class PluginBridgeAdapter {
     Library library,
     Map<String, dynamic> args,
   ) async {
-    final bookId = (args['bookId'] ?? args['title']) as String?;
-    if (PluginBookIdentity.parseId(args['id']) == null &&
-        bookId == null &&
-        (args['bookUid'] as String?)?.trim().isNotEmpty != true) {
-      throw Exception('error.invalid_params: id, bookUid or bookId required');
-    }
+    _requireBookIdentity(args);
     final writable = _parseUserFileAccess(args);
     final book = _findPluginBook(library, args);
     if (book == null) throw Exception('error.not_found: book not found');
@@ -2153,6 +2134,14 @@ class PluginBridgeAdapter {
       return null;
     }
     return found.first;
+  }
+
+  static void _requireBookIdentity(Map<String, dynamic> args) {
+    if (PluginBookIdentity.parseId(args['id']) == null &&
+        (args['bookId'] ?? args['title']) == null &&
+        (args['bookUid'] as String?)?.trim().isNotEmpty != true) {
+      throw Exception('error.invalid_params: id, bookUid or bookId required');
+    }
   }
 
   void _ensureBookIndex(Library library) {
@@ -2537,21 +2526,13 @@ class PluginBridgeAdapter {
         //   navigateToPositionIfReused?, matchPages?, matchedTerms? })
         // also accepts legacy 'title' for back-compat; all supplied identity fields must match.
         {
-          final bookId = (args['bookId'] ?? args['title']) as String?;
           final index = (args['index'] as num?)?.toInt() ?? 0;
           final searchQuery = args['searchQuery'] as String? ?? '';
           final navigateToPositionIfReused =
               args['navigateToPositionIfReused'] as bool? ?? false;
           final openInSidePane = args['openInSidePane'] as bool? ?? false;
           final externalMatches = _parseExternalMatches(args, searchQuery);
-          if (PluginBookIdentity.parseId(args['id']) == null &&
-              bookId == null &&
-              args['external'] == null &&
-              (args['bookUid'] as String?)?.trim().isNotEmpty != true) {
-            throw Exception(
-              'error.invalid_params: id, bookUid or bookId required',
-            );
-          }
+          if (args['external'] == null) _requireBookIdentity(args);
           if (args['external'] != null && args['reader'] != 'native') {
             final access = DeclarativeLibraryBookAccess.otzaria(
               _dependencies.bookOpenCoordinator,
@@ -2748,17 +2729,10 @@ class PluginBridgeAdapter {
       case 'openBookAtRef':
         // spec: openBookAtRef({ id?, bookId?, type?, ref, index?, highlight? })
         {
-          final bookId = (args['bookId'] ?? args['title']) as String?;
           final ref = args['ref'] as String?;
           int index = (args['index'] as num?)?.toInt() ?? 0;
           final highlight = args['highlight'] as bool? ?? false;
-          if (PluginBookIdentity.parseId(args['id']) == null &&
-              bookId == null &&
-              (args['bookUid'] as String?)?.trim().isNotEmpty != true) {
-            throw Exception(
-              'error.invalid_params: id, bookUid or bookId required',
-            );
-          }
+          _requireBookIdentity(args);
           final book = _findPluginBook(
             await DataRepository.instance.library,
             args,
@@ -2852,13 +2826,7 @@ class PluginBridgeAdapter {
               'startIndex',
             );
           }
-          if (PluginBookIdentity.parseId(args['id']) == null &&
-              (args['bookId'] ?? args['title']) == null &&
-              (args['bookUid'] as String?)?.trim().isNotEmpty != true) {
-            throw Exception(
-              'error.invalid_params: id, bookUid or bookId required',
-            );
-          }
+          _requireBookIdentity(args);
           final rawCommentators = args['commentators'];
           if (args.containsKey('commentators') &&
               (rawCommentators is! List ||
@@ -6474,15 +6442,7 @@ class PluginBridgeAdapter {
           if (index < 0) {
             throw Exception('error.invalid_params: index must not be negative');
           }
-          final hasUid =
-              (args['bookUid'] as String?)?.trim().isNotEmpty == true;
-          if (!hasUid &&
-              PluginBookIdentity.parseId(args['id']) == null &&
-              (args['bookId'] ?? args['title']) == null) {
-            throw Exception(
-              'error.invalid_params: id, bookUid or bookId required',
-            );
-          }
+          _requireBookIdentity(args);
           final book = _findPluginBook(
             await DataRepository.instance.library,
             args,
