@@ -5,6 +5,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/app_scope/app_scope_providers.dart';
 import 'package:otzaria/app_scope/process_duties.dart';
+import 'package:otzaria/plugins/bloc/plugin_system_bloc.dart';
+import 'package:otzaria/plugins/declarative/services/declarative_plugin_host_service.dart';
 import 'package:otzaria/core/focus_repository.dart';
 import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/core/user_state/window_bounds.dart';
@@ -145,6 +147,17 @@ void main() {
     expect(tabsA.state.tabs, [same(tab)]);
     expect(tabsB.state.tabs, isEmpty);
     expect(a.takeInitialTab(), isNull, reason: 'נצרכת פעם אחת');
+
+    final pluginsA = ctxA.read<PluginSystemBloc>();
+    final pluginsB = ctxB.read<PluginSystemBloc>();
+    expect(pluginsA.toolbarRegistry, isNotNull);
+    expect(pluginsA.toolbarRegistry, isNot(same(pluginsB.toolbarRegistry)));
+    expect(
+      (pluginsA.declarativeHost as DeclarativePluginHostService)
+          .toolbarBinding
+          .toolbarRegistry,
+      same(pluginsA.toolbarRegistry),
+    );
 
     final focusA = ctxA.read<FocusRepository>();
     expect(focusA, same(FocusRepository.forWindow(a.keys)));

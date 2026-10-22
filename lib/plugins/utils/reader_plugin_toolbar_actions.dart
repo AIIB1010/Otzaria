@@ -15,7 +15,10 @@ List<ActionButtonData> buildReaderPluginActions(
   required OpenedTab tab,
   required String pluginContext,
 }) {
-  final records = PluginToolbarRegistry.instance.getAll();
+  final records = [
+    ...PluginToolbarRegistry.instance.getAll(),
+    ...?context.read<PluginSystemBloc>().toolbarRegistry?.getAll(),
+  ];
   if (records.isEmpty) return const [];
   return buildPluginToolbarActions(
     records: records,
@@ -36,7 +39,10 @@ List<(int, ActionButtonData)> buildReaderPluginOverflowActions(
   required OpenedTab tab,
   required String pluginContext,
 }) {
-  final records = PluginToolbarRegistry.instance.getAll();
+  final records = [
+    ...PluginToolbarRegistry.instance.getAll(),
+    ...?context.read<PluginSystemBloc>().toolbarRegistry?.getAll(),
+  ];
   if (records.isEmpty) return const [];
   return buildOrderedPluginOverflowActions(
     records: records,
@@ -50,3 +56,10 @@ List<(int, ActionButtonData)> buildReaderPluginOverflowActions(
         ?.dispatchAction,
   );
 }
+
+/// רישומים משותפים לצד הפקדים הדקלרטיביים של החלון הזה.
+Listenable readerPluginToolbarListenable(BuildContext context) =>
+    Listenable.merge([
+      PluginToolbarRegistry.instance,
+      context.read<PluginSystemBloc>().toolbarRegistry,
+    ]);

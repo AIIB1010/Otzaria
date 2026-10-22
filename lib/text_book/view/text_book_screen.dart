@@ -94,7 +94,6 @@ import 'package:otzaria/utils/ui/image_decode_size.dart';
 
 import 'package:otzaria/widgets/navigation/responsive_action_bar.dart';
 import 'package:otzaria/widgets/navigation/book_view_actions.dart';
-import 'package:otzaria/plugins/services/plugin_toolbar_registry.dart';
 import 'package:otzaria/plugins/services/plugin_text_reader_registry.dart';
 import 'package:otzaria/plugins/utils/plugin_toolbar_actions.dart';
 import 'package:otzaria/plugins/services/context_menu_registry.dart';
@@ -1660,7 +1659,7 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
   Widget _buildActions(BuildContext context, TextBookLoaded state) {
     final tourKeys = TourTargetKeys.of(context);
     return ListenableBuilder(
-      listenable: PluginToolbarRegistry.instance,
+      listenable: readerPluginToolbarListenable(context),
       builder: (context, _) => Consumer<ShamorZachorDataProvider>(
         builder: (context, _, _) => ResponsiveActionBar(
           key: const ValueKey('responsive_actions'),

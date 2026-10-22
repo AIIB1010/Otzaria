@@ -24,6 +24,7 @@ import 'package:otzaria/plugins/declarative/services/declarative_library_book_ac
 import 'package:otzaria/plugins/declarative/services/declarative_plugin_host_service.dart';
 import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
 import 'package:otzaria/plugins/services/plugin_reader_actions.dart';
+import 'package:otzaria/plugins/services/plugin_toolbar_registry.dart';
 import 'package:otzaria/settings/services/custom_folders/bloc/custom_folders_bloc.dart';
 import 'package:otzaria/tools/calendar/services/calendar_alerts_client.dart';
 import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
@@ -255,7 +256,9 @@ PluginSystemBloc _createPluginSystemBloc(
   final bookAccess = DeclarativeLibraryBookAccess.otzaria(
     coordinator,
   );
+  final toolbar = PluginToolbarRegistry.forWindow();
   final host = DeclarativePluginHostService(
+    toolbarRegistry: toolbar,
     loadPlugin: repository.getPlugin,
     loadPermissions: (pluginId) async =>
         (await repository.getGrantedPermissionNames(
@@ -276,6 +279,7 @@ PluginSystemBloc _createPluginSystemBloc(
       repository: repository,
       alertsClient: CalendarAlertsClient.forCurrentWindow(),
       declarativeHost: host,
+      toolbarRegistry: toolbar,
       readerStates: tabsBloc.stream,
       initialReaderState: tabsBloc.state,
       processDuties: duties,

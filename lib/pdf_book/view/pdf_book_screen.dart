@@ -102,7 +102,6 @@ import 'package:otzaria/utils/ui/reading_left_pane_policy.dart';
 import 'package:otzaria/widgets/widgets_exports.dart';
 import 'package:otzaria/widgets/layout/adaptive_side_pane.dart';
 import 'package:otzaria/widgets/navigation/responsive_action_bar.dart';
-import 'package:otzaria/plugins/services/plugin_toolbar_registry.dart';
 import 'package:otzaria/plugins/utils/plugin_toolbar_actions.dart';
 import 'package:otzaria/widgets/navigation/book_view_actions.dart';
 
@@ -5289,7 +5288,7 @@ class _PdfBookScreenState extends State<PdfBookScreen>
   Widget _buildPdfActions(BuildContext context) {
     final tourKeys = TourTargetKeys.of(context);
     return ListenableBuilder(
-      listenable: PluginToolbarRegistry.instance,
+      listenable: readerPluginToolbarListenable(context),
       builder: (context, _) => ResponsiveActionBar(
         key: const ValueKey('pdf_actions'),
         overflowMenuOffset: const Offset(0, 8),

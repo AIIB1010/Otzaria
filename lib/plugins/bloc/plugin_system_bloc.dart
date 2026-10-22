@@ -60,6 +60,8 @@ class PluginSystemBloc extends Bloc<PluginSystemEvent, PluginSystemState> {
   final PluginDevLoaderService devLoader;
   final PluginDevWatchService devWatchService;
   final DeclarativePluginHost? declarativeHost;
+  final PluginToolbarRegistry? toolbarRegistry;
+  final bool _sharedDevWatcher;
   StreamSubscription<PluginDevFsChange>? _devWatchSub;
   StreamSubscription<TabsState>? _readerStateSub;
 
@@ -90,6 +92,7 @@ class PluginSystemBloc extends Bloc<PluginSystemEvent, PluginSystemState> {
     PluginDevWatchService? devWatchService,
     BundledPluginSeedService? bundledSeedService,
     this.declarativeHost,
+    this.toolbarRegistry,
     Stream<TabsState>? readerStates,
     TabsState? initialReaderState,
     PluginInstallResultsLog? installResultsLog,
@@ -105,7 +108,8 @@ class PluginSystemBloc extends Bloc<PluginSystemEvent, PluginSystemState> {
            bundledSeedService ??
            BundledPluginSeedService(repository: repository),
        devLoader = devLoader ?? PluginDevLoaderService(repository: repository),
-       devWatchService = devWatchService ?? PluginDevWatchService(),
+       _sharedDevWatcher = devWatchService == null,
+       devWatchService = devWatchService ?? PluginDevWatchService.acquire(),
        super(PluginSystemInitial()) {
     on<LoadPlugins>(_onLoadPlugins, transformer: sequential());
     on<SeedBundledPlugins>(_onSeedBundledPlugins);
@@ -141,20 +145,7 @@ class PluginSystemBloc extends Bloc<PluginSystemEvent, PluginSystemState> {
     PluginShortcutRegistry.instance.addListener(_onPluginShortcutsChanged);
 
     _devWatchSub = this.devWatchService.events.listen((change) {
-      if (change.manifestChanged) {
-        add(DevelopmentPluginManifestChanged(change.pluginId));
-      } else {
-        unawaited(
-          PluginRuntimeDispatcher.instance
-              .reloadPlugin(change.pluginId)
-              .then(
-                (_) {},
-                onError: (e) => debugPrint(
-                  'Plugin dev reload error [${change.pluginId}]: $e',
-                ),
-              ),
-        );
-      }
+      unawaited(_handleDevChange(change));
     });
     if (declarativeHost != null) {
       if (initialReaderState != null) {
@@ -169,9 +160,35 @@ class PluginSystemBloc extends Bloc<PluginSystemEvent, PluginSystemState> {
     PluginShortcutRegistry.instance.removeListener(_onPluginShortcutsChanged);
     await _devWatchSub?.cancel();
     await _readerStateSub?.cancel();
-    devWatchService.dispose();
+    if (_sharedDevWatcher) {
+      PluginDevWatchService.release();
+    } else {
+      devWatchService.dispose();
+    }
     declarativeHost?.dispose();
+    toolbarRegistry?.dispose();
     await super.close();
+  }
+
+  Future<void> _handleDevChange(PluginDevFsChange change) async {
+    try {
+      await devWatchService.handleOnce(change, () async {
+        try {
+          if (change.manifestChanged) {
+            _removeSearchProviders(change.pluginId);
+            final plugin = await repository.getPlugin(change.pluginId);
+            if (plugin?.devRootPath case final root?) {
+              await devLoader.loadDevelopmentPlugin(root);
+            }
+          }
+        } finally {
+          await PluginRuntimeDispatcher.instance.reloadPlugin(change.pluginId);
+        }
+      });
+      if (change.manifestChanged && !isClosed) add(LoadPlugins());
+    } catch (error) {
+      debugPrint('Plugin dev reload error [${change.pluginId}]: $error');
+    }
   }
 
   Future<void> _onLoadPlugins(
