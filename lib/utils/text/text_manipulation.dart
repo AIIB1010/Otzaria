@@ -19,7 +19,7 @@ import 'package:otzaria_search_engine/otzaria_search_engine.dart'
         generateHighlightPattern,
         splitQueryWords;
 import 'package:otzaria/search/utils/literal_search_pattern.dart'
-    show literalQueryWordEdges;
+    show LiteralEdgeCheck, literalEdgeCheck;
 import 'package:otzaria/search/utils/user_regex_query.dart';
 
 /// רגקס להסרת תגי HTML.
@@ -1207,6 +1207,7 @@ List<_HighlightMatch> _crossLineMatches(
   required bool lineFirst,
   required _CompiledHighlightPattern compiled,
   required List<bool> requireTokenBoundaries,
+  LiteralEdgeCheck? edgeCheck,
 }) {
   final matcher = compiled.matcher;
   final userRegex = compiled.userRegexCrossesLines ? compiled.userRegex : null;
@@ -1226,6 +1227,9 @@ List<_HighlightMatch> _crossLineMatches(
       );
   for (final match in found) {
     if (match.start >= leftEnd || match.end <= leftEnd + 1) continue;
+    if (edgeCheck != null && !edgeCheck(joined, match.start, match.end)) {
+      continue;
+    }
     final words = <(int, int)>[
       for (final range in match.wordRanges)
         if (lineFirst && match.start + range.end <= leftEnd)
@@ -1298,6 +1302,9 @@ String highLight(
     for (final eligible in compiled.boundaryEligible)
       eligible && !yellowBackground && !partialWordMatch,
   ];
+  final edgeCheck = partialWordMatch && !yellowBackground
+      ? _edgeCheckFor(searchQuery, compiled)
+      : null;
 
   var matches = _findHighlightMatches(
     data,
@@ -1307,6 +1314,7 @@ String highLight(
     isSearchResultLine: isSearchResultLine,
     isFuzzy: isFuzzy,
   );
+  matches = _anchoredToQueryEdges(matches, data, edgeCheck);
   // מילה בודדת מותאמת בתוך טוקן אחד ולא יכולה לחצות את המעבר בין השורות.
   if (currentIndex == -1 &&
       !yellowBackground &&
@@ -1321,6 +1329,7 @@ String highLight(
           lineFirst: true,
           compiled: compiled,
           requireTokenBoundaries: requireTokenBoundaries,
+          edgeCheck: edgeCheck,
         ),
       if (previousLine != null)
         ..._crossLineMatches(
@@ -1329,6 +1338,7 @@ String highLight(
           lineFirst: false,
           compiled: compiled,
           requireTokenBoundaries: requireTokenBoundaries,
+          edgeCheck: edgeCheck,
         ),
     ];
     if (crossing.isNotEmpty) {
@@ -1336,9 +1346,6 @@ String highLight(
     }
   }
 
-  if (partialWordMatch && !yellowBackground) {
-    matches = _anchoredToQueryEdges(matches, data, searchQuery);
-  }
   if (matches.isEmpty) return data;
 
   // מעבר אחד עם buffer: שרשור substring לכל התאמה מעתיק את כל השורה בכל פעם,
@@ -1426,7 +1433,11 @@ List<List<int>> computeHighlightRanges(
     isFuzzy: isFuzzy,
   );
   if (partialWordMatch) {
-    matches = _anchoredToQueryEdges(matches, data, searchQuery);
+    matches = _anchoredToQueryEdges(
+      matches,
+      data,
+      _edgeCheckFor(searchQuery, compiled),
+    );
   }
   final ranges = <List<int>>[];
   for (final highlightMatch in matches) {
@@ -1523,26 +1534,30 @@ List<_HighlightMatch> _queryMatches(
   ];
   final matches = _findHighlightMatches(text, compiled, requireTokenBoundaries);
   return partialWordMatch
-      ? _anchoredToQueryEdges(matches, text, searchQuery)
+      ? _anchoredToQueryEdges(
+          matches,
+          text,
+          _edgeCheckFor(searchQuery, compiled),
+        )
       : matches;
 }
 
-/// בהתאמה חלקית רווח בקצה השאילתה דורש גבול מילה באותו צד, כמו בחיפוש
-/// הליטרלי ([literalQueryWordEdges]).
+/// בהתאמה חלקית רווח בקצה השאילתה דורש את גבול המילה של החיפוש הליטרלי.
+LiteralEdgeCheck? _edgeCheckFor(
+  String searchQuery,
+  _CompiledHighlightPattern compiled,
+) => compiled.userRegex == null ? literalEdgeCheck(searchQuery) : null;
+
 List<_HighlightMatch> _anchoredToQueryEdges(
   List<_HighlightMatch> matches,
   String data,
-  String searchQuery,
-) {
-  final edges = literalQueryWordEdges(searchQuery);
-  if (!edges.start && !edges.end) return matches;
-  return [
-    for (final match in matches)
-      if ((!edges.start || _hasTokenBoundaryBefore(data, match.start)) &&
-          (!edges.end || _hasTokenBoundaryAfter(data, match.end)))
-        match,
-  ];
-}
+  LiteralEdgeCheck? edgeCheck,
+) => edgeCheck == null
+    ? matches
+    : [
+        for (final match in matches)
+          if (edgeCheck(data, match.start, match.end)) match,
+      ];
 
 Future<bool> hasTopic(
   String title,
