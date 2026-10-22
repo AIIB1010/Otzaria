@@ -750,8 +750,9 @@ void main() {
         'inWorkArea': false,
       };
 
-      await CrossWindowTabDrag(inProcess: drops)
-          .handleDroppedOutside(tab, source);
+      await CrossWindowTabDrag(
+        inProcess: drops,
+      ).handleDroppedOutside(tab, source);
 
       expect(opener.opened, isEmpty);
       expect(source.events, isEmpty);
