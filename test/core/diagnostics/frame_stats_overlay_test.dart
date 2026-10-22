@@ -38,7 +38,8 @@ void main() {
     DeveloperDiagnostics.instance
       ..resetForTesting()
       ..outputPath = outputPath
-      ..errorLogWriter = (_) {};
+      ..errorLogWriter = (_) {}
+      ..processSampler = () async => null;
   });
 
   tearDown(() => DeveloperDiagnostics.instance.resetForTesting());
