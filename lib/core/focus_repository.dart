@@ -324,10 +324,13 @@ class FocusRepository {
 /// [registerDialogFocusRestorer] מ-initState. ביטול הרישום אוטומטי ב-dispose.
 mixin DialogFocusRestorerMixin<T extends StatefulWidget> on State<T> {
   FocusRestorer? _dialogFocusRestorer;
+  late final FocusRepository _dialogFocusRepository = FocusRepository.of(
+    context,
+  );
 
   /// רושם את [focusNode] כ-owner של שכבת הדיאלוג. קרא מ-initState.
   void registerDialogFocusRestorer(FocusNode focusNode) {
-    _dialogFocusRestorer = FocusRepository().registerActiveRestorer(
+    _dialogFocusRestorer = _dialogFocusRepository.registerActiveRestorer(
       restore: () {
         if (mounted && focusNode.canRequestFocus) focusNode.requestFocus();
       },
@@ -341,7 +344,9 @@ mixin DialogFocusRestorerMixin<T extends StatefulWidget> on State<T> {
   @override
   void dispose() {
     final restorer = _dialogFocusRestorer;
-    if (restorer != null) FocusRepository().unregisterActiveRestorer(restorer);
+    if (restorer != null) {
+      _dialogFocusRepository.unregisterActiveRestorer(restorer);
+    }
     super.dispose();
   }
 }

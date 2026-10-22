@@ -1,4 +1,4 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/focus_repository.dart';
 import 'package:otzaria/core/windowing/app_window_controller.dart';
@@ -9,6 +9,48 @@ import 'package:otzaria/core/windowing/app_window_scope.dart';
 /// שני חלונות באותו isolate לא חולקים צמתי פוקוס, טקסט איתור ומחסנית שחזור.
 void main() {
   tearDown(AppWindowKeys.resetForTest);
+
+  testWidgets(
+    'דיאלוג נשאר במאגר החלון שלו בעת יצירה וסגירה כשהפוקוס בחלון אחר',
+    (tester) async {
+      final a = AppWindowKeys(id: const AppWindowId('probe-a'));
+      final b = AppWindowKeys(id: const AppWindowId('probe-b'));
+      final repoA = FocusRepository.forWindow(a);
+      final repoB = FocusRepository.forWindow(b);
+      addTearDown(() {
+        repoA.resetForTesting();
+        repoB.resetForTesting();
+        AppWindowKeys.resetForTest();
+      });
+      AppWindowKeys.register(a);
+      AppWindowKeys.register(b);
+      AppWindowKeys.activateWindow(b.id);
+      var screenRestores = 0;
+      repoA.setScreenRestorer(
+        restore: () => screenRestores++,
+        canRestore: () => true,
+      );
+      final window = _FakeWindow();
+      await tester.pumpWidget(
+        AppWindowScope(
+          controller: window,
+          geometry: window,
+          keys: a,
+          child: const MaterialApp(home: _DialogProbe()),
+        ),
+      );
+      repoA.restoreNowForTesting();
+      expect(
+        screenRestores,
+        0,
+        reason:
+            'The mounted dialog must receive restore instead of its underlying screen',
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      repoA.restoreNowForTesting();
+      expect(screenRestores, 1);
+    },
+  );
 
   test('FocusRepository() הוא המופע של החלון הנוכחי, ויציב', () {
     expect(FocusRepository(), same(FocusRepository.current));
@@ -98,3 +140,29 @@ void main() {
 
 class _FakeWindow extends Fake
     implements AppWindowController, AppWindowGeometry {}
+
+class _DialogProbe extends StatefulWidget {
+  const _DialogProbe();
+  @override
+  State<_DialogProbe> createState() => _DialogProbeState();
+}
+
+class _DialogProbeState extends State<_DialogProbe>
+    with DialogFocusRestorerMixin<_DialogProbe> {
+  final node = FocusNode();
+  @override
+  void initState() {
+    super.initState();
+    registerDialogFocusRestorer(node);
+  }
+
+  @override
+  void dispose() {
+    node.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      Focus(focusNode: node, child: const SizedBox());
+}
