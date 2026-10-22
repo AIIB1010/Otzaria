@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/widgets/misc/inline_link_targets.dart';
 
 /// מזהה המצביע של אירועי הגלגלת הסינתטיים ש[MiddleClickAutoScroll] משגר.
@@ -177,6 +178,8 @@ class _MiddleClickAutoScrollState extends State<MiddleClickAutoScroll>
     if (!_isActive) return false;
     if (event is! KeyDownEvent) return false;
     if (event.logicalKey != LogicalKeyboardKey.escape) return false;
+    // ESC מחלון אחר לא עוצר את הגלילה כאן ולא נבלע.
+    if (!AppWindowKeys.isActiveWindow(context)) return false;
     _stop();
     return true;
   }

@@ -84,8 +84,12 @@ class _KeyboardShortcutsState extends State<KeyboardShortcuts> {
     super.dispose();
   }
 
+  /// FocusManager אחד לכל החלונות ב-isolate: כל מקש מגיע ל-handlers של כולם,
+  /// ולכן רק החלון הפעיל מבצע קיצורים.
+  bool get _isActiveWindow => mounted && AppWindowKeys.isActiveWindow(context);
+
   KeyEventResult _handleLateKeyEvent(KeyEvent event) {
-    if (!mounted) return KeyEventResult.ignored;
+    if (!_isActiveWindow) return KeyEventResult.ignored;
     final focusContext = FocusManager.instance.primaryFocus?.context;
     final route = focusContext == null ? null : ModalRoute.of(focusContext);
     if (route != null &&
@@ -123,10 +127,11 @@ class _KeyboardShortcutsState extends State<KeyboardShortcuts> {
 
   /// בעריכת טקסט השדה קודם, והקיצור הדינמי נבדק רק ב-late handler.
   KeyEventResult _handleEarlyKeyEvent(KeyEvent event) {
+    if (!_isActiveWindow) return KeyEventResult.ignored;
     if (event is KeyRepeatEvent && event.physicalKey == _dynamicKey) {
       return KeyEventResult.handled;
     }
-    if (event is! KeyDownEvent || !mounted) return KeyEventResult.ignored;
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
     final result = ShortcutHelper.isEditingText
         ? null
         : _handleDynamicShortcut(event);
