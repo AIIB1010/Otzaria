@@ -138,8 +138,8 @@ class _BooksListDialogState extends State<_BooksListDialog> {
                     // גובה שורה קבוע: קפיצת פס הגלילה לא בונה את כל השורות בדרך
                     prototypeItem: _BookListRow(
                       row: _BookRow(
-                        title: '',
-                        author: '',
+                        title: ' ',
+                        author: ' ',
                         category: '',
                         fileType: '',
                       ),
@@ -198,18 +198,24 @@ class _BookListRow extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              row.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodyMedium,
+            Tooltip(
+              message: row.title,
+              child: Text(
+                row.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
             ),
             const SizedBox(height: 2),
-            Text(
-              detailsLine,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: subtitleStyle,
+            Tooltip(
+              message: detailsLine,
+              child: Text(
+                detailsLine,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: subtitleStyle,
+              ),
             ),
           ],
         ),

@@ -89,10 +89,13 @@ class _HiddenBooksListDialogState extends State<_HiddenBooksListDialog> {
         ListTile(
           shape: Border(bottom: BorderSide(color: cs.surfaceContainerHighest)),
           leading: Icon(entry.icon, size: 20),
-          title: Text(
-            entry.label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+          title: Tooltip(
+            message: entry.label,
+            child: Text(
+              entry.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           trailing: ActionButton.ghost(
             text: context.settingsText('בטל הסתרה'),
