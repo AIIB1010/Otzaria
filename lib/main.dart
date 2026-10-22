@@ -14,12 +14,10 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:provider/provider.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:otzaria/plugins/view/safe_mode_controls.dart';
 import 'package:otzaria/plugins/services/startup_crash_counter.dart';
 import 'package:otzaria/plugins/services/webview2_creation_diagnostics.dart';
-import 'package:otzaria/attached_libraries/bloc/attached_libraries_bloc.dart';
 import 'package:otzaria/attached_libraries/repository/attached_library_registry.dart';
 import 'package:otzaria/attached_libraries/repository/attached_libraries_repository.dart';
 import 'package:otzaria/attached_libraries/repository/external_link_repository.dart';
@@ -32,34 +30,15 @@ import 'package:otzaria/app_report/services/crash_report_flow.dart';
 import 'package:otzaria/app_report/services/unclean_exit_detector.dart';
 import 'package:otzaria/app_report/view/crash_prompt_dialog.dart';
 import 'package:otzaria/app.dart';
-import 'package:otzaria/bookmarks/bloc/bookmark_bloc.dart';
-import 'package:otzaria/bookmarks/repository/bookmark_repository.dart';
-import 'package:otzaria/find_ref/bloc/find_ref_bloc.dart';
-import 'package:otzaria/find_ref/repository/find_ref_factory.dart';
-import 'package:otzaria/core/focus_repository.dart';
+import 'package:otzaria/app_scope/app_scope_providers.dart';
+import 'package:otzaria/app_scope/window_scope_providers.dart';
 import 'package:otzaria/core/netfree_certificates.dart';
 import 'package:otzaria/attached_libraries/repository/update/attached_library_update_service.dart';
-import 'package:otzaria/history/bloc/history_bloc.dart';
 import 'package:otzaria/history/history_repository.dart';
-import 'package:otzaria/indexing/bloc/indexing_bloc.dart';
 import 'package:otzaria/indexing/services/release_index_builder_cli.dart';
-import 'package:otzaria/library/bloc/library_bloc.dart';
-import 'package:otzaria/settings/services/custom_folders/bloc/custom_folders_bloc.dart';
-import 'package:otzaria/navigation/bloc/navigation_bloc.dart';
-import 'package:otzaria/navigation/bloc/navigation_event.dart';
-import 'package:otzaria/navigation/bloc/navigation_state.dart';
-import 'package:otzaria/navigation/navigation_repository.dart';
-import 'package:otzaria/settings/engine/settings_bloc.dart';
-import 'package:otzaria/settings/engine/settings_event.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
 import 'package:otzaria/update/differential/swap_recovery.dart';
-import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
-import 'package:otzaria/tabs/bloc/tabs_event.dart';
-import 'package:otzaria/tabs/models/tab.dart';
 import 'package:otzaria/tabs/tabs_repository.dart';
-import 'package:otzaria/workspaces/bloc/workspace_bloc.dart';
-import 'package:otzaria/workspaces/bloc/workspace_event.dart';
-import 'package:otzaria/workspaces/workspace_repository.dart';
 import 'package:otzaria/data/data_providers/tantivy_data_provider.dart';
 import 'package:otzaria/data/repository/data_repository.dart';
 import 'package:path_provider/path_provider.dart';
@@ -69,28 +48,11 @@ import 'package:otzaria/data/data_providers/cache_database_holder.dart';
 import 'package:otzaria/data/data_providers/hive_data_provider.dart';
 import 'package:otzaria/data/data_providers/shared_preferences_cache.dart';
 import 'package:otzaria/data/data_providers/sqlite_data_provider.dart';
-import 'package:otzaria/personal_notes/bloc/personal_notes_bloc.dart';
 import 'package:otzaria/data/constants/database_constants.dart';
 import 'package:otzaria/empty_library/bloc/empty_library_bloc.dart';
-import 'package:otzaria/library_update/bloc/library_update_bloc.dart';
 import 'package:otzaria/library_update/changes_notes/library_changes_notes.dart';
 import 'package:otzaria/library_update/services/library_access_gate.dart';
-import 'package:otzaria/library_update/repository/library_update_repository.dart';
-import 'package:otzaria/library_update/services/streaming_patch_downloader.dart';
-import 'package:otzaria/library_update/services/companion_assets_service.dart';
-import 'package:otzaria/semantic_search/repository/semantic_search_repository.dart';
 import 'package:otzaria/library_update/services/startup_recovery_check.dart';
-import 'package:otzaria/library_update/services/github_rate_limit.dart';
-import 'package:seforim_library_updater/seforim_library_updater.dart';
-import 'package:otzaria/work_status/work_status_cubit.dart';
-import 'package:otzaria/plugins/bloc/plugin_system_bloc.dart';
-import 'package:otzaria/plugins/bloc/plugin_system_event.dart';
-import 'package:otzaria/plugins/bloc/plugin_updates_cubit.dart';
-import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
-import 'package:otzaria/plugins/declarative/services/declarative_library_book_access.dart';
-import 'package:otzaria/plugins/services/plugin_reader_actions.dart';
-import 'package:otzaria/plugins/declarative/services/declarative_plugin_host_service.dart';
-import 'package:otzaria/utils/navigation/book_open_coordinator.dart';
 
 import 'package:otzaria_search_engine/otzaria_search_engine.dart';
 import 'package:otzaria/core/app_paths.dart';
@@ -102,8 +64,6 @@ import 'package:otzaria/core/cli_command.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/sqlite_memory_release.dart';
 import 'package:otzaria/core/error_log_file.dart';
-import 'package:otzaria/core/messages/window_messages.dart';
-import 'package:otzaria/core/update_check_frequency.dart';
 import 'package:otzaria/core/info/app_info_cli.dart';
 import 'package:otzaria/core/info/app_install_timeline.dart';
 import 'package:otzaria/core/external_activation_queue.dart';
@@ -122,8 +82,6 @@ import 'package:otzaria/core/windowing/window_bus_host.dart';
 import 'package:otzaria/core/windowing/window_bus.dart';
 import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/core/windowing/window_manager_app_window_controller.dart';
-import 'package:otzaria/tools/shamor_zachor/providers/shamor_zachor_data_provider.dart';
-import 'package:otzaria/tools/shamor_zachor/providers/shamor_zachor_progress_provider.dart';
 import 'package:otzaria/settings/services/backup_service.dart';
 import 'package:otzaria/core/http_client_registry.dart';
 import 'package:otzaria/plugins/services/plugin_report_service.dart';
@@ -134,7 +92,6 @@ import 'package:otzaria/data/cache/generation_cache.dart';
 import 'package:otzaria/find_ref/repository/reference_books_cache.dart';
 import 'package:otzaria/tools/dictionary/repository/dictionary_lookup_repository.dart';
 import 'package:pdfrx/pdfrx.dart';
-import 'package:otzaria/tools/calendar/services/calendar_alerts_client.dart';
 import 'package:otzaria/tools/calendar/services/calendar_alerts_owner.dart';
 import 'package:otzaria/tools/calendar/services/notification_service.dart';
 import 'package:otzaria/plugins/database/plugin_database_bootstrap.dart';
@@ -1637,245 +1594,10 @@ class _AppBootstrapState extends State<AppBootstrap> {
     final historyRepository = _historyRepository!;
     final settingsRepository = _settingsRepository!;
 
-    return MultiRepositoryProvider(
-      providers: [
-        RepositoryProvider<FocusRepository>(
-          create: (_) => FocusRepository(),
-        ),
-        RepositoryProvider<SettingsRepository>(
-          create: (_) => settingsRepository,
-        ),
-      ],
-      child: MultiBlocProvider(
-        providers: [
-          BlocProvider<SettingsBloc>(
-            create: (_) => StartupTimeline.instance.phaseSync(
-              'settingsBloc',
-              () => SettingsBloc(
-                repository: settingsRepository,
-                initialSettings: settingsRepository.readSettings(),
-              )..add(LoadSettings()),
-            ),
-          ),
-          BlocProvider<LibraryBloc>(
-            // ה-LoadLibrary אינו נשלח כאן יותר: בניית הקטלוג (~300ms CPU על
-            // ה-main thread) הייתה חונקת את שאילתת תוכן הספר הפעיל ומעכבת את
-            // הופעתו. ההפעלה עברה ל-MainWindowScreen._revealMainWindowOnce,
-            // שמעדיף את טעינת הספר הפעיל ורק אז מתחיל את בניית הקטלוג.
-            create: (_) => LibraryBloc(),
-          ),
-          BlocProvider<CustomFoldersBloc>(
-            create: (context) => CustomFoldersBloc(
-              addLibraryEvent: (event) =>
-                  context.read<LibraryBloc>().add(event),
-            )..add(const LoadCustomFolders()),
-          ),
-          // לא עצל: הבלוק מאזין לשינויי המסדים המצורפים (גם מהסריקה בעלייה)
-          // ומרענן את העץ, גם כשמסך ההגדרות לא נפתח.
-          BlocProvider<AttachedLibrariesBloc>(
-            lazy: false,
-            create: (context) => AttachedLibrariesBloc(
-              addLibraryEvent: (event) =>
-                  context.read<LibraryBloc>().add(event),
-            ),
-          ),
-          BlocProvider<IndexingBloc>(
-            create: (_) => IndexingBloc.create(),
-          ),
-          BlocProvider<TabsBloc>(
-            create: (_) {
-              final bloc = StartupTimeline.instance.phaseSync(
-                'tabsBloc',
-                () {
-                  final repository = TabsRepository();
-                  return TabsBloc(
-                    repository: repository,
-                    session: repository.window,
-                  )..add(LoadTabs());
-                },
-              );
-              // חלון שנפתח עם מטען מקבל את הכרטיסיה שהועברה אליו. `LoadTabs`
-              // נשלח קודם כדי שסדר האירועים יהיה זהה לחלון רגיל — הכרטיסיה
-              // המועברת נכנסת אחריו, ולכן היא זו שתהיה פעילה.
-              // הפענוח כאן ולא בנקודת הכניסה: בשלב הזה `Settings` כבר
-              // מאותחל, ו-`TextBookTab.fromJson` תלוי בו.
-              final payload = secondaryWindowPayload;
-              secondaryWindowPayload = null;
-              final transferred = MultiWindowService.decodePayload(payload);
-              if (transferred != null) {
-                bloc.add(AddTab(transferred));
-              } else if (MultiWindowService.payloadHasTab(payload)) {
-                // ⚠️ המטען **הכיל** כרטיסיה והפענוח נכשל. עד כה זה היה
-                // כשל שקט: חלון חדש נפתח ריק, המקור כבר מחק את הכרטיסיה,
-                // והשורה היחידה שהסבירה למה נכתבה ל-stdout שאיש אינו רואה
-                // בהפעלה מהסייר.
-                //
-                // ההודעה נדחית לאחרי הבנייה — `UiSnack` זקוק ל-navigator,
-                // ובנקודה הזו העץ עוד לא הורכב.
-                debugPrint('⚠️ פענוח הכרטיסיה שהועברה נכשל — החלון ייפתח ריק');
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  UiSnack.showError(
-                    WindowMessages.transferredTabDecodeFailed,
-                  );
-                });
-                try {
-                  ErrorLogFile.append(
-                    title: 'פענוח כרטיסיה שהועברה לחלון חדש נכשל',
-                    error:
-                        'decodePayload returned null for a payload with a tab',
-                    stackTrace: StackTrace.current,
-                  );
-                } catch (_) {
-                  // רישום הוא best-effort ולעולם אינו חוסם את עליית החלון.
-                }
-              }
-              return bloc;
-            },
-          ),
-          // ⚠️ אחרי TabsBloc: ה-context של create רואה רק ספקים שמעליו,
-          // ו-currentTab קורא את TabsBloc בכל לכידה של ההיסטוריה.
-          BlocProvider<HistoryBloc>(
-            create: (context) => HistoryBloc(
-              historyRepository,
-              currentTab: () => context.read<TabsBloc>().state.currentTab,
-            ),
-          ),
-          BlocProvider<NavigationBloc>(
-            create: (context) {
-              // הבנאי משחזר את כל הכרטיסיות השמורות סינכרונית (loadTabs) —
-              // נמדד כי זה רץ בתוך build, לפני שהמסך הראשי קיים.
-              final nav = StartupTimeline.instance.phaseSync(
-                'navigationBloc',
-                () =>
-                    NavigationBloc(
-                      repository: NavigationRepository(),
-                      tabsRepository: TabsRepository(),
-                      // "חיפוש" ו"עיון" הם אותו עמוד טאבים; היישור לפי
-                      // החלונית הפעילה שומר שהאייקון המודגש בסרגל יתאים
-                      // למה שמוצג בפועל.
-                      activePaneStream: context
-                          .read<TabsBloc>()
-                          .stream
-                          .map((tabsState) => tabsState.activePane)
-                          .distinct(),
-                    )..add(
-                      const CheckLibrary(),
-                    ),
-              );
-              // ⚠️ אחרי `CheckLibrary` ולא במקומו. `CheckLibrary` מחליט
-              // לאן לנווט לפי מצב הספרייה, ובחלון שנפתח עם כרטיסיה מועברת
-              // ההחלטה שגויה: הוא היה נשאר במסך הספרייה בעוד הכרטיסיה
-              // פתוחה מאחוריו — בדיוק מה שנצפה. הניווט נשלח אחריו ולכן
-              // גובר עליו.
-              if (WindowRole.openedWithTab) {
-                nav.add(const NavigateToScreen(Screen.reading));
-              }
-              return nav;
-            },
-          ),
-          BlocProvider<FindRefBloc>(
-            create: (_) => FindRefBloc(
-              findRefRepository: buildFindRefRepository(),
-            ),
-          ),
-          BlocProvider<PersonalNotesBloc>(
-            create: (_) => PersonalNotesBloc(),
-          ),
-          BlocProvider<BookmarkBloc>(
-            create: (_) => BookmarkBloc(BookmarkRepository()),
-          ),
-          BlocProvider<WorkspaceBloc>(
-            create: (context) {
-              final tabsBloc = context.read<TabsBloc>();
-              return WorkspaceBloc(
-                repository: WorkspaceRepository(),
-                onWorkspaceTabsChanged:
-                    (
-                      List<OpenedTab> tabs,
-                      int activeIndex,
-                      String? activePane,
-                    ) async {
-                      // ⚠️ ההמתנה נרשמת **לפני** השליחה: `ReplaceAllTabs`
-                      // מטופל סינכרונית, ורישום אחריו היה מפספס את המצב
-                      // שהוא מחפש ומחכה לנצח.
-                      final replaced = tabsBloc.stream.firstWhere(
-                        (state) =>
-                            identical(state.tabs, tabs) &&
-                            state.currentTabIndex == activeIndex,
-                      );
-                      tabsBloc.add(
-                        ReplaceAllTabs(
-                          tabs,
-                          activeIndex,
-                          activePane: activePane,
-                        ),
-                      );
-                      await replaced;
-                    },
-              )..add(LoadWorkspaces());
-            },
-          ),
-          ChangeNotifierProvider<ShamorZachorDataProvider>(
-            lazy: true,
-            create: (_) => ShamorZachorDataProvider(),
-          ),
-          ChangeNotifierProvider<ShamorZachorProgressProvider>(
-            lazy: true,
-            create: (_) => ShamorZachorProgressProvider(),
-          ),
-          BlocProvider<WorkStatusCubit>(
-            create: (_) => WorkStatusCubit(),
-          ),
-          BlocProvider<LibraryUpdateBloc>(
-            lazy: true,
-            create: (context) => LibraryUpdateBloc(
-              repository: LibraryUpdateRepository(
-                discovery: LibraryUpdateDiscovery(
-                  client: GithubLibraryReleaseClient(
-                    httpClient: GithubRateLimitAwareClient(),
-                  ),
-                  supportedDbSchemaVersion:
-                      DatabaseConstants.readableDbSchemaVersion,
-                ),
-                // זורם לדיסק: patch גדול נפרס בלי לשבת ב-RAM (ראו את המחלקה).
-                downloader: StreamingPatchDownloader(),
-              ),
-              companionAssets: CompanionAssetsService(
-                // רק אחרי שהמשתמש הוריד את נתוני החיפוש הסמנטי; אחרת לא עושה דבר.
-                scheduleSemanticVectorsUpdate: (tag) => SemanticSearchRepository
-                    .instance
-                    .scheduleVectorsUpdate(libraryTag: tag),
-              ),
-              isOfflineMode: () =>
-                  Settings.getValue<bool>(SettingsRepository.keyOfflineMode) ??
-                  false,
-              // בדיקת עדכונים רצה רק במארח, כדי שחלונות משניים לא יכפילו
-              // בקשות GitHub ויקבלו 403.
-              areUpdatesEnabled: () =>
-                  !WindowRole.isSecondary &&
-                  (Settings.getValue<bool>(
-                        SettingsRepository.keySoftwareAndBookUpdatesEnabled,
-                      ) ??
-                      true),
-              // עדכוני ספרייה תמיד ליציב בלבד — מנותק מערוץ הפיתוח, שמשפיע רק
-              // על עדכוני התוכנה.
-              allowPrerelease: () => false,
-              onCheckSucceeded: () => recordSuccessfulUpdateCheck(
-                SettingsRepository.keyLastLibraryUpdateCheck,
-              ),
-            ),
-          ),
-          BlocProvider<PluginUpdatesCubit>(
-            lazy: true,
-            create: (_) => PluginUpdatesCubit(),
-          ),
-          BlocProvider<PluginSystemBloc>(
-            create: (context) => StartupTimeline.instance.phaseSync(
-              'pluginSystemBloc',
-              () => _createPluginSystemBloc(context),
-            ),
-          ),
-        ],
+    return AppScopeProviders(
+      settingsRepository: settingsRepository,
+      child: WindowScopeProviders(
+        historyRepository: historyRepository,
         // מתחת לכל ה-blocs: האפיק עונה על בקשות מחלונות אחרים, ושתי
         // הבקשות הנתמכות — "תאר את עצמך" ו"קלוט כרטיסיה" — זקוקות
         // ל-TabsBloc ול-NavigationBloc.
@@ -1883,45 +1605,6 @@ class _AppBootstrapState extends State<AppBootstrap> {
       ),
     );
   }
-}
-
-PluginSystemBloc _createPluginSystemBloc(BuildContext context) {
-  final repository = PluginRegistryRepository();
-  final tabsBloc = context.read<TabsBloc>();
-  final coordinator = BookOpenCoordinator(
-    tabsBloc: tabsBloc,
-    historyBloc: context.read<HistoryBloc>(),
-    navigationBloc: context.read<NavigationBloc>(),
-  );
-  final bookAccess = DeclarativeLibraryBookAccess.otzaria(
-    coordinator,
-  );
-  final host = DeclarativePluginHostService(
-    loadPlugin: repository.getPlugin,
-    loadPermissions: (pluginId) async =>
-        (await repository.getGrantedPermissionNames(
-          pluginId,
-        )).toSet(),
-    bookResolver: bookAccess,
-    bookOpener: bookAccess,
-    parallelEditionsFinder: bookAccess.parallelEditionsForIdentity,
-    readerScroller: PluginDeclarativeReaderScroller(
-      tabsBloc: tabsBloc,
-    ),
-    searchOpener: PluginDeclarativeSearchOpener(coordinator),
-    onError: (pluginId, error, stackTrace) => debugPrint(
-      'Declarative plugin host [$pluginId]: $error\n$stackTrace',
-    ),
-  );
-  return PluginSystemBloc(
-      repository: repository,
-      alertsClient: CalendarAlertsClient.forCurrentWindow(),
-      declarativeHost: host,
-      readerStates: tabsBloc.stream,
-      initialReaderState: tabsBloc.state,
-    )
-    ..add(const SeedBundledPlugins())
-    ..add(LoadPlugins());
 }
 
 Future<void> initHive() async {
