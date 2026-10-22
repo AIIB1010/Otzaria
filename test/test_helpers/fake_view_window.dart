@@ -83,6 +83,9 @@ class StubWindowHandle extends ViewWindowHandle {
   @override
   int? get hwnd => isDestroyed ? null : fakeHwnd;
 
+  @override
+  int? get nativeHandle => hwnd;
+
   /// כמו WM_CLOSE מהמערכת (X, Alt+F4).
   void requestClose() => _onCloseRequested(this);
 }

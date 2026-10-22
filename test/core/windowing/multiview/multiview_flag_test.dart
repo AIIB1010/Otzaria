@@ -3,6 +3,9 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
+import 'package:otzaria/core/windowing/multiview/view_window_native.dart';
+
+import '../../../test_helpers/fake_view_window.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -48,5 +51,20 @@ void main() {
     MultiViewMode.debugOverride = false;
     expect(MultiViewMode.enabled, isFalse);
     expect(MultiViewMode.usesEngineWindows, isTrue);
+  });
+
+  test('nativeHandle: בקר שאינו נייטיב או חלון שנהרס מחזירים null', () {
+    final view =
+        TestWidgetsFlutterBinding.instance.platformDispatcher.views.first;
+    final handle = ViewWindowHandle.forTesting(StubWindowController(view));
+    expect(handle.nativeHandle, isNull);
+    expect(handle.hwnd, isNull);
+    handle.markDestroyed();
+    expect(handle.nativeHandle, isNull);
+  });
+
+  test('ViewWindowNative.platform: win32 ב-Windows', () {
+    final native = ViewWindowNative.platform();
+    if (Platform.isWindows) expect(native, isA<Win32ViewWindowNative>());
   });
 }

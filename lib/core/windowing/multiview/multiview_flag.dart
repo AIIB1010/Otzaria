@@ -6,6 +6,8 @@ import 'dart:ui' show FlutterView, PlatformDispatcher;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/src/foundation/_features.dart' as features;
 import 'package:flutter/src/widgets/_window.dart';
+import 'package:flutter/src/widgets/_window_linux.dart'
+    show WindowControllerLinux;
 import 'package:flutter/src/widgets/_window_win32.dart'
     show WindowControllerWin32;
 import 'package:flutter/widgets.dart';
@@ -85,6 +87,19 @@ class ViewWindowHandle {
 
   /// האם החלון כבר נהרס (WM_DESTROY).
   bool get isDestroyed => _destroyed;
+
+  /// החלון העליון כמספר: HWND ב-Windows, `GtkWindow*` ב-Linux; null אחרי ההריסה.
+  int? get nativeHandle {
+    final controller = _controller;
+    if (_destroyed) return null;
+    if (controller is WindowControllerWin32) {
+      return (controller as WindowControllerWin32).windowHandle.address;
+    }
+    if (controller is WindowControllerLinux) {
+      return (controller as WindowControllerLinux).windowHandle.address;
+    }
+    return null;
+  }
 
   /// ה-HWND של החלון העליון; null מחוץ ל-Windows או אחרי ההריסה.
   int? get hwnd {

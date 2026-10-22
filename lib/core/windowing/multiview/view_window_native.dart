@@ -8,7 +8,11 @@ import 'package:win32/win32.dart';
 import 'package:window_manager/window_manager.dart' show ResizeEdge;
 
 /// מה שחלון Dart צריך מהמערכת ואין לו בבקר של המסגרת. הכול בפיקסלים פיזיים.
+/// `hwnd` הוא `ViewWindowHandle.nativeHandle`: HWND ב-Windows, `GtkWindow*` ב-Linux.
 abstract interface class ViewWindowNative {
+  /// המימוש של הפלטפורמה הנוכחית.
+  factory ViewWindowNative.platform() => const Win32ViewWindowNative();
+
   /// מלבן החלון כולו (כולל המסגרת); null כשאינו זמין.
   Rect? windowRect(int hwnd);
   void setWindowRect(int hwnd, Rect rect);

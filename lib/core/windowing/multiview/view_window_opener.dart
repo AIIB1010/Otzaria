@@ -41,7 +41,7 @@ class ViewWindowOpener implements WindowOpener {
     Future<int?> Function()? mainWindowHwnd,
     Future<bool> Function()? isMainWindowFullscreen,
     this.firstFrameTimeout = const Duration(seconds: 20),
-  }) : _native = native ?? const Win32ViewWindowNative(),
+  }) : _native = native ?? ViewWindowNative.platform(),
        _isMainWindowVisible = isMainWindowVisible ?? windowManager.isVisible,
        _restoreMainWindow =
            restoreMainWindow ??
@@ -104,9 +104,9 @@ class ViewWindowOpener implements WindowOpener {
   Future<SourceWindowPlacement?> _sourceWindow() async {
     final foreground = _native.foregroundWindow();
     final view = registry.windows
-        .where((w) => w.handle.hwnd == foreground)
+        .where((w) => w.handle.nativeHandle == foreground)
         .firstOrNull;
-    final hwnd = view?.handle.hwnd ?? await _mainWindowHwnd();
+    final hwnd = view?.handle.nativeHandle ?? await _mainWindowHwnd();
     if (hwnd == null) return null;
     final placement = _native.placement(hwnd);
     final area = _native.workArea(hwnd);
@@ -339,7 +339,7 @@ class ViewWindowOpener implements WindowOpener {
     PhysicalBounds? bounds,
     Size? size,
   }) {
-    final hwnd = entry.handle.hwnd;
+    final hwnd = entry.handle.nativeHandle;
     if (hwnd == null) return;
     if (bounds != null && _isWindowSized(bounds)) {
       final target = Rect.fromLTWH(

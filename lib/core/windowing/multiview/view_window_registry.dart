@@ -94,7 +94,7 @@ class ViewWindowEntry {
 class ViewWindowRegistry extends ChangeNotifier {
   ViewWindowRegistry({ViewWindowFactory? factory, ViewWindowNative? native})
     : _factory = factory ?? createViewWindow,
-      _native = native ?? const Win32ViewWindowNative();
+      _native = native ?? ViewWindowNative.platform();
 
   static final ViewWindowRegistry instance = ViewWindowRegistry();
 
@@ -134,7 +134,7 @@ class ViewWindowRegistry extends ChangeNotifier {
     AppWindowKeys.register(entry.keys);
     _windows.add(entry);
     notifyListeners();
-    final hwnd = handle.hwnd;
+    final hwnd = handle.nativeHandle;
     if (hwnd != null) {
       unawaited(_native.installViewHooks(hwnd));
       // לפני הפריים הראשון, בעוד החלון מוסתר: בלי הבהוב של המסגרת.
