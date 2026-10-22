@@ -47,6 +47,7 @@ class WindowScopeProviders extends StatelessWidget {
     this.initialTab,
     this.tabsSession,
     this.duties,
+    this.initialFullscreen,
     required this.child,
   });
 
@@ -60,6 +61,9 @@ class WindowScopeProviders extends StatelessWidget {
 
   /// `null` — [ProcessDuties.current], וה-`PluginSystemBloc` קורא אותו בכל אירוע.
   final ProcessDuties? duties;
+
+  /// מצב החלון בפועל; null משמר את שחזור חלון ה־window_manager מההגדרות.
+  final bool? initialFullscreen;
 
   final Widget child;
 
@@ -211,7 +215,7 @@ class WindowScopeProviders extends StatelessWidget {
             create: (_) => WorkStatusCubit(),
           ),
           BlocProvider<WindowFullscreenCubit>(
-            create: (_) => WindowFullscreenCubit(),
+            create: (_) => WindowFullscreenCubit(initial: initialFullscreen),
           ),
           BlocProvider<PluginSystemBloc>(
             create: (context) => StartupTimeline.instance.phaseSync(

@@ -19,6 +19,7 @@ import 'package:otzaria/core/windowing/multiview/view_window_close_flow.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_scope.dart';
 import 'package:otzaria/core/windowing/window_title_sync.dart';
+import 'package:otzaria/core/windowing/window_fullscreen_cubit.dart';
 import 'package:otzaria/history/history_repository.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
@@ -153,6 +154,32 @@ void main() {
     // תיקוני הקלט של ה-runner הותקנו לכל חלון.
     expect(windows.native.hooked, [a.handle.hwnd, b.handle.hwnd]);
 
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('מצב מסך מלא של חלון חדש נקרא מהחלון ולא מהגדרות חלון אחר', (
+    tester,
+  ) async {
+    await Settings.setValue<bool>(SettingsRepository.keyIsFullscreen, true);
+    addTearDown(
+      () => Settings.setValue<bool>(SettingsRepository.keyIsFullscreen, false),
+    );
+    final windows = FakeViewWindows(tester);
+    final (contexts, _) = await pumpHost(tester, windows.registry);
+    final regular = windows.registry.open(size: const Size(800, 600))!;
+    final fullscreen = windows.registry.open(size: const Size(800, 600))!;
+    windows.stubOf(fullscreen).fullscreen = true;
+    await tester.pump();
+    expect(
+      contexts[regular.slot]!.read<WindowFullscreenCubit>().state,
+      isFalse,
+    );
+    expect(
+      contexts[fullscreen.slot]!.read<WindowFullscreenCubit>().state,
+      isTrue,
+    );
+    expect(Settings.getValue<bool>(SettingsRepository.keyIsFullscreen), isTrue);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 1));
   });

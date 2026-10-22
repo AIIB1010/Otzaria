@@ -100,6 +100,7 @@ class _ViewWindowScopeState extends State<ViewWindowScope> {
       initialTab: _initialTab,
       tabsSession: _entry.tabsSession,
       duties: ViewWindowScope.duties,
+      initialFullscreen: _entry.handle.isFullscreen,
       child: widget.child,
     ),
   );
