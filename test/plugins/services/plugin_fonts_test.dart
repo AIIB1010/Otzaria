@@ -309,7 +309,7 @@ void main() {
       );
       expect(controller.arguments, {
         'css': 'X',
-        'targets': ['16px "A"'],
+        'targets': ['16px "A"', '16px "FrankRuhlCLM"'],
         'timeoutMs': 1500,
       });
     });
@@ -336,6 +336,38 @@ void main() {
           targets: const [],
           timeout: const Duration(milliseconds: 10),
         ),
+        isFalse,
+      );
+    });
+
+    test('מטרת הבדיקה המובנית אינה מוכפלת כשכבר כלולה', () async {
+      final controller = _FakeController(
+        CallAsyncJavaScriptResult(value: true),
+      );
+      await installPluginFonts(
+        controller,
+        css: 'X',
+        targets: ['16px "FrankRuhlCLM"'],
+      );
+      expect(controller.arguments!['targets'], ['16px "FrankRuhlCLM"']);
+    });
+
+    test('משפחות ללא כלל אינן עוקפות בדיקת transport של גופן מובנה', () async {
+      final controller = _ScriptController('unmatched');
+      expect(
+        await installPluginFonts(
+          controller,
+          css: 'X',
+          targets: ['16px "Missing System Family"'],
+        ),
+        isFalse,
+      );
+    });
+
+    test('targets ריקים אינם עוקפים בדיקת transport של גופן מובנה', () async {
+      final controller = _ScriptController('unmatched');
+      expect(
+        await installPluginFonts(controller, css: 'X', targets: const []),
         isFalse,
       );
     });
@@ -544,7 +576,11 @@ class _ScriptController extends Fake implements InAppWebViewController {
 const document = {
   createElement: () => ({setAttribute() {}, remove() {}}),
   head: {appendChild() {}},
-  fonts: {load() {
+  fonts: {load(target) {
+    if (${jsonEncode(outcome)} === 'unmatched') {
+      return target === '16px "FrankRuhlCLM"'
+        ? Promise.reject(new Error('CSP')) : Promise.resolve([]);
+    }
     if (${jsonEncode(outcome)} === 'blocked') return Promise.reject(new Error('CSP'));
     if (${jsonEncode(outcome)} === 'pending') return new Promise(() => {});
     return Promise.resolve([{}]);

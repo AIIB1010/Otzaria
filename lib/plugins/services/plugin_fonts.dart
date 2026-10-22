@@ -273,7 +273,8 @@ Future<bool> installPluginFonts(
           functionBody: _installFontsJs,
           arguments: {
             'css': css,
-            'targets': targets,
+            // משפחה חסרה נטענת כ-[] בלי בקשה; face מוכר בודק את הרשאות ה-transport.
+            'targets': {...targets, '16px "${AppFonts.defaultFont}"'}.toList(),
             'timeoutMs': timeout.inMilliseconds,
           },
         )
