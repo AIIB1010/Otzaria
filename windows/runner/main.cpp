@@ -285,9 +285,9 @@ static std::wstring SingleInstanceMutexName() {
 
 // Appends a URI string to the external-activation queue file so the already-
 // running instance can pick it up.
-static void EnqueueUri(const std::string& uri_utf8) {
+static bool EnqueueUri(const std::string& uri_utf8) {
   const std::wstring dir = DataRootPath();
-  if (dir.empty()) return;
+  if (dir.empty()) return false;
   std::wstring queue_path =
       dir + L"\\pending_external_activations.jsonl";
 
@@ -313,10 +313,12 @@ static void EnqueueUri(const std::string& uri_utf8) {
   if (fh != INVALID_HANDLE_VALUE) {
     std::string line = record + "\n";
     DWORD written = 0;
-    WriteFile(fh, line.c_str(), static_cast<DWORD>(line.size()), &written,
-              nullptr);
+    const bool queued = WriteFile(fh, line.c_str(), static_cast<DWORD>(line.size()),
+                                  &written, nullptr) && written == line.size();
     CloseHandle(fh);
+    return queued;
   }
+  return false;
 }
 
 // Restores a minimized window and brings it to the foreground.
@@ -385,16 +387,18 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     // Enqueue any otzaria:// URIs (and .otzplugin file paths) passed on the
     // command line so the first instance can handle them via its file-watcher,
     // then exit immediately.
+    bool queued_uri = false;
     for (const auto& arg : early_args) {
       if (arg.size() >= 8 &&
           _strnicmp(arg.c_str(), "otzaria:", 8) == 0) {
-        EnqueueUri(arg);
+        queued_uri |= EnqueueUri(arg);
       } else if (EndsWithIgnoreCase(arg, ".otzplugin")) {
-        EnqueueUri("otzaria://plugin/install-local?path=" +
-                   UrlEncodeQueryComponent(arg));
+        queued_uri |= EnqueueUri("otzaria://plugin/install-local?path=" +
+                                 UrlEncodeQueryComponent(arg));
       }
     }
-    BringWindowToFront(FindRunningMainWindow());
+    // המנתב מעלה את חלון היעד; העלאת הראשי כאן דורסת את החלון הפעיל האחרון.
+    if (!queued_uri) BringWindowToFront(FindRunningMainWindow());
     CloseHandle(mutex);
     return EXIT_SUCCESS;
   }
