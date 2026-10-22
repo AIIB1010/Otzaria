@@ -38,6 +38,7 @@ class ViewWindowOpener implements WindowOpener {
     Future<bool> Function()? restoreMainWindow,
     Size Function()? defaultSize,
     Future<int?> Function()? mainWindowHwnd,
+    Future<bool> Function()? isMainWindowFullscreen,
     this.firstFrameTimeout = const Duration(seconds: 20),
   }) : _native = native ?? const Win32ViewWindowNative(),
        _isMainWindowVisible = isMainWindowVisible ?? windowManager.isVisible,
@@ -45,7 +46,9 @@ class ViewWindowOpener implements WindowOpener {
            restoreMainWindow ??
            const MultiWindowService().restoreLastClosedWindow,
        _defaultSize = defaultSize ?? _implicitViewSize,
-       _mainWindowHwnd = mainWindowHwnd ?? _windowManagerHwnd;
+       _mainWindowHwnd = mainWindowHwnd ?? _windowManagerHwnd,
+       _isMainWindowFullscreen =
+           isMainWindowFullscreen ?? windowManager.isFullScreen;
 
   static final ViewWindowOpener instance = ViewWindowOpener();
 
@@ -63,6 +66,7 @@ class ViewWindowOpener implements WindowOpener {
   final Future<bool> Function() _restoreMainWindow;
   final Size Function() _defaultSize;
   final Future<int?> Function() _mainWindowHwnd;
+  final Future<bool> Function() _isMainWindowFullscreen;
   final Duration firstFrameTimeout;
 
   ViewWindowRegistry get registry => _registry ?? ViewWindowRegistry.instance;
@@ -98,8 +102,10 @@ class ViewWindowOpener implements WindowOpener {
   /// חלון המקור: חלון Dart שבחזית, ואחרת הראשי. מסגרת חיצונית, פיזית.
   Future<SourceWindowPlacement?> _sourceWindow() async {
     final foreground = _native.foregroundWindow();
-    final isView = registry.windows.any((w) => w.handle.hwnd == foreground);
-    final hwnd = isView ? foreground : await _mainWindowHwnd();
+    final view = registry.windows
+        .where((w) => w.handle.hwnd == foreground)
+        .firstOrNull;
+    final hwnd = view?.handle.hwnd ?? await _mainWindowHwnd();
     if (hwnd == null) return null;
     final placement = _native.placement(hwnd);
     final area = _native.workArea(hwnd);
@@ -107,7 +113,9 @@ class ViewWindowOpener implements WindowOpener {
     return SourceWindowPlacement(
       normal: _physical(placement.normal),
       workArea: _physical(area),
-      maximized: placement.maximized,
+      maximized:
+          placement.maximized ||
+          (view?.handle.isFullscreen ?? await _isMainWindowFullscreen()),
       dpi: placement.dpi,
     );
   }

@@ -127,6 +127,7 @@ void main() {
     FakeViewWindowNative? native,
     _MemorySessions? store,
     int? mainHwnd,
+    bool mainFullscreen = false,
   }) {
     windows = FakeViewWindows(tester);
     sessions = store ?? _MemorySessions();
@@ -143,6 +144,7 @@ void main() {
       },
       defaultSize: () => const Size(1000, 700),
       mainWindowHwnd: () async => mainHwnd,
+      isMainWindowFullscreen: () async => mainFullscreen,
       firstFrameTimeout: timeout ?? const Duration(seconds: 20),
     );
   }
@@ -276,6 +278,16 @@ void main() {
       );
     });
 
+    testWidgets('ראשי במסך מלא פותח חלון ממוקסם', (tester) async {
+      final opener = makeOpener(tester, mainHwnd: main, mainFullscreen: true);
+      await pumpHost(tester);
+      windows.native.rects[main] = const Rect.fromLTWH(0, 0, 1920, 1080);
+
+      expect(await settle(tester, opener.openWindow()), isTrue);
+      expect(windows.handles.single.stub.maximized, isTrue);
+      expect(windows.handles.single.stub.fullscreen, isFalse);
+    });
+
     testWidgets('ראשי בגובה מלא: חוזר לפינת אזור העבודה ואינו גולש', (
       tester,
     ) async {
@@ -335,6 +347,27 @@ void main() {
         windows.native.rects[102],
         const Rect.fromLTWH(130, 80, 1200, 800),
       );
+    });
+
+    testWidgets('חלון Dart במסך מלא פותח חלון ממוקסם בלי להוריש מסך מלא', (
+      tester,
+    ) async {
+      final opener = makeOpener(tester);
+      await pumpHost(tester);
+      expect(await settle(tester, opener.openWindow()), isTrue);
+      final source = windows.handles.single;
+      source.stub.fullscreen = true;
+      windows.native.foreground = source.fakeHwnd;
+      windows.native.rects[source.fakeHwnd!] = const Rect.fromLTWH(
+        0,
+        0,
+        1920,
+        1080,
+      );
+
+      expect(await settle(tester, opener.openWindow()), isTrue);
+      expect(windows.handles.last.stub.maximized, isTrue);
+      expect(windows.handles.last.stub.fullscreen, isFalse);
     });
 
     testWidgets('גרירה לנקודה: גודל המקור, מהודק ומוקטן לאזור העבודה', (
