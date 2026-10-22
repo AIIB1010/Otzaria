@@ -99,14 +99,15 @@ void main() {
     (
       tester,
     ) async {
+      // לפני הבנייה: המסך קורא את ProcessDuties פעם אחת, ב-initState.
+      ProcessDuties.debugOverride = ProcessDuties(isProcessOwner: () => false);
+      addTearDown(() => ProcessDuties.debugOverride = null);
       final harness = await _pumpMainWindow(
         tester,
         Future.value(Library(categories: [])),
       );
       // החלון "ראשי", אבל אינו בעלי התהליך — הענף של מי שאינו בעלים חייב לרוץ.
       WindowRole.isSecondary = false;
-      ProcessDuties.debugOverride = ProcessDuties(isProcessOwner: () => false);
-      addTearDown(() => ProcessDuties.debugOverride = null);
       harness.libraryChanges.add(
         harness.initialState.copyWith(isLoading: false),
       );

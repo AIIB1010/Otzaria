@@ -38,6 +38,7 @@ import 'package:otzaria/history/history_repository.dart';
 import 'package:otzaria/indexing/services/release_index_builder_cli.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
 import 'package:otzaria/update/differential/swap_recovery.dart';
+import 'package:otzaria/tabs/models/tab.dart';
 import 'package:otzaria/tabs/tabs_repository.dart';
 import 'package:otzaria/data/data_providers/tantivy_data_provider.dart';
 import 'package:otzaria/data/repository/data_repository.dart';
@@ -62,6 +63,7 @@ import 'package:otzaria/core/data_root_writability_warning.dart';
 import 'package:otzaria/core/personal_data_missing_warning.dart';
 import 'package:otzaria/core/cli_command.dart';
 import 'package:otzaria/core/ui_snack.dart';
+import 'package:otzaria/core/messages/window_messages.dart';
 import 'package:otzaria/core/sqlite_memory_release.dart';
 import 'package:otzaria/core/error_log_file.dart';
 import 'package:otzaria/core/info/app_info_cli.dart';
@@ -1546,6 +1548,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
   Object? _error;
   HistoryRepository? _historyRepository;
   SettingsRepository? _settingsRepository;
+  OpenedTab? _initialTab;
 
   @override
   void initState() {
@@ -1556,6 +1559,8 @@ class _AppBootstrapState extends State<AppBootstrap> {
           setState(() {
             _historyRepository = HistoryRepository();
             _settingsRepository = SettingsRepository();
+            // כאן ולא בנקודת הכניסה: `TextBookTab.fromJson` תלוי ב-`Settings`.
+            _initialTab = _takeSecondaryWindowInitialTab();
             _ready = true;
           });
           StartupTimeline.instance.mark('bootstrapReady');
@@ -1602,6 +1607,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
       child: DockProgressListener(
         child: WindowScopeProviders(
           historyRepository: historyRepository,
+          initialTab: _initialTab,
           // מתחת לכל ה-blocs: האפיק עונה על בקשות מחלונות אחרים, ושתי
           // הבקשות הנתמכות — "תאר את עצמך" ו"קלוט כרטיסיה" — זקוקות
           // ל-TabsBloc ול-NavigationBloc.
@@ -1797,17 +1803,17 @@ void secondaryWindowMain(List<String> args) async {
   Bloc.observer = AppBlocObserver();
   unawaited(_runDeferredCursorSetup());
 
-  // ⚠️ המטען נשמר **גולמי** ומפוענח מאוחר יותר, ב-`TabsBloc`.
+  // ⚠️ המטען נשמר **גולמי** ומפוענח מאוחר יותר, ב-`AppBootstrap`.
   //
   // `TextBookTab.fromJson` קורא ל-`Settings.getValue('key-splited-view')`,
   // ו-`Settings` מאותחל רק בתוך `AppBootstrap`. פענוח כאן זרק, נתפס והחזיר
   // null — הכרטיסיה נעלמה מהחלון המקורי ולא נפתחה בחדש. `ToolTab.fromJson`
   // אינו נוגע ב-Settings, ולכן דווקא כלים עברו בהצלחה והבאג נראה אקראי.
-  secondaryWindowPayload = args.isEmpty || args.first.isEmpty
+  _secondaryWindowPayload = args.isEmpty || args.first.isEmpty
       ? null
       : args.first;
   WindowRole.openedWithTab = MultiWindowService.payloadHasTab(
-    secondaryWindowPayload,
+    _secondaryWindowPayload,
   );
 
   // ⚠️ נדרש לפני `runApp`: בלעדיו `setTitleBarStyle(hidden)` שב-bootstrap
@@ -1987,12 +1993,39 @@ Future<T> _timedPhase<T>(String name, Future<T> Function() body) async {
   }
 }
 
-/// המטען הגולמי שאיתו נפתח החלון, אם נפתח כחלון משני.
-///
-/// נצרך **פעם אחת** ביצירת `TabsBloc` ומתאפס שם, כדי ש-`RestartWidget`
-/// לא יוסיף את הכרטיסיה שוב בהפעלה מחדש של העץ. הפענוח קורה שם ולא
-/// כאן — ראו ההערה ב-[secondaryWindowMain].
-String? secondaryWindowPayload;
+/// המטען הגולמי של חלון משני; נצרך **פעם אחת** כדי ש-`RestartWidget` לא
+/// יוסיף את הכרטיסיה שוב. ראו [_takeSecondaryWindowInitialTab].
+String? _secondaryWindowPayload;
+
+/// צורך את [_secondaryWindowPayload] ומפענח את הכרטיסיה שבו, אם יש.
+OpenedTab? _takeSecondaryWindowInitialTab() {
+  final payload = _secondaryWindowPayload;
+  _secondaryWindowPayload = null;
+  final transferred = MultiWindowService.decodePayload(payload);
+  if (transferred != null || !MultiWindowService.payloadHasTab(payload)) {
+    return transferred;
+  }
+  // ⚠️ המטען **הכיל** כרטיסיה והפענוח נכשל. עד כה זה היה כשל שקט: חלון
+  // חדש נפתח ריק, המקור כבר מחק את הכרטיסיה, והשורה היחידה שהסבירה למה
+  // נכתבה ל-stdout שאיש אינו רואה בהפעלה מהסייר.
+  //
+  // ההודעה נדחית לאחרי הבנייה — `UiSnack` זקוק ל-navigator, ובנקודה הזו
+  // העץ עוד לא הורכב.
+  debugPrint('⚠️ פענוח הכרטיסיה שהועברה נכשל — החלון ייפתח ריק');
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    UiSnack.showError(WindowMessages.transferredTabDecodeFailed);
+  });
+  try {
+    ErrorLogFile.append(
+      title: 'פענוח כרטיסיה שהועברה לחלון חדש נכשל',
+      error: 'decodePayload returned null for a payload with a tab',
+      stackTrace: StackTrace.current,
+    );
+  } catch (_) {
+    // רישום הוא best-effort ולעולם אינו חוסם את עליית החלון.
+  }
+  return null;
+}
 
 /// משלים או מבטל החלפת עדכון שנקטעה. בדרך כלל רק שתי בדיקות קיום; השחזור
 /// עצמו רץ במעדכן אחרי יציאת אוצריא, כי ההתקנה החיה נעולה כל עוד היא רצה.

@@ -685,7 +685,7 @@ class MyUpdatWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     // אסור שצורת העץ תלויה בהגדרות משתנות (מנותק/עדכונים) — החלפת העוטף
     // בזמן ריצה בונה מחדש את כל תת-העץ וה-PageView מאבד את העמוד הפעיל.
-    if (!managesUpdatesHere()) return child;
+    if (!managesUpdatesHere(duties: ProcessDuties.of(context))) return child;
     return _ManagedUpdatWidget(child: child);
   }
 }

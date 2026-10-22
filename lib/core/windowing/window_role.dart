@@ -23,3 +23,33 @@ class WindowRole {
   /// הדילוג אינו מוותר על שום דבר; הוא רק דוחה למי שבאמת צריך.
   static bool openedWithTab = false;
 }
+
+/// תפקיד חלון אחד, כפי שנחשף ב-`AppWindowScope.roleOf`. [AppWindowRole.current]
+/// הוא מה ש-[WindowRole] אומר; חלון באותו isolate יעביר ערכים משלו.
+class AppWindowRole {
+  const AppWindowRole({
+    required this.isPrimaryView,
+    this.openedWithTab = false,
+  });
+
+  /// התפקיד מתוך [WindowRole], נקרא מחדש בכל גישה.
+  static AppWindowRole get current => AppWindowRole(
+    isPrimaryView: !WindowRole.isSecondary,
+    openedWithTab: WindowRole.openedWithTab,
+  );
+
+  /// האם זה החלון הראשון ולא חלון שנפתח מתוך אחר ([WindowRole.isSecondary]).
+  final bool isPrimaryView;
+
+  /// האם החלון נפתח עם כרטיסיה שהועברה אליו ([WindowRole.openedWithTab]).
+  final bool openedWithTab;
+
+  @override
+  bool operator ==(Object other) =>
+      other is AppWindowRole &&
+      other.isPrimaryView == isPrimaryView &&
+      other.openedWithTab == openedWithTab;
+
+  @override
+  int get hashCode => Object.hash(isPrimaryView, openedWithTab);
+}

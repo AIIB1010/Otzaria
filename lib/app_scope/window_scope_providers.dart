@@ -1,21 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:otzaria/app_scope/process_duties.dart';
 import 'package:otzaria/attached_libraries/bloc/attached_libraries_bloc.dart';
-import 'package:otzaria/core/error_log_file.dart';
 import 'package:otzaria/core/focus_repository.dart';
-import 'package:otzaria/core/messages/window_messages.dart';
 import 'package:otzaria/core/startup_timeline.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
+import 'package:otzaria/core/windowing/app_window_scope.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
 import 'package:otzaria/core/windowing/window_fullscreen_cubit.dart';
-import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/find_ref/bloc/find_ref_bloc.dart';
 import 'package:otzaria/find_ref/repository/find_ref_factory.dart';
 import 'package:otzaria/history/bloc/history_bloc.dart';
 import 'package:otzaria/history/history_repository.dart';
 import 'package:otzaria/library/bloc/library_bloc.dart';
-import 'package:otzaria/main.dart' show secondaryWindowPayload;
 import 'package:otzaria/navigation/bloc/navigation_bloc.dart';
 import 'package:otzaria/navigation/bloc/navigation_event.dart';
 import 'package:otzaria/navigation/bloc/navigation_state.dart';
@@ -47,10 +45,23 @@ class WindowScopeProviders extends StatelessWidget {
   const WindowScopeProviders({
     super.key,
     required this.historyRepository,
+    this.initialTab,
+    this.tabsSession,
+    this.duties,
     required this.child,
   });
 
   final HistoryRepository historyRepository;
+
+  /// כרטיסיה שהחלון נפתח איתה; נוספת פעם אחת, ביצירת `TabsBloc`.
+  final OpenedTab? initialTab;
+
+  /// סשן הכרטיסיות של החלון; `null` — [WindowTabsSession.current].
+  final WindowTabsSession? tabsSession;
+
+  /// `null` — [ProcessDuties.current], וה-`PluginSystemBloc` קורא אותו בכל אירוע.
+  final ProcessDuties? duties;
+
   final Widget child;
 
   @override
@@ -64,6 +75,9 @@ class WindowScopeProviders extends StatelessWidget {
         ),
         RepositoryProvider<FocusRepository>(
           create: (_) => FocusRepository(),
+        ),
+        RepositoryProvider<ProcessDuties>.value(
+          value: duties ?? ProcessDuties.current,
         ),
       ],
       child: MultiBlocProvider(
@@ -95,48 +109,17 @@ class WindowScopeProviders extends StatelessWidget {
               final bloc = StartupTimeline.instance.phaseSync(
                 'tabsBloc',
                 () {
-                  final repository = TabsRepository();
+                  final repository = TabsRepository(window: tabsSession);
                   return TabsBloc(
                     repository: repository,
                     session: repository.window,
                   )..add(LoadTabs());
                 },
               );
-              // חלון שנפתח עם מטען מקבל את הכרטיסיה שהועברה אליו. `LoadTabs`
-              // נשלח קודם כדי שסדר האירועים יהיה זהה לחלון רגיל — הכרטיסיה
-              // המועברת נכנסת אחריו, ולכן היא זו שתהיה פעילה.
-              // הפענוח כאן ולא בנקודת הכניסה: בשלב הזה `Settings` כבר
-              // מאותחל, ו-`TextBookTab.fromJson` תלוי בו.
-              final payload = secondaryWindowPayload;
-              secondaryWindowPayload = null;
-              final transferred = MultiWindowService.decodePayload(payload);
-              if (transferred != null) {
-                bloc.add(AddTab(transferred));
-              } else if (MultiWindowService.payloadHasTab(payload)) {
-                // ⚠️ המטען **הכיל** כרטיסיה והפענוח נכשל. עד כה זה היה
-                // כשל שקט: חלון חדש נפתח ריק, המקור כבר מחק את הכרטיסיה,
-                // והשורה היחידה שהסבירה למה נכתבה ל-stdout שאיש אינו רואה
-                // בהפעלה מהסייר.
-                //
-                // ההודעה נדחית לאחרי הבנייה — `UiSnack` זקוק ל-navigator,
-                // ובנקודה הזו העץ עוד לא הורכב.
-                debugPrint('⚠️ פענוח הכרטיסיה שהועברה נכשל — החלון ייפתח ריק');
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  UiSnack.showError(
-                    WindowMessages.transferredTabDecodeFailed,
-                  );
-                });
-                try {
-                  ErrorLogFile.append(
-                    title: 'פענוח כרטיסיה שהועברה לחלון חדש נכשל',
-                    error:
-                        'decodePayload returned null for a payload with a tab',
-                    stackTrace: StackTrace.current,
-                  );
-                } catch (_) {
-                  // רישום הוא best-effort ולעולם אינו חוסם את עליית החלון.
-                }
-              }
+              // `LoadTabs` נשלח קודם כדי שסדר האירועים יהיה זהה לחלון רגיל —
+              // הכרטיסיה המועברת נכנסת אחריו, ולכן היא זו שתהיה פעילה.
+              final tab = initialTab;
+              if (tab != null) bloc.add(AddTab(tab));
               return bloc;
             },
           ),
@@ -157,7 +140,7 @@ class WindowScopeProviders extends StatelessWidget {
                 () =>
                     NavigationBloc(
                       repository: NavigationRepository(),
-                      tabsRepository: TabsRepository(),
+                      tabsRepository: TabsRepository(window: tabsSession),
                       // "חיפוש" ו"עיון" הם אותו עמוד טאבים; היישור לפי
                       // החלונית הפעילה שומר שהאייקון המודגש בסרגל יתאים
                       // למה שמוצג בפועל.
@@ -175,7 +158,7 @@ class WindowScopeProviders extends StatelessWidget {
               // ההחלטה שגויה: הוא היה נשאר במסך הספרייה בעוד הכרטיסיה
               // פתוחה מאחוריו — בדיוק מה שנצפה. הניווט נשלח אחריו ולכן
               // גובר עליו.
-              if (WindowRole.openedWithTab) {
+              if (AppWindowScope.roleOf(context).openedWithTab) {
                 nav.add(const NavigateToScreen(Screen.reading));
               }
               return nav;
@@ -192,8 +175,11 @@ class WindowScopeProviders extends StatelessWidget {
           BlocProvider<WorkspaceBloc>(
             create: (context) {
               final tabsBloc = context.read<TabsBloc>();
+              final session = tabsSession;
               return WorkspaceBloc(
-                repository: WorkspaceRepository(),
+                repository: WorkspaceRepository(
+                  slot: session == null ? null : () => session.slot,
+                ),
                 onWorkspaceTabsChanged:
                     (
                       List<OpenedTab> tabs,
@@ -229,7 +215,7 @@ class WindowScopeProviders extends StatelessWidget {
           BlocProvider<PluginSystemBloc>(
             create: (context) => StartupTimeline.instance.phaseSync(
               'pluginSystemBloc',
-              () => _createPluginSystemBloc(context),
+              () => _createPluginSystemBloc(context, duties),
             ),
           ),
         ],
@@ -249,7 +235,10 @@ class _WindowUiLifetime {
   }
 }
 
-PluginSystemBloc _createPluginSystemBloc(BuildContext context) {
+PluginSystemBloc _createPluginSystemBloc(
+  BuildContext context,
+  ProcessDuties? duties,
+) {
   final repository = PluginRegistryRepository();
   final tabsBloc = context.read<TabsBloc>();
   final coordinator = BookOpenCoordinator(
@@ -284,6 +273,7 @@ PluginSystemBloc _createPluginSystemBloc(BuildContext context) {
       declarativeHost: host,
       readerStates: tabsBloc.stream,
       initialReaderState: tabsBloc.state,
+      processDuties: duties,
     )
     ..add(const SeedBundledPlugins())
     ..add(LoadPlugins());
