@@ -47,6 +47,7 @@ import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
 import 'package:otzaria/navigation/bloc/navigation_bloc.dart';
 import 'package:otzaria/navigation/bloc/navigation_state.dart';
 import 'package:otzaria/core/focus_repository.dart';
+import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/widgets/text/rtl_selection_shortcuts.dart';
 import 'package:otzaria/widgets/text/selection_copy_shortcuts.dart';
 import 'package:otzaria/widgets/misc/app_menu_exports.dart';
@@ -490,6 +491,18 @@ class SimpleTextViewer extends StatefulWidget {
   State<SimpleTextViewer> createState() => _SimpleTextViewerState();
 }
 
+/// המפרש הפעיל של חלון אחד — קיצור בחלון אחד לא ינותב למפרש של חלון אחר.
+class _ActiveCommentarySlot {
+  _SimpleTextViewerState? viewer;
+}
+
+final _activeCommentarySlots = Expando<_ActiveCommentarySlot>();
+
+extension on AppWindowKeys {
+  _ActiveCommentarySlot get _activeCommentary =>
+      _activeCommentarySlots[this] ??= _ActiveCommentarySlot();
+}
+
 class _SimpleTextViewerState extends State<SimpleTextViewer> {
   // דגל סטטי: מונע מהטקסט הראשי לדרוס העתקה שכבר בוצעה ע"י מפרש
   static bool _commentaryCopyHandled = false;
@@ -497,8 +510,12 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
   static bool _commentaryNoteHandled = false;
   // דגל סטטי: מונע מהטקסט הראשי לפתוח דיווח כפול אחרי שמפרש טיפל בקיצור
   static bool _commentaryReportHandled = false;
-  // מצביע סטטי: רק הפרשן האחרון שנבחר בו טקסט מטפל ב-Ctrl+C
-  static _SimpleTextViewerState? _lastActiveCommentary;
+  // רק הפרשן האחרון שנבחר בו טקסט מטפל ב-Ctrl+C — אחד בכל חלון.
+  late final _ActiveCommentarySlot _activeCommentarySlot;
+  _SimpleTextViewerState? get _lastActiveCommentary =>
+      _activeCommentarySlot.viewer;
+  set _lastActiveCommentary(_SimpleTextViewerState? viewer) =>
+      _activeCommentarySlot.viewer = viewer;
 
   late ItemScrollController _scrollController;
   late ItemPositionsListener _positionsListener;
@@ -543,6 +560,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
       ParagraphCommentatorsCache();
   List<Link>? _anchorStyleSourceLinks;
   Map<String, int> _anchorStyleCache = const {};
+  late final AppWindowKeys _previewWindow;
   Timer? _previewHoverTimer;
   List<PersonalNote> _commentaryNotes = const [];
   int _commentaryNotesLoadGeneration = 0;
@@ -693,7 +711,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
   }
 
   Future<void> _openAnchorTarget(Link link) {
-    LinkPreviewOverlay.dismiss();
+    LinkPreviewOverlay.dismiss(window: AppWindowKeys.of(context));
     return openLinkTarget(link, (tab) => widget.openBookCallback(tab));
   }
 
@@ -704,7 +722,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     Offset globalPosition, {
     bool hoverMode = true,
   }) {
-    LinkPreviewOverlay.cancelScheduledHide();
+    LinkPreviewOverlay.cancelScheduledHide(AppWindowKeys.of(context));
     _cancelPendingPreview();
     final line = noteMarkerLineFromUrl(url);
     final bloc = context.read<TextBookBloc>();
@@ -751,7 +769,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     if (url.startsWith('otzaria://note') && widget.isPersonalNotesTabActive) {
       return;
     }
-    LinkPreviewOverlay.cancelScheduledHide();
+    LinkPreviewOverlay.cancelScheduledHide(AppWindowKeys.of(context));
     _cancelPendingPreview();
     final bloc = context.read<TextBookBloc>();
     final currentState = bloc.state;
@@ -865,7 +883,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
 
   void _handlePreviewHoverExit(String url) {
     _cancelPendingPreview();
-    LinkPreviewOverlay.scheduleHide();
+    LinkPreviewOverlay.scheduleHide(AppWindowKeys.of(context));
   }
 
   bool _isTextInputFocused() {
@@ -1065,6 +1083,8 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
   @override
   void initState() {
     super.initState();
+    _previewWindow = AppWindowKeys.of(context);
+    _activeCommentarySlot = AppWindowKeys.of(context)._activeCommentary;
     _configureScrollControllers();
     _selectionFocusNode = FocusNode(debugLabel: 'SelectionAreaFocus');
     _resolvedKeyboardFocusNode;
@@ -1243,7 +1263,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
     final binding = _viewportBinding;
     if (binding != null) _lines?.detach(binding);
     _ownedLines?.dispose();
-    if (widget.isMainText) LinkPreviewOverlay.dismiss();
+    if (widget.isMainText) LinkPreviewOverlay.dismiss(window: _previewWindow);
     widget.selectionSyncController?.removeListener(
       _handleExternalSelectionChange,
     );

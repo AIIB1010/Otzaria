@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:otzaria/core/windowing/app_window_keys.dart';
 
 /// נקודת אחיזה גלובלית לפתיחת פאנל הכלים.
 ///
@@ -10,8 +11,20 @@ class ToolsLauncherController {
 
   static final ToolsLauncherController instance = ToolsLauncherController._();
 
-  /// נרשם על-ידי `MainWindowScreen`. `null` כשהמסך אינו מורכב.
-  void Function()? opener;
+  final _openers = Expando<void Function()>();
+
+  /// הפותח של החלון הנוכחי. `null` כשהמסך שלו אינו מורכב.
+  void Function()? get opener => _openers[AppWindowKeys.current];
+  set opener(void Function()? value) => _openers[AppWindowKeys.current] = value;
+
+  /// נקרא על-ידי `MainWindowScreen` של החלון [keys].
+  void register(AppWindowKeys keys, void Function() opener) =>
+      _openers[keys] = opener;
+
+  /// מסיר את [opener] רק אם הוא עדיין הרשום (השוואה ב-== — tear-off חדש בכל גישה).
+  void unregister(AppWindowKeys keys, void Function() opener) {
+    if (_openers[keys] == opener) _openers[keys] = null;
+  }
 
   @visibleForTesting
   int openCount = 0;

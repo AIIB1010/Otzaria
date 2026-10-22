@@ -1,3 +1,4 @@
+import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/data/book_identity.dart';
 import 'package:otzaria/text_book/models/book_notes.dart';
 import 'package:otzaria/text_book/view/widgets/selection_gutter_painter.dart';
@@ -495,7 +496,7 @@ class _CombinedViewState extends State<CombinedView> {
 
   /// פתיחת יעד התצוגה המקדימה: חלונית מתאימה, או ספר עבור Linker.
   Future<void> _openPreviewDestination(Link link, {int? sourceLine}) async {
-    LinkPreviewOverlay.dismiss();
+    LinkPreviewOverlay.dismiss(window: AppWindowKeys.of(context));
     if (!shouldOpenPreviewLinkInBook(link)) {
       if (sourceLine != null) {
         final state = _textBookBloc.state;
@@ -574,7 +575,7 @@ class _CombinedViewState extends State<CombinedView> {
   }
 
   Future<void> _openLinkTarget(Link link) {
-    LinkPreviewOverlay.dismiss();
+    LinkPreviewOverlay.dismiss(window: AppWindowKeys.of(context));
     return openLinkTarget(link, _openTab);
   }
 
@@ -634,7 +635,7 @@ class _CombinedViewState extends State<CombinedView> {
         )) {
       return;
     }
-    LinkPreviewOverlay.cancelScheduledHide();
+    LinkPreviewOverlay.cancelScheduledHide(AppWindowKeys.of(context));
     _cancelPendingAnchorHover();
 
     // סימון העוגן מחליף את MouseRegion ויוצר exit/enter מלאכותיים.
@@ -747,7 +748,7 @@ class _CombinedViewState extends State<CombinedView> {
     Offset globalPosition, {
     bool hoverMode = true,
   }) {
-    LinkPreviewOverlay.cancelScheduledHide();
+    LinkPreviewOverlay.cancelScheduledHide(AppWindowKeys.of(context));
     _cancelPendingAnchorHover();
     final line = noteMarkerLineFromUrl(url);
     final state = _textBookBloc.state;
@@ -767,7 +768,7 @@ class _CombinedViewState extends State<CombinedView> {
   /// (מתבטלת אם הסמן נכנס לחלונית עצמה או חוזר לעוגן).
   void _handleAnchorHoverExit(String url) {
     _cancelPendingAnchorHover();
-    LinkPreviewOverlay.scheduleHide();
+    LinkPreviewOverlay.scheduleHide(AppWindowKeys.of(context));
   }
 
   late final ReadingViewportBinding _viewportBinding = ReadingViewportBinding(
@@ -856,9 +857,12 @@ class _CombinedViewState extends State<CombinedView> {
   final DictionaryLookupRepository _dictionaryLookupRepository =
       DictionaryLookupRepository.instance;
 
+  late final AppWindowKeys _previewWindow;
+
   @override
   void initState() {
     super.initState();
+    _previewWindow = AppWindowKeys.of(context);
     _localCorrectionActive = _hasLocalCorrections;
     PluginCorrectionSessionService.instance.addListener(
       _onLocalCorrectionChanged,
@@ -978,7 +982,7 @@ class _CombinedViewState extends State<CombinedView> {
   void _resetBookState() {
     _cancelCommentaryReveal();
     _cancelPendingAnchorHover();
-    LinkPreviewOverlay.dismiss();
+    LinkPreviewOverlay.dismiss(window: AppWindowKeys.of(context));
     _activeAnchorLine = null;
     _activeAnchorIndex = null;
     _anchorHandledCurrentTap = false;
@@ -1175,7 +1179,7 @@ class _CombinedViewState extends State<CombinedView> {
     _disposed = true;
     _detachTabBindings(widget);
     _cancelPendingAnchorHover();
-    LinkPreviewOverlay.dismiss();
+    LinkPreviewOverlay.dismiss(window: _previewWindow);
     _savedSelectedText.dispose();
     _savedSelectedIndex.dispose();
     _currentSelectedIndex.dispose();

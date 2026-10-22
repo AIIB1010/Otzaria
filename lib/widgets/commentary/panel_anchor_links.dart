@@ -1,3 +1,4 @@
+import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
@@ -110,7 +111,7 @@ mixin PanelAnchorLinksMixin<T extends StatefulWidget> on State<T> {
     required void Function(Link link) onOpen,
     TextDisplayProfile? displayProfile,
   }) {
-    LinkPreviewOverlay.cancelScheduledHide();
+    LinkPreviewOverlay.cancelScheduledHide(AppWindowKeys.of(context));
     _cancelAnchorHoverTimer();
     final generation = _anchorHoverGeneration;
     final isNoteMarker = url.startsWith('otzaria://note-marker');
@@ -142,7 +143,7 @@ mixin PanelAnchorLinksMixin<T extends StatefulWidget> on State<T> {
         hoverMode: true,
         displayProfile: displayProfile,
         onOpen: () {
-          LinkPreviewOverlay.dismiss();
+          LinkPreviewOverlay.dismiss(window: AppWindowKeys.of(context));
           onOpen(link);
         },
       );
@@ -232,7 +233,7 @@ mixin PanelAnchorLinksMixin<T extends StatefulWidget> on State<T> {
   void _openNoteAnchor(String url) {
     final link = anchorLinkFromUrl(url);
     if (link == null) return;
-    LinkPreviewOverlay.dismiss();
+    LinkPreviewOverlay.dismiss(window: AppWindowKeys.of(context));
     openPanelAnchor(link);
   }
 
@@ -257,13 +258,13 @@ mixin PanelAnchorLinksMixin<T extends StatefulWidget> on State<T> {
 
   void handleAnchorHoverExit(String url) {
     _cancelAnchorHoverTimer();
-    LinkPreviewOverlay.scheduleHide();
+    LinkPreviewOverlay.scheduleHide(AppWindowKeys.of(context));
   }
 
   /// לחיצה על הציטוט מנווטת — ריחוף ממתין היה פותח חלונית אחרי הניווט.
   void cancelAnchorHover() {
     _cancelAnchorHoverTimer();
-    LinkPreviewOverlay.dismiss();
+    LinkPreviewOverlay.dismiss(window: AppWindowKeys.of(context));
   }
 
   void _requestAnchorLinks() {

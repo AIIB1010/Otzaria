@@ -1,3 +1,4 @@
+import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/data/book_identity.dart';
 import 'package:otzaria/book_common/bloc/commentary_search_bloc.dart';
 import 'package:flutter/material.dart';
@@ -2935,14 +2936,14 @@ class _NotesCommentaryWidgetState extends State<_NotesCommentaryWidget> {
   void _openAnchor(String url) {
     final link = _anchorLink(url);
     if (link == null) return;
-    LinkPreviewOverlay.dismiss();
+    LinkPreviewOverlay.dismiss(window: AppWindowKeys.of(context));
     openLinkTarget(link, (tab) => widget.openBookCallback(tab));
   }
 
   void _previewAnchor(String url, Offset globalPosition) {
     final link = _anchorLink(url);
     if (link == null) return;
-    LinkPreviewOverlay.cancelScheduledHide();
+    LinkPreviewOverlay.cancelScheduledHide(AppWindowKeys.of(context));
     LinkPreviewOverlay.show(
       context,
       link: link,
@@ -3093,7 +3094,9 @@ class _NotesCommentaryWidgetState extends State<_NotesCommentaryWidget> {
                             onAnchorTap: _openAnchor,
                             onAnchorHover: _previewAnchor,
                             onAnchorHoverExit: (_) =>
-                                LinkPreviewOverlay.scheduleHide(),
+                                LinkPreviewOverlay.scheduleHide(
+                                  AppWindowKeys.of(context),
+                                ),
                           ),
                         );
                       }),
