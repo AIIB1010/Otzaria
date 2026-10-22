@@ -168,6 +168,70 @@ void main() {
     expect(PluginCorrectionSessionService.instance.processQuitPending, isFalse);
   });
 
+  test('סגירת הראשי ממתינה למסלול סגירה של חלון Dart', () async {
+    MultiViewMode.debugOverride = true;
+    WindowOpener.debugOverride = _TwoWindowsOpener();
+    addTearDown(() {
+      MultiViewMode.debugOverride = null;
+      WindowOpener.debugOverride = null;
+      WindowTabsSession.current.resume();
+    });
+    WindowBus.instance.register();
+    final released = Completer<void>();
+    final started = Completer<void>();
+    final otherClose = ViewWindowOpener.instance.serializeClose(() async {
+      started.complete();
+      await released.future;
+      return true;
+    });
+    await started.future;
+    var prepared = false;
+    AppWindowListener.prepareUpdateForClose = () async {
+      prepared = true;
+    };
+    final mainClose = AppWindowListener().handleWindowClose();
+    await Future<void>.delayed(Duration.zero);
+    expect(prepared, isFalse);
+    released.complete();
+    await otherClose;
+    await mainClose;
+    expect(prepared, isTrue);
+  });
+
+  testWidgets('עדכון בריבוי תצוגות מבקש יציאה מלאה ולא מסתיר רק את הראשי', (
+    tester,
+  ) async {
+    MultiViewMode.debugOverride = true;
+    WindowOpener.debugOverride = _TwoWindowsOpener();
+    MultiWindowService.correctionQuitRequestTimeout = const Duration(
+      milliseconds: 10,
+    );
+    addTearDown(() {
+      MultiViewMode.debugOverride = null;
+      WindowOpener.debugOverride = null;
+      WindowTabsSession.current.resume();
+    });
+    WindowBus.instance.register();
+    final peer = _FakeOwner(2, reply: false)..register();
+    addTearDown(peer.dispose);
+    final tab = ToolTab(toolId: 'p', title: 'תוסף', instanceId: 'update');
+    await tester.pumpWidget(
+      BlocProvider<TabsBloc>.value(
+        value: _GuardTabs(tab),
+        child: MaterialApp(navigatorKey: navigatorKey, home: const SizedBox()),
+      ),
+    );
+    MultiWindowService.closePeers();
+    await tester.runAsync(() => AppWindowListener().handleWindowClose());
+    expect(
+      runner.closeSelfCalls,
+      0,
+      reason: 'חלון שלא אישר יציאה מונע את הכיבוי; הראשי נשאר גלוי',
+    );
+    expect(WindowTabsSession.current.slot, isNotNull);
+    expect(MultiWindowService.closingAll, isFalse);
+  });
+
   test('כשל בהכנת העדכון אינו נועל את ניסיון הסגירה הבא', () async {
     WindowBus.instance.register();
     final listener = AppWindowListener();

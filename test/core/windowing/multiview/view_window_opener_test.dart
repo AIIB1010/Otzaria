@@ -94,6 +94,15 @@ class _FailingDeleteSessions extends _MemorySessions {
   Future<void> delete(int slot) async => throw StateError('locked');
 }
 
+class _ToggleDeleteSessions extends _MemorySessions {
+  bool failDelete = false;
+  @override
+  Future<void> delete(int slot) async {
+    if (failDelete) throw StateError('locked');
+    await super.delete(slot);
+  }
+}
+
 void main() {
   setUpAll(() async {
     await Settings.init(cacheProvider: MemoryCacheProvider());
@@ -507,5 +516,63 @@ void main() {
     );
     expect(await settle(tester, flow.run()), isTrue);
     expect(windows.stubOf(entry).destroyed, isTrue);
+  });
+
+  testWidgets('סגירת שני החלונות האחרונים במקביל מבקשת יציאה אחת', (
+    tester,
+  ) async {
+    final opener = makeOpener(tester);
+    await pumpHost(tester);
+    var exits = 0;
+    opener.endProcess = () async {
+      exits++;
+    };
+    expect(await settle(tester, opener.openWindow()), isTrue);
+    expect(await settle(tester, opener.openWindow()), isTrue);
+    mainVisible = false;
+    final closing = [
+      for (final entry in windows.registry.windows)
+        ViewWindowCloseFlow(
+          entry: entry,
+          flush: () async {},
+          discardSession: sessions.delete,
+          opener: opener,
+        ).run(),
+    ];
+    await settle(tester, Future.wait(closing));
+    expect(exits, 1);
+    expect(
+      windows.registry.windows,
+      hasLength(1),
+      reason: 'ביטול יציאה משאיר חלון גלוי ולא תהליך ללא חלונות',
+    );
+  });
+
+  testWidgets('כשל מסד בשחזור שומר את החלון לניסיון חוזר', (tester) async {
+    final store = _ToggleDeleteSessions();
+    final opener = makeOpener(tester, store: store);
+    await pumpHost(tester);
+    expect(await settle(tester, opener.openWindow()), isTrue);
+    final entry = windows.registry.windows.single;
+    await sessions.save(2, tabsJson: '["draft"]', currentIndex: 0);
+    expect(
+      await settle(
+        tester,
+        ViewWindowCloseFlow(
+          entry: entry,
+          flush: () async {},
+          discardSession: sessions.delete,
+          opener: opener,
+        ).run(),
+      ),
+      isTrue,
+    );
+    store.failDelete = true;
+    expect(await settle(tester, opener.restoreLastClosedWindow()), isFalse);
+    expect(opener.closedCountForTest, 1);
+    store.failDelete = false;
+    expect(await settle(tester, opener.restoreLastClosedWindow()), isTrue);
+    expect(opener.closedCountForTest, 0);
+    expect(sessions.rows[2]!.tabsJson, '["draft"]');
   });
 }

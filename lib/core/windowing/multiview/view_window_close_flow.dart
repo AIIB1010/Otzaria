@@ -48,35 +48,37 @@ class ViewWindowCloseFlow {
     _running = true;
     try {
       final opener = _opener ?? ViewWindowOpener.instance;
-      final endProcess = opener.endProcess;
-      if (endProcess != null && await opener.isLastVisibleWindow(entry)) {
-        // החלון האחרון על המסך: יציאה מהתוכנה, עם השאלות של יציאה. אם חזרה — בוטלה.
-        AppWindowKeys.activateWindow(entry.id);
-        await endProcess();
-        return false;
-      }
-      final context = entry.keys.navigator.currentContext;
-      if (context != null && context.mounted) {
-        final tabs = context.read<TabsBloc>().state.tabs;
-        if (!await _confirm(context, tabs)) return false;
-      }
-      try {
-        // שוטף את כל החלונות; כתיבה מיותרת בחלון אחר אינה מזיקה.
-        await _flush();
-      } on PreCloseFlushFailure catch (e) {
-        debugPrint('view window close: flush failed: $e');
-      }
-      await opener.rememberClosed(entry.slot);
-      // סגירה מכוונת מוחקת את הסשן; קודם endSession, ששמירה באמצע לא תחזיר אותו.
-      entry.endSession();
-      try {
-        await _discardSession(entry.slot);
-      } catch (e) {
-        // השורה תאומץ בהפעלה הבאה; החלון נסגר בכל מקרה.
-        debugPrint('view window close: discard failed: $e');
-      }
-      entry.handle.destroy();
-      return true;
+      return await opener.serializeClose(() async {
+        final endProcess = opener.endProcess;
+        if (endProcess != null && await opener.isLastVisibleWindow(entry)) {
+          // החלון האחרון על המסך: יציאה מהתוכנה, עם השאלות של יציאה. אם חזרה — בוטלה.
+          AppWindowKeys.activateWindow(entry.id);
+          await endProcess();
+          return false;
+        }
+        final context = entry.keys.navigator.currentContext;
+        if (context != null && context.mounted) {
+          final tabs = context.read<TabsBloc>().state.tabs;
+          if (!await _confirm(context, tabs)) return false;
+        }
+        try {
+          // שוטף את כל החלונות; כתיבה מיותרת בחלון אחר אינה מזיקה.
+          await _flush();
+        } on PreCloseFlushFailure catch (e) {
+          debugPrint('view window close: flush failed: $e');
+        }
+        await opener.rememberClosed(entry.slot);
+        // סגירה מכוונת מוחקת את הסשן; קודם endSession, ששמירה באמצע לא תחזיר אותו.
+        entry.endSession();
+        try {
+          await _discardSession(entry.slot);
+        } catch (e) {
+          // השורה תאומץ בהפעלה הבאה; החלון נסגר בכל מקרה.
+          debugPrint('view window close: discard failed: $e');
+        }
+        entry.handle.destroy();
+        return true;
+      });
     } finally {
       _running = false;
     }

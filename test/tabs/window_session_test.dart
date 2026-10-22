@@ -7,6 +7,8 @@ import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
 import 'package:otzaria/core/windowing/window_bus.dart';
+import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
+import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
 import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/tabs/models/tool_tab.dart';
 import 'package:otzaria/tabs/tabs_repository.dart';
@@ -37,6 +39,7 @@ void main() {
   });
 
   tearDown(() async {
+    MultiViewMode.debugOverride = null;
     TabsRepository.debugSessions = null;
     MultiWindowService.debugSupportedOverride = null;
     database.close();
@@ -209,6 +212,17 @@ void main() {
       expect(await sessions.loadAll(), hasLength(WindowBus.slotCount));
       expect(first, isNot(contains(host)));
     });
+  });
+
+  test('ריבוי תצוגות משחזר את כל שמונת הסשנים בלי למחוק חלונות', () async {
+    MultiViewMode.debugOverride = true;
+    WindowBus.instance.register();
+    for (var slot = 1; slot <= ViewWindowRegistry.maxWindows; slot++) {
+      await sessions.save(slot, tabsJson: '["$slot"]', currentIndex: 0);
+    }
+    expect(await TabsRepository.compactWindowSessions(), [2, 3, 4, 5, 6, 7, 8]);
+    expect(await sessions.loadAll(), hasLength(ViewWindowRegistry.maxWindows));
+    expect((await sessions.load(8))!.tabsJson, '["8"]');
   });
 
   group('אימוץ סשנים יתומים', () {

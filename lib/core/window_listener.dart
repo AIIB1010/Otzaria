@@ -323,6 +323,26 @@ class AppWindowListener extends WindowListener {
       return;
     }
     _isClosing = true;
+    try {
+      if (MultiViewMode.enabled && !quit && !MultiWindowService.closingAll) {
+        await ViewWindowOpener.instance.serializeClose(() async {
+          await _handleWindowClose(canClose: canClose, quit: quit);
+          return true;
+        });
+      } else {
+        await _handleWindowClose(canClose: canClose, quit: quit);
+      }
+    } finally {
+      _isClosing = false;
+    }
+  }
+
+  Future<void> _handleWindowClose({
+    bool Function()? canClose,
+    required bool quit,
+  }) async {
+    // עדכון ממתין ליציאת התהליך; חלונות Dart חולקים את אותו מנוע.
+    quit = quit || (MultiViewMode.enabled && MultiWindowService.closingAll);
     var correctionQuitFinished = false;
     try {
       if (canClose != null && !canClose()) return;
@@ -392,7 +412,6 @@ class AppWindowListener extends WindowListener {
       }
       // רק בעל הניסיון מנקה: בקשת עדכון יכולה להגיע בזמן שומר הסגירה.
       MultiWindowService.closingAll = false;
-      _isClosing = false;
     }
   }
 

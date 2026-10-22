@@ -71,6 +71,7 @@ class ViewWindowOpener implements WindowOpener {
   final Set<int> _pendingRestore = {};
   final List<_ClosedWindow> _closed = [];
   Future<void> _queue = Future.value();
+  Future<void> _closeQueue = Future.value();
 
   static Size _implicitViewSize() {
     final view = WidgetsBinding.instance.platformDispatcher.implicitView;
@@ -92,6 +93,13 @@ class ViewWindowOpener implements WindowOpener {
     return result;
   }
 
+  /// בדיקת החלון האחרון והסגירה חייבות להיות יחידה אחת בין כל החלונות.
+  Future<bool> serializeClose(Future<bool> Function() close) {
+    final result = _closeQueue.then((_) => close());
+    _closeQueue = result.then<void>((_) {}, onError: (Object _) {});
+    return result;
+  }
+
   @override
   Future<bool> openWindow({
     OpenedTab? tab,
@@ -100,14 +108,12 @@ class ViewWindowOpener implements WindowOpener {
     bool inheritPlacement = true,
   }) => _serialized(() async {
     if (!registry.canOpenAnotherWindow) return false;
-    // ⚠️ עותק ולא אותו מופע: הקורא שולח `RemoveTab` במקור, שמשחרר את שלו.
-    final copy = tab == null ? null : OpenedTab.fromJson(tab.toJson());
     final slot = registry.freeSlot(excluding: _pendingRestore);
     // שארית מקריסה במשבצת הזו אינה שייכת לחלון החדש.
     await _store.delete(slot);
     return _open(
       slot: slot,
-      tab: copy,
+      tab: tab == null ? null : OpenedTab.fromJson(tab.toTransferJson()),
       origin: origin,
       bounds: bounds,
       deleteRowOnTimeout: true,
@@ -157,15 +163,18 @@ class ViewWindowOpener implements WindowOpener {
   @override
   Future<bool> restoreLastClosedWindow() => _serialized(() async {
     while (_closed.isNotEmpty) {
-      final closed = _closed.removeLast();
+      final closed = _closed.last;
       if (closed.isMain) {
         // false: הראשי כבר גלוי, ממשיכים לחלון הקודם.
-        if (await _restoreMainWindow()) return true;
+        if (await _restoreMainWindow()) {
+          _closed.remove(closed);
+          return true;
+        }
+        _closed.remove(closed);
         continue;
       }
       final session = closed.session!;
       if (!registry.canOpenAnotherWindow) {
-        _closed.add(closed);
         await reportOpenWindowFailure();
         return false;
       }
@@ -182,10 +191,12 @@ class ViewWindowOpener implements WindowOpener {
       if (session.boundsJson != null) {
         await _store.saveBounds(slot, session.boundsJson);
       }
-      if (await _openSession(slot)) return true;
+      if (await _openSession(slot)) {
+        _closed.remove(closed);
+        return true;
+      }
       // נכשל: השורה שנכתבה כאן אינה של אף חלון, והחלון נשאר לניסיון חוזר.
       await _store.delete(slot);
-      _closed.add(closed);
       return false;
     }
     return false;
