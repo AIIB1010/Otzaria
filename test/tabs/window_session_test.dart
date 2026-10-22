@@ -10,8 +10,6 @@ import 'package:otzaria/core/windowing/multi_window_service.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
 import 'package:otzaria/core/windowing/window_bus.dart';
-import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
-import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
 import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/tabs/models/tool_tab.dart';
 import 'package:otzaria/tabs/tabs_repository.dart';
