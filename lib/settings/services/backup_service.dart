@@ -4,6 +4,7 @@ import 'dart:isolate';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:hive_ce/hive.dart';
 import 'package:path/path.dart' as p;
+import 'package:otzaria/app_scope/process_duties.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:logging/logging.dart';
 import 'package:otzaria/bookmarks/models/bookmark_group.dart';
@@ -41,7 +42,6 @@ import 'package:otzaria/indexing/repository/indexing_repository.dart';
 import 'package:otzaria/data/sqlite/sqlite3_api.dart' as sqlite3;
 import 'package:otzaria/core/user_state/pending_report_store.dart';
 import 'package:otzaria/core/windowing/host_relay.dart';
-import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/core/messages/settings_messages.dart';
 import 'package:otzaria/core/messages/window_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
@@ -879,7 +879,9 @@ class BackupService {
   ) async {
     final path = request['path'];
     final mode = BackupImportMode.values.asNameMap()[request['mode']];
-    if (path is! String || mode == null || WindowRole.isSecondary) {
+    if (path is! String ||
+        mode == null ||
+        !ProcessDuties.current.isProcessOwner) {
       return {'error': WindowMessages.mainWindowRequestFailed};
     }
     try {
@@ -971,7 +973,7 @@ class BackupService {
   }) async {
     // שטיפת תורי הדיווחים פועלת בחלון הראשי. שחזור מחלון משני היה מוחק
     // ומוסיף מחדש את אותן שורות במקביל לשטיפה, ולכן חייב לרוץ אצל הבעלים.
-    if (WindowRole.isSecondary) {
+    if (!ProcessDuties.current.isProcessOwner) {
       return _restoreInMainWindow(backupPath, mode);
     }
     final file = File(backupPath);

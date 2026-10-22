@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:otzaria/app_scope/process_duties.dart';
 import 'package:otzaria/plugins/services/startup_crash_counter.dart';
 import 'package:otzaria/app_report/services/app_crash_session.dart';
 import 'package:otzaria/app_report/services/app_hang_report.dart';
@@ -77,7 +78,7 @@ class AppWindowListener extends WindowListener {
         return null;
       case 'appHangRecovered':
         // ה-UI isolate חזר להגיב; הדיווח לא יעכב את המשך הטיפול בהודעות.
-        if (!WindowRole.isSecondary) {
+        if (ProcessDuties.current.isProcessOwner) {
           unawaited(AppHangReport.onRecovered(call.arguments));
         }
         return null;
