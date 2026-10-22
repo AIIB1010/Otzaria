@@ -536,17 +536,11 @@ class SearchNavigationTree extends StatelessWidget {
     // ספר ללא תוצאות מוסתר כאן בדיוק כמו בעץ: בחירתו הייתה מרוקנת את
     // התוצאות ומשאירה סינון שלא מיוצג בעץ אחרי ניקוי שדה האיתור.
     final matches = <_FilteredBook>[];
-    for (final book in _allBooks(library)) {
-      if (!_titleHaystack(book).contains(query)) {
-        continue;
-      }
-      final facet = FacetHelper.buildBookFacet(
-        FacetHelper.resolveCategoryPath(book),
-        book,
-      );
-      final count = facetCounts[facet] ?? 0;
+    for (final entry in _filterEntries[library] ??= _buildFilterEntries()) {
+      if (!entry.haystack.contains(query)) continue;
+      final count = facetCounts[entry.facet] ?? 0;
       if (count == 0) continue;
-      matches.add(_FilteredBook(book, facet, count));
+      matches.add(_FilteredBook(entry.book, entry.facet, count));
     }
 
     if (matches.isEmpty) {
@@ -575,11 +569,12 @@ class SearchNavigationTree extends StatelessWidget {
 
   // ── עזרי traversal ──────────────────────────────────────────────────────────
 
-  // כותרת מנורמלת לכל ספר מחושבת פעם אחת ולא בכל הקשה.
-  static final Expando<String> _haystacks = Expando();
+  // סדר הספרים, הכותרת המנורמלת וה-facet תלויים רק בספרייה — לא בכל הקשה.
+  static final Expando<List<_FilterEntry>> _filterEntries = Expando();
 
-  static String _titleHaystack(Book book) =>
-      _haystacks[book] ??= normalizeBookTitle(book.title).toLowerCase();
+  List<_FilterEntry> _buildFilterEntries() => [
+    for (final book in _allBooks(library)) _FilterEntry(book),
+  ];
 
   List<Book> _uniqueBooks(List<Book> books) {
     final unique = <String, Book>{};
@@ -628,6 +623,20 @@ class SearchNavigationTree extends StatelessWidget {
     final categoryKey = book.categoryId?.toString() ?? book.categoryPath ?? '';
     return '${book.title.trim()}|$categoryKey';
   }
+}
+
+/// ספר ברשימת הסינון; הכותרת המנורמלת וה-facet מחושבים בפעם הראשונה שנדרשים.
+class _FilterEntry {
+  final Book book;
+
+  _FilterEntry(this.book);
+
+  late final String haystack = normalizeBookTitle(book.title).toLowerCase();
+
+  late final String facet = FacetHelper.buildBookFacet(
+    FacetHelper.resolveCategoryPath(book),
+    book,
+  );
 }
 
 /// ספר שעבר את סינון שדה האיתור, יחד עם ה-facet והספירה שכבר חושבו עבורו.
