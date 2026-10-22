@@ -739,9 +739,6 @@ class AppFonts {
   static String _compactFontName(String name) =>
       name.replaceAll(RegExp('[^A-Za-z0-9]'), '').toLowerCase();
 
-  /// בייטים של קובץ גופן מהדיסק, או null כשאינו קריא.
-  static Uint8List? readFontBytes(String path) => _readFontBytesSync(path);
-
   /// גופני מערכת שכבר נטענו (או בתהליך טעינה) — מונע טעינה כפולה ברשימה גדולה.
   static final Map<String, Future<void>> _loadingSystemFonts = {};
 

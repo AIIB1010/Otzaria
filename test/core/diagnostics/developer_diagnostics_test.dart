@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/rendering.dart';
 import 'package:otzaria/core/error_log_file.dart';
 import 'package:otzaria/core/diagnostics/developer_diagnostics.dart';
+import 'package:otzaria/core/diagnostics/process_tree_sampler.dart';
+import 'package:otzaria/core/startup_timeline.dart';
 
 class _BlockedFile extends Fake implements File {
   _BlockedFile(this.delegate);
@@ -387,6 +389,152 @@ void main() {
         expect(records().first['version'], '1.2.3+45');
       },
     );
+
+    group('process tree', () {
+      const sample = ProcessTreeSample(
+        hostPrivMb: 260,
+        webview: {
+          'RENDERER': (count: 2, privMb: 120, eachMb: [70, 50], pages: []),
+        },
+      );
+      late int calls;
+
+      setUp(() {
+        calls = 0;
+        diagnostics.processSampler = () async {
+          calls++;
+          return sample;
+        };
+      });
+
+      Future<void> settle() => Future<void>.delayed(Duration.zero);
+
+      // חייב לרוץ ראשון: אחריו ציר הזמן מסומן כחשוף לכל הקובץ.
+      test('is not sampled before the window is revealed', () async {
+        expect(StartupTimeline.instance.toJson()['revealMs'], isNull);
+        diagnostics.toggle();
+        for (var i = 0; i < 10; i++) {
+          diagnostics.debugTick();
+          await settle();
+        }
+        expect(calls, 0);
+      });
+
+      group('after reveal', () {
+        setUpAll(StartupTimeline.instance.finishAtReveal);
+
+        test('is sampled once every few ticks', () async {
+          diagnostics.toggle();
+          for (var i = 0; i < 11; i++) {
+            diagnostics.debugTick();
+            await settle();
+          }
+          expect(calls, 3);
+        });
+
+        test('a slow sample is never overlapped', () async {
+          final pending = Completer<ProcessTreeSample?>();
+          diagnostics.processSampler = () {
+            calls++;
+            return pending.future;
+          };
+          diagnostics.toggle();
+          for (var i = 0; i < 12; i++) {
+            diagnostics.debugTick();
+            await settle();
+          }
+          expect(calls, 1);
+          pending.complete(sample);
+        });
+
+        test(
+          'a fresh sample writes a stats line even without frames',
+          () async {
+            diagnostics.toggle();
+            diagnostics.debugTick();
+            await settle();
+            diagnostics.debugTick();
+            diagnostics.debugTick();
+            expect(diagnostics.stats.value.processes, sample);
+            await diagnostics.snapshot();
+
+            final stats = records().where((r) => r['type'] == 'stats');
+            expect(stats, hasLength(1));
+            expect(stats.single['processes'], sample.toJson());
+            final snapshot = records().singleWhere(
+              (r) => r['type'] == 'snapshot',
+            );
+            expect(snapshot['processes']['webviewPrivMb'], 120);
+            expect(snapshot['processes'], contains('ageMs'));
+          },
+        );
+
+        test('a failing sampler does not stop collection', () async {
+          diagnostics.processSampler = () async {
+            calls++;
+            throw StateError('no access');
+          };
+          diagnostics.toggle();
+          for (var i = 0; i < 6; i++) {
+            diagnostics.debugTick();
+            await settle();
+          }
+          expect(diagnostics.isCollecting, isTrue);
+          expect(calls, 2);
+          expect(diagnostics.stats.value.processes, isNull);
+        });
+
+        test('a sample that lands after stopping is dropped', () async {
+          final pending = Completer<ProcessTreeSample?>();
+          diagnostics.processSampler = () => pending.future;
+          diagnostics.toggle();
+          diagnostics.debugTick();
+          diagnostics.toggle();
+          pending.complete(sample);
+          await settle();
+          diagnostics.processSampler = () async => null;
+          diagnostics.toggle();
+          diagnostics.debugTick();
+          await settle();
+          expect(diagnostics.stats.value.processes, isNull);
+        });
+
+        test(
+          'a sample from an earlier session is dropped after restart',
+          () async {
+            final pending = Completer<ProcessTreeSample?>();
+            diagnostics.processSampler = () => pending.future;
+            diagnostics.toggle();
+            diagnostics.debugTick();
+            diagnostics
+              ..toggle()
+              ..toggle();
+            expect(diagnostics.isCollecting, isTrue);
+            pending.complete(sample);
+            await settle();
+            diagnostics.debugTick();
+            // הדגימה של ה-session הקודם לא נקלטה; ה-tick רק התחיל דגימה חדשה.
+            expect(diagnostics.stats.value.processes, isNull);
+          },
+        );
+
+        test(
+          'the default sampler uses the registered WebView lister',
+          () async {
+            diagnostics.resetForTesting();
+            var listed = 0;
+            diagnostics.webViewProcessLister = () async {
+              listed++;
+              return const [];
+            };
+            diagnostics.toggle();
+            diagnostics.debugTick();
+            await Future<void>.delayed(const Duration(milliseconds: 300));
+            expect(listed, Platform.isWindows ? 1 : 0);
+          },
+        );
+      });
+    });
 
     test('toggling it off stops collecting', () {
       diagnostics.toggle();

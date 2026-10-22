@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
+import 'package:otzaria/core/diagnostics/process_tree_sampler.dart';
 import 'package:otzaria/core/error_log_file.dart';
 import 'package:otzaria/core/info/os_version.dart';
 import 'package:otzaria/core/startup_timeline.dart';
@@ -65,6 +66,7 @@ class FrameStats {
     this.rssMb = 0,
     this.peakRssMb = 0,
     this.topRebuilds = const [],
+    this.processes,
   });
 
   final int framesPerSecond;
@@ -80,7 +82,11 @@ class FrameStats {
   /// Widget types rebuilt most often in the window. Debug builds only.
   final List<MapEntry<String, int>> topRebuilds;
 
-  Map<String, Object?> toJson() => {
+  /// הדגימה האחרונה של עץ התהליכים, או null כשאין (כבוי, לפני reveal, או
+  /// פלטפורמה בלי מימוש).
+  final ProcessTreeSample? processes;
+
+  Map<String, Object?> toJson({bool includeProcesses = true}) => {
     'fps': framesPerSecond,
     'buildAvgMs': buildAvgMs,
     'buildMaxMs': buildMaxMs,
@@ -92,6 +98,7 @@ class FrameStats {
     'peakRssMb': peakRssMb,
     if (topRebuilds.isNotEmpty)
       'rebuilds': {for (final e in topRebuilds) e.key: e.value},
+    if (includeProcesses && processes != null) 'processes': processes!.toJson(),
   };
 }
 
@@ -103,6 +110,7 @@ FrameStats computeFrameStats(
   int rssMb = 0,
   int peakRssMb = 0,
   List<MapEntry<String, int>> topRebuilds = const [],
+  ProcessTreeSample? processes,
 }) {
   double? avg(Iterable<double> v) =>
       v.isEmpty ? null : _round1(v.reduce((a, b) => a + b) / v.length);
@@ -123,6 +131,7 @@ FrameStats computeFrameStats(
     rssMb: rssMb,
     peakRssMb: peakRssMb,
     topRebuilds: topRebuilds,
+    processes: processes,
   );
 }
 
@@ -146,6 +155,10 @@ class DeveloperDiagnostics {
   /// A frame this slow is logged on its own, with the app context.
   static const double slowFrameLogMs = 100;
 
+  /// The process tree is sampled every this many ticks (seconds), after the
+  /// window is revealed.
+  static const int processSampleEveryTicks = 5;
+
   DiagnosticsLaunchMode _launchMode = DiagnosticsLaunchMode.off;
   bool _toggledOn = false;
   bool _running = false;
@@ -161,6 +174,15 @@ class DeveloperDiagnostics {
   Map<String, Object?> Function()? contextProvider;
 
   late String outputPath = _defaultOutputPath();
+
+  /// Lists the WebView processes; registered by the plugin layer.
+  WebViewProcessLister? webViewProcessLister;
+
+  /// Samples the app and WebView processes; replaced in tests.
+  late ProcessTreeSampler processSampler = _sampleProcessTree;
+
+  Future<ProcessTreeSample?> _sampleProcessTree() =>
+      sampleProcessTree(webViewProcesses: webViewProcessLister);
 
   /// Receives the readable snapshot entry; errors.txt by default.
   void Function(String text) errorLogWriter = ErrorLogFile.appendText;
@@ -179,6 +201,15 @@ class DeveloperDiagnostics {
   RebuildDirtyWidgetCallback? _previousRebuildCallback;
   bool _previousRepaintRainbow = false;
   bool _previousPaintSize = false;
+  ProcessTreeSample? _processes;
+  DateTime? _processesAt;
+  int _ticksUntilProcessSample = 0;
+  bool _processesFresh = false;
+  bool _processSampleFailureLogged = false;
+  Future<void>? _processSampling;
+
+  /// A sample started in an earlier collection is dropped when it lands.
+  int _session = 0;
 
   bool get isCollecting => _running;
 
@@ -225,11 +256,13 @@ class DeveloperDiagnostics {
 
   void _start() {
     _running = true;
+    _session++;
     _clock = Stopwatch()..start();
     _slowTotal = 0;
     _peakRss = 0;
     _startupWritten = false;
     _lastContext = null;
+    _resetProcesses();
     SchedulerBinding.instance.addTimingsCallback(_onTimings);
     if (kDebugMode) {
       _previousRebuildCallback = debugOnRebuildDirtyWidget;
@@ -272,8 +305,53 @@ class DeveloperDiagnostics {
     if (flush) unawaited(_flushAll());
     _samples.clear();
     _rebuildsInWindow.clear();
+    _resetProcesses();
     stats.value = const FrameStats();
     performanceOverlay.value = false;
+  }
+
+  void _resetProcesses() {
+    _processes = null;
+    _processesAt = null;
+    _ticksUntilProcessSample = 0;
+    _processesFresh = false;
+    _processSampleFailureLogged = false;
+    _processSampling = null;
+  }
+
+  /// psapi.dll וה-COM של WebView2 נטענים בדגימה הראשונה — לכן רק אחרי reveal.
+  void _maybeSampleProcesses({required bool revealed}) {
+    if (!revealed || _processSampling != null) return;
+    if (_ticksUntilProcessSample-- > 0) return;
+    _ticksUntilProcessSample = processSampleEveryTicks - 1;
+    unawaited(_sampleProcesses());
+  }
+
+  Future<void> _sampleProcesses() {
+    final running = _processSampling;
+    if (running != null) return running;
+    late final Future<void> operation;
+    operation = _runProcessSample().whenComplete(() {
+      if (identical(_processSampling, operation)) _processSampling = null;
+    });
+    return _processSampling = operation;
+  }
+
+  Future<void> _runProcessSample() async {
+    final session = _session;
+    try {
+      final sample = await processSampler().timeout(
+        const Duration(seconds: 2),
+      );
+      if (!_running || session != _session || sample == null) return;
+      _processes = sample;
+      _processesAt = DateTime.now();
+      _processesFresh = true;
+    } catch (error) {
+      if (_processSampleFailureLogged) return;
+      _processSampleFailureLogged = true;
+      debugPrint('Developer diagnostics process sample failed: $error');
+    }
   }
 
   int get _elapsedMs => _clock?.elapsedMilliseconds ?? 0;
@@ -309,6 +387,8 @@ class DeveloperDiagnostics {
   }
 
   void _onTick() {
+    final startup = StartupTimeline.instance.toJson();
+    _maybeSampleProcesses(revealed: startup['revealMs'] != null);
     final cutoff = DateTime.now().subtract(window);
     while (_samples.isNotEmpty && _samples.first.$1.isBefore(cutoff)) {
       _samples.removeFirst();
@@ -325,8 +405,11 @@ class DeveloperDiagnostics {
       rssMb: rss >> 20,
       peakRssMb: _peakRss >> 20,
       topRebuilds: top.take(10).toList(),
+      processes: _processes,
     );
     stats.value = current;
+    final freshProcesses = _processesFresh;
+    _processesFresh = false;
 
     final context = _context();
     final encodedContext = jsonEncode(context);
@@ -334,10 +417,15 @@ class DeveloperDiagnostics {
       _lastContext = encodedContext;
       _write({'type': 'context', 't': _elapsedMs, ...context});
     }
-    if (current.framesPerSecond > 0 || current.topRebuilds.isNotEmpty) {
-      _write({'type': 'stats', 't': _elapsedMs, ...current.toJson()});
+    if (current.framesPerSecond > 0 ||
+        current.topRebuilds.isNotEmpty ||
+        freshProcesses) {
+      _write({
+        'type': 'stats',
+        't': _elapsedMs,
+        ...current.toJson(includeProcesses: freshProcesses),
+      });
     }
-    final startup = StartupTimeline.instance.toJson();
     if (!_startupWritten && startup['revealMs'] != null) {
       _startupWritten = true;
       _write({
@@ -363,11 +451,18 @@ class DeveloperDiagnostics {
     if (_pending.length >= _maxPendingRecords && !await _flushAll()) {
       return null;
     }
+    await _sampleProcesses();
+    final processesAt = _processesAt;
     final record = {
       'type': 'snapshot',
       't': _elapsedMs,
       'time': DateTime.now().toIso8601String(),
-      ...stats.value.toJson(),
+      ...stats.value.toJson(includeProcesses: false),
+      'processes': ?_processes?.toJson(
+        ageMs: processesAt == null
+            ? null
+            : DateTime.now().difference(processesAt).inMilliseconds,
+      ),
       'context': _context(),
       'startup': StartupTimeline.instance.toJson(),
     };
@@ -462,6 +557,9 @@ class DeveloperDiagnostics {
   );
 
   @visibleForTesting
+  void debugTick() => _onTick();
+
+  @visibleForTesting
   void resetForTesting() {
     if (_running) {
       _running = false;
@@ -480,6 +578,9 @@ class DeveloperDiagnostics {
     _rebuildsInWindow.clear();
     contextProvider = null;
     errorLogWriter = ErrorLogFile.appendText;
+    processSampler = _sampleProcessTree;
+    webViewProcessLister = null;
+    _resetProcesses();
     panelVisible.value = false;
     performanceOverlay.value = false;
     stats.value = const FrameStats();

@@ -2139,9 +2139,9 @@ export interface FontFamilyRequest {
 }
 
 /**
- * Result of `fonts.resolveFamilies`: ready-to-inject `@font-face` rules whose
- * bytes come from Otzaria's bundled or system fonts, each declared under the
- * requested `name`.
+ * Result of `fonts.resolveFamilies`: ready-to-inject `@font-face` rules for
+ * Otzaria's bundled or system fonts, each declared under the requested `name`.
+ * Each `src` is a self-contained `data:` URL, suitable for storing or exporting.
  *
  * Needed because `src: local()` inside a plugin WebView resolves only fonts
  * installed on the machine — never the faces Otzaria injects itself. A plugin
