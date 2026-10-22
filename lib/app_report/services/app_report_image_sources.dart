@@ -73,7 +73,7 @@ class AppReportImageSources {
     final files = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: AppReportImage.supportedExtensions,
-      windowsOptions: kModalWindowsOptions,
+      windowsOptions: modalWindowsOptions(),
       linuxOptions: kModalLinuxOptions,
     );
     final images = <AppReportImage>[];

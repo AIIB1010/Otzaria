@@ -642,7 +642,7 @@ class _PersonalNotesManagerScreenState
       dialogTitle: 'בחר קובץ ייבוא',
       allowedExtensions: ['json'],
       type: FileType.custom,
-      windowsOptions: kModalWindowsOptions,
+      windowsOptions: modalWindowsOptions(),
       linuxOptions: kModalLinuxOptions,
     );
     if (!mounted) return;

@@ -22,6 +22,8 @@ Future<String?> saveFileWithExtension({
   BuildContext? context,
 }) async {
   final effectiveContext = context ?? navigatorKey.currentContext;
+  // לפני ההמתנה: הבעלים הוא החלון שביקש, גם אם הפוקוס עבר בינתיים.
+  final windowsOptions = modalWindowsOptions(effectiveContext);
   if (effectiveContext != null &&
       !await verifySaferModePassword(effectiveContext)) {
     return null;
@@ -31,7 +33,7 @@ Future<String?> saveFileWithExtension({
     fileName: fileName,
     initialDirectory: initialDirectory,
     bytes: bytes,
-    windowsOptions: kModalWindowsOptions,
+    windowsOptions: windowsOptions,
     linuxOptions: kModalLinuxOptions,
   );
   if (uri == null) return null;

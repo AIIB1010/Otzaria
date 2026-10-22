@@ -46,6 +46,7 @@ import 'package:otzaria/widgets/misc/app_popup_menu.dart';
 import 'package:otzaria/widgets/misc/app_dropdown_field.dart';
 import 'package:otzaria/tools/calendar/helpers/calendar_date_helpers.dart';
 import 'package:otzaria/tour/bloc/tour_cubit.dart';
+import 'package:otzaria/utils/file/file_picker_dialog_options.dart';
 import 'package:otzaria/utils/file/open_in_file_manager.dart';
 import 'package:otzaria/utils/file/save_file_with_extension.dart';
 import 'package:otzaria/plugins/view/webview_environment_holder.dart';
@@ -891,6 +892,8 @@ class _SystemSettingsTabState extends State<SystemSettingsTab> {
     final result = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: ['json'],
+      windowsOptions: modalWindowsOptions(context),
+      linuxOptions: kModalLinuxOptions,
     );
     final filePath = result?.path;
     if (filePath == null || !mounted) return;
@@ -916,6 +919,8 @@ class _SystemSettingsTabState extends State<SystemSettingsTab> {
     final result = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: ['json'],
+      windowsOptions: modalWindowsOptions(context),
+      linuxOptions: kModalLinuxOptions,
     );
     final filePath = result?.path;
     if (filePath == null || !mounted) return;

@@ -70,7 +70,7 @@ class _AttachedLibrariesPanelState extends State<AttachedLibrariesPanel> {
       type: widget.supportsLinking ? FileType.custom : FileType.any,
       allowedExtensions: widget.supportsLinking ? const ['db'] : null,
       dialogTitle: context.settingsText('בחר קובץ מסד ספרים'),
-      windowsOptions: kModalWindowsOptions,
+      windowsOptions: modalWindowsOptions(context),
       linuxOptions: kModalLinuxOptions,
     );
     final path = files.map((f) => f.path).whereType<String>().firstOrNull;
@@ -80,7 +80,7 @@ class _AttachedLibrariesPanelState extends State<AttachedLibrariesPanel> {
   Future<void> _addFolder() async {
     final bloc = context.read<AttachedLibrariesBloc>();
     final path = await FilePicker.getDirectoryPath(
-      windowsOptions: kModalWindowsOptions,
+      windowsOptions: modalWindowsOptions(context),
       linuxOptions: kModalLinuxOptions,
     );
     if (path != null) bloc.add(AddAttachedLibraryFolder(path));

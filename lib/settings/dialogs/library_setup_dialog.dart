@@ -240,7 +240,7 @@ class _LibrarySetupDialogContentState
 
   Future<void> _pickTargetRoot() async {
     final path = await FilePicker.getDirectoryPath(
-      windowsOptions: kModalWindowsOptions,
+      windowsOptions: modalWindowsOptions(context),
       linuxOptions: kModalLinuxOptions,
       dialogTitle: context.settingsText('בחר את תיקיית היעד לספרייה'),
     );
@@ -254,7 +254,7 @@ class _LibrarySetupDialogContentState
       folder = await (debugPickAndroidSourceFolder ?? _pickSafFolder)();
     } else {
       final path = await FilePicker.getDirectoryPath(
-        windowsOptions: kModalWindowsOptions,
+        windowsOptions: modalWindowsOptions(context),
         linuxOptions: kModalLinuxOptions,
         dialogTitle: context.settingsText('בחר תיקייה המכילה את קבצי הספרייה'),
       );
@@ -283,7 +283,7 @@ class _LibrarySetupDialogContentState
   /// בוחר תיקיית ספרייה קיימת לשימוש במקומה (ללא העתקה).
   Future<void> _pickInPlaceFolder() async {
     final folder = await FilePicker.getDirectoryPath(
-      windowsOptions: kModalWindowsOptions,
+      windowsOptions: modalWindowsOptions(context),
       linuxOptions: kModalLinuxOptions,
       dialogTitle: context.settingsText('בחר את תיקיית הספרייה הקיימת'),
     );

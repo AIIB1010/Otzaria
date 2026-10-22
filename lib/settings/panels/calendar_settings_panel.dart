@@ -595,7 +595,7 @@ class _CalendarSettingsTabState extends State<CalendarSettingsTab> {
     final result = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: ['ics'],
-      windowsOptions: kModalWindowsOptions,
+      windowsOptions: modalWindowsOptions(context),
       linuxOptions: kModalLinuxOptions,
     );
     final path = result?.path;

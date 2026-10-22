@@ -238,7 +238,7 @@ class _ToolsLauncherPanelState extends State<ToolsLauncherPanel> {
     final result = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: ['otzplugin'],
-      windowsOptions: kModalWindowsOptions,
+      windowsOptions: modalWindowsOptions(),
       linuxOptions: kModalLinuxOptions,
     );
     final path = result?.path;
@@ -252,7 +252,7 @@ class _ToolsLauncherPanelState extends State<ToolsLauncherPanel> {
     final verified = await verifySaferModePassword(context);
     if (!verified || !mounted) return;
     final rootPath = await FilePicker.getDirectoryPath(
-      windowsOptions: kModalWindowsOptions,
+      windowsOptions: modalWindowsOptions(),
       linuxOptions: kModalLinuxOptions,
     );
     if (rootPath == null || !mounted) return;

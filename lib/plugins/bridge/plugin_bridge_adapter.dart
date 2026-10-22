@@ -4442,7 +4442,7 @@ class PluginBridgeAdapter {
       return null;
     }
     return FilePicker.getDirectoryPath(
-      windowsOptions: kModalWindowsOptions,
+      windowsOptions: modalWindowsOptions(),
       linuxOptions: kModalLinuxOptions,
       dialogTitle: title,
     );
@@ -5092,7 +5092,7 @@ class PluginBridgeAdapter {
         allowedExtensions != null && allowedExtensions.isNotEmpty;
     final result = await FilePicker.pickFile(
       dialogTitle: title,
-      windowsOptions: kModalWindowsOptions,
+      windowsOptions: modalWindowsOptions(),
       linuxOptions: kModalLinuxOptions,
       type: hasExtensions ? FileType.custom : FileType.any,
       allowedExtensions: hasExtensions ? allowedExtensions : null,
@@ -5331,7 +5331,7 @@ class PluginBridgeAdapter {
     }
     final folder = await FilePicker.getDirectoryPath(
       dialogTitle: pluginSaveFolderDialogTitle(title),
-      windowsOptions: kModalWindowsOptions,
+      windowsOptions: modalWindowsOptions(),
       linuxOptions: kModalLinuxOptions,
     );
     if (folder == null) return null;
