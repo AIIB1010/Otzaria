@@ -59,6 +59,9 @@ class ContextMenuRegionState extends State<ContextMenuRegion> {
   static const double _contextMenuScreenPadding = 8;
   static const double _contextMenuMaxWidth = 320;
 
+  // ה-Listener של אזור מקונן רץ לפני של העוטף; התפריט הקרוב ביותר גובר.
+  static PointerEvent? _menuOpenedForEvent;
+
   bool _isMenuOpen = false;
   bool _isMenuVisible = false;
   OverlayEntry? _menuOverlayEntry;
@@ -275,11 +278,15 @@ class ContextMenuRegionState extends State<ContextMenuRegion> {
     _menuOverlayEntry?.markNeedsBuild();
   }
 
-  Future<void> _openContextMenu(Offset globalPosition) async {
+  Future<void> _openContextMenu(
+    Offset globalPosition, {
+    PointerEvent? trigger,
+  }) async {
     final entries = _normalizeEntries(
       widget.menuBuilder(context, globalPosition),
     );
     if (entries.isEmpty) return;
+    _menuOpenedForEvent = trigger;
 
     widget.onMenuOpening?.call(context, globalPosition);
 
@@ -462,14 +469,17 @@ class ContextMenuRegionState extends State<ContextMenuRegion> {
         child: Listener(
           behavior: HitTestBehavior.translucent,
           onPointerDown: (event) {
-            if (event.buttons == kSecondaryButton) {
+            // כל Listener מקבל עותק מותמר של האירוע; original משותף לכולם.
+            final original = event.original ?? event;
+            if (event.buttons == kSecondaryButton &&
+                !identical(original, _menuOpenedForEvent)) {
               widget.onSecondaryTapDown?.call(
                 TapDownDetails(
                   globalPosition: event.position,
                   localPosition: event.localPosition,
                 ),
               );
-              _openContextMenu(event.position);
+              _openContextMenu(event.position, trigger: original);
             }
           },
           child: _wrapWithHoverEnter(widget.child),
