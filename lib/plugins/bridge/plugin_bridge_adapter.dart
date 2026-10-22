@@ -113,6 +113,7 @@ import 'package:otzaria/plugins/models/plugin_toolbar_item.dart';
 import 'package:otzaria/plugins/models/plugin_when_condition.dart';
 import 'package:otzaria/plugins/services/context_menu_registry.dart';
 import 'package:otzaria/plugins/services/plugin_toolbar_registry.dart';
+import 'package:otzaria/plugins/services/plugin_restore_state_store.dart';
 import 'package:otzaria/plugins/services/plugin_unsaved_changes_registry.dart';
 import 'package:otzaria/plugins/services/plugin_page_launcher.dart';
 import 'package:otzaria/plugins/services/plugin_new_tab_page_service.dart';
@@ -872,8 +873,9 @@ class PluginBridgeAdapter {
     return streamId is String && _streamIdPattern.hasMatch(streamId);
   }
 
-  void dispose() {
-    _stopFolderRevocationListener();
+  /// משחרר את מה שקשור לדף הנוכחי — תרומות ו-streams — כשה-WebView שוחרר.
+  /// המתאם ממשיך לשמש את הדף הבא של אותו מופע.
+  void releaseRuntime() {
     // מסיר רק את תרומות המופע הזה — מופע אחר של אותו תוסף ממשיך לתפקד,
     // וה-dedup בציור חושף את העותקים שלו.
     final key = (pluginId: plugin.pluginId, instanceId: instanceId);
@@ -891,6 +893,11 @@ class PluginBridgeAdapter {
     }
     _activeNetworkFetchStreams.clear();
     _pendingNetworkFetchCancellations.clear();
+  }
+
+  void dispose() {
+    _stopFolderRevocationListener();
+    releaseRuntime();
     _networkFetchService?.dispose();
     _fileDownloadService?.dispose();
     _bookContentCache.clear();
@@ -7493,6 +7500,22 @@ class PluginBridgeAdapter {
         return true;
       case 'backgroundDone':
         return _dependencies.onBackgroundInstanceDone?.call() ?? false;
+      case 'setRestoreState':
+        // spec: setRestoreState({ state }) — נמסר ב-plugin.boot.restore כשהדף
+        // של המופע נטען מחדש (פינוי, נפילה, סשן). למופע רקע אין שחזור.
+        if (!args.containsKey('state')) {
+          throw Exception('error.invalid_params: state is required');
+        }
+        if (instanceId == PluginInstanceIds.background) return false;
+        try {
+          PluginRestoreStateStore.instance.set((
+            pluginId: plugin.pluginId,
+            instanceId: instanceId,
+          ), args['state']);
+        } on ArgumentError catch (e) {
+          throw Exception('error.invalid_params: ${e.message}');
+        }
+        return true;
       default:
         throw Exception(
           'error.unknown_method: Unknown action in plugin: $action',

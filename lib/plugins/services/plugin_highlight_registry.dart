@@ -509,6 +509,10 @@ class PluginHighlightRegistry extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// האם למופע [key] יש הדגשות רשומות.
+  bool hasInstance(PluginInstanceKey key) =>
+      _recordsByOwner[key]?.isNotEmpty ?? false;
+
   /// מסיר רק את רישומי המופע [key] (סגירת טאב אחד) — עותק של מופע אחר
   /// לאותה הדגשה נחשף אוטומטית בציור דרך ה-dedup.
   void removeInstance(PluginInstanceKey key) {

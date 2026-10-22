@@ -236,6 +236,7 @@ if (response.success) {
 | `plugin.setNewTabPage` | 0.9.97 |
 | `plugin.openOther` | 0.9.97 |
 | `plugin.backgroundDone` | 0.9.97 |
+| `plugin.setRestoreState` | 0.9.99 |
 | `plugin.listInstalled` | 0.9.97 |
 | `notes.list` | 0.9.89 |
 | `notes.getBookNotesSummary` | 0.9.89 |
@@ -2856,6 +2857,53 @@ Otzaria.on('plugin.boot', async (payload) => {
 
 ---
 
+### `plugin.setRestoreState`
+**הרשאה:** אין | **מגרסה:** 0.9.99
+
+שומר אצל אוצריא מצב קטן של הכרטיסייה (מסך, גלילה, טיוטה בטופס), שיחזור
+לתוסף ב-`plugin.boot` כשהדף של אותה כרטיסייה נטען מחדש. אוצריא עשויה לפנות
+כרטיסיית תוסף שעזבו מזמן כדי לשחרר זיכרון, ולטעון אותה מחדש כשחוזרים אליה
+(ראו §פינוי ושחזור ב-README). גם נפילה של תהליך הדפדפן, עדכון של התוסף
+ושחזור הכרטיסיות בהפעלה הבאה טוענים את הדף מחדש.
+
+```javascript
+// בכל שינוי משמעותי — לא רק ב-plugin.suspended (ראו הערות)
+function saveView() {
+  Otzaria.call('plugin.setRestoreState', {
+    state: { screen: currentScreen, scrollTop: list.scrollTop }
+  });
+}
+// קראו ל-saveView אחרי כל מעבר מסך, ובסיום גלילה.
+list.addEventListener('scrollend', saveView);
+
+Otzaria.on('plugin.boot', (payload) => {
+  const saved = payload.restore?.state;
+  if (saved) showScreen(saved.screen, saved.scrollTop);
+});
+
+await Otzaria.call('plugin.setRestoreState', { state: null }); // מחיקה
+// true — נשמר; false — מופע רקע (אין לו שחזור)
+```
+
+**הערות:**
+- `state` הוא כל ערך JSON, עד 64KB אחרי קידוד. ערך גדול יותר מחזיר
+  `error.invalid_params`. `state: null` מוחק את המצב.
+- שמירת מצב שאינו `null` מאפשרת פינוי אוטומטי של המופע. רק מופע עם מצב
+  שמור מפונה; מחיקת המצב או הסרתו ממטמון ה-LRU מונעת פינוי.
+- הערך מחליף את הקודם. **קראו לה בכל שינוי משמעותי של המצב**, ולא רק
+  ב-`plugin.suspended`: מעבר בין שולחנות עבודה ושמירת הסשן קוראים את המצב
+  השמור לפני שהלשונית מושהית, ולכן מה שנשמר רק ב-`plugin.suspended` לא ייכנס
+  אליהם. גם לפני פינוי אין אירוע, כי הדף כבר מושהה ברגע הזה.
+- `restore` מגיע כשנטען מחדש הדף של כרטיסייה שכבר הייתה פתוחה (`discarded`,
+  `crashed`, `reloaded`) — גם כשלא נשמר מצב, ואז `state` הוא `null`. בכרטיסייה
+  ששוחזרה מסשן קודם או משולחן עבודה הוא מגיע רק אם נשמר לה מצב (`session`).
+  בפתיחה רגילה של כרטיסייה הוא חסר.
+- המצב שייך לכרטיסייה: הוא נמחק כשסוגרים אותה, ונשמר עם הכרטיסיות בסשן
+  ובסביבות העבודה. בקורא טקסט של תוסף המצב נשמר רק עד סגירת התוכנה.
+- לא לשמור כאן נתונים שאסור לאבד — לזה `storage.set`.
+
+---
+
 ### `plugin.listInstalled`
 **הרשאה:** `app.info.read` (הרשאת בסיס; אין צורך להצהיר עליה במניפסט) · **מגרסה:** 0.9.97
 
@@ -4930,9 +4978,9 @@ Otzaria.on('event.name', (data) => {
 
 **הרשאה נדרשת:** כל אירוע מצריך הרשאה מתאימה מסוג `events.subscribe:<event_name>`
 
-- `plugin.boot` - נורה פעם אחת בטעינת התוסף (ללא הרשאה). ה-payload כולל `app.runMode: 'foreground' | 'background'` — ראה §ריצת רקע — וכן `connectivity` (מצב האינטרנט; ראה [`app.getConnectivity`](#appgetconnectivity)). שדה ה-`app` כולל גם `language` (קוד השפה, זהה ל-[`app.getLocale`](#appgetlocale)) ו-`devMode` (`true` רק כשהתוסף נטען כתוסף פיתוח). שים לב: `buildNumber` אינו נשלח ב-`plugin.boot` — לקבלתו יש לקרוא ל-[`app.getInfo`](#appgetinfo).
+- `plugin.boot` - נורה פעם אחת בטעינת הדף (ללא הרשאה). כשהדף של כרטיסייה שכבר הייתה פתוחה נטען מחדש (פינוי, נפילה, עדכון), ה-payload כולל `restore: { reason, state }`, גם כש-`state` הוא `null`; בכרטיסייה ששוחזרה מסשן או משולחן עבודה — רק אם נשמר לה מצב. ראה [`plugin.setRestoreState`](#pluginsetrestorestate). ה-payload כולל `app.runMode: 'foreground' | 'background'` — ראה §ריצת רקע — וכן `connectivity` (מצב האינטרנט; ראה [`app.getConnectivity`](#appgetconnectivity)). שדה ה-`app` כולל גם `language` (קוד השפה, זהה ל-[`app.getLocale`](#appgetlocale)) ו-`devMode` (`true` רק כשהתוסף נטען כתוסף פיתוח). שים לב: `buildNumber` אינו נשלח ב-`plugin.boot` — לקבלתו יש לקרוא ל-[`app.getInfo`](#appgetinfo).
 - `plugin.ready` - נורה אחרי boot (ללא הרשאה)
-- `plugin.suspended` - התוסף הושהה (יציאה מלשונית התוסף / מעבר לרקע). ללא הרשאה — ראה §השהיה ברקע ב-README
+- `plugin.suspended` - התוסף הושהה (יציאה מלשונית התוסף, מזעור החלון, או מעבר של האפליקציה לרקע במובייל). ללא הרשאה — ראה §השהיה ברקע ב-README
 - `plugin.resumed` - התוסף חזר מהשהיה (ללא הרשאה)
 - `theme.changed` - שינוי בערכת הצבעים (הרשאה: `events.subscribe:theme.changed`)
 - `navigation.changed` - מעבר בין מסכים ראשיים בלבד (library ↔ reading ↔ more ↔ settings) (הרשאה: `events.subscribe:navigation.changed`)

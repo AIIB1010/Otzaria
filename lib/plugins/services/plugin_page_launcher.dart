@@ -23,6 +23,10 @@ class PluginPageLauncher {
   // חדש מגיע בזמן ריקון הממתינים.
   final Map<String, Future<void>> _deliveryChain = {};
 
+  /// האם ממתינים ל-[pluginId] אירועים עד שדף שלו יהיה מוכן.
+  bool hasPendingFor(String pluginId) =>
+      _pending[pluginId]?.isNotEmpty ?? false;
+
   bool _hasReadyPage(String pluginId) =>
       _readyPages.any((key) => key.pluginId == pluginId);
 

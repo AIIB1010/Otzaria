@@ -760,10 +760,18 @@ class MainWindowScreenState extends State<MainWindowScreen>
 
     // Listen to calendar changes for plugin dispatch
     var lastDispatchedCity = _calendarCubit.state.selectedCity;
+    var lastDispatchedDate = _calendarCubit.state.selectedGregorianDate
+        .toIso8601String();
     _calendarCubit.stream.listen((state) {
-      PluginRuntimeDispatcher.instance.dispatchEvent('calendar.date_changed', {
-        'date': state.selectedGregorianDate.toIso8601String(),
-      });
+      // הקוביט משדר גם על שינויים שאינם בתאריך (אירועים, עיר).
+      final date = state.selectedGregorianDate.toIso8601String();
+      if (date != lastDispatchedDate) {
+        lastDispatchedDate = date;
+        PluginRuntimeDispatcher.instance.dispatchEvent(
+          'calendar.date_changed',
+          {'date': date},
+        );
+      }
       // שינוי העיר הנבחרת — אירוע נפרד, נשלח רק כשהעיר באמת משתנה
       if (state.selectedCity != lastDispatchedCity) {
         lastDispatchedCity = state.selectedCity;
