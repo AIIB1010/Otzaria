@@ -8,12 +8,12 @@ import 'package:otzaria/tabs/models/tab.dart';
 /// כל פתיחת חלון עוברת דרך [WindowOpener.current], ולא ישירות דרך המימוש.
 abstract interface class WindowOpener {
   /// המימוש הפעיל. ניתן להחלפה בבדיקות דרך [debugOverride].
-  /// עם ריבוי תצוגות — חלונות Dart באותו מנוע, ולעולם לא מנוע נוסף.
+  /// ב-Windows תמיד חלונות Dart; בלי בעלים הם פשוט אינם נפתחים.
   static WindowOpener get current =>
       debugOverride ??
-      (MultiViewMode.enabled
-          ? ViewWindowOpener.instance
-          : const MultiWindowService());
+      (MultiViewMode.usesEngineWindows
+          ? const MultiWindowService()
+          : ViewWindowOpener.instance);
 
   @visibleForTesting
   static WindowOpener? debugOverride;

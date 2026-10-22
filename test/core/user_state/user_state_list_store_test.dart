@@ -150,7 +150,7 @@ void main() {
   });
 
   group('חלונות Dart באותו isolate', () {
-    tearDown(() => MultiViewMode.debugOverride = null);
+    tearDown(() => MultiViewMode.debugOverride = false);
 
     UserStateListRepository<int> repo(UserStateListStore store) =>
         UserStateListRepository<int>(

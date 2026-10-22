@@ -55,7 +55,7 @@ void main() {
     repo = DataRepository()..library = Future.value(before);
   });
 
-  tearDown(() => MultiViewMode.debugOverride = null);
+  tearDown(() => MultiViewMode.debugOverride = false);
 
   LibraryBloc loaded() {
     final bloc = LibraryBloc(repository: repo, hiddenStore: _Store());

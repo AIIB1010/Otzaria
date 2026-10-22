@@ -15,7 +15,7 @@ import 'package:otzaria/settings/engine/settings_repository.dart';
 
 void main() {
   tearDown(() {
-    MultiViewMode.debugOverride = null;
+    MultiViewMode.debugOverride = false;
     AppWindowKeys.resetForTest();
   });
 

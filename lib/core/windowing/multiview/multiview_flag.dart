@@ -10,23 +10,19 @@ import 'package:flutter/src/widgets/_window_win32.dart'
     show WindowControllerWin32;
 import 'package:flutter/widgets.dart';
 
-/// חלונות Dart באותו מנוע (ריבוי תצוגות). פעיל כברירת מחדל;
-/// `--dart-define=OTZARIA_MULTIVIEW=false` מחזיר למודל A (מנוע לכל חלון).
-const bool kMultiView = bool.fromEnvironment(
-  'OTZARIA_MULTIVIEW',
-  defaultValue: true,
-);
-
-/// התנאי היחיד לכל מסלול ריבוי התצוגות.
+/// התנאי היחיד לכל מסלול ריבוי התצוגות (חלונות Dart באותו מנוע).
 abstract final class MultiViewMode {
   static bool? _override;
   static bool _ownerInstalled = false;
 
-  /// הבנייה והפלטפורמה מאפשרות ריבוי תצוגות. Linux/macOS עדיין במודל A.
-  static bool get supported => kMultiView && Platform.isWindows;
+  /// ב-Windows תמיד ריבוי תצוגות. Linux/macOS עדיין במודל A (מנוע לכל חלון).
+  static bool get supported => Platform.isWindows;
 
   /// פעיל רק אחרי ש-[installWindowingOwner] התקין בעלים אמיתי.
   static bool get enabled => _override ?? (supported && _ownerInstalled);
+
+  /// חלון נוסף הוא מנוע נוסף (מודל A). ב-Windows לעולם לא, גם בלי בעלים.
+  static bool get usesEngineWindows => !(_override ?? supported);
 
   /// האם הותקן בעלים אמיתי לחלונות ה-Dart.
   static bool get ownerInstalled => _ownerInstalled;
@@ -55,8 +51,8 @@ bool installWindowingOwner() {
   if (MultiViewMode._ownerInstalled) return true;
   if (!MultiViewMode.supported || !hasRealPlatformDispatcher()) return false;
   withWindowing(
-    () => WidgetsBinding.instance.windowingOwner =
-        createDefaultWindowingOwner(),
+    () =>
+        WidgetsBinding.instance.windowingOwner = createDefaultWindowingOwner(),
   );
   return MultiViewMode._ownerInstalled = true;
 }

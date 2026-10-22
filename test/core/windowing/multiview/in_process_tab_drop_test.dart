@@ -163,7 +163,7 @@ void main() {
 
   tearDown(() {
     runner.uninstall();
-    MultiViewMode.debugOverride = null;
+    MultiViewMode.debugOverride = false;
     MultiWindowService.debugSupportedOverride = null;
     WindowOpener.debugOverride = null;
     AppWindowKeys.resetForTest();
