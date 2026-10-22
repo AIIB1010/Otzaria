@@ -176,13 +176,14 @@ class PluginBridgeHandler {
       return _errorResp("error.forbidden", "Bridge call is not authorized");
     }
 
+    final method = first['method'];
+    final parts = method is String ? method.split('.') : const <String>[];
     final endWork = onWorkStarted?.call();
     try {
       return await adapter.withWindowDependencies(
         () => _dispatchRpc(args, eventSink: eventSink),
-        domain: (first['method'] is String)
-            ? (first['method'] as String).split('.').first
-            : null,
+        domain: parts.firstOrNull,
+        rpcAction: parts.skip(1).join('.'),
       );
     } catch (error) {
       return _errorResp("error.internal", error.toString());

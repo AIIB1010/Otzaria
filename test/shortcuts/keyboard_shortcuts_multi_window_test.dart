@@ -3,6 +3,12 @@ import 'dart:async';
 import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:otzaria/models/books.dart';
+import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
+import 'package:otzaria/plugins/services/plugin_runtime_dispatcher.dart';
+import 'package:otzaria/shortcuts/shortcut_validator.dart';
+import 'package:otzaria/tabs/models/pdf_tab.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/focus_repository.dart';
@@ -72,6 +78,30 @@ class _FakeTabsRepository extends TabsRepository {
 
   @override
   Future<void> saveTabs(List<OpenedTab> tabs, int currentTabIndex) async {}
+}
+
+class _PluginRepository extends Fake implements PluginRegistryRepository {
+  @override
+  Future<bool> getIsEnabled(String pluginId) async => true;
+}
+
+class _PluginController extends Fake implements InAppWebViewController {
+  final List<String> events = [];
+
+  @override
+  Future<void> resume() async {}
+
+  @override
+  Future<void> pause() async {}
+
+  @override
+  Future<dynamic> evaluateJavascript({
+    required String source,
+    ContentWorld? contentWorld,
+  }) async {
+    events.add(source);
+    return null;
+  }
 }
 
 class _FakeWindow extends Fake
@@ -237,6 +267,77 @@ void main() {
     w.tabs.add(RemoveTab(closed));
     await tester.pump();
   }
+
+  testWidgets('קיצור פקודת PDF נמסר למופע התוסף בחלון המקור', (tester) async {
+    createWindows();
+    final tab = PdfBookTab(
+      book: PdfBook(title: 'ספר בחלון ב', path: '/book.pdf'),
+      pageNumber: 1,
+    );
+    b.tabs.add(AddTab(tab));
+    await tester.pump();
+    final dispatcher = PluginRuntimeDispatcher.instance;
+    const pluginId = 'pdf.shortcut.window';
+    final controllerA = _PluginController();
+    final controllerB = _PluginController();
+    dispatcher.repositoryForTesting = _PluginRepository();
+    dispatcher.registerController(
+      pluginId,
+      controllerA,
+      instanceId: 'a',
+      viewId: -1,
+    );
+    dispatcher.registerController(
+      pluginId,
+      controllerB,
+      instanceId: 'b',
+      viewId: tester.view.viewId,
+    );
+    dispatcher.setVisiblePluginInstances({
+      (pluginId: pluginId, instanceId: 'a'),
+    }, viewId: -1);
+    dispatcher.setVisiblePluginInstances({
+      (pluginId: pluginId, instanceId: 'b'),
+    }, viewId: tester.view.viewId);
+    ShortcutValidator.registerPluginShortcuts({
+      'key-shortcut-plugin-window-command': (
+        pluginId: pluginId,
+        shortcutId: 'window-command',
+        label: 'פקודה בחלון',
+        defaultKey: 'ctrl+shift+f12',
+        command: 'window-command',
+        contextMenuItemId: null,
+      ),
+    });
+    addTearDown(() {
+      ShortcutValidator.registerPluginShortcuts({});
+      dispatcher.unregisterController(pluginId, instanceId: 'a');
+      dispatcher.unregisterController(pluginId, instanceId: 'b');
+      dispatcher.resetVisibilityForTesting();
+      dispatcher.repositoryForTesting = PluginRegistryRepository();
+      dispatcher.invalidatePlugin(pluginId);
+    });
+    await pumpWindows(tester);
+    AppWindowKeys.activateWindow(b.keys.id);
+
+    await _press(tester, [
+      LogicalKeyboardKey.controlLeft,
+      LogicalKeyboardKey.shiftLeft,
+      LogicalKeyboardKey.f12,
+    ]);
+
+    expect(
+      controllerA.events.where((event) => event.contains('app.command')),
+      isEmpty,
+    );
+    expect(
+      controllerB.events.where(
+        (event) =>
+            event.contains('app.command') && event.contains('window-command'),
+      ),
+      hasLength(1),
+    );
+  });
 
   testWidgets('Ctrl+Alt+N בשני חלונות פותח חלון אחד בלבד', (tester) async {
     createWindows();

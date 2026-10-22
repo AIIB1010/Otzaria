@@ -269,6 +269,8 @@ class _KeyboardShortcutsState extends State<KeyboardShortcuts> {
               'app.command',
               {'command': target.command, 'shortcutId': target.shortcutId},
               preferBackground: true,
+              viewId: View.of(context).viewId,
+              windowKeys: AppWindowKeys.of(context),
             ),
           );
           return KeyEventResult.handled;

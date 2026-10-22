@@ -142,6 +142,7 @@ class _FakeAdapter implements PluginBridgeAdapter {
   Future<T> withWindowDependencies<T>(
     Future<T> Function() action, {
     String? domain,
+    String? rpcAction,
   }) => action();
 
   int executeCalls = 0;

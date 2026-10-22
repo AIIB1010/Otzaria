@@ -573,19 +573,20 @@ class PluginBridgeAdapter {
   Future<T> withWindowDependencies<T>(
     Future<T> Function() action, {
     String? domain,
+    String? rpcAction,
   }) {
     if (const {
-      'app',
-      'fonts',
-      'storage',
-      'settings',
-      'calendar',
-      'bookmarks',
-      'notifications',
-      'database',
-      'network',
-      'shortcut',
-    }.contains(domain)) {
+          'app',
+          'fonts',
+          'storage',
+          'settings',
+          'calendar',
+          'bookmarks',
+          'database',
+          'network',
+          'shortcut',
+        }.contains(domain) ||
+        (domain == 'notifications' && rpcAction != 'showInApp')) {
       return action();
     }
     final resolve = windowDependenciesResolver;
@@ -891,6 +892,7 @@ class PluginBridgeAdapter {
   }) => withWindowDependencies(
     () => _execute(domain, action, args, eventSink: eventSink),
     domain: domain,
+    rpcAction: action,
   );
 
   Future<dynamic> _execute(
@@ -4160,7 +4162,9 @@ class PluginBridgeAdapter {
             screen = Screen.reading;
             break;
           case 'more':
-            ToolsLauncherController.instance.open();
+            ToolsLauncherController.instance.open(
+              windowKeys: _windowDependencies.windowKeys,
+            );
             return true;
           case 'settings':
             screen = Screen.settings;
@@ -4277,18 +4281,21 @@ class PluginBridgeAdapter {
       case 'showMessage':
         UiSnack.show(
           args['message'] as String? ?? '',
+          window: _windowDependencies.windowKeys,
           onTap: _messageTapHandler(args),
         );
         return true;
       case 'showSuccess':
         UiSnack.showSuccess(
           args['message'] as String? ?? '',
+          window: _windowDependencies.windowKeys,
           onTap: _messageTapHandler(args),
         );
         return true;
       case 'showError':
         UiSnack.showError(
           args['message'] as String? ?? '',
+          window: _windowDependencies.windowKeys,
           onTap: _messageTapHandler(args),
         );
         return true;
@@ -4604,7 +4611,7 @@ class PluginBridgeAdapter {
     return result != 'inactive';
   }
 
-  /// מסך ההדפסה של הקורא, כדיאלוג מעל החלון הראשי (`reader.printRange`).
+  /// מסך ההדפסה של הקורא מעל חלון הבקשה (`reader.printRange`).
   Future<bool> _defaultPrintBookRange(
     TextBook book, {
     required int startLine,
@@ -4613,7 +4620,10 @@ class PluginBridgeAdapter {
     required List<String> availableCommentators,
   }) async {
     final toc = await book.tableOfContents;
-    final context = navigatorKey.currentContext;
+    final context =
+        rpcWindowContext ??
+        (_windowDependencies.windowKeys?.navigator ?? navigatorKey)
+            .currentContext;
     if (context == null || !context.mounted) {
       throw Exception('error.unavailable: No window to show the print screen');
     }
@@ -4634,25 +4644,15 @@ class PluginBridgeAdapter {
     return printed ?? false;
   }
 
-  /// מסך ההדפסה של הקורא על קובץ PDF, כדיאלוג מעל החלון הראשי
-  /// (`ui.printFile`) — אותה הגדרה כמו `_handlePrintPress` בקורא ה-PDF:
-  /// [PrintingScreen] עם `createPdfOverride`, בלי טווח שורות או מפרשים.
-  ///
-  /// הקובץ נקרא פעם אחת לפני הפתיחה, כך ש-`fs.revokeFile`, פינוי המטמון או
-  /// הסרת התוסף בזמן שהדיאלוג פתוח אינם מוחקים אותו מתחת למסך.
-  ///
-  /// קורא ה-PDF מנתק את ה-`PdfViewer` שלו כל עוד המסך פתוח (pdfrx מנהל worker
-  /// יחיד), ופה אין ניתוק דומה. הניתוק נכתב כשהתצוגה המקדימה הייתה `PdfViewer`
-  /// ופתחה מסמכים במקביל, והתקיעה תוקנה אחר כך בשורש (פתיחה בזיכרון, `await`
-  /// ל-`dispose`, הסדרת כל פעולות ה-pdfrx בתוך המסך). שאר הכניסות למסך רצות
-  /// כשיש `PdfViewer` חי ואינן מנתקות אותו: הדפסה מקורא טקסט (טאב PDF ברקע
-  /// נשמר ב-keep-alive) והדפסת מפרשים מתוך טאב PDF פעיל. ובקריאה מתוסף הטאב
-  /// הפעיל הוא טאב התוסף, כך שאין `PdfViewer` גלוי שמרנדר.
+  /// קורא את קובץ ה-PDF לפני פתיחת מסך ההדפסה בחלון הבקשה.
   Future<bool> _defaultPrintPluginFile(
     File file, {
     required String jobName,
   }) async {
-    final context = navigatorKey.currentContext;
+    final context =
+        rpcWindowContext ??
+        (_windowDependencies.windowKeys?.navigator ?? navigatorKey)
+            .currentContext;
     if (context == null || !context.mounted) {
       throw Exception('error.unavailable: No window to show the print screen');
     }
@@ -6691,14 +6691,26 @@ class PluginBridgeAdapter {
         final onTap = _messageTapHandler(args);
         switch (type) {
           case 'success':
-            UiSnack.showSuccess(message, onTap: onTap);
+            UiSnack.showSuccess(
+              message,
+              onTap: onTap,
+              window: _windowDependencies.windowKeys,
+            );
             break;
           case 'error':
-            UiSnack.showError(message, onTap: onTap);
+            UiSnack.showError(
+              message,
+              onTap: onTap,
+              window: _windowDependencies.windowKeys,
+            );
             break;
           case 'info':
           default:
-            UiSnack.show(message, onTap: onTap);
+            UiSnack.show(
+              message,
+              onTap: onTap,
+              window: _windowDependencies.windowKeys,
+            );
             break;
         }
         return true;
