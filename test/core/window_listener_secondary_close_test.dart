@@ -198,6 +198,97 @@ void main() {
     expect(prepared, isTrue);
   });
 
+  testWidgets(
+    'יציאה מה-Dart האחרון מחליפה סגירת ראשי ממתינה גם כשהיציאה בוטלה',
+    (tester) async {
+      MultiViewMode.debugOverride = true;
+      WindowOpener.debugOverride = _TwoWindowsOpener();
+      MultiWindowService.correctionQuitRequestTimeout = const Duration(
+        milliseconds: 10,
+      );
+      addTearDown(() {
+        MultiViewMode.debugOverride = null;
+        WindowOpener.debugOverride = null;
+        WindowTabsSession.current.resume();
+      });
+      WindowBus.instance.register();
+      final peer = _FakeOwner(2, reply: false)..register();
+      addTearDown(peer.dispose);
+      await tester.pumpWidget(
+        BlocProvider<TabsBloc>.value(
+          value: _GuardTabs(
+            ToolTab(toolId: 'p', title: 'טיוטה', instanceId: 'queued-quit'),
+          ),
+          child: MaterialApp(
+            navigatorKey: navigatorKey,
+            home: const SizedBox(),
+          ),
+        ),
+      );
+      var prepared = 0;
+      AppWindowListener.prepareUpdateForClose = () async {
+        prepared++;
+      };
+      await tester.runAsync(() async {
+        final released = Completer<void>();
+        final started = Completer<void>();
+        final dartClose = ViewWindowOpener.instance.serializeClose(() async {
+          started.complete();
+          await released.future;
+          return true;
+        });
+        await started.future;
+        final listener = AppWindowListener();
+        final mainClose = listener.handleWindowClose();
+        await listener.quitFromLastViewWindow();
+        released.complete();
+        await dartClose;
+        await mainClose;
+      });
+      expect(
+        prepared,
+        0,
+        reason: 'אישור יציאה נכשל; סגירה רגילה ישנה אינה רצה אחריו',
+      );
+      expect(runner.closeSelfCalls, 0);
+      expect(WindowTabsSession.current.slot, isNotNull);
+    },
+  );
+
+  test('יציאה מפורשת בזמן סגירה פעילה ממתינה ונבדקת אחריה', () async {
+    MultiViewMode.debugOverride = true;
+    WindowOpener.debugOverride = _TwoWindowsOpener();
+    addTearDown(() {
+      MultiViewMode.debugOverride = null;
+      WindowOpener.debugOverride = null;
+      WindowTabsSession.current.resume();
+    });
+    WindowBus.instance.register();
+    final prepared = Completer<void>();
+    final released = Completer<void>();
+    AppWindowListener.prepareUpdateForClose = () async {
+      prepared.complete();
+      await released.future;
+    };
+    final listener = AppWindowListener();
+    final normal = listener.handleWindowClose();
+    await prepared.future;
+    var quitAttempts = 0;
+    final quit = listener.handleWindowClose(
+      quit: true,
+      canClose: () {
+        quitAttempts++;
+        return false;
+      },
+    );
+    expect(quitAttempts, 0);
+    released.complete();
+    await normal;
+    await quit;
+    expect(quitAttempts, 1);
+    expect(runner.closeSelfCalls, 1);
+  });
+
   testWidgets('עדכון בריבוי תצוגות מבקש יציאה מלאה ולא מסתיר רק את הראשי', (
     tester,
   ) async {

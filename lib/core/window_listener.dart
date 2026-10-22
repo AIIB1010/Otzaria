@@ -221,7 +221,8 @@ class AppWindowListener extends WindowListener {
 
   /// נקרא בכל אירוע resize רציף — מיועד ל-debounced restore.
   VoidCallback? onWindowResizeOccurred;
-  bool _isClosing = false;
+  ({Future<void> done, bool quit})? _activeClose;
+  Future<void>? _queuedClose;
 
   /// הכנת עדכון פר-isolate, אחרי אישור הסגירה ולפני תחילת הכיבוי.
   static Future<void> Function()? prepareUpdateForClose;
@@ -318,23 +319,46 @@ class AppWindowListener extends WindowListener {
   Future<void> handleWindowClose({
     bool Function()? canClose,
     bool quit = false,
-  }) async {
-    if (_isClosing) {
-      return;
+  }) {
+    final processQuit =
+        quit || (MultiViewMode.enabled && MultiWindowService.closingAll);
+    if (processQuit) _queuedClose = null;
+    final active = _activeClose;
+    if (active != null) {
+      if (!processQuit || active.quit) return Future.value();
+      return active.done.then(
+        (_) => handleWindowClose(canClose: canClose, quit: true),
+      );
     }
-    _isClosing = true;
-    try {
-      if (MultiViewMode.enabled && !quit && !MultiWindowService.closingAll) {
-        await ViewWindowOpener.instance.serializeClose(() async {
-          await _handleWindowClose(canClose: canClose, quit: quit);
+    if (!MultiViewMode.enabled || processQuit) {
+      return _startWindowClose(canClose: canClose, quit: processQuit);
+    }
+    final pending = _queuedClose;
+    if (pending != null) return Future.value();
+    late final Future<void> queued;
+    queued = ViewWindowOpener.instance
+        .serializeClose(() async {
+          // יציאה מלאה מחליפה סגירה רגילה שעדיין ממתינה בתור.
+          if (!identical(_queuedClose, queued)) return false;
+          _queuedClose = null;
+          await _startWindowClose(canClose: canClose, quit: false);
           return true;
-        });
-      } else {
-        await _handleWindowClose(canClose: canClose, quit: quit);
-      }
-    } finally {
-      _isClosing = false;
-    }
+        })
+        .then<void>((_) {});
+    _queuedClose = queued;
+    return queued;
+  }
+
+  Future<void> _startWindowClose({
+    bool Function()? canClose,
+    required bool quit,
+  }) {
+    final done = _handleWindowClose(
+      canClose: canClose,
+      quit: quit,
+    ).whenComplete(() => _activeClose = null);
+    _activeClose = (done: done, quit: quit);
+    return done;
   }
 
   Future<void> _handleWindowClose({
