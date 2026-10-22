@@ -1329,8 +1329,8 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/pdfrx"
-      ref: "6f5fec0c44a5db00a1ea3c2f26cb01862e02fef1"
-      resolved-ref: "6f5fec0c44a5db00a1ea3c2f26cb01862e02fef1"
+      ref: "74726f6d46ef58783cc246d0c2f1f6551f2cf364"
+      resolved-ref: "74726f6d46ef58783cc246d0c2f1f6551f2cf364"
       url: "https://github.com/Y-PLONI/pdfrx"
     source: git
     version: "2.9.0"
@@ -1338,8 +1338,8 @@ packages:
     dependency: "direct overridden"
     description:
       path: "packages/pdfrx_engine"
-      ref: "6f5fec0c44a5db00a1ea3c2f26cb01862e02fef1"
-      resolved-ref: "6f5fec0c44a5db00a1ea3c2f26cb01862e02fef1"
+      ref: "74726f6d46ef58783cc246d0c2f1f6551f2cf364"
+      resolved-ref: "74726f6d46ef58783cc246d0c2f1f6551f2cf364"
       url: "https://github.com/Y-PLONI/pdfrx"
     source: git
     version: "0.7.4"

@@ -29,8 +29,7 @@ import 'package:otzaria/utils/file/page_converter.dart';
 import 'package:otzaria/utils/navigation/open_book.dart';
 import 'package:otzaria/utils/navigation/talmud_bavli_open_format.dart';
 import 'package:otzaria/widgets/dialogs/password_dialog.dart';
-import 'package:otzaria/pdf_book/view/pdf_book_screen.dart'
-    show kPdfImageCacheMinBytesPerPane;
+import 'package:otzaria/pdf_book/utils/pdf_image_budget.dart';
 import 'package:otzaria/pdf_book/view/pdf_scrollbar.dart';
 import 'package:otzaria/widgets/misc/app_menu_exports.dart';
 import 'package:otzaria/widgets/widgets_exports.dart';
@@ -692,9 +691,8 @@ class _BookPreviewPanelState extends State<BookPreviewPanel> {
             controller: _pdfController!,
             params: PdfViewerParams(
               backgroundColor: Theme.of(context).colorScheme.surface,
-              // התצוגה המקדימה חיה לצד טאבי הקריאה — מקבלת את רצפת התקציב שלהם
-              // ולא את 100MB ברירת המחדל של pdfrx.
-              maxImageBytesCachedOnMemory: kPdfImageCacheMinBytesPerPane,
+              maxImageBytesCachedOnMemory: kPdfPreviewImageBudgetBytes,
+              imageCacheBudget: pdfSharedImageBudget,
               zoomStepsDelegateProvider:
                   const PdfViewerZoomStepsDelegateProviderSmart(),
               sizeDelegateProvider: PdfViewerSizeDelegateProviderLegacy(
