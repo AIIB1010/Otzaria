@@ -12,6 +12,8 @@ void main() {
     expect(await tryInitSearchEngine(), isTrue, reason: searchEngineSkipReason);
     expect(searchEngineLoadedLibraryPath, isNotNull);
     final root = await Directory.systemTemp.createTemp('economy_native_');
+    Directory('${root.path}/normal').createSync();
+    Directory('${root.path}/changing').createSync();
     final baseline = await SearchEngine.newInstance(
       path: '${root.path}/normal',
     );

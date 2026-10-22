@@ -31,6 +31,9 @@ String? _searchEnginePackageRoot() {
 /// `flutter test` מריץ את ה-build hook של החבילה ומניח את הספרייה תחת
 /// build/native_assets; נסרקים גם בניית cargo ידנית ופלטי הבנייה של האפליקציה.
 List<String> searchEngineLibraryCandidates() {
+  final explicitPath =
+      Platform.environment['OTZARIA_SEARCH_ENGINE_LIBRARY_PATH'];
+  if (explicitPath != null) return [explicitPath];
   const names = [
     'search_engine.dll',
     'libsearch_engine.so',
