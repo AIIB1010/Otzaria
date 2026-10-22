@@ -2938,7 +2938,6 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
           )),
           itemScrollController: _scrollController,
           itemPositionsListener: _positionsListener,
-          notifyPositionsOnRebuild: _lines?.needsPositionsAfterRebuild ?? true,
           scrollOffsetController: _offsetController,
           itemCount: segments?.length ?? widget.content.length,
           initialScrollIndex: segments == null || anchor == null

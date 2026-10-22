@@ -179,7 +179,6 @@ void main() {
     final navigation = lines.jumpToLine(targetLine);
     await tester.pumpAndSettle();
     await navigation;
-    expect(lines.needsPositionsAfterRebuild, isTrue);
     final scroll = lines.itemController.scrollController!;
     final beforeLoad = scroll.offset;
 
@@ -194,11 +193,89 @@ void main() {
         extent.top * itemHeight - kReadingAnchorAlignment * viewportHeight;
     expect(beforeLoad, isNot(closeTo(expectedOffset, 0.5)));
     expect(scroll.offset, closeTo(expectedOffset, 0.5));
-    expect(lines.needsPositionsAfterRebuild, isFalse);
+    expect(lines.hasPendingTarget, isFalse);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('בנייה מחדש בלי המתנה אינה מפרסמת מיקומים', (tester) async {
+  testWidgets('גלילה ידנית לפסקה לא טעונה שומרת עוגן בטעינה בגובה זהה', (
+    tester,
+  ) async {
+    const viewportHeight = 600.0;
+    const targetLine = 30;
+    final content = List.generate(40, (index) => 'שורה $index');
+    // אותו גובה כולל לפני הטעינה ואחריה, אבל השורה נמצאת במקום אחר.
+    double loadedLineHeight(int line) => line < targetLine ? 50 : 250;
+    const itemHeight = targetLine * 50.0 + 10 * 250.0;
+    var segments = buildReadingSegments(
+      content,
+      continuous: true,
+      loadedLineFlags: List.generate(content.length, (index) => index != 0),
+    );
+    final lines = LineScrollController();
+    final binding = ReadingViewportBinding(
+      segments: () => segments,
+      viewportExtent: () => viewportHeight,
+    );
+    lines.attach(binding);
+    addTearDown(() async {
+      lines.detach(binding);
+      await tester.pumpWidget(const SizedBox.shrink());
+      lines.dispose();
+    });
+    late StateSetter rebuild;
+    await tester.pumpWidget(
+      _ReaderList(
+        lines: lines,
+        viewportHeight: viewportHeight,
+        onBuild: (setState) => rebuild = setState,
+        itemCount: () => segments.length,
+        child: (item) => segments[item].isLoaded
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var line = 0; line < content.length; line++)
+                    ReaderLineBlock(
+                      lineIndex: line,
+                      child: SizedBox(
+                        height: loadedLineHeight(line),
+                        child: Text(content[line]),
+                      ),
+                    ),
+                ],
+              )
+            : const SizedBox(height: itemHeight),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(segments.length, 1);
+
+    final scroll = lines.itemController.scrollController!;
+    scroll.jumpTo(3000);
+    await tester.pumpAndSettle();
+    final anchor = lines.captureAnchor()!;
+    expect(lines.hasPendingTarget, isFalse);
+    final beforeLoad = scroll.offset;
+
+    rebuild(() {
+      segments = buildReadingSegments(content, continuous: true);
+    });
+    await tester.pumpAndSettle();
+
+    expect(lines.itemBoxes.boxForItem(0)!.size.height, itemHeight);
+    final extent = lines.itemBoxes.lineExtent(0, anchor.line)!;
+    final expectedOffset =
+        (extent.top + anchor.intraLineFraction * (extent.bottom - extent.top)) *
+            itemHeight -
+        anchor.alignment * viewportHeight;
+    expect(beforeLoad, isNot(closeTo(expectedOffset, 0.5)));
+    expect(scroll.offset, closeTo(expectedOffset, 0.5));
+    expect(lines.captureAnchor()!.line, anchor.line);
+    expect(lines.hasPendingTarget, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('בנייה מחדש בלי יעד ממתין ממשיכה לפרסם מיקומים', (tester) async {
     const viewportHeight = 600.0;
     final content = List.generate(40, (index) => 'שורה $index');
     final segments = buildReadingSegments(content, continuous: false);
@@ -224,7 +301,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(lines.needsPositionsAfterRebuild, isFalse);
+    expect(lines.hasPendingTarget, isFalse);
     var notifications = 0;
     void count() => notifications++;
     lines.positionsListener.itemPositions.addListener(count);
@@ -237,7 +314,7 @@ void main() {
       await tester.pump();
     }
     await tester.pumpAndSettle();
-    expect(notifications, 0);
+    expect(notifications, greaterThan(0));
   });
 }
 
@@ -272,7 +349,6 @@ class _ReaderList extends StatelessWidget {
               ScrollablePositionedList.builder(
                 itemScrollController: lines.itemController,
                 itemPositionsListener: lines.positionsListener,
-                notifyPositionsOnRebuild: lines.needsPositionsAfterRebuild,
                 itemCount: itemCount(),
                 estimateExtent: (_, width) => 4000,
                 itemBuilder: (_, item) => ReaderItemBox(

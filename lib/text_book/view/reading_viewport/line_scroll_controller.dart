@@ -147,11 +147,6 @@ class LineScrollController {
 
   bool get hasPendingTarget => _pending != null;
 
-  /// לרשימת הקורא: יעד ממתין נשען על התראת מיקומים אחרי בנייה, גם כשהטעינה
-  /// לא הזיזה דבר.
-  bool get needsPositionsAfterRebuild =>
-      _awaitingLoad != null || _pending != null;
-
   bool get isNavigating => _navigating > 0;
 
   ReadingSegments? get _segments => _binding?.segments();
