@@ -9,6 +9,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'package:otzaria/core/diagnostics/process_tree_sampler.dart';
 import 'package:otzaria/core/error_log_file.dart';
+import 'package:otzaria/core/diagnostics/smart_text_render_stats.dart';
 import 'package:otzaria/core/info/os_version.dart';
 import 'package:otzaria/core/startup_timeline.dart';
 import 'package:path/path.dart' as p;
@@ -360,6 +361,8 @@ class DeveloperDiagnostics {
     // רענונים שקדמו לאיסוף אינם נספרים.
     _lastEstimates = Expando();
     _estimateRefreshesSinceLastTick();
+    SmartTextRenderStats.reset();
+    SmartTextRenderStats.enabled = true;
     SchedulerBinding.instance.addTimingsCallback(_onTimings);
     if (kDebugMode) {
       _previousRebuildCallback = debugOnRebuildDirtyWidget;
@@ -393,6 +396,7 @@ class DeveloperDiagnostics {
     panelVisible.value = false;
     _tick?.cancel();
     _tick = null;
+    SmartTextRenderStats.enabled = false;
     SchedulerBinding.instance.removeTimingsCallback(_onTimings);
     if (kDebugMode && debugOnRebuildDirtyWidget == _onRebuild) {
       debugOnRebuildDirtyWidget = _previousRebuildCallback;
@@ -515,14 +519,17 @@ class DeveloperDiagnostics {
       _lastContext = encodedContext;
       _write({'type': 'context', 't': _elapsedMs, ...context});
     }
+    final smartText = SmartTextRenderStats.takeAndReset();
     if (current.framesPerSecond > 0 ||
         current.topRebuilds.isNotEmpty ||
         current.estimates != null ||
-        freshProcesses) {
+        freshProcesses ||
+        smartText != null) {
       _write({
         'type': 'stats',
         't': _elapsedMs,
         ...current.toJson(includeProcesses: freshProcesses),
+        'smartText': ?smartText,
       });
     }
     if (!_startupWritten && startup['revealMs'] != null) {
@@ -663,6 +670,8 @@ class DeveloperDiagnostics {
     if (_running) {
       _running = false;
       _tick?.cancel();
+      SmartTextRenderStats.enabled = false;
+      SmartTextRenderStats.reset();
       SchedulerBinding.instance.removeTimingsCallback(_onTimings);
       if (kDebugMode && debugOnRebuildDirtyWidget == _onRebuild) {
         debugOnRebuildDirtyWidget = _previousRebuildCallback;

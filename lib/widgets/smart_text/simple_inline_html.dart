@@ -2,6 +2,7 @@ import 'dart:collection';
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
+import 'package:otzaria/core/diagnostics/smart_text_render_stats.dart';
 import 'package:otzaria/theme/app_fonts.dart';
 import 'package:otzaria/widgets/smart_text/raised_markers.dart';
 
@@ -79,6 +80,7 @@ class SimpleInlineHtml {
       return cached.$1;
     }
     final result = _tryParseUncached(html, baseStyle);
+    if (result == null) SmartTextRenderStats.fullPathHtml(html);
     // אומדן לעץ שטוח: כל ילד מחויב כספאן וסגנון, גם אם אין לו סגנון משלו.
     final nodes = 1 + 2 * (result?.children?.length ?? 0);
     if (nodes > _cacheMaxNodes) return result;

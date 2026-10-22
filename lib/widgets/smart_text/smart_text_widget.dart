@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
+import 'package:otzaria/core/diagnostics/smart_text_render_stats.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:otzaria/tabs/models/tab.dart';
 import 'package:otzaria/text_book/utils/inline_section_markers.dart';
@@ -118,10 +119,13 @@ class SmartTextWidget extends StatelessWidget {
       listenables.add(utils.highlightPatternRevision);
     }
     if (bookId != null && sectionIndex != null) {
-      listenables.addAll([
-        PluginHighlightRegistry.instance,
-        PluginHighlightRevealService.instance,
-      ]);
+      listenables.add(
+        PluginHighlightRegistry.instance.sectionListenable(
+          bookId: bookId,
+          sectionIndex: sectionIndex,
+          bookUid: highlightBookUid,
+        ),
+      );
     }
     Widget buildResolved() => _buildResolved(
       context,
@@ -135,7 +139,9 @@ class SmartTextWidget extends StatelessWidget {
     );
     if (listenables.isEmpty) return buildResolved();
     return ListenableBuilder(
-      listenable: Listenable.merge(listenables),
+      listenable: listenables.length == 1
+          ? listenables.single
+          : Listenable.merge(listenables),
       builder: (context, _) => buildResolved(),
     );
   }
@@ -210,6 +216,7 @@ class SmartTextWidget extends StatelessWidget {
       final simpleSpan =
           heading?.span ?? SimpleInlineHtml.tryParse(processedHtml, textStyle);
       if (simpleSpan != null) {
+        SmartTextRenderStats.fastLine(heading: heading != null);
         final plainText = simpleSpan.toPlainText();
         if (plainText.isEmpty) {
           return const SizedBox.shrink();
@@ -251,6 +258,7 @@ class SmartTextWidget extends StatelessWidget {
       }
     }
 
+    SmartTextRenderStats.fullLine(columnMode: renderMode == RenderMode.column);
     // סמן-מספר וטווח-ציטוט נשארים בשורה בצבע הקישור; fwfh לא מכיר
     // inherit ולכן הערך מפורש. צבעי אותיות המפרשים המורמות נפתרים ב-wrap.
     final colorScheme = Theme.of(context).colorScheme;
@@ -711,6 +719,21 @@ class _SmartTextCallbacks extends InheritedWidget {
 
   @override
   bool updateShouldNotify(_SmartTextCallbacks oldWidget) => false;
+
+  @override
+  InheritedElement createElement() => _TimedCallbacksElement(this);
+}
+
+/// מודד את בניית תת-העץ של HtmlWidget: פרסור, עץ fwfh וספאנים, בלי פריסה.
+class _TimedCallbacksElement extends InheritedElement {
+  _TimedCallbacksElement(super.widget);
+
+  @override
+  void performRebuild() {
+    final start = SmartTextRenderStats.startMicros();
+    super.performRebuild();
+    SmartTextRenderStats.fwfhBuild(start);
+  }
 }
 
 /// עיגון מחדש של הדגשות התוספים ותיעוד תוכן הקטע (#828) לשורה מוצגת.
