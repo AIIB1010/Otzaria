@@ -527,8 +527,8 @@ packages:
     dependency: "direct main"
     description:
       path: flutter_inappwebview
-      ref: f53f7fa07a145b4a143d10dc85997e2d29d5da79
-      resolved-ref: f53f7fa07a145b4a143d10dc85997e2d29d5da79
+      ref: "254f262736fbaeb6b553eca0c2f129d005232488"
+      resolved-ref: "254f262736fbaeb6b553eca0c2f129d005232488"
       url: "https://github.com/Otzaria/flutter_inappwebview"
     source: git
     version: "6.2.0-beta.3"
@@ -536,8 +536,8 @@ packages:
     dependency: "direct overridden"
     description:
       path: flutter_inappwebview_android
-      ref: f53f7fa07a145b4a143d10dc85997e2d29d5da79
-      resolved-ref: f53f7fa07a145b4a143d10dc85997e2d29d5da79
+      ref: "254f262736fbaeb6b553eca0c2f129d005232488"
+      resolved-ref: "254f262736fbaeb6b553eca0c2f129d005232488"
       url: "https://github.com/Otzaria/flutter_inappwebview"
     source: git
     version: "1.2.0-beta.3"
@@ -553,8 +553,8 @@ packages:
     dependency: "direct overridden"
     description:
       path: flutter_inappwebview_ios
-      ref: f53f7fa07a145b4a143d10dc85997e2d29d5da79
-      resolved-ref: f53f7fa07a145b4a143d10dc85997e2d29d5da79
+      ref: "254f262736fbaeb6b553eca0c2f129d005232488"
+      resolved-ref: "254f262736fbaeb6b553eca0c2f129d005232488"
       url: "https://github.com/Otzaria/flutter_inappwebview"
     source: git
     version: "1.2.0-beta.3"
@@ -562,8 +562,8 @@ packages:
     dependency: "direct overridden"
     description:
       path: flutter_inappwebview_linux
-      ref: f53f7fa07a145b4a143d10dc85997e2d29d5da79
-      resolved-ref: f53f7fa07a145b4a143d10dc85997e2d29d5da79
+      ref: "254f262736fbaeb6b553eca0c2f129d005232488"
+      resolved-ref: "254f262736fbaeb6b553eca0c2f129d005232488"
       url: "https://github.com/Otzaria/flutter_inappwebview"
     source: git
     version: "0.1.0-beta.1"
@@ -571,8 +571,8 @@ packages:
     dependency: "direct overridden"
     description:
       path: flutter_inappwebview_macos
-      ref: f53f7fa07a145b4a143d10dc85997e2d29d5da79
-      resolved-ref: f53f7fa07a145b4a143d10dc85997e2d29d5da79
+      ref: "254f262736fbaeb6b553eca0c2f129d005232488"
+      resolved-ref: "254f262736fbaeb6b553eca0c2f129d005232488"
       url: "https://github.com/Otzaria/flutter_inappwebview"
     source: git
     version: "1.2.0-beta.3"
@@ -580,8 +580,8 @@ packages:
     dependency: "direct overridden"
     description:
       path: flutter_inappwebview_platform_interface
-      ref: f53f7fa07a145b4a143d10dc85997e2d29d5da79
-      resolved-ref: f53f7fa07a145b4a143d10dc85997e2d29d5da79
+      ref: "254f262736fbaeb6b553eca0c2f129d005232488"
+      resolved-ref: "254f262736fbaeb6b553eca0c2f129d005232488"
       url: "https://github.com/Otzaria/flutter_inappwebview"
     source: git
     version: "1.4.0-beta.3"
@@ -597,8 +597,8 @@ packages:
     dependency: "direct main"
     description:
       path: flutter_inappwebview_windows
-      ref: f53f7fa07a145b4a143d10dc85997e2d29d5da79
-      resolved-ref: f53f7fa07a145b4a143d10dc85997e2d29d5da79
+      ref: "254f262736fbaeb6b553eca0c2f129d005232488"
+      resolved-ref: "254f262736fbaeb6b553eca0c2f129d005232488"
       url: "https://github.com/Otzaria/flutter_inappwebview"
     source: git
     version: "0.7.0-beta.3"
@@ -1173,6 +1173,13 @@ packages:
       url: "https://github.com/palmoni5/otzaria-ashurit.git"
     source: git
     version: "1.0.5"
+  otzaria_context_menu:
+    dependency: "direct main"
+    description:
+      path: "packages/otzaria_context_menu"
+      relative: true
+    source: path
+    version: "0.1.0"
   otzaria_icons:
     dependency: "direct main"
     description:
@@ -1322,8 +1329,8 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/pdfrx"
-      ref: "6f5fec0c44a5db00a1ea3c2f26cb01862e02fef1"
-      resolved-ref: "6f5fec0c44a5db00a1ea3c2f26cb01862e02fef1"
+      ref: "74726f6d46ef58783cc246d0c2f1f6551f2cf364"
+      resolved-ref: "74726f6d46ef58783cc246d0c2f1f6551f2cf364"
       url: "https://github.com/Y-PLONI/pdfrx"
     source: git
     version: "2.9.0"
@@ -1331,8 +1338,8 @@ packages:
     dependency: "direct overridden"
     description:
       path: "packages/pdfrx_engine"
-      ref: "6f5fec0c44a5db00a1ea3c2f26cb01862e02fef1"
-      resolved-ref: "6f5fec0c44a5db00a1ea3c2f26cb01862e02fef1"
+      ref: "74726f6d46ef58783cc246d0c2f1f6551f2cf364"
+      resolved-ref: "74726f6d46ef58783cc246d0c2f1f6551f2cf364"
       url: "https://github.com/Y-PLONI/pdfrx"
     source: git
     version: "0.7.4"

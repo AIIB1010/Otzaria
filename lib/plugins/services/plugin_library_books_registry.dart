@@ -99,6 +99,9 @@ class PluginLibraryBooksRegistry extends ChangeNotifier {
   @visibleForTesting
   Iterable<PluginLibraryBookProvider> get providers => _providers.values;
 
+  bool hasProviderFor(String pluginId) =>
+      _providers.values.any((provider) => provider.pluginId == pluginId);
+
   bool isOwner(String pluginId, String provider) =>
       _providers[provider]?.pluginId == pluginId;
 

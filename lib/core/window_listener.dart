@@ -211,6 +211,8 @@ class AppWindowListener extends WindowListener {
   void _notifyRestoredFromMinimize() {
     if (!_minimized) return;
     _minimized = false;
+    // לפני ה-callback: בקשת הפוקוס שלו צריכה למצוא את התוסף בדרך לחידוש.
+    PluginRuntimeDispatcher.instance.setWindowMinimized(false);
     onWindowRestoredFromMinimize?.call();
   }
 
@@ -669,6 +671,8 @@ class AppWindowListener extends WindowListener {
       debugPrint('Window minimized');
     }
     _minimized = true;
+    // ממוזער אינו מוצג: התוספים שבו מושהים עד השחזור.
+    PluginRuntimeDispatcher.instance.setWindowMinimized(true);
   }
 
   @override

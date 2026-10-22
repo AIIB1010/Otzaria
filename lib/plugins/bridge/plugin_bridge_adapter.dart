@@ -17,7 +17,6 @@ import 'package:otzaria/utils/file/file_picker_dialog_options.dart';
 import 'package:otzaria/widgets/dialogs/input_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show compute;
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:otzaria_report_contract/otzaria_report_contract.dart';
 import 'package:path/path.dart' as p;
 import 'package:otzaria/plugins/plugin_constants.dart';
@@ -30,6 +29,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:otzaria/plugins/models/installed_plugin.dart';
 import 'package:otzaria/plugins/services/installed_fonts.dart';
+import 'package:otzaria/plugins/services/plugin_fonts.dart';
 import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
 import 'package:otzaria/data/repository/data_repository.dart';
 import 'package:otzaria/data/data_providers/database_library_provider.dart';
@@ -116,6 +116,7 @@ import 'package:otzaria/plugins/models/plugin_toolbar_item.dart';
 import 'package:otzaria/plugins/models/plugin_when_condition.dart';
 import 'package:otzaria/plugins/services/context_menu_registry.dart';
 import 'package:otzaria/plugins/services/plugin_toolbar_registry.dart';
+import 'package:otzaria/plugins/services/plugin_restore_state_store.dart';
 import 'package:otzaria/plugins/services/plugin_unsaved_changes_registry.dart';
 import 'package:otzaria/plugins/services/plugin_page_launcher.dart';
 import 'package:otzaria/plugins/services/plugin_new_tab_page_service.dart';
@@ -249,186 +250,6 @@ Map<String, dynamic> buildThemePayloadFromScheme(
       'commentatorsFontSize': commentatorsFontSize,
     },
   };
-}
-
-// ===================================================================
-// Helper: build CSS @font-face block with bundled fonts as data: URLs
-// so the plugin WebView can resolve names like 'FrankRuhlCLM'.
-// בלי זה — שמות הגופנים שאוצריא שולחת לתוסף מצביעים על font assets
-// של Flutter שאינם זמינים ל-WebView, וב-macOS ה-fallback של המערכת
-// לעברית נראה כגופן דקורטיבי (ראה תקלת תצוגת תוספים ב-macOS).
-// ===================================================================
-final Map<String, String> _fontFaceCache = {};
-
-/// \u05db\u05dc\u05dc `@font-face` \u05d9\u05d7\u05d9\u05d3. [weight] \u05d4\u05d5\u05d0 \u05d3\u05e1\u05e7\u05e8\u05d9\u05e4\u05d8\u05d5\u05e8 \u05d4-CSS: \u05de\u05e9\u05e7\u05dc \u05d1\u05d5\u05d3\u05d3
-/// ("700") \u05d0\u05d5 \u05d8\u05d5\u05d5\u05d7 \u05dc\u05d2\u05d5\u05e4\u05df \u05de\u05e9\u05ea\u05e0\u05d4 ("100 900").
-String _fontFaceRule(String family, Uint8List bytes, String weight) {
-  final b64 = base64Encode(bytes);
-  return "@font-face{font-family:'$family';font-style:normal;"
-      "font-weight:$weight;"
-      "src:url(data:font/ttf;base64,$b64) format('truetype');"
-      'font-display:block;}';
-}
-
-/// \u05d4-faces \u05e9\u05dc \u05d2\u05d5\u05e4\u05df \u05de\u05d5\u05d1\u05e0\u05d4: \u05d4-regular, \u05d5\u05d1\u05de\u05e9\u05e4\u05d7\u05d4 \u05e2\u05dd \u05e7\u05d5\u05d1\u05e5 \u05d1\u05d5\u05dc\u05d3 \u05e0\u05e4\u05e8\u05d3 \u05d2\u05dd \u05d4\u05d5\u05d0.
-/// \u05d2\u05d5\u05e4\u05df \u05de\u05e9\u05ea\u05e0\u05d4 \u05de\u05e7\u05d1\u05dc \u05d8\u05d5\u05d5\u05d7 \u05de\u05e9\u05e7\u05dc\u05d9\u05dd \u2014 \u05d1\u05dc\u05e2\u05d3\u05d9\u05d5 \u05d4-WebView \u05e0\u05e2\u05d5\u05dc \u05e2\u05dc \u05de\u05d5\u05e4\u05e2
-/// \u05d1\u05e8\u05d9\u05e8\u05ea \u05d4\u05de\u05d7\u05d3\u05dc \u05d5\u05de\u05e1\u05e0\u05ea\u05d6 \u05d1\u05d5\u05dc\u05d3 \u05de\u05dc\u05d0\u05db\u05d5\u05ea\u05d9 \u05d5\u05de\u05e8\u05d5\u05d7 \u05d1\u05de\u05e7\u05d5\u05dd \u05dc\u05d4\u05e9\u05ea\u05de\u05e9 \u05d1\u05e6\u05d9\u05e8 \u05d4-wght.
-/// [asFamily] מגיש את הבייטים תחת שם אחר. כך `fonts.resolveFamilies` עונה על
-/// בקשה לגופן שאינו במכונה: הבייטים של תחליף, בשם שהמסמך מבקש.
-Future<String> _bundledFontFaceCss(String family, {String? asFamily}) async {
-  final assetPath = AppFonts.fontPaths[family];
-  if (assetPath == null) return '';
-  final name = asFamily ?? family;
-  final isVariable = AppFonts.variableWeightFonts.contains(family);
-  final regular = await rootBundle.load(assetPath);
-  final parts = <String>[
-    _fontFaceRule(
-      name,
-      regular.buffer.asUint8List(),
-      isVariable ? '100 900' : '400',
-    ),
-  ];
-  final boldPath = AppFonts.boldFontPaths[family];
-  if (boldPath != null) {
-    final bold = await rootBundle.load(boldPath);
-    parts.add(_fontFaceRule(name, bold.buffer.asUint8List(), '700'));
-  }
-  return parts.join('\n');
-}
-
-/// \u05d4-faces \u05e9\u05dc \u05d2\u05d5\u05e4\u05df \u05de\u05e2\u05e8\u05db\u05ea \u05e9\u05e0\u05d1\u05d7\u05e8 \u05d1\u05d4\u05d2\u05d3\u05e8\u05d5\u05ea. \u05d0\u05d9\u05e0\u05d5 \u05de\u05d5\u05d1\u05e0\u05d4, \u05d5\u05dc\u05db\u05df \u05d4-WebView
-/// \u05d0\u05d9\u05e0\u05d5 \u05d9\u05db\u05d5\u05dc \u05dc\u05e4\u05ea\u05d5\u05e8 \u05d0\u05ea \u05e9\u05de\u05d5 \u05d0\u05dc\u05d0 \u05d0\u05dd \u05d4\u05d1\u05d9\u05d9\u05d8\u05d9\u05dd \u05e9\u05dc\u05d5 \u05e0\u05e9\u05dc\u05d7\u05d9\u05dd \u05d0\u05d9\u05ea\u05d5.
-Future<String> _systemFontFaceCss(String family, {String? asFamily}) async {
-  await AppFonts.warmUpSystemFontsCache();
-  final faces = AppFonts.pluginSystemFamilyFaces(family);
-  if (faces == null) return '';
-  final regular = AppFonts.readFontBytes(faces.regularPath);
-  if (regular == null) return '';
-  final name = asFamily ?? family;
-  final parts = <String>[
-    _fontFaceRule(name, regular, faces.hasWeightAxis ? '100 900' : '400'),
-  ];
-  final boldPath = faces.boldPath;
-  if (boldPath != null) {
-    final bold = AppFonts.readFontBytes(boldPath);
-    if (bold != null) parts.add(_fontFaceRule(name, bold, '700'));
-  }
-  return parts.join('\n');
-}
-
-Future<String> _loadFontFaceCss(String fontFamily, {String? asFamily}) async {
-  if (fontFamily.isEmpty) return '';
-  if (asFamily == null) {
-    final cached = _fontFaceCache[fontFamily];
-    if (cached != null) return cached;
-  }
-  try {
-    final css = AppFonts.fontPaths.containsKey(fontFamily)
-        ? await _bundledFontFaceCss(fontFamily, asFamily: asFamily)
-        : await _systemFontFaceCss(fontFamily, asFamily: asFamily);
-    if (css.isNotEmpty && asFamily == null) {
-      _fontFaceCache[fontFamily] = css;
-    }
-    return css;
-  } catch (_) {
-    return '';
-  }
-}
-
-/// כמה משפחות ותחליפים בקשה אחת יכולה לבקש. גבול, לא מדיניות: כל גופן שמוגש
-/// הוא מאות קילובייטים ב-base64, ובקשה בלי תקרה היא דרך לנפח את ה-WebView.
-const int _maxResolveFamilies = 24;
-const int _maxResolveSubstitutes = 12;
-
-/// עונה על `fonts.resolveFamilies`: לכל משפחה מבוקשת, ה-`@font-face` הראשון
-/// שאפשר להרכיב מרשימת התחליפים שלה — **בשם שהמסמך מבקש**.
-///
-/// למה בכלל: `src: local()` ב-WebView רואה רק גופנים מותקנים במערכת, ולא את
-/// אלה שאוצריא מזריקה כ-`@font-face`. תוסף שפותח מסמך המבקש גופן שאינו מותקן
-/// אינו יכול להגיע לגופנים הארוזים כאן בלי הבייטים עצמם — וזה מה שמוחזר.
-///
-/// המדיניות — אילו תחליפים ובאיזה סדר — נשארת אצל הקורא: הוא זה שקרא את
-/// `word/fontTable.xml` ויודע מה המסמך באמת מבקש.
-Future<Map<String, dynamic>> _resolveFontFamilies(
-  List<dynamic> requested,
-) async {
-  final css = <String>[];
-  final resolved = <String>[];
-
-  for (final entry in requested.take(_maxResolveFamilies)) {
-    if (entry is! Map) continue;
-    final name = entry['name'];
-    if (name is! String || name.isEmpty) continue;
-
-    final substitutes = entry['substitutes'];
-    final candidates = substitutes is List
-        ? substitutes.whereType<String>().take(_maxResolveSubstitutes)
-        : const <String>[];
-
-    for (final candidate in candidates) {
-      final rule = await _loadFontFaceCss(candidate, asFamily: name);
-      if (rule.isEmpty) continue;
-      css.add(rule);
-      resolved.add(name);
-      break;
-    }
-  }
-
-  return {'css': css.join('\n'), 'resolved': resolved};
-}
-
-@visibleForTesting
-Future<Map<String, dynamic>> debugResolveFontFamilies(
-  List<dynamic> requested,
-) => _resolveFontFamilies(requested);
-
-@visibleForTesting
-void debugClearFontFaceCssCache() {
-  _fontFaceCache.clear();
-  _fontFaceJsonCache = null;
-}
-
-@visibleForTesting
-int get debugFontFaceCssCacheSize => _fontFaceCache.length;
-
-/// בונה כללי @font-face לגופנים המובנים ולגופנים שנבחרו בהגדרות.
-Future<String> buildPluginFontFaceCss() async =>
-    (await _buildFontFaceCss(_pluginFontFamilies())).css;
-
-Set<String> _pluginFontFamilies() => {
-  ...AppFonts.fontPaths.keys,
-  Settings.getValue<String>(SettingsRepository.keyFontFamily) ??
-      AppFonts.defaultFont,
-  Settings.getValue<String>(SettingsRepository.keyCommentatorsFontFamily) ??
-      AppFonts.defaultCommentatorsFont,
-};
-
-({String key, String json})? _fontFaceJsonCache;
-
-/// [buildPluginFontFaceCss] מקודד ל-JSON. הקידוד (~2MB) עולה כ-10ms בכל טעינת
-/// תוסף, ולכן נשמר כל עוד המשפחות זהות וכולן נטענו (כשל נטען שוב בפעם הבאה).
-Future<String> buildPluginFontFaceJson() async {
-  final families = _pluginFontFamilies();
-  final key = families.join('\u0000');
-  final cached = _fontFaceJsonCache;
-  if (cached != null && cached.key == key) return cached.json;
-  final result = await _buildFontFaceCss(families);
-  final json = jsonEncode(result.css);
-  if (result.complete) {
-    _fontFaceJsonCache = (key: key, json: json);
-  }
-  return json;
-}
-
-Future<({String css, bool complete})> _buildFontFaceCss(
-  Set<String> families,
-) async {
-  final parts = <String>[];
-  for (final family in families) {
-    final css = await _loadFontFaceCss(family);
-    if (css.isNotEmpty) parts.add(css);
-  }
-  return (css: parts.join('\n'), complete: parts.length == families.length);
 }
 
 /// שורת ערך AltToc עם ה-lineIndex שלה (או null לכותרת-אב ללא שורה), לבניית
@@ -875,8 +696,9 @@ class PluginBridgeAdapter {
     return streamId is String && _streamIdPattern.hasMatch(streamId);
   }
 
-  void dispose() {
-    _stopFolderRevocationListener();
+  /// משחרר את מה שקשור לדף הנוכחי — תרומות ו-streams — כשה-WebView שוחרר.
+  /// המתאם ממשיך לשמש את הדף הבא של אותו מופע.
+  void releaseRuntime() {
     // מסיר רק את תרומות המופע הזה — מופע אחר של אותו תוסף ממשיך לתפקד,
     // וה-dedup בציור חושף את העותקים שלו.
     final key = (pluginId: plugin.pluginId, instanceId: instanceId);
@@ -894,6 +716,11 @@ class PluginBridgeAdapter {
     }
     _activeNetworkFetchStreams.clear();
     _pendingNetworkFetchCancellations.clear();
+  }
+
+  void dispose() {
+    _stopFolderRevocationListener();
+    releaseRuntime();
     _networkFetchService?.dispose();
     _fileDownloadService?.dispose();
     _bookContentCache.clear();
@@ -1051,7 +878,7 @@ class PluginBridgeAdapter {
         if (families is! List) {
           throw Exception('error.invalid_params: families must be an array');
         }
-        return await _resolveFontFamilies(families);
+        return await resolvePluginFontFamilies(families);
       case 'listInstalled':
         return InstalledFonts.list();
       default:
@@ -7508,6 +7335,22 @@ class PluginBridgeAdapter {
         return true;
       case 'backgroundDone':
         return _dependencies.onBackgroundInstanceDone?.call() ?? false;
+      case 'setRestoreState':
+        // spec: setRestoreState({ state }) — נמסר ב-plugin.boot.restore כשהדף
+        // של המופע נטען מחדש (פינוי, נפילה, סשן). למופע רקע אין שחזור.
+        if (!args.containsKey('state')) {
+          throw Exception('error.invalid_params: state is required');
+        }
+        if (instanceId == PluginInstanceIds.background) return false;
+        try {
+          PluginRestoreStateStore.instance.set((
+            pluginId: plugin.pluginId,
+            instanceId: instanceId,
+          ), args['state']);
+        } on ArgumentError catch (e) {
+          throw Exception('error.invalid_params: ${e.message}');
+        }
+        return true;
       default:
         throw Exception(
           'error.unknown_method: Unknown action in plugin: $action',

@@ -32,6 +32,8 @@ dependencies:
   sentry_flutter: ^9.30.1
   flutter:
     sdk: flutter
+  otzaria_context_menu:
+    path: packages/otzaria_context_menu
   flutter_bloc: ^9.1.1
   bloc: ^9.2.1
   bloc_concurrency: ^0.3.0
@@ -124,24 +126,24 @@ dependencies:
   flutter_inappwebview:
     git:
       url: https://github.com/Otzaria/flutter_inappwebview
-      ref: f53f7fa07a145b4a143d10dc85997e2d29d5da79
+      ref: 254f262736fbaeb6b553eca0c2f129d005232488
       path: flutter_inappwebview
   # נדרש ישירות עבור WindowsFileDropManager (גרירת קבצים אל החלון).
   flutter_inappwebview_windows: any
   wakelock_plus: ^1.8.1
 
 dependency_overrides:
-  # TODO: לחזור ל-pub.dev רק לאחר שנרמול העברית ישמר את החיפוש ומיפוי התווים הקיימים בספרים סרוקים.
-  # שתי החבילות מוצמדות יחד; המנרמל הקיים נשמר, כולל מגבלותיו בטקסט מעורב ובפיסוק מספרים.
+  # TODO: לחזור ל-pub.dev לאחר שחרור תעדוף הרינדור והמטמונים, עם תאימות OCR ל-dev.
+  # מנרמל העברית הקיים נשמר, כולל מגבלותיו בטקסט מעורב ובפיסוק מספרים.
   pdfrx:
     git:
       url: https://github.com/Y-PLONI/pdfrx
-      ref: 6f5fec0c44a5db00a1ea3c2f26cb01862e02fef1
+      ref: 74726f6d46ef58783cc246d0c2f1f6551f2cf364
       path: packages/pdfrx
   pdfrx_engine:
     git:
       url: https://github.com/Y-PLONI/pdfrx
-      ref: 6f5fec0c44a5db00a1ea3c2f26cb01862e02fef1
+      ref: 74726f6d46ef58783cc246d0c2f1f6551f2cf364
       path: packages/pdfrx_engine
   # TODO: להחזיר ל-pub.dev כשיתמזג וישוחרר MaikuB/flutter_local_notifications#2826
   # (קריאות WinRT ב-thread ייעודי, כולל תיקון ה-deadlock ב-invoke). עד אז הפורק
@@ -174,33 +176,33 @@ dependency_overrides:
   flutter_inappwebview_windows:
     git:
       url: https://github.com/Otzaria/flutter_inappwebview
-      ref: f53f7fa07a145b4a143d10dc85997e2d29d5da79
+      ref: 254f262736fbaeb6b553eca0c2f129d005232488
       path: flutter_inappwebview_windows
   flutter_inappwebview_platform_interface:
     git:
       url: https://github.com/Otzaria/flutter_inappwebview
-      ref: f53f7fa07a145b4a143d10dc85997e2d29d5da79
+      ref: 254f262736fbaeb6b553eca0c2f129d005232488
       path: flutter_inappwebview_platform_interface
   flutter_inappwebview_ios:
     git:
       url: https://github.com/Otzaria/flutter_inappwebview
-      ref: f53f7fa07a145b4a143d10dc85997e2d29d5da79
+      ref: 254f262736fbaeb6b553eca0c2f129d005232488
       path: flutter_inappwebview_ios
   flutter_inappwebview_macos:
     git:
       url: https://github.com/Otzaria/flutter_inappwebview
-      ref: f53f7fa07a145b4a143d10dc85997e2d29d5da79
+      ref: 254f262736fbaeb6b553eca0c2f129d005232488
       path: flutter_inappwebview_macos
   flutter_inappwebview_linux:
     git:
       url: https://github.com/Otzaria/flutter_inappwebview
-      ref: f53f7fa07a145b4a143d10dc85997e2d29d5da79
+      ref: 254f262736fbaeb6b553eca0c2f129d005232488
       path: flutter_inappwebview_linux
   # הגרסה שב-pub.dev קוראת ל-setStatusBarColor שהוצא משימוש ב-Android 15.
   flutter_inappwebview_android:
     git:
       url: https://github.com/Otzaria/flutter_inappwebview
-      ref: f53f7fa07a145b4a143d10dc85997e2d29d5da79
+      ref: 254f262736fbaeb6b553eca0c2f129d005232488
       path: flutter_inappwebview_android
 
 flutter_launcher_icons:

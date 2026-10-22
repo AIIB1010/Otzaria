@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/diagnostics/developer_diagnostics.dart';
 import 'package:otzaria/core/diagnostics/frame_stats_overlay.dart';
+import 'package:otzaria/core/diagnostics/process_tree_sampler.dart';
 
 class _Probe extends StatefulWidget {
   const _Probe();
@@ -173,6 +174,28 @@ void main() {
     expect(text, contains('slow      1 (2s)  total 7'));
     expect(text, contains('memory    420 MB  peak 512 MB'));
     expect(text, contains('rebuild   10x TextBookScreen'));
+  });
+
+  test('formatFrameStats shows the WebView process tree when sampled', () {
+    final text = formatFrameStats(
+      const FrameStats(
+        rssMb: 300,
+        peakRssMb: 320,
+        processes: ProcessTreeSample(
+          hostPrivMb: 262,
+          webview: {
+            'BROWSER': (count: 1, privMb: 61, eachMb: [61], pages: []),
+            'RENDERER': (count: 2, privMb: 130, eachMb: [70, 60], pages: []),
+          },
+        ),
+      ),
+    );
+    expect(text, contains('memory    300 MB  peak 320 MB  priv 262 MB'));
+    expect(text, contains('webview   191 MB  3 proc  2 rend 130 MB (max 70)'));
+  });
+
+  test('formatFrameStats has no process line without a sample', () {
+    expect(formatFrameStats(const FrameStats()), isNot(contains('webview')));
   });
 
   test('formatFrameStats handles an idle window', () {

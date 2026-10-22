@@ -106,6 +106,10 @@ class PluginSearchFieldSessionService extends ChangeNotifier {
 
   final PluginSearchFieldEventDispatcher _dispatch;
   final Map<String, PluginSearchFieldSession> _sessions = {};
+
+  /// האם ל-[pluginId] יש סשן פתוח בשדה חיפוש.
+  bool hasSessionFor(String pluginId) =>
+      _sessions.values.any((s) => s.pluginId == pluginId);
   final Random _random = Random.secure();
 
   PluginSearchFieldSession? sessionFor(

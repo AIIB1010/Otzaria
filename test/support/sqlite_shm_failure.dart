@@ -1,18 +1,50 @@
 import 'dart:ffi';
 
 import 'package:ffi/ffi.dart';
+import 'package:sqlite3/sqlite3.dart';
 import 'package:sqlite3/unstable/ffi_bindings.dart' as native;
 
-@Native<Pointer<native.sqlite3_vfs> Function(Pointer<Char>)>(
-  symbol: 'sqlite3_vfs_find',
-  assetId: 'package:sqlite3/src/ffi/libsqlite3.g.dart',
-)
-external Pointer<native.sqlite3_vfs> _findVfs(Pointer<Char> name);
+typedef _ExtensionInit =
+    Int Function(Pointer<Void>, Pointer<Pointer<Char>>, Pointer<Pointer<Void>>);
+
+// מיקומי vfs_find ו-cancel_auto_extension ב-ABI הקבוע שב-sqlite3ext.h.
+const _vfsFindIndex = 141, _cancelAutoExtensionIndex = 195;
+
+Pointer<native.sqlite3_vfs> _findDefaultVfs() {
+  late Pointer<native.sqlite3_vfs> result;
+  late NativeCallable<_ExtensionInit> extension;
+  extension = NativeCallable<_ExtensionInit>.isolateLocal((
+    Pointer<Void> db,
+    Pointer<Pointer<Char>> error,
+    Pointer<Pointer<Void>> api,
+  ) {
+    api[_cancelAutoExtensionIndex]
+        .cast<NativeFunction<Int Function(Pointer<Void>)>>()
+        .asFunction<int Function(Pointer<Void>)>()(
+      extension.nativeFunction.cast(),
+    );
+    result = api[_vfsFindIndex]
+        .cast<
+          NativeFunction<Pointer<native.sqlite3_vfs> Function(Pointer<Char>)>
+        >()
+        .asFunction<
+          Pointer<native.sqlite3_vfs> Function(Pointer<Char>)
+        >()(nullptr);
+    return 0;
+  }, exceptionalReturn: 1);
+  native.sqlite3_auto_extension(extension.nativeFunction.cast());
+  try {
+    sqlite3.openInMemory().close();
+    return result;
+  } finally {
+    extension.close();
+  }
+}
 
 /// מעביר I/O למערכת הקבצים האמיתית, ומדמה כשל רק במיפוי SHM.
 class SqliteShmFailure {
   SqliteShmFailure() {
-    _base = _findVfs(nullptr);
+    _base = _findDefaultVfs();
     _vfs = calloc<native.sqlite3_vfs>();
     _vfs
         .cast<Uint8>()

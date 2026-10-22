@@ -856,6 +856,7 @@ void main() {
       expect(a.pauseCalls, 1);
       expect(a.jsEvents, contains(contains('plugin.suspended')));
       expect(b.resumeCalls, 1);
+      // LOW אחרי ההשהיה מקצץ את ה-working set של ה-renderer המוקפא.
       expect(a.memoryLevels, [
         MemoryUsageTargetLevel.NORMAL,
         MemoryUsageTargetLevel.LOW,
@@ -1079,54 +1080,56 @@ void main() {
       expect(background.jsEvents, isEmpty);
     });
 
-    test(
-      'חידוש תוסף מסנכרן מחדש את ה-theme האחרון (שאבד בזמן ההשהיה)',
-      () async {
-        _d.repositoryForTesting = _FakeRegistryRepo(
-          enabled: true,
-          permission: true,
-        );
-        // dispatchEvent ללא controllers רשומים — שומר רק את ה-payload האחרון
-        // ומדמה החלפת מצב כהה בזמן שהתוסף מושהה.
-        await _d.dispatchEvent('theme.changed', {'mode': 'dark'});
+    Future<_LifecycleFakeController> suspendedPlugin() async {
+      final a = _LifecycleFakeController();
+      _d.registerController(pidA, a);
+      _d.setVisiblePluginInstances({_fg(pidA)});
+      await pumpEventQueue();
+      _d.setVisiblePluginInstances(const {});
+      await pumpEventQueue();
+      a.jsEvents.clear();
+      return a;
+    }
 
-        final a = _LifecycleFakeController();
-        _d.registerController(pidA, a);
+    test('theme שהשתנה בזמן ההשהיה נמסר ב-resume ולא לדף המושהה', () async {
+      _d.repositoryForTesting = _FakeRegistryRepo(
+        enabled: true,
+        permission: true,
+      );
+      final a = await suspendedPlugin();
 
-        _d.setVisiblePluginInstances({_fg(pidA)});
-        await pumpEventQueue();
+      await _d.dispatchEvent('theme.changed', {'mode': 'dark'});
+      expect(a.jsEvents, isEmpty);
 
-        expect(a.resumeCalls, 1);
-        expect(
-          a.jsEvents,
-          contains(allOf(contains('theme.changed'), contains('dark'))),
-        );
-      },
-    );
+      _d.setVisiblePluginInstances({_fg(pidA)});
+      await pumpEventQueue();
+
+      expect(a.resumeCalls, 2);
+      expect(
+        a.jsEvents,
+        contains(allOf(contains('theme.changed'), contains('dark'))),
+      );
+    });
 
     test('חידוש לא שולח theme כשאין הרשאת events.subscribe', () async {
       _d.repositoryForTesting = _FakeRegistryRepo(
         enabled: true,
         permission: false,
       );
+      final a = await suspendedPlugin();
       await _d.dispatchEvent('theme.changed', {'mode': 'dark'});
-
-      final a = _LifecycleFakeController();
-      _d.registerController(pidA, a);
 
       _d.setVisiblePluginInstances({_fg(pidA)});
       await pumpEventQueue();
 
-      expect(a.resumeCalls, 1);
+      expect(a.resumeCalls, 2);
       expect(a.jsEvents.any((e) => e.contains('theme.changed')), isFalse);
     });
 
     test('חידוש לא שולח theme כשהתוסף מושבת', () async {
       _d.repositoryForTesting = _FakeRegistryRepo(enabled: false);
+      final a = await suspendedPlugin();
       await _d.dispatchEvent('theme.changed', {'mode': 'dark'});
-
-      final a = _LifecycleFakeController();
-      _d.registerController(pidA, a);
 
       _d.setVisiblePluginInstances({_fg(pidA)});
       await pumpEventQueue();
@@ -1134,9 +1137,13 @@ void main() {
       expect(a.jsEvents.any((e) => e.contains('theme.changed')), isFalse);
     });
 
-    test('חידוש ללא theme קודם — לא שולח theme.changed', () async {
-      final a = _LifecycleFakeController();
-      _d.registerController(pidA, a);
+    test('חידוש בלי שינוי theme בזמן ההשהיה — לא שולח theme.changed', () async {
+      _d.repositoryForTesting = _FakeRegistryRepo(
+        enabled: true,
+        permission: true,
+      );
+      await _d.dispatchEvent('theme.changed', {'mode': 'dark'});
+      final a = await suspendedPlugin();
 
       _d.setVisiblePluginInstances({_fg(pidA)});
       await pumpEventQueue();

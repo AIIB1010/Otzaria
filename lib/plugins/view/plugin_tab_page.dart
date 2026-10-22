@@ -13,7 +13,12 @@ import 'dart:io';
 import 'dart:convert';
 import 'dart:collection';
 import 'package:path/path.dart' as p;
+import 'package:otzaria/core/messages/plugin_messages.dart';
+import 'package:otzaria/core/ui_snack.dart';
+import 'package:otzaria/plugins/services/plugin_fonts.dart';
 import 'package:otzaria/plugins/services/plugin_page_launcher.dart';
+import 'package:otzaria/plugins/services/plugin_process_recovery.dart';
+import 'package:otzaria/plugins/services/plugin_restore_state_store.dart';
 import 'package:otzaria/plugins/services/plugin_runtime_dispatcher.dart';
 import 'package:otzaria/plugins/services/plugin_unsaved_changes_registry.dart';
 import 'package:otzaria/plugins/storage/plugin_system_database.dart';
@@ -39,6 +44,7 @@ import 'package:otzaria/plugins/view/plugin_webrtc_block_script.dart';
 import 'package:otzaria/plugins/view/plugin_sdk_scripts.dart';
 import 'package:otzaria/plugins/view/plugin_webview_host.dart';
 import 'package:otzaria/plugins/view/plugin_linkify_script.dart';
+import 'package:otzaria/plugins/view/plugin_load_generation.dart';
 import 'package:otzaria/plugins/view/widgets/plugin_webview_focus_restorer.dart';
 import 'package:otzaria/plugins/services/plugin_download_handler.dart';
 import 'package:otzaria/plugins/services/plugin_webview_permission_gate.dart';
@@ -89,6 +95,8 @@ InAppWebViewSettings buildPluginTabWebViewSettings({
     supportZoom: false,
     pinchZoomEnabled: false,
     cacheEnabled: !isDevelopment,
+    // Android dispose ממתין ל-about:blank; אחרי מות renderer אין הבטחת destroy.
+    useOnRenderProcessGone: false,
     isInspectable: isDevelopment || kDebugMode,
     resourceCustomSchemes: pluginAssetSchemeEnabled
         ? const [pluginAssetScheme]
@@ -177,10 +185,21 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
   late final bool _usePrereqGate = _needsWebViewPrerequisites;
 
   /// GlobalKey ל-InAppWebView — שורד החלפת הורה באותו פריים בלי טעינה מחדש.
-  final GlobalKey _webViewKey = GlobalKey();
+  /// מוחלף רק כשה-WebView משוחרר, כדי שהבא ייווצר מאפס.
+  GlobalKey _webViewKey = GlobalKey();
+
+  /// ה-WebView שוחרר (פינוי או נפילה) וייווצר מחדש כשהמופע יוצג.
+  bool _webViewReleased = false;
+  PluginRestoreReason? _releaseReason;
+  final PluginProcessRecovery _recovery = PluginProcessRecovery();
+  bool _crashGaveUp = false;
+  bool _crashLostUnsavedChanges = false;
+  bool _bootedOnce = false;
+  late final _TabInstanceHost _host = _TabInstanceHost(this);
 
   /// רק לפתיחה הראשונה: בטעינה מחדש הדף הקודם נשאר מוצג עד שהחדש מצויר.
   bool _awaitingFirstBoot = true;
+  final _loadGeneration = PluginLoadGeneration();
   bool _hasError = false;
   String? _devErrorMessage;
 
@@ -212,7 +231,93 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
         : '${widget.plugin.resolvedRootPath}/${widget.plugin.entrypointPath}';
     _entrypointMissing =
         !widget.plugin.isLocalhostDev && !File(localHtmlPath).existsSync();
-    initPluginHost(onReload: _reloadFromDisk, readerTab: widget.readerTab);
+    final pluginId = widget.plugin.pluginId;
+    final instanceId = widget.instanceId;
+    final dispatcher = PluginRuntimeDispatcher.instance;
+    // דף שמחליף דף חי של אותו מופע (עדכון התוסף) הוא טעינה חוזרת, לא חדשה.
+    _bootedOnce =
+        dispatcher.controllerOf(pluginId, instanceId: instanceId) != null;
+    initPluginHost(
+      onReload: _reloadFromDisk,
+      readerTab: widget.readerTab,
+      onWorkStarted: () =>
+          dispatcher.beginInstanceWork(pluginId, instanceId: instanceId),
+    );
+    dispatcher
+      ..ensureLifecycleObserver()
+      ..registerInstanceHost(
+        pluginId,
+        _host,
+        instanceId: instanceId,
+        token: this,
+      );
+  }
+
+  /// מוריד את ה-WebView מהעץ. המופע נשאר רשום, והבא ייווצר במפתח חדש.
+  void _releaseWebView(PluginRestoreReason reason) {
+    if (!mounted || _webViewReleased) return;
+    adapter.releaseRuntime();
+    _creationWatchdog?.cancel();
+    _creationWatchdog = null;
+    setState(() {
+      _webViewReleased = true;
+      _releaseReason = reason;
+      _webViewKey = GlobalKey();
+      webViewController = null;
+    });
+  }
+
+  /// מקים WebView חדש למופע שהשתחרר. נקרא רק כשהמופע מוצג.
+  void _restoreWebView() {
+    if (!mounted || !_webViewReleased || _crashGaveUp) return;
+    final crashed = _releaseReason == PluginRestoreReason.crashed;
+    if (crashed && !_recovery.consume()) {
+      setState(() => _crashGaveUp = true);
+      return;
+    }
+    if (crashed) {
+      UiSnack.show(
+        PluginMessages.pluginRecoveredAfterCrash(
+          widget.plugin.name,
+          hadUnsavedChanges: _crashLostUnsavedChanges,
+        ),
+      );
+      _crashLostUnsavedChanges = false;
+    }
+    setState(() {
+      _webViewReleased = false;
+      _awaitingFirstBoot = true;
+    });
+  }
+
+  /// התהליך שמריץ את ה-WebView נפל. [kind] — לרישום בלבד.
+  void _onWebViewGone(InAppWebViewController controller, String kind) {
+    if (!mounted || !isCurrentWebView(controller)) return;
+    logPluginWebViewGoneOnce(kind);
+    final pluginId = widget.plugin.pluginId;
+    final instanceId = widget.instanceId;
+    final key = (pluginId: pluginId, instanceId: instanceId);
+    _crashLostUnsavedChanges =
+        _crashLostUnsavedChanges ||
+        PluginUnsavedChangesRegistry.instance.hasUnsavedChanges(key);
+    // התהליך של האפליקציה חי — אין כאן קריסה נייטיבית לחסום בהפעלה הבאה.
+    unawaited(PluginCrashGuard.markLoadSuccess(pluginId, owner: instanceId));
+    final dispatcher = PluginRuntimeDispatcher.instance;
+    final shown = dispatcher.isInstanceShown(key);
+    dispatcher.markInstanceReleased(
+      pluginId,
+      instanceId: instanceId,
+      reason: PluginRestoreReason.crashed,
+    );
+    _releaseWebView(PluginRestoreReason.crashed);
+    if (shown) _restoreWebView();
+  }
+
+  void _retryAfterCrash() {
+    if (!mounted) return;
+    _recovery.reset();
+    setState(() => _crashGaveUp = false);
+    _restoreWebView();
   }
 
   Future<void> _reloadFromDisk() async {
@@ -490,6 +595,14 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
   }
 
   Widget _buildWebView() {
+    if (_crashGaveUp) {
+      return PluginWebViewFailedView(
+        pluginName: widget.plugin.name,
+        kind: PluginWebViewFailureKind.crashed,
+        onRetry: _retryAfterCrash,
+      );
+    }
+    if (_webViewReleased) return const SizedBox.expand();
     if (_creationFailure != null) {
       return PluginWebViewFailedView(
         pluginName: widget.plugin.name,
@@ -612,7 +725,10 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
           ),
       shouldInterceptRequest: (controller, request) =>
           interceptPluginRequest(request),
+      onLoadStart: (controller, url) => _loadGeneration.invalidate(),
       onLoadStop: (controller, url) async {
+        final generation = _loadGeneration.begin();
+        bool stale() => !mounted || !_loadGeneration.isCurrent(generation);
         // טעינה מחדש של הדף מאפסת את מצב ה-JS, ואיתו את הדגל שהוא הרים.
         PluginUnsavedChangesRegistry.instance.removeInstance((
           pluginId: widget.plugin.pluginId,
@@ -622,19 +738,30 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
           // לוכד theme לפני ה-await (context חייב להישמר synchronously)
           final theme = buildThemePayload(context);
 
-          // כל הגופנים חייבים להירשם לפני boot, כדי שתוספים יוכלו לטעון
-          // ולמדוד אותם מתוך plugin.ready בלי ליפול לגופן חלופי.
-          final fontFaceJson = await buildPluginFontFaceJson();
-          if (!mounted) return;
+          final fontFaceCss = await buildPluginFontFaceCss();
+          if (stale()) return;
 
           // Use cached PackageInfo — avoids async gap crossing a dispose
           final packageInfo =
               PluginWebViewHost.cachedPackageInfo ??
               await PackageInfo.fromPlatform();
-          if (!mounted) return;
+          if (stale()) return;
           final permissions = await pluginRegistryRepository
               .getGrantedPermissionNames(widget.plugin.pluginId);
-          if (!mounted) return;
+          if (stale()) return;
+          // הגופנים נרשמים, וגופני ברירת המחדל נטענים, לפני ה-boot: תוסף מודד
+          // טקסט מתוך plugin.ready. ה-boot חייב להישאר סינכרוני (ה-Dispatcher).
+          final fontsInstalled = await installPluginFonts(
+            controller,
+            css: fontFaceCss,
+            targets: pluginFontLoadTargets(theme),
+          );
+          // דף שנטען מחדש בזמן ההמתנה מקבל boot מהזרימה שלו בלבד.
+          if (stale()) return;
+          final fallbackCss = fontsInstalled
+              ? null
+              : await buildPluginFontFaceCss(embedded: true);
+          if (stale()) return;
           // Real SDK — injected after load, calls _boot() which re-plays queued
           // Otzaria.on() calls and then fires plugin.boot
           await controller.evaluateJavascript(
@@ -647,10 +774,19 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
                 final tab? => PluginTextReaderRegistry.bookPayload(tab),
                 null => null,
               },
-              fontFaceJson: fontFaceJson,
+              restore: PluginRuntimeDispatcher.instance.takeBootRestore(
+                widget.plugin.pluginId,
+                instanceId: widget.instanceId,
+                firstBoot: !_bootedOnce,
+              ),
+              fontFaceJson: fallbackCss == null
+                  ? null
+                  : pluginFontFaceJson(fallbackCss),
             ),
           );
+          if (stale()) return;
           await _pushHostShortcuts(controller);
+          _bootedOnce = true;
           // הטעינה הצליחה עד הסוף (גם ה-stub וגם ה-boot payload הוזרקו).
           // מסירים את התוסף מ-quarantine כדי שהפעלה הבאה תאפשר טעינה רגילה.
           unawaited(
@@ -698,10 +834,17 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
           }
         }
       },
-      onProcessFailed: (controller, detail) {
-        // תהליך WebView2 (renderer/browser/GPU) מת — התוכן נעלם בלי חריגה.
-        logPluginProcessFailed(detail);
-      },
+      onProcessFailed: (controller, detail) => logPluginProcessFailed(detail),
+      // Windows: ה-renderer של ה-WebView; iOS/macOS: תהליך התוכן.
+      onWebContentProcessDidTerminate: (controller) =>
+          _onWebViewGone(controller, 'renderer'),
+      // Windows: תהליך הדפדפן (כל ה-WebView-ים); Android/Linux: ה-renderer.
+      onRenderProcessGone: (controller, detail) => _onWebViewGone(
+        controller,
+        defaultTargetPlatform == TargetPlatform.windows
+            ? 'browser'
+            : 'renderer',
+      ),
       onReceivedError: (controller, request, error) {
         // only fail the view for the entrypoint file load itself
         if (request.url.scheme == 'file' ||
@@ -791,4 +934,19 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
     }
     return _WebViewPrereqStatus.ready;
   }
+}
+
+class _TabInstanceHost implements PluginInstanceHost {
+  _TabInstanceHost(this._page);
+  final _PluginTabPageState _page;
+
+  @override
+  void releaseWebView() => _page._releaseWebView(PluginRestoreReason.discarded);
+
+  @override
+  void restoreWebView() => _page._restoreWebView();
+
+  @override
+  bool get canDiscard =>
+      !_page.widget.plugin.isDevelopment && !_page.widget.plugin.isLocalhostDev;
 }
