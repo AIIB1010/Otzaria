@@ -5,13 +5,13 @@ import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
+import 'package:otzaria/app_scope/process_duties.dart';
 import 'package:otzaria/attached_libraries/models/attached_library.dart';
 import 'package:otzaria/attached_libraries/repository/attached_library_registry.dart';
 import 'package:otzaria/attached_libraries/repository/external_link_core.dart';
 import 'package:otzaria/core/messages/window_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/windowing/host_relay.dart';
-import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/data/data_providers/cache_database_holder.dart';
 import 'package:otzaria/data/data_providers/sqlite_data_provider.dart';
 import 'package:otzaria/data/sqlite/sqlite3_api.dart' as sqlite3;
@@ -465,7 +465,7 @@ class ExternalLinkRepository {
   }
 
   void _maybeSyncAfterReset() {
-    if (!_syncOnNextUse || WindowRole.isSecondary) return;
+    if (!_syncOnNextUse || !ProcessDuties.current.isProcessOwner) return;
     _syncOnNextUse = false;
     unawaited(
       sync().then<void>(
@@ -492,7 +492,7 @@ class ExternalLinkRepository {
     String? resumeSlug,
     bool autoResume = false,
   }) async {
-    if (WindowRole.isSecondary) return const {};
+    if (!ProcessDuties.current.isProcessOwner) return const {};
     final libraries = _registry.libraries;
     if (libraries.isEmpty) {
       tooLargeSlugs.value = const {};
@@ -625,7 +625,7 @@ class ExternalLinkRepository {
   /// כך שמחיקת ה-meta אינה מקדימה סנכרון שכותב. הממשק משתמש ב-[requestRebuild].
   @visibleForTesting
   Future<void> rebuild(String slug) => _enqueue(() async {
-    if (WindowRole.isSecondary) return;
+    if (!ProcessDuties.current.isProcessOwner) return;
     await _inIsolate(_forgetIndexMeta, (await _cacheDbPath(), slug));
     await _sync();
   });
@@ -646,7 +646,7 @@ class ExternalLinkRepository {
 
   /// בחלון משני הפקודה נשלחת למארח, ומצבה חוזר בשידור [requestState].
   bool _forwardToHost(String command, {String? slug, bool? on}) {
-    if (!WindowRole.isSecondary) return false;
+    if (ProcessDuties.current.isProcessOwner) return false;
     unawaited(() async {
       final response = await HostRelay.sendToHost(
         requestCommand,
@@ -663,13 +663,13 @@ class ExternalLinkRepository {
   Object? handleWindowRequest(Map<String, dynamic> request) {
     switch (request['type']) {
       case requestState:
-        if (!WindowRole.isSecondary) return _hostSnapshot();
+        if (ProcessDuties.current.isProcessOwner) return _hostSnapshot();
         final state = request['state'];
         if (state is! Map) return false;
         _applyHostState(state);
         return true;
       case requestCommand:
-        if (WindowRole.isSecondary) return false;
+        if (!ProcessDuties.current.isProcessOwner) return false;
         final slug = request['slug'];
         switch (request['command']) {
           case 'pause':
@@ -696,7 +696,7 @@ class ExternalLinkRepository {
 
   /// מושך מהמארח את מצב הבנייה, לחלון משני שמתחיל להציג אותו.
   Future<void> refreshFromHost() async {
-    if (!WindowRole.isSecondary) return;
+    if (ProcessDuties.current.isProcessOwner) return;
     final state = await HostRelay.fetchHostSnapshot(requestState);
     if (state != null) _applyHostState(state);
   }

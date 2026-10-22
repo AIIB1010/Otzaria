@@ -3,6 +3,7 @@ import 'dart:isolate';
 import 'dart:ui' as ui show IsolateNameServer;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:otzaria/app_scope/process_duties.dart';
 import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
@@ -44,6 +45,7 @@ void main() {
     MultiWindowService.debugSupportedOverride = null;
     database.close();
     WindowRole.isSecondary = false;
+    ProcessDuties.debugOverride = null;
     WindowBus.instance.unregister();
     for (var i = 1; i <= WindowBus.slotCount; i++) {
       ui.IsolateNameServer.removePortNameMapping('$_namespace.$i');
@@ -276,6 +278,21 @@ void main() {
 
       WindowRole.isSecondary = true;
       expect(await TabsRepository.adoptOrphanWindowSessions(), 0);
+      expect(await sessions.load(host + 1), isNotNull);
+    });
+
+    test('אינו רץ כשאינו בעל התהליך, גם בחלון ראשי', () async {
+      WindowBus.instance.register();
+      final host = WindowBus.instance.slot!;
+      await sessions.save(
+        host + 1,
+        tabsJson: '[${_encoded('יתום')}]',
+        currentIndex: 0,
+      );
+
+      ProcessDuties.debugOverride = ProcessDuties(isProcessOwner: () => false);
+      expect(await TabsRepository.adoptOrphanWindowSessions(), 0);
+      expect(await TabsRepository.compactWindowSessions(), isEmpty);
       expect(await sessions.load(host + 1), isNotNull);
     });
   });

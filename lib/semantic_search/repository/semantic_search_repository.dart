@@ -7,11 +7,11 @@ import 'package:archive/archive.dart'
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:otzaria/app_scope/process_duties.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:http/http.dart' as http;
 import 'package:otzaria/core/windowing/host_relay.dart';
 import 'package:otzaria/core/windowing/window_bus.dart';
-import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/data/constants/database_constants.dart';
 import 'package:otzaria/library_update/services/companion_assets_service.dart';
 import 'package:otzaria/library_update/services/github_rate_limit.dart';
@@ -94,7 +94,8 @@ class SemanticSearchRepository {
     hostRequest,
     this._modelReleases = kSemanticModelReleases,
     this._busyRetryDelay = const Duration(minutes: 2),
-  }) : _isSecondaryWindow = isSecondaryWindow ?? (() => WindowRole.isSecondary),
+  }) : _isSecondaryWindow =
+           isSecondaryWindow ?? (() => !ProcessDuties.current.isProcessOwner),
        _hostRequest =
            hostRequest ??
            ((type, args) => HostRelay.sendToHost(
@@ -663,7 +664,7 @@ class SemanticSearchRepository {
   ) async {
     switch (request['type']) {
       case requestState:
-        if (!WindowRole.isSecondary) {
+        if (ProcessDuties.current.isProcessOwner) {
           return availabilityToMap(await instance.refresh());
         }
         final state = request['state'];
@@ -679,7 +680,7 @@ class SemanticSearchRepository {
         await repository._closeSession();
         return true;
       case requestCommand:
-        if (WindowRole.isSecondary) return false;
+        if (!ProcessDuties.current.isProcessOwner) return false;
         final repository = instance;
         switch (request['command']) {
           case 'download':

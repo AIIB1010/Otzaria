@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
 import 'package:otzaria/app_scope/external_activation_service.dart';
+import 'package:otzaria/app_scope/process_duties.dart';
 import 'package:otzaria/bookmarks/bloc/bookmark_bloc.dart';
 import 'package:otzaria/bookmarks/repository/bookmark_repository.dart';
 import 'package:otzaria/core/startup_timeline.dart';
 import 'package:otzaria/core/update_check_frequency.dart';
-import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/data/constants/database_constants.dart';
 import 'package:otzaria/indexing/bloc/indexing_bloc.dart';
 import 'package:otzaria/library_update/bloc/library_update_bloc.dart';
@@ -95,7 +95,7 @@ class AppScopeProviders extends StatelessWidget {
               // בדיקת עדכונים רצה רק במארח, כדי שחלונות משניים לא יכפילו
               // בקשות GitHub ויקבלו 403.
               areUpdatesEnabled: () =>
-                  !WindowRole.isSecondary &&
+                  ProcessDuties.current.isProcessOwner &&
                   (Settings.getValue<bool>(
                         SettingsRepository.keySoftwareAndBookUpdatesEnabled,
                       ) ??
