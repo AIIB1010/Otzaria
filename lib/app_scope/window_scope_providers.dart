@@ -7,7 +7,6 @@ import 'package:otzaria/core/startup_timeline.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
-import 'package:otzaria/core/windowing/multi_window_service.dart';
 import 'package:otzaria/core/windowing/window_fullscreen_cubit.dart';
 import 'package:otzaria/find_ref/bloc/find_ref_bloc.dart';
 import 'package:otzaria/find_ref/repository/find_ref_factory.dart';

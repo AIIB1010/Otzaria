@@ -16,6 +16,7 @@ abstract interface class WindowOpener {
     OpenedTab? tab,
     ({int x, int y})? origin,
     ({int left, int top, int width, int height})? bounds,
+    bool inheritPlacement = true,
   });
 
   Future<bool> openEmptyWindow();

@@ -372,7 +372,8 @@ bool CreateSecondaryWindowOnThisThread(const flutter::DartProject& base,
                                        const std::string& payload,
                                        int inherited_width,
                                        int inherited_height, int origin_x,
-                                       int origin_y, const RECT* bounds) {
+                                       int origin_y, const RECT* bounds,
+                                       bool maximized) {
   // ניקוי חלונות שנסגרו, כדי שהרשימה לא תגדל בלי גבול.
   auto& windows = SecondaryWindowsOnThisThread();
   windows.erase(
@@ -402,7 +403,7 @@ bool CreateSecondaryWindowOnThisThread(const flutter::DartProject& base,
   }
   if (reusable != nullptr) {
     reusable->ReviveWith(payload, inherited_width, inherited_height, origin_x,
-                         origin_y, bounds);
+                         origin_y, bounds, maximized);
     return true;
   }
 
@@ -494,17 +495,19 @@ bool CreateSecondaryWindowOnThisThread(const flutter::DartProject& base,
   // האתחול משאירה שניות שבהן לא קורה כלום על המסך, והמשתמש אינו יודע אם
   // הלחיצה נקלטה. הפריים הראשון הוא מסך הטעינה של האפליקציה: מופיע כמעט
   // מיד, ואינו ריק.
+  window->SetRevealMaximized(maximized);
   window->RevealOnFirstFrame();
 
   // רשת ביטחון: אם הפריים הראשון לא הגיע, חלון בלתי-נראה לתמיד גרוע
   // מחלון שמופיע מאוחר.
   const HWND handle = window->GetHandle();
   auto hidden = window->hidden_flag();
+  const int show_cmd = maximized ? SW_SHOWMAXIMIZED : SW_SHOW;
   // ⚠️ ה-`try` אינו קוסמטי: הפונקציה נקראת מ-`MessageHandler`, שהוא
   // `noexcept`, וכשל בהקצאת thread היה מגיע ל-`std::terminate` — כלומר
   // קריסת התהליך כולו במקום חלון שנחשף מאוחר.
   try {
-    std::thread([handle, hidden]() {
+    std::thread([handle, hidden, show_cmd]() {
       ::Sleep(20000);
       // ⚠️ רק אם המשתמש לא סגר אותו בינתיים: `IsWindowVisible` לבדו היה
       // מחזיר לחיים חלון שנסגר לפני שהשעון פקע.
@@ -515,7 +518,7 @@ bool CreateSecondaryWindowOnThisThread(const flutter::DartProject& base,
         // (זה היה חטיפת פוקוס שניות אחרי החשיפה). בלי זה חלון שנחשף
         // במסלול הזה היה מופיע מאחורי החלון שפתח אותו.
         Win32Window::AllowActivation(handle);
-        ::ShowWindow(handle, SW_SHOW);
+        ::ShowWindow(handle, show_cmd);
         ::BringWindowToTop(handle);
         ::SetForegroundWindow(handle);
       }
@@ -907,6 +910,53 @@ bool FlutterWindow::OnCreate() {
           result->Success();
           return;
         }
+        // מיקום החלון הזה, לחלון חדש שנפתח ממנו (#2989). הכול פיזי.
+        // ⚠️ ממוקסם: המסגרת הרגילה ולא מסגרת המיקסום, שאותה `getSize` מחזיר.
+        if (call.method_name() == "windowPlacement") {
+          const HWND self = GetHandle();
+          WINDOWPLACEMENT placement{};
+          placement.length = sizeof(placement);
+          MONITORINFO info{};
+          info.cbSize = sizeof(info);
+          if (!self || !::GetWindowPlacement(self, &placement) ||
+              !::GetMonitorInfoW(
+                  ::MonitorFromWindow(self, MONITOR_DEFAULTTONEAREST),
+                  &info)) {
+            result->Success();
+            return;
+          }
+          const bool maximized = ::IsZoomed(self) != FALSE;
+          RECT normal{};
+          if (maximized || ::IsIconic(self)) {
+            // `rcNormalPosition` בקואורדינטות workspace — יחסית לאזור העבודה.
+            normal = placement.rcNormalPosition;
+            if ((::GetWindowLongPtrW(self, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) ==
+                0) {
+              ::OffsetRect(&normal, info.rcWork.left - info.rcMonitor.left,
+                           info.rcWork.top - info.rcMonitor.top);
+            }
+          } else {
+            ::GetWindowRect(self, &normal);
+          }
+          const auto put = [](flutter::EncodableMap& map, const char* key,
+                              int value) {
+            map[flutter::EncodableValue(key)] = flutter::EncodableValue(value);
+          };
+          flutter::EncodableMap out;
+          put(out, "left", normal.left);
+          put(out, "top", normal.top);
+          put(out, "width", normal.right - normal.left);
+          put(out, "height", normal.bottom - normal.top);
+          put(out, "workLeft", info.rcWork.left);
+          put(out, "workTop", info.rcWork.top);
+          put(out, "workWidth", info.rcWork.right - info.rcWork.left);
+          put(out, "workHeight", info.rcWork.bottom - info.rcWork.top);
+          put(out, "dpi", static_cast<int>(::GetDpiForWindow(self)));
+          out[flutter::EncodableValue("maximized")] =
+              flutter::EncodableValue(maximized);
+          result->Success(flutter::EncodableValue(out));
+          return;
+        }
         // אילו חלונות אוצריא **מוצגים** על המסך כרגע.
         //
         // ⚠️ נדרש כי חלון שהמשתמש סגר מוסתר ולא נהרס, וה-isolate שלו
@@ -1025,6 +1075,14 @@ bool FlutterWindow::OnCreate() {
                 pending.bounds.bottom = pending.bounds.top + h;
               }
             }
+          }
+        }
+        if (const auto* args =
+                std::get_if<flutter::EncodableMap>(call.arguments())) {
+          const auto m_it = args->find(flutter::EncodableValue("maximized"));
+          if (m_it != args->end()) {
+            const auto* v = std::get_if<bool>(&m_it->second);
+            pending.maximized = v != nullptr && *v;
           }
         }
         // ⚠️ הבקשה מתפרסמת ל-thread של החלון ואינה מבוצעת כאן ישירות.
@@ -1292,7 +1350,7 @@ bool RestoreLastHiddenWindow() {
 
 void FlutterWindow::ReviveWith(const std::string& payload, int width,
                                int height, int origin_x, int origin_y,
-                               const RECT* bounds) {
+                               const RECT* bounds, bool maximized) {
   const HWND self = GetHandle();
   if (!self) return;
 
@@ -1322,7 +1380,27 @@ void FlutterWindow::ReviveWith(const std::string& payload, int width,
       width > 400 ? static_cast<int>(width * scale) : 0;
   const int final_height =
       height > 300 ? static_cast<int>(height * scale) : 0;
-  if (bounds != nullptr) {
+  // ⚠️ `SetWindowPos` על חלון ממוקסם משאיר אותו ממוקסם. כאן המסגרת היא
+  // המסגרת הרגילה, והמיקסום נקבע לפי המקור (#2989) — בקריאה אחת שגם מציגה.
+  WINDOWPLACEMENT placement{};
+  placement.length = sizeof(placement);
+  const bool use_placement = bounds != nullptr &&
+                             (maximized || ::IsZoomed(self)) &&
+                             ::GetWindowPlacement(self, &placement);
+  if (use_placement) {
+    RECT normal = *bounds;
+    MONITORINFO info{};
+    info.cbSize = sizeof(info);
+    // `rcNormalPosition` בקואורדינטות workspace — יחסית לאזור העבודה.
+    if (::GetMonitorInfoW(::MonitorFromRect(bounds, MONITOR_DEFAULTTONEAREST),
+                          &info)) {
+      ::OffsetRect(&normal, info.rcMonitor.left - info.rcWork.left,
+                   info.rcMonitor.top - info.rcWork.top);
+    }
+    placement.flags = 0;
+    placement.rcNormalPosition = normal;
+    placement.showCmd = maximized ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL;
+  } else if (bounds != nullptr) {
     // ⚠️ המסגרת שההצמדה נתנה, מילה במילה. חישוב מחדש ממיקום וגודל היה
     // מחמיץ אותה בפיקסלים, וחלון "כמעט מוצמד" נראה שבור.
     ::SetWindowPos(self, nullptr, bounds->left, bounds->top,
@@ -1346,7 +1424,11 @@ void FlutterWindow::ReviveWith(const std::string& payload, int width,
   // ⚠️ החזרת חלון לשימוש היא כוונה מפורשת — ראו
   // [Win32Window::ShouldVetoActivation].
   NoteUserActivation(self);
-  ::ShowWindow(self, SW_SHOW);
+  if (use_placement) {
+    ::SetWindowPlacement(self, &placement);
+  } else {
+    ::ShowWindow(self, SW_SHOW);
+  }
   ::BringWindowToTop(self);
   ::SetForegroundWindow(self);
   // החלון האמיתי כאן — הרוח שהוקפאה במקום השחרור סיימה את תפקידה.
@@ -1370,12 +1452,14 @@ void FlutterWindow::ReviveWith(const std::string& payload, int width,
 // `ShowWindow`/`SetForegroundWindow` כאן תקינים, ואין טעם לחפש כאן שוב.
 void FlutterWindow::RevealOnFirstFrame() {
   if (!flutter_controller_ || !flutter_controller_->engine()) {
-    ::ShowWindow(GetHandle(), SW_SHOW);
+    ::ShowWindow(GetHandle(), reveal_maximized_ ? SW_SHOWMAXIMIZED : SW_SHOW);
     return;
   }
   const HWND hwnd = GetHandle();
   const DWORD started = ::GetTickCount();
-  flutter_controller_->engine()->SetNextFrameCallback([hwnd, started]() {
+  const int show_cmd = reveal_maximized_ ? SW_SHOWMAXIMIZED : SW_SHOW;
+  flutter_controller_->engine()->SetNextFrameCallback([hwnd, started,
+                                                       show_cmd]() {
     if (!::IsWindow(hwnd)) return;
     // ⚠️ לפני ההצגה. עד כאן החלון לא היה יכול להיות מופעל כלל
     // ([kNoActivateUntilRevealed]) — זה מה שמנע את תנודת ההפעלות.
@@ -1383,7 +1467,7 @@ void FlutterWindow::RevealOnFirstFrame() {
     // ⚠️ חשיפת חלון חדש היא כוונה מפורשת — ראו
     // [Win32Window::ShouldVetoActivation].
     Win32Window::NoteUserActivation(hwnd);
-    ::ShowWindow(hwnd, SW_SHOW);
+    ::ShowWindow(hwnd, show_cmd);
     ::BringWindowToTop(hwnd);
     ::SetForegroundWindow(hwnd);
     // החלון האמיתי על המסך — הרוח שהוקפאה במקום השחרור מוסתרת בדיוק
@@ -1455,7 +1539,7 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
       created = CreateSecondaryWindowOnThisThread(
           project_, pending.payload, pending.width, pending.height,
           pending.origin_x, pending.origin_y,
-          pending.has_bounds ? &pending.bounds : nullptr);
+          pending.has_bounds ? &pending.bounds : nullptr, pending.maximized);
     } catch (...) {
       created = false;
     }

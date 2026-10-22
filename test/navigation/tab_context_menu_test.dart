@@ -444,6 +444,7 @@ class _FakeWindowOpener implements WindowOpener {
     OpenedTab? tab,
     ({int x, int y})? origin,
     ({int left, int top, int width, int height})? bounds,
+    bool inheritPlacement = true,
   }) async {
     calls.add('openWindow');
     openedTabs.add(tab);

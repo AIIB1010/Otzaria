@@ -1673,7 +1673,7 @@ Future<void> _runDeferredRestoreWindows() async {
     for (final slot in slots) {
       final session = await WindowSessionStore.instance.load(slot);
       final bounds = WindowBounds.decode(session?.boundsJson)?.toPhysical();
-      if (!await service.openWindow(bounds: bounds)) {
+      if (!await service.openWindow(bounds: bounds, inheritPlacement: false)) {
         debugPrint('שחזור חלונות נעצר: פתיחת חלון למשבצת $slot נכשלה');
         return;
       }

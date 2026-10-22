@@ -9,6 +9,7 @@ import 'package:hive_ce/hive.dart';
 import 'package:otzaria/core/messages/window_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/windowing/drag_preview_colors.dart';
+import 'package:otzaria/core/windowing/new_window_placement.dart';
 import 'package:otzaria/core/windowing/window_bus.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/library/hidden/hidden_library_selection.dart';
@@ -122,14 +123,26 @@ class MultiWindowService implements WindowOpener {
   /// [bounds] היא מסגרת מדויקת שדוחה את [origin] — כך חלון שהמשתמש
   /// **הצמיד** בגרירה נוצר בדיוק במסגרת שההצמדה נתנה. בלעדיה ההצמדה
   /// שהמשתמש ראה נעלמת ברגע שהחלון האמיתי מופיע.
+  ///
+  /// בלי שתיהן, ועם [inheritPlacement], החלון יורש גודל ומיקסום מהחלון הזה
+  /// ונפתח מדורג ממנו (#2989). שחזור חלונות שמורים מעביר false.
   @override
   Future<bool> openWindow({
     OpenedTab? tab,
     ({int x, int y})? origin,
     ({int left, int top, int width, int height})? bounds,
+    bool inheritPlacement = true,
   }) async {
     if (!canOpenWindows) return false;
     try {
+      var maximized = false;
+      if (origin == null && bounds == null && inheritPlacement) {
+        final placement = await _inheritedPlacement();
+        if (placement != null) {
+          bounds = placement.bounds;
+          maximized = placement.maximized;
+        }
+      }
       // המידות נשלחות ל-runner כדי שייצור את החלון בגודל הנכון מלכתחילה.
       // שינוי גודל אחרי היצירה היה מאתחל את ה-swapchain של המנוע וגורם
       // להבהוב, בדיוק כמו שקורה בחלון הראשון (ראו initSettingsAndWindow).
@@ -153,6 +166,7 @@ class MultiWindowService implements WindowOpener {
                 'width': bounds.width,
                 'height': bounds.height,
               },
+            if (maximized) 'maximized': true,
           })
           // ⚠️ רשת ביטחון. התשובה מגיעה מלולאת ההודעות של ה-runner,
           // ואם החלון הפותח נהרס לפני שההודעה טופלה — אין מי שיענה.
@@ -167,6 +181,26 @@ class MultiWindowService implements WindowOpener {
     } on MissingPluginException {
       // ה-runner בגרסה זו אינו מכיר את הערוץ — למשל בבדיקות widget.
       return false;
+    }
+  }
+
+  /// המסגרת של חלון חדש לפי מיקום החלון הזה; null כשה-runner לא דיווח.
+  Future<({PhysicalRect bounds, bool maximized})?> _inheritedPlacement() async {
+    try {
+      final source = SourceWindowPlacement.fromMap(
+        await channel.invokeMapMethod<Object?, Object?>('windowPlacement'),
+      );
+      if (source == null) return null;
+      var fullScreen = false;
+      try {
+        fullScreen = await windowManager.isFullScreen();
+      } catch (_) {
+        // בלי התשובה נשען על דגל המיקסום בלבד.
+      }
+      return cascadeNewWindowPlacement(source, fullScreen: fullScreen);
+    } catch (e) {
+      debugPrint('windowPlacement failed: $e');
+      return null;
     }
   }
 
