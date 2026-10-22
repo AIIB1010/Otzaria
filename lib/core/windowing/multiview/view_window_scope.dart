@@ -79,6 +79,10 @@ class _ViewWindowScopeState extends State<ViewWindowScope> {
   Future<void> _close() => _closeFlow.run();
 
   void _onWindowChanged() {
+    PluginRuntimeDispatcher.instance.setWindowMinimized(
+      _entry.handle.isMinimized,
+      viewId: _viewId,
+    );
     // לא לפי מעבר: ב-WA_INACTIVE החלון עוד ב-foreground, ומעבר שנבלע שם
     // השאיר את הראשי פעיל כשהמשתמש חזר לכאן (ESC סגר תפריט בראשי).
     if (_entry.handle.isActivated && AppWindowKeys.current.id != _entry.id) {

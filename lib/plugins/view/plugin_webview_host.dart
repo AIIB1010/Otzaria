@@ -464,6 +464,7 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
         plugin.pluginId,
         controller,
         instanceId: instanceId,
+        viewId: View.of(context).viewId,
       );
       bridge.register(controller);
       unawaited(_pushContentBlockers());

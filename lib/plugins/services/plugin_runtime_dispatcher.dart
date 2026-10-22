@@ -74,6 +74,7 @@ class _PluginInstance {
   final PluginInstanceId instanceId;
 
   InAppWebViewController? controller;
+  int? viewId;
   Future<void> Function()? reloadCallback;
   Object? reloadToken;
   PluginInstanceHost? host;
@@ -298,7 +299,7 @@ class PluginRuntimeDispatcher {
 
   /// המופע הקדמי ה"ראשי" של [pluginId]: הגלוי כרגע, ואם אין גלוי —
   /// האחרון שנרשם (סדר ההכנסה באינדקס).
-  PluginInstanceKey? _primaryForegroundKey(String pluginId) {
+  PluginInstanceKey? _primaryForegroundKey(String pluginId, {int? viewId}) {
     final keys = _instancesByPlugin[pluginId];
     if (keys == null) return null;
     PluginInstanceKey? lastRegistered;
@@ -306,7 +307,8 @@ class PluginRuntimeDispatcher {
       final instance = _instances[key];
       if (instance == null ||
           instance.isBackground ||
-          instance.controller == null) {
+          instance.controller == null ||
+          (viewId != null && instance.viewId != viewId)) {
         continue;
       }
       if (_visibleInstanceKeys.contains(key)) return key;
@@ -329,18 +331,23 @@ class PluginRuntimeDispatcher {
   /// בלי instanceId תבחר כרגיל (רקע / החייאה).
   PluginInstanceId? pickContributionTarget(
     String pluginId,
-    Iterable<PluginInstanceId> registrantInstanceIds,
-  ) {
+    Iterable<PluginInstanceId> registrantInstanceIds, {
+    int? viewId,
+  }) {
     PluginInstanceId? fallback;
     for (final instanceId in registrantInstanceIds) {
       final key = _keyOf(pluginId, instanceId);
       final instance = _instances[key];
       if (instance == null ||
           instance.isBackground ||
-          instance.controller == null) {
+          instance.controller == null ||
+          (viewId != null && instance.viewId != viewId)) {
         continue;
       }
-      if (isInstanceVisible(key)) return instanceId;
+      if ((viewId == null ? _visibleInstanceKeys : _window(viewId).visibleKeys)
+          .contains(key)) {
+        return instanceId;
+      }
       fallback = instanceId;
     }
     return fallback;
@@ -350,6 +357,7 @@ class PluginRuntimeDispatcher {
     String pluginId,
     InAppWebViewController controller, {
     PluginInstanceId instanceId = PluginInstanceIds.defaultForeground,
+    int? viewId,
   }) {
     if (_shutdownMode == _PluginRuntimeShutdownMode.exit) {
       debugPrint(
@@ -363,6 +371,7 @@ class PluginRuntimeDispatcher {
     // בקשת פוקוס ממתינה אינה מבוצעת כאן אלא ב-onForegroundInstanceReady:
     // העברת פוקוס ל-WebView שהדף בו עוד לא נטען מקדימה את ה-autofocus שלו.
     _instanceFor(pluginId, instanceId)
+      ..viewId = viewId
       ..controller = controller
       ..busyCount = 0
       ..released = false
@@ -1443,6 +1452,7 @@ class PluginRuntimeDispatcher {
     bool preferBackground = false,
     bool resumeForegroundIfNeeded = false,
     PluginInstanceId? instanceId,
+    int? viewId,
   }) async {
     await PluginSafeMode.ready;
     if (PluginSafeMode.isActive) return;
@@ -1499,7 +1509,7 @@ class PluginRuntimeDispatcher {
       _enabledCache[pluginId] = isEnabled;
       if (!isEnabled) return;
       final background = _backgroundControllerOf(pluginId);
-      final primaryKey = _primaryForegroundKey(pluginId);
+      final primaryKey = _primaryForegroundKey(pluginId, viewId: viewId);
       final primary = primaryKey == null ? null : _instances[primaryKey];
       final primarySuspended = primary?.suspended ?? false;
       final shouldResumeForeground =

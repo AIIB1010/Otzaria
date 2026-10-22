@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otzaria/plugins/bloc/plugin_system_bloc.dart';
 import 'package:otzaria/plugins/services/plugin_toolbar_registry.dart';
@@ -22,6 +23,8 @@ List<ActionButtonData> buildReaderPluginActions(
   if (records.isEmpty) return const [];
   return buildPluginToolbarActions(
     records: records,
+    viewId: View.of(context).viewId,
+    windowKeys: AppWindowKeys.of(context),
     context: pluginContext,
     compact: context.read<SettingsBloc>().state.compactMenuMode,
     locationPayload: () async =>
@@ -46,6 +49,8 @@ List<(int, ActionButtonData)> buildReaderPluginOverflowActions(
   if (records.isEmpty) return const [];
   return buildOrderedPluginOverflowActions(
     records: records,
+    viewId: View.of(context).viewId,
+    windowKeys: AppWindowKeys.of(context),
     context: pluginContext,
     compact: context.read<SettingsBloc>().state.compactMenuMode,
     locationPayload: () async =>
