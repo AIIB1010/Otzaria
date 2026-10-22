@@ -684,16 +684,28 @@ class PluginBridgeAdapter {
   static const _searchIdleTimeout = Duration(seconds: 30);
   static final _streamIdPattern = RegExp(r'^[A-Za-z0-9_-]{1,64}$');
 
-  static bool isSearchCancellationPayload(Map<String, dynamic> args) {
+  static bool isStreamCancellationPayload(Map<String, dynamic> args) {
     if (args.length != 1) return false;
     final streamId = args[_cancelStreamIdKey];
     return streamId is String && _streamIdPattern.hasMatch(streamId);
   }
 
-  static bool isNetworkFetchCancellationPayload(Map<String, dynamic> args) {
-    if (args.length != 1) return false;
-    final streamId = args[_cancelStreamIdKey];
-    return streamId is String && _streamIdPattern.hasMatch(streamId);
+  /// ביטול שמגיע לפני תחילת הזרם נשמר ב-[pending], והזרם נעצר כשיתחיל.
+  Map<String, dynamic> _cancelStream(
+    String streamId,
+    Map<String, Future<void> Function()> active,
+    Set<String> pending,
+  ) {
+    if (!_streamIdPattern.hasMatch(streamId)) {
+      throw Exception('error.invalid_params: invalid internal stream id');
+    }
+    final cancel = active[streamId];
+    if (cancel == null) {
+      if (pending.length < 16) pending.add(streamId);
+      return {'cancelled': false};
+    }
+    unawaited(cancel());
+    return {'cancelled': true};
   }
 
   /// משחרר את מה שקשור לדף הנוכחי — תרומות ו-streams — כשה-WebView שוחרר.
@@ -2228,7 +2240,11 @@ class PluginBridgeAdapter {
         return _handleSearchFieldSession(action, args);
       case 'query':
         if (args[_cancelStreamIdKey] case final String streamId) {
-          return _cancelPluginSearch(streamId);
+          return _cancelStream(
+            streamId,
+            _activeSearchStreams,
+            _pendingSearchCancellations,
+          );
         }
         return await _runPluginSearch(args, eventSink: eventSink);
       default:
@@ -2425,21 +2441,6 @@ class PluginBridgeAdapter {
       _activeSearchStreams.remove(streamId);
       await iterator.cancel();
     }
-  }
-
-  Map<String, dynamic> _cancelPluginSearch(String streamId) {
-    if (!_streamIdPattern.hasMatch(streamId)) {
-      throw Exception('error.invalid_params: invalid internal stream id');
-    }
-    final cancel = _activeSearchStreams[streamId];
-    if (cancel == null) {
-      if (_pendingSearchCancellations.length < 16) {
-        _pendingSearchCancellations.add(streamId);
-      }
-      return {'cancelled': false};
-    }
-    unawaited(cancel());
-    return {'cancelled': true};
   }
 
   // ----------------------------------------------------------------
@@ -7412,7 +7413,11 @@ class PluginBridgeAdapter {
     switch (action) {
       case 'fetchStream':
         if (args[_cancelStreamIdKey] case final String streamId) {
-          return _cancelPluginNetworkFetch(streamId);
+          return _cancelStream(
+            streamId,
+            _activeNetworkFetchStreams,
+            _pendingNetworkFetchCancellations,
+          );
         }
         return _runPluginNetworkFetchStream(args, eventSink: eventSink);
 
@@ -7675,21 +7680,6 @@ class PluginBridgeAdapter {
       _activeNetworkFetchStreams.remove(streamId);
       await iterator?.cancel();
     }
-  }
-
-  Map<String, dynamic> _cancelPluginNetworkFetch(String streamId) {
-    if (!_streamIdPattern.hasMatch(streamId)) {
-      throw Exception('error.invalid_params: invalid internal stream id');
-    }
-    final cancel = _activeNetworkFetchStreams[streamId];
-    if (cancel == null) {
-      if (_pendingNetworkFetchCancellations.length < 16) {
-        _pendingNetworkFetchCancellations.add(streamId);
-      }
-      return {'cancelled': false};
-    }
-    unawaited(cancel());
-    return {'cancelled': true};
   }
 
   Iterable<String> _splitNetworkFetchChunk(String value) sync* {
