@@ -1,5 +1,7 @@
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart' show Listenable;
+
 import 'package:otzaria/core/windowing/app_window_id.dart';
 import 'package:window_manager/window_manager.dart' show TitleBarStyle;
 
@@ -46,6 +48,10 @@ abstract interface class AppWindowController {
   Future<bool> isMaximized();
   Future<bool> isMinimized();
   Future<bool> isFullScreen();
+
+  /// מודיע כשמצב ה-maximize של החלון משתנה; המאזינים שואלים מחדש
+  /// ([isMaximized]) ולא מקבלים ערך.
+  Listenable get stateChanges;
 }
 
 /// גודל, מיקום ומצב תצוגה של חלון.
