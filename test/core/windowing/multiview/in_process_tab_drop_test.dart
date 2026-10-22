@@ -70,6 +70,9 @@ class _FakeOpener implements WindowOpener {
 /// הערוץ מול ה-runner: מה שתחת הסמן, ורישום של כל קריאה עם הארגומנטים.
 class _Runner {
   Map<String, Object?> target = const {'isSelf': false, 'isShellTray': false};
+
+  /// מה שתחת הסמן כשהגרירה שנמסרה למערכת מסתיימת.
+  Map<String, Object?> systemDrag = const {};
   final List<MethodCall> calls = [];
 
   void install() => TestDefaultBinaryMessengerBinding
@@ -79,6 +82,21 @@ class _Runner {
         calls.add(call);
         if (call.method == 'windowAtCursor') {
           return {'x': 300, 'y': 40, ...target};
+        }
+        if (call.method == 'dragOutToSystem') {
+          return {
+            'ran': true,
+            'snapped': false,
+            'left': 1100,
+            'top': 1040,
+            'width': 176,
+            'height': 40,
+            'x': 1200,
+            'y': 1060,
+            'isSelf': false,
+            'isShellTray': false,
+            ...systemDrag,
+          };
         }
         if (call.method == 'openWindow') return true;
         return null;
@@ -444,6 +462,84 @@ void main() {
       expect(source.events.single, RemoveTab(tab));
       // ה-runner אינו מכיר חלונות Dart, ולכן הרוח מוסתרת כאן.
       expect(runner.named('endTabDrag'), hasLength(1));
+      await source.close();
+    });
+
+    testWidgets('שחרור מחוץ לאזור העבודה (שורת משימות) מבוטל', (tester) async {
+      final windows = FakeViewWindows(tester);
+      final drops = makeDrops(windows.registry);
+      final opener = _FakeOpener();
+      WindowOpener.debugOverride = opener;
+      final source = _RecordingTabsBloc();
+      final tab = ToolTab(toolId: 'builtin.calendar', title: 'לוח שנה');
+      // מחלקת שורת המשימות לא זוהתה; רק אזור העבודה מעיד עליה.
+      runner.target = {
+        'hwnd': 31337,
+        'isSelf': false,
+        'isShellTray': false,
+        'inWorkArea': false,
+      };
+
+      await CrossWindowTabDrag(
+        inProcess: drops,
+      ).handleDroppedOutside(tab, source);
+
+      expect(opener.opened, isEmpty);
+      expect(source.events, isEmpty);
+      expect(runner.named('endTabDrag'), hasLength(1));
+      await source.close();
+    });
+
+    testWidgets('גרירה שנמסרה למערכת ושוחררה מעל שורת המשימות מבוטלת', (
+      tester,
+    ) async {
+      final windows = FakeViewWindows(tester);
+      final drops = makeDrops(windows.registry);
+      final opener = _FakeOpener();
+      WindowOpener.debugOverride = opener;
+      final source = _RecordingTabsBloc();
+      final tab = ToolTab(toolId: 'builtin.calendar', title: 'לוח שנה');
+      var cancelled = 0;
+      // הסמן יצא מהחלון, והגרירה נמסרת ל-Windows.
+      runner.target = {'hwnd': 31337, 'isSelf': false, 'isShellTray': false};
+      runner.systemDrag = {'hwnd': 4242, 'inWorkArea': false};
+      final drag = CrossWindowTabDrag(inProcess: drops)
+        ..begin(tab, colors, tabsBloc: source, cancelDrag: () => cancelled++);
+
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(runner.named('dragOutToSystem'), hasLength(1));
+      expect(cancelled, 1);
+      expect(opener.opened, isEmpty);
+      expect(source.events, isEmpty);
+      expect(runner.named('endTabDrag'), isNotEmpty);
+      drag.dispose();
+      await source.close();
+    });
+
+    testWidgets('חלון אוצריא מחוץ לאזור העבודה (מסך מלא) עדיין קולט', (
+      tester,
+    ) async {
+      final windows = FakeViewWindows(tester);
+      final view = windows.registry.open(size: const Size(800, 600))!;
+      final drops = makeDrops(windows.registry);
+      final t = _target(2);
+      drops.register(view.id, t.target);
+      final source = _RecordingTabsBloc();
+      final tab = ToolTab(toolId: 'builtin.calendar', title: 'לוח שנה');
+      runner.target = {
+        'hwnd': view.handle.hwnd,
+        'isSelf': false,
+        'isShellTray': false,
+        'inWorkArea': false,
+      };
+
+      await CrossWindowTabDrag(
+        inProcess: drops,
+      ).handleDroppedOutside(tab, source);
+
+      expect(t.received.single.$2, 2);
+      expect(source.events.single, RemoveTab(tab));
       await source.close();
     });
 

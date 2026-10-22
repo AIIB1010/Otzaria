@@ -455,7 +455,8 @@ class CrossWindowTabDrag {
 
       // ⚠️ שורת המשימות אינה מחווה של "פתח חלון כאן". היא נגישה גם בחלון
       // ממוקסם, ולכן שחרור עליה הוא כמעט תמיד החטאה.
-      if (outcome.isShellTray) {
+      if (outcome.isShellTray ||
+          _outsideWorkArea(outcome.slot, outcome.inWorkArea)) {
         debugPrint('גרירה שוחררה מעל שורת המשימות — מבוטלת');
         return _hidePreview();
       }
@@ -566,7 +567,8 @@ class CrossWindowTabDrag {
     // ⚠️ שחרור מעל שורת המשימות אינו מחווה של "פתח חלון כאן". היא נגישה
     // גם בחלון ממוקסם, ולכן משתמש שאינו מכיר את הפיצ'ר יכול לפתוח חלון
     // שני בטעות — שינוי בהתנהגות קיימת, לא רק פיצ'ר חדש.
-    if (target.isShellTray) {
+    if (target.isShellTray ||
+        _outsideWorkArea(target.slot, target.inWorkArea)) {
       debugPrint('גרירה שוחררה מעל שורת המשימות — מבוטלת');
       return _hidePreview();
     }
@@ -606,6 +608,11 @@ class CrossWindowTabDrag {
 
   void _hidePreview() => unawaited(_service.endTabDrag());
 
+  /// ריבוי תצוגות: שחרור על "שולחן העבודה" מחוץ לאזור העבודה של כל צג הוא
+  /// שורת משימות או appbar, גם כשהמחלקה שלה לא זוהתה. חלון אוצריא שם קולט.
+  bool _outsideWorkArea(int? slot, bool inWorkArea) =>
+      _inProcess != null && slot == null && !inWorkArea;
+
   /// ה-runner מסתיר את הרוח כשחלון מנוע נחשף, אבל אינו מכיר חלונות Dart.
   void _hideAfterViewOpened() {
     if (_inProcess != null) _hidePreview();
@@ -631,6 +638,7 @@ class CrossWindowTabDrag {
       slot: slot,
       isSelf: target.isSelf || _isSourceSlot(drops, slot),
       isShellTray: target.isShellTray,
+      inWorkArea: target.inWorkArea,
       approachingTop: target.approachingTop,
       minUpwardTravel: target.minUpwardTravel,
       x: target.x,
@@ -659,6 +667,7 @@ class CrossWindowTabDrag {
       slot: slot,
       isSelf: outcome.isSelf || _isSourceSlot(drops, slot),
       isShellTray: outcome.isShellTray,
+      inWorkArea: outcome.inWorkArea,
       hwnd: outcome.hwnd,
     );
   }

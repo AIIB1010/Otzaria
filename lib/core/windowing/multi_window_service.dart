@@ -34,6 +34,7 @@ typedef SystemDragOutcome = ({
   int? slot,
   bool isSelf,
   bool isShellTray,
+  bool inWorkArea,
   int? hwnd,
 });
 
@@ -42,6 +43,7 @@ typedef CursorTarget = ({
   int? slot,
   bool isSelf,
   bool isShellTray,
+  bool inWorkArea,
   bool approachingTop,
   int minUpwardTravel,
   int x,
@@ -392,6 +394,8 @@ class MultiWindowService implements WindowOpener {
       slot: info['slot'] as int?,
       isSelf: info['isSelf'] == true,
       isShellTray: info['isShellTray'] == true,
+      // runner ישן או מסלול בלי HWND אינו מדווח — בתוך אזור העבודה.
+      inWorkArea: info['inWorkArea'] != false,
       hwnd: info['hwnd'] as int?,
     );
   });
@@ -482,6 +486,8 @@ class MultiWindowService implements WindowOpener {
       slot: info['slot'] as int?,
       isSelf: info['isSelf'] == true,
       isShellTray: info['isShellTray'] == true,
+      // runner ישן או מסלול בלי HWND אינו מדווח — בתוך אזור העבודה.
+      inWorkArea: info['inWorkArea'] != false,
       approachingTop: info['approachingTop'] == true,
       // ערך חסר דורש נסיעה שמרנית יותר.
       minUpwardTravel: (info['minUpwardTravel'] as int?) ?? 24,

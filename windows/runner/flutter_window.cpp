@@ -308,6 +308,7 @@ flutter::EncodableMap DescribeTarget(HWND under, POINT cursor, HWND self,
 
   // בודקים את הצג שמתחת לסמן, כולל אזור העבודה לשורת משימות עליונה.
   bool approaching_top = false;
+  bool in_work_area = false;
   int upward_travel = kUpwardTravelLogical;
   const HMONITOR monitor = ::MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
   MONITORINFO monitor_info{};
@@ -321,6 +322,8 @@ flutter::EncodableMap DescribeTarget(HWND under, POINT cursor, HWND self,
     upward_travel = ::MulDiv(kUpwardTravelLogical, dpi, 96);
     approaching_top = cursor.y - monitor_info.rcMonitor.top <= band ||
                       cursor.y - monitor_info.rcWork.top <= band;
+    // הצגים אינם חופפים: נקודה מחוץ לאזור העבודה של הקרוב היא מחוץ לכולם.
+    in_work_area = ::PtInRect(&monitor_info.rcWork, cursor) != FALSE;
   }
   info[flutter::EncodableValue("approachingTop")] =
       flutter::EncodableValue(approaching_top);
@@ -342,6 +345,9 @@ flutter::EncodableMap DescribeTarget(HWND under, POINT cursor, HWND self,
     }
     info[flutter::EncodableValue("isSelf")] =
         flutter::EncodableValue(under != nullptr && under == self);
+    // שורת משימות או appbar גם כשהמחלקה אינה מזוהה כ-`isShellTray`.
+    info[flutter::EncodableValue("inWorkArea")] =
+        flutter::EncodableValue(in_work_area);
   }
   return info;
 }
