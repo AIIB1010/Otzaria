@@ -2,6 +2,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/windowing/app_window_id.dart';
 import 'package:otzaria/core/windowing/multiview/host_window_app_window_controller.dart';
+import 'package:window_manager/window_manager.dart' show ResizeEdge;
 
 import '../../../test_helpers/fake_view_window.dart';
 import '../../../test_helpers/second_test_view.dart';
@@ -44,6 +45,10 @@ void main() {
     expect(native.focused, [7]);
     await window.startDragging();
     expect(native.dragged, [7]);
+    await window.startResizing(ResizeEdge.topLeft);
+    expect(native.resized, [(7, ResizeEdge.topLeft)]);
+    await window.maximizeVertically();
+    expect(native.maximizedVertically, [7]);
     await window.setMinimumSize(const Size(420, 400));
     expect(
       stub.constraints,
@@ -58,6 +63,8 @@ void main() {
 
     // אחרי ההריסה אין HWND, והשאילתות אינן זורקות.
     handle.markDestroyed();
+    await window.startResizing(ResizeEdge.top);
+    expect(native.resized, hasLength(1));
     expect(await window.isVisible(), isFalse);
     expect(await window.getBounds(), Rect.zero);
     expect(await window.isMaximized(), isFalse);

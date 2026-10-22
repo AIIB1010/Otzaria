@@ -322,6 +322,10 @@ void main() {
 
     // תיקוני הקלט של ה-runner הותקנו לכל חלון.
     expect(windows.native.hooked, [a.handle.hwnd, b.handle.hwnd]);
+    // הכותרת הוסרה פעם אחת לכל חלון, ובנייה מחדש אינה חוזרת על זה.
+    expect(windows.native.frameless, [a.handle.hwnd, b.handle.hwnd]);
+    await tester.pump();
+    expect(windows.native.frameless, hasLength(2));
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 1));

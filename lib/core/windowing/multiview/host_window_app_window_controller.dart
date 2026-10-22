@@ -5,12 +5,13 @@ import 'package:otzaria/core/windowing/app_window_controller.dart';
 import 'package:otzaria/core/windowing/app_window_id.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_native.dart';
-import 'package:window_manager/window_manager.dart' show TitleBarStyle;
+import 'package:window_manager/window_manager.dart'
+    show ResizeEdge, TitleBarStyle;
 
 /// החלון של חלון Dart: מצב החלון מהבקר של המסגרת, ומיקום ומסגרת דרך win32.
 /// הגבולות לוגיים לפי ה-DPR של התצוגה, כמו ב-`window_manager`.
 final class HostWindowAppWindowController
-    implements AppWindowController, AppWindowGeometry {
+    implements AppWindowController, AppWindowGeometry, AppWindowResizing {
   HostWindowAppWindowController({
     required this.id,
     required this._handle,
@@ -72,6 +73,13 @@ final class HostWindowAppWindowController
   @override
   Future<void> startDragging() => _withHwnd(_native.startDragging);
 
+  @override
+  Future<void> startResizing(ResizeEdge edge) =>
+      _withHwnd((hwnd) => _native.startResizing(hwnd, edge));
+
+  @override
+  Future<void> maximizeVertically() => _withHwnd(_native.maximizeVertically);
+
   /// עובר במסלול הסגירה של החלון, כמו לחיצה על X.
   @override
   Future<void> close() => _onClose();
@@ -123,7 +131,8 @@ final class HostWindowAppWindowController
   @override
   Future<void> setFullScreen(bool value) async => _handle.setFullscreen(value);
 
-  /// מסגרת מערכת (D2): אין סרגל כותרת להסתיר.
+  /// הכותרת הוסרה פעם אחת בפתיחה (`makeFrameless`); מסך מלא של המסגרת
+  /// מחזיר את הסגנון בסיומו, ולכן אין מה לעשות כאן.
   @override
   Future<void> setTitleBarStyle(
     TitleBarStyle style, {

@@ -10,6 +10,7 @@ import 'package:otzaria/core/user_state/window_session_store.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_native.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
+import 'package:otzaria/core/windowing/new_window_placement.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/tabs/models/tab.dart';
 import 'package:window_manager/window_manager.dart';
@@ -36,13 +37,18 @@ class ViewWindowOpener implements WindowOpener {
     Future<bool> Function()? isMainWindowVisible,
     Future<bool> Function()? restoreMainWindow,
     Size Function()? defaultSize,
+    Future<int?> Function()? mainWindowHwnd,
+    Future<bool> Function()? isMainWindowFullscreen,
     this.firstFrameTimeout = const Duration(seconds: 20),
   }) : _native = native ?? const Win32ViewWindowNative(),
        _isMainWindowVisible = isMainWindowVisible ?? windowManager.isVisible,
        _restoreMainWindow =
            restoreMainWindow ??
            const MultiWindowService().restoreLastClosedWindow,
-       _defaultSize = defaultSize ?? _implicitViewSize;
+       _defaultSize = defaultSize ?? _implicitViewSize,
+       _mainWindowHwnd = mainWindowHwnd ?? _windowManagerHwnd,
+       _isMainWindowFullscreen =
+           isMainWindowFullscreen ?? windowManager.isFullScreen;
 
   static final ViewWindowOpener instance = ViewWindowOpener();
 
@@ -59,6 +65,8 @@ class ViewWindowOpener implements WindowOpener {
   final Future<bool> Function() _isMainWindowVisible;
   final Future<bool> Function() _restoreMainWindow;
   final Size Function() _defaultSize;
+  final Future<int?> Function() _mainWindowHwnd;
+  final Future<bool> Function() _isMainWindowFullscreen;
   final Duration firstFrameTimeout;
 
   ViewWindowRegistry get registry => _registry ?? ViewWindowRegistry.instance;
@@ -81,6 +89,48 @@ class ViewWindowOpener implements WindowOpener {
     final size = view.physicalSize / view.devicePixelRatio;
     return size.isEmpty ? const Size(1280, 800) : size;
   }
+
+  static Future<int?> _windowManagerHwnd() async {
+    try {
+      return await windowManager.getId();
+    } catch (e) {
+      debugPrint('main window hwnd failed: $e');
+      return null;
+    }
+  }
+
+  /// חלון המקור: חלון Dart שבחזית, ואחרת הראשי. מסגרת חיצונית, פיזית.
+  Future<SourceWindowPlacement?> _sourceWindow() async {
+    final foreground = _native.foregroundWindow();
+    final view = registry.windows
+        .where((w) => w.handle.hwnd == foreground)
+        .firstOrNull;
+    final hwnd = view?.handle.hwnd ?? await _mainWindowHwnd();
+    if (hwnd == null) return null;
+    final placement = _native.placement(hwnd);
+    final area = _native.workArea(hwnd);
+    if (placement == null || area == null) return null;
+    return SourceWindowPlacement(
+      normal: _physical(placement.normal),
+      workArea: _physical(area),
+      maximized:
+          placement.maximized ||
+          (view?.handle.isFullscreen ?? await _isMainWindowFullscreen()),
+      dpi: placement.dpi,
+    );
+  }
+
+  static PhysicalRect _physical(Rect r) => (
+    left: r.left.round(),
+    top: r.top.round(),
+    width: r.width.round(),
+    height: r.height.round(),
+  );
+
+  static bool _isWindowSized(PhysicalBounds? bounds) =>
+      bounds != null &&
+      bounds.width >= minBoundsWidth &&
+      bounds.height >= minBoundsHeight;
 
   /// פתיחה אחת בכל רגע: משבצת פנויה ומחיקת השארית שלה אינן מתנגשות.
   /// כשל הוא false, כמו במודל הקודם: הקוראים אינם מצפים לחריגה.
@@ -111,11 +161,30 @@ class ViewWindowOpener implements WindowOpener {
     final slot = registry.freeSlot(excluding: _pendingRestore);
     // שארית מקריסה במשבצת הזו אינה שייכת לחלון החדש.
     await _store.delete(slot);
+    // בלי מסגרת שמורה: גודל חיצוני של המקור, ולא גודל התוכן ועוד כותרת.
+    final source = _isWindowSized(bounds) || !inheritPlacement
+        ? null
+        : await _sourceWindow();
+    var target = bounds;
+    var maximized = false;
+    Size? size;
+    if (source != null && origin == null) {
+      final cascade = cascadeNewWindowPlacement(source);
+      target = cascade.bounds;
+      maximized = cascade.maximized;
+    } else if (source != null) {
+      size = Size(
+        source.normal.width.toDouble(),
+        source.normal.height.toDouble(),
+      );
+    }
     return _open(
       slot: slot,
       tab: tab == null ? null : OpenedTab.fromJson(tab.toTransferJson()),
       origin: origin,
-      bounds: bounds,
+      bounds: target,
+      size: size,
+      maximized: maximized,
       deleteRowOnTimeout: true,
     );
   });
@@ -228,6 +297,7 @@ class ViewWindowOpener implements WindowOpener {
     OpenedTab? tab,
     ({int x, int y})? origin,
     PhysicalBounds? bounds,
+    Size? size,
     bool maximized = false,
     bool deleteRowOnTimeout = false,
   }) async {
@@ -240,7 +310,7 @@ class ViewWindowOpener implements WindowOpener {
       tab?.dispose();
       return false;
     }
-    _place(entry, origin: origin, bounds: bounds);
+    _place(entry, origin: origin, bounds: bounds, size: size);
     try {
       await entry.firstFrame.timeout(firstFrameTimeout);
     } on TimeoutException {
@@ -258,16 +328,16 @@ class ViewWindowOpener implements WindowOpener {
   }
 
   /// לפני הפריים הראשון, כשהחלון עוד מוסתר. בלי מיקום — ברירת המחדל של המערכת.
+  /// [size] היא המסגרת החיצונית לחלון שנפתח ב-[origin]; בלעדיה — הגודל הנוכחי.
   void _place(
     ViewWindowEntry entry, {
     ({int x, int y})? origin,
     PhysicalBounds? bounds,
+    Size? size,
   }) {
     final hwnd = entry.handle.hwnd;
     if (hwnd == null) return;
-    if (bounds != null &&
-        bounds.width >= minBoundsWidth &&
-        bounds.height >= minBoundsHeight) {
+    if (bounds != null && _isWindowSized(bounds)) {
       final target = Rect.fromLTWH(
         bounds.left.toDouble(),
         bounds.top.toDouble(),
@@ -282,7 +352,7 @@ class ViewWindowOpener implements WindowOpener {
       return;
     }
     if (origin == null) return;
-    final current = _native.windowRect(hwnd);
+    final current = size ?? _native.windowRect(hwnd)?.size;
     if (current == null) return;
     final x = origin.x.toDouble(), y = origin.y.toDouble();
     _native.setWindowRect(
@@ -290,21 +360,25 @@ class ViewWindowOpener implements WindowOpener {
       Rect.fromLTWH(x, y, current.width, current.height),
     );
     // המעבר למסך אחר עשוי לשנות את הגודל לפי ה-DPI שלו; מהדקים אחריו.
-    final moved = _native.windowRect(hwnd) ?? current;
+    final moved =
+        _native.windowRect(hwnd) ??
+        Rect.fromLTWH(x, y, current.width, current.height);
     final area = _native.workArea(hwnd);
     if (area == null) return;
     _native.setWindowRect(hwnd, clampToArea(moved, area));
   }
 
-  /// כמו `OriginForDrop` ב-runner: מזיז לתוך אזור העבודה בלי לשנות גודל.
+  /// כמו `OriginForDrop` ב-runner: מזיז לתוך אזור העבודה, ומקטין כשאינו נכנס.
   @visibleForTesting
   static Rect clampToArea(Rect rect, Rect area) {
+    final width = rect.width.clamp(0.0, area.width);
+    final height = rect.height.clamp(0.0, area.height);
     var left = rect.left, top = rect.top;
-    if (left + rect.width > area.right) left = area.right - rect.width;
+    if (left + width > area.right) left = area.right - width;
     if (left < area.left) left = area.left;
-    if (top + rect.height > area.bottom) top = area.bottom - rect.height;
+    if (top + height > area.bottom) top = area.bottom - height;
     if (top < area.top) top = area.top;
-    return Rect.fromLTWH(left, top, rect.width, rect.height);
+    return Rect.fromLTWH(left, top, width, height);
   }
 
   /// האם [entry] הוא החלון האחרון שעל המסך, כלומר סגירתו היא יציאה.

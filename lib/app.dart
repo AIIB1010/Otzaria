@@ -12,9 +12,11 @@ import 'package:otzaria/core/diagnostics/frame_stats_overlay.dart';
 import 'package:otzaria/navigation/bloc/navigation_bloc.dart';
 import 'package:otzaria/plugins/bloc/plugin_system_bloc.dart';
 import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
+import 'package:otzaria/core/windowing/app_virtual_window_frame.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
 import 'package:otzaria/core/windowing/mac_menu_bar.dart';
+import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:otzaria/navigation/view/main_window_screen.dart';
 import 'package:otzaria/settings/settings_exports.dart';
@@ -47,11 +49,13 @@ class App extends StatelessWidget {
           state.darkSeedColor,
           Brightness.dark,
         );
-        // חלון Dart במסגרת מערכת (D2): `VirtualWindowFrame` מאזין לחלון הראשי.
         final useVirtualWindowFrame =
             !kIsWeb &&
-            (Platform.isWindows || Platform.isLinux || Platform.isMacOS) &&
-            !AppWindowScope.roleOf(context).isViewWindow;
+            (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
+        // `VirtualWindowFrame` מאזין לחלון הראשי; לחלון Dart מסגרת משלו.
+        final isViewWindow =
+            MultiViewMode.enabled &&
+            AppWindowScope.roleOf(context).isViewWindow;
         return ValueListenableBuilder<bool>(
           valueListenable: DeveloperDiagnostics.instance.performanceOverlay,
           builder: (context, showPerformanceOverlay, _) => MaterialApp(
@@ -124,6 +128,10 @@ class App extends StatelessWidget {
 
               if (!useVirtualWindowFrame) {
                 return content;
+              }
+
+              if (isViewWindow) {
+                return AppVirtualWindowFrame(child: content);
               }
 
               return VirtualWindowFrame(

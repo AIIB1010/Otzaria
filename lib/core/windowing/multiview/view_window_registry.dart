@@ -130,7 +130,11 @@ class ViewWindowRegistry extends ChangeNotifier {
     _windows.add(entry);
     notifyListeners();
     final hwnd = handle.hwnd;
-    if (hwnd != null) unawaited(_native.installViewHooks(hwnd));
+    if (hwnd != null) {
+      unawaited(_native.installViewHooks(hwnd));
+      // לפני הפריים הראשון, בעוד החלון מוסתר: בלי הבהוב של המסגרת.
+      unawaited(_native.makeFrameless(hwnd));
+    }
     return entry;
   }
 

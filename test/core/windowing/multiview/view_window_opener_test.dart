@@ -126,6 +126,8 @@ void main() {
     Duration? timeout,
     FakeViewWindowNative? native,
     _MemorySessions? store,
+    int? mainHwnd,
+    bool mainFullscreen = false,
   }) {
     windows = FakeViewWindows(tester);
     sessions = store ?? _MemorySessions();
@@ -141,6 +143,8 @@ void main() {
         return true;
       },
       defaultSize: () => const Size(1000, 700),
+      mainWindowHwnd: () async => mainHwnd,
+      isMainWindowFullscreen: () async => mainFullscreen,
       firstFrameTimeout: timeout ?? const Duration(seconds: 20),
     );
   }
@@ -182,6 +186,7 @@ void main() {
     expect(entry.openedWithTab, isTrue);
     expect(sessions.rows[2], isNull, reason: 'שארית מקריסה אינה נטענת');
     expect(windows.native.hooked, [windows.handleOf(entry).fakeHwnd]);
+    expect(windows.native.frameless, [windows.handleOf(entry).fakeHwnd]);
     final count = (await opener.windowCount())!;
     expect((count.count, count.max, count.engines), (2, 8, 1));
   });
@@ -241,6 +246,224 @@ void main() {
       isTrue,
     );
     expect(windows.native.rects[102], const Rect.fromLTWH(920, 340, 1000, 700));
+  });
+
+  group('חלון חדש בלי מסגרת שמורה: לפי המסגרת החיצונית של המקור', () {
+    const main = 1;
+
+    testWidgets('גודל הראשי ומדרג של 30 לוגיים', (tester) async {
+      final opener = makeOpener(tester, mainHwnd: main);
+      await pumpHost(tester);
+      windows.native.area = const Rect.fromLTWH(0, 0, 1920, 1040);
+      windows.native.rects[main] = const Rect.fromLTWH(100, 50, 1200, 800);
+
+      expect(await settle(tester, opener.openWindow()), isTrue);
+      expect(
+        windows.native.rects[100],
+        const Rect.fromLTWH(130, 80, 1200, 800),
+      );
+      expect(windows.handles.single.stub.maximized, isFalse);
+    });
+
+    testWidgets('DPI 144: המדרג 45 פיזיים', (tester) async {
+      final opener = makeOpener(tester, mainHwnd: main);
+      await pumpHost(tester);
+      windows.native.dpi = 144;
+      windows.native.rects[main] = const Rect.fromLTWH(100, 50, 1200, 800);
+
+      expect(await settle(tester, opener.openWindow()), isTrue);
+      expect(
+        windows.native.rects[100],
+        const Rect.fromLTWH(145, 95, 1200, 800),
+      );
+    });
+
+    testWidgets('ראשי במסך מלא פותח חלון ממוקסם', (tester) async {
+      final opener = makeOpener(tester, mainHwnd: main, mainFullscreen: true);
+      await pumpHost(tester);
+      windows.native.rects[main] = const Rect.fromLTWH(0, 0, 1920, 1080);
+
+      expect(await settle(tester, opener.openWindow()), isTrue);
+      expect(windows.handles.single.stub.maximized, isTrue);
+      expect(windows.handles.single.stub.fullscreen, isFalse);
+    });
+
+    testWidgets('ראשי בגובה מלא: חוזר לפינת אזור העבודה ואינו גולש', (
+      tester,
+    ) async {
+      final opener = makeOpener(tester, mainHwnd: main);
+      await pumpHost(tester);
+      windows.native.area = const Rect.fromLTWH(0, 0, 1920, 1040);
+      windows.native.rects[main] = const Rect.fromLTWH(200, 0, 1000, 1040);
+
+      expect(await settle(tester, opener.openWindow()), isTrue);
+      expect(windows.native.rects[100], const Rect.fromLTWH(0, 0, 1000, 1040));
+    });
+
+    testWidgets('מקור גדול מאזור העבודה: מוקטן אליו', (tester) async {
+      final opener = makeOpener(tester, mainHwnd: main);
+      await pumpHost(tester);
+      windows.native.area = const Rect.fromLTWH(0, 0, 1920, 1040);
+      windows.native.rects[main] = const Rect.fromLTWH(-8, -8, 1936, 1056);
+
+      expect(await settle(tester, opener.openWindow()), isTrue);
+      expect(windows.native.rects[100], const Rect.fromLTWH(0, 0, 1920, 1040));
+    });
+
+    testWidgets('ראשי ממוקסם: החדש ממוקסם, מסגרתו הרגילה מדורגת', (
+      tester,
+    ) async {
+      final opener = makeOpener(tester, mainHwnd: main);
+      await pumpHost(tester);
+      windows.native.rects[main] = const Rect.fromLTWH(100, 50, 1200, 800);
+      windows.native.maximizedWindows.add(main);
+
+      expect(await settle(tester, opener.openWindow()), isTrue);
+      expect(
+        windows.native.rects[100],
+        const Rect.fromLTWH(130, 80, 1200, 800),
+      );
+      expect(windows.handles.single.stub.maximized, isTrue);
+    });
+
+    testWidgets('חלון Dart בחזית הוא המקור', (tester) async {
+      final opener = makeOpener(tester, mainHwnd: main);
+      await pumpHost(tester);
+      windows.native.rects[main] = const Rect.fromLTWH(100, 50, 1200, 800);
+      expect(await settle(tester, opener.openWindow()), isTrue);
+      windows.native.rects[100] = const Rect.fromLTWH(500, 300, 900, 600);
+      windows.native.foreground = 100;
+
+      expect(await settle(tester, opener.openWindow()), isTrue);
+      expect(
+        windows.native.rects[101],
+        const Rect.fromLTWH(530, 330, 900, 600),
+      );
+
+      // חלון זר בחזית: חוזרים לראשי.
+      windows.native.foreground = 999;
+      expect(await settle(tester, opener.openWindow()), isTrue);
+      expect(
+        windows.native.rects[102],
+        const Rect.fromLTWH(130, 80, 1200, 800),
+      );
+    });
+
+    testWidgets('חלון Dart במסך מלא פותח חלון ממוקסם בלי להוריש מסך מלא', (
+      tester,
+    ) async {
+      final opener = makeOpener(tester);
+      await pumpHost(tester);
+      expect(await settle(tester, opener.openWindow()), isTrue);
+      final source = windows.handles.single;
+      source.stub.fullscreen = true;
+      windows.native.foreground = source.fakeHwnd;
+      windows.native.rects[source.fakeHwnd!] = const Rect.fromLTWH(
+        0,
+        0,
+        1920,
+        1080,
+      );
+
+      expect(await settle(tester, opener.openWindow()), isTrue);
+      expect(windows.handles.last.stub.maximized, isTrue);
+      expect(windows.handles.last.stub.fullscreen, isFalse);
+    });
+
+    testWidgets('גרירה לנקודה: גודל המקור, מהודק ומוקטן לאזור העבודה', (
+      tester,
+    ) async {
+      final opener = makeOpener(tester, mainHwnd: main);
+      await pumpHost(tester);
+      windows.native.area = const Rect.fromLTWH(0, 0, 1920, 1040);
+      windows.native.rects[main] = const Rect.fromLTWH(0, 0, 1200, 1100);
+      windows.native.maximizedWindows.add(main);
+
+      expect(
+        await settle(tester, opener.openWindow(origin: (x: 1500, y: 300))),
+        isTrue,
+      );
+      expect(
+        windows.native.rects[100],
+        const Rect.fromLTWH(720, 0, 1200, 1040),
+      );
+      expect(windows.handles.single.stub.maximized, isFalse);
+    });
+
+    testWidgets('מסגרת שמורה: כפי שהיא, בלי מדרג ובלי לשאול את המקור', (
+      tester,
+    ) async {
+      final opener = makeOpener(tester, mainHwnd: main);
+      await pumpHost(tester);
+      windows.native.rects[main] = const Rect.fromLTWH(100, 50, 1200, 800);
+      windows.native.maximizedWindows.add(main);
+      sessions.rows[2] = WindowSession(
+        slot: 2,
+        tabsJson: '[]',
+        currentIndex: 0,
+        boundsJson: const WindowBounds(
+          left: 10,
+          top: 20,
+          width: 800,
+          height: 600,
+        ).encode(),
+      );
+
+      await settle(tester, opener.restoreAllWindows([2]));
+      expect(windows.native.rects[100], const Rect.fromLTWH(10, 20, 800, 600));
+      expect(windows.handles.single.stub.maximized, isFalse);
+
+      expect(
+        await settle(
+          tester,
+          opener.openWindow(
+            bounds: (left: 960, top: 0, width: 960, height: 1040),
+          ),
+        ),
+        isTrue,
+      );
+      expect(windows.native.rects[101], const Rect.fromLTWH(960, 0, 960, 1040));
+      expect(windows.handles.last.stub.maximized, isFalse);
+    });
+
+    testWidgets('inheritPlacement: false — בלי מדרג ובלי מיקסום מהמקור', (
+      tester,
+    ) async {
+      final opener = makeOpener(tester, mainHwnd: main);
+      await pumpHost(tester);
+      windows.native.rects[main] = const Rect.fromLTWH(100, 50, 1200, 800);
+      windows.native.maximizedWindows.add(main);
+
+      expect(
+        await settle(tester, opener.openWindow(inheritPlacement: false)),
+        isTrue,
+      );
+      expect(
+        windows.native.rects[100],
+        isNot(const Rect.fromLTWH(130, 80, 1200, 800)),
+      );
+      expect(windows.handles.single.stub.maximized, isFalse);
+    });
+  });
+
+  testWidgets('clampToArea: מזיז פנימה, ומקטין רק מה שאינו נכנס', (
+    tester,
+  ) async {
+    const area = Rect.fromLTWH(0, 0, 1920, 1040);
+    expect(
+      ViewWindowOpener.clampToArea(
+        const Rect.fromLTWH(1500, 900, 1000, 700),
+        area,
+      ),
+      const Rect.fromLTWH(920, 340, 1000, 700),
+    );
+    expect(
+      ViewWindowOpener.clampToArea(
+        const Rect.fromLTWH(100, 100, 2000, 1100),
+        area,
+      ),
+      const Rect.fromLTWH(0, 0, 1920, 1040),
+    );
   });
 
   testWidgets('תקרה: 8 כולל הראשי; משבצת שהתפנתה נלקחת שוב', (tester) async {
