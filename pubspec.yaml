@@ -137,13 +137,13 @@ dependency_overrides:
   # מנרמל העברית הקיים נשמר, כולל מגבלותיו בטקסט מעורב ובפיסוק מספרים.
   pdfrx:
     git:
-      url: https://github.com/palmoni5/pdfrx
-      ref: 8a7cefa013fd1cd026cbbde487867a505b74337a
+      url: https://github.com/Y-PLONI/pdfrx
+      ref: 74726f6d46ef58783cc246d0c2f1f6551f2cf364
       path: packages/pdfrx
   pdfrx_engine:
     git:
-      url: https://github.com/palmoni5/pdfrx
-      ref: 8a7cefa013fd1cd026cbbde487867a505b74337a
+      url: https://github.com/Y-PLONI/pdfrx
+      ref: 74726f6d46ef58783cc246d0c2f1f6551f2cf364
       path: packages/pdfrx_engine
   # TODO: להחזיר ל-pub.dev כשיתמזג וישוחרר MaikuB/flutter_local_notifications#2826
   # (קריאות WinRT ב-thread ייעודי, כולל תיקון ה-deadlock ב-invoke). עד אז הפורק

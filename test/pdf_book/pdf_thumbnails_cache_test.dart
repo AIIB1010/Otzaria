@@ -38,9 +38,18 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const pathProviderChannel = MethodChannel('plugins.flutter.io/path_provider');
   late Directory tempDir;
+  final originalModulePath = Pdfrx.pdfiumModulePath;
 
   setUp(() {
     tempDir = Directory.systemTemp.createTempSync('otzaria-pdf-thumbs-');
+    final moduleName = Platform.isWindows
+        ? 'pdfium.dll'
+        : Platform.isMacOS
+        ? 'libpdfium.dylib'
+        : 'libpdfium.so';
+    Pdfrx.pdfiumModulePath = File(
+      'build/native_assets/${Platform.operatingSystem}/$moduleName',
+    ).absolute.path;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
           pathProviderChannel,
@@ -52,6 +61,7 @@ void main() {
   });
 
   tearDown(() {
+    Pdfrx.pdfiumModulePath = originalModulePath;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(pathProviderChannel, null);
     try {
