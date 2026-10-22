@@ -4,6 +4,8 @@ import 'package:path/path.dart' as p;
 import 'package:otzaria/core/user_state/user_state_slot.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
 import 'package:otzaria/core/windowing/window_bus.dart';
+import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
+import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
 import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/tabs/models/combined_tab.dart';
 import 'package:otzaria/tabs/models/tab.dart';
@@ -27,7 +29,17 @@ class WindowTabsSession {
   ///
   /// ⚠️ חלון בלי משבצת אינו שומר, ובשום מצב אינו נופל למשבצת של חלון אחר
   /// — זו הייתה דריסת הכרטיסיות שלו.
-  int? get slot => _slot();
+  int? get slot => _suspended ? null : _slot();
+
+  bool _suspended = false;
+
+  /// חלון מוסתר שהסשן שלו נמחק אינו שומר עד שיוצג שוב ([resume]).
+  void suspend() {
+    _suspended = true;
+    _cancelPendingIndex();
+  }
+
+  void resume() => _suspended = false;
 
   /// דור הסשן של החלון הזה: עולה בכל [TabsRepository.importRaw].
   int get generation => _generation;
@@ -337,7 +349,12 @@ class TabsRepository {
     final host = WindowTabsSession.current.slot;
     if (host == null) return const [];
     try {
-      return await _staticStore.compactAround(host, WindowBus.slotCount);
+      return await _staticStore.compactAround(
+        host,
+        MultiViewMode.enabled
+            ? ViewWindowRegistry.maxWindows
+            : WindowBus.slotCount,
+      );
     } catch (e) {
       debugPrint('⚠️ compactWindowSessions failed: $e');
       return const [];

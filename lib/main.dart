@@ -81,7 +81,7 @@ import 'package:otzaria/core/user_state/window_bounds.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
 import 'package:otzaria/core/windowing/multiview/multi_view_host.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
-import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
+import 'package:otzaria/core/windowing/multiview/view_window_opener.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_scope.dart';
 import 'package:otzaria/core/windowing/dock_progress_listener.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
@@ -1678,6 +1678,9 @@ Future<void> _runDeferredRestoreWindows() async {
   if (WindowRole.isSecondary || _windowSlotsToRestore.isEmpty) return;
   final slots = _windowSlotsToRestore;
   _windowSlotsToRestore = const [];
+  // חלון שנפתח בזמן ההמתנה היה מוחק את השורה של משבצת פנויה.
+  final opener = WindowOpener.current;
+  if (opener is ViewWindowOpener) opener.reserveForRestore(slots);
   try {
     await _mainWindowRevealedCompleter.future.timeout(
       const Duration(seconds: 20),
@@ -1687,6 +1690,11 @@ Future<void> _runDeferredRestoreWindows() async {
   }
   try {
     final service = WindowOpener.current;
+    // חלונות Dart: המשבצת נקבעת ב-Dart, ואין אפיק להמתין לרישום בו.
+    if (service is ViewWindowOpener) {
+      await service.restoreAllWindows(slots);
+      return;
+    }
     for (final slot in slots) {
       final session = await WindowSessionStore.instance.load(slot);
       final bounds = WindowBounds.decode(session?.boundsJson)?.toPhysical();
@@ -1876,31 +1884,13 @@ void _maybeScheduleDebugSecondWindow() {
     Platform.environment['OTZARIA_DEBUG_OPEN_WINDOW_MS'] ?? '',
   );
   if (ms == null || ms <= 0) return;
-  if (MultiViewMode.enabled) {
-    Timer(Duration(milliseconds: ms), _debugOpenViewWindow);
-    return;
-  }
   Timer(Duration(milliseconds: ms), () async {
+    final stopwatch = Stopwatch()..start();
     final opened = await WindowOpener.current.openWindow();
-    debugPrint('[debug] openWindow -> $opened');
+    debugPrint(
+      '[debug] openWindow -> $opened, ${stopwatch.elapsedMilliseconds}ms',
+    );
   });
-}
-
-/// חלון Dart בגודל החלון הראשי, עם תוכן זמני.
-Future<void> _debugOpenViewWindow() async {
-  final view = WidgetsBinding.instance.platformDispatcher.implicitView!;
-  final stopwatch = Stopwatch()..start();
-  final entry = ViewWindowRegistry.instance.open(
-    size: view.physicalSize / view.devicePixelRatio,
-  );
-  await entry?.firstFrame.timeout(
-    const Duration(seconds: 20),
-    onTimeout: () {},
-  );
-  debugPrint(
-    '[debug] openViewWindow -> slot ${entry?.slot}, '
-    'view ${entry?.handle.view.viewId}, ${stopwatch.elapsedMilliseconds}ms',
-  );
 }
 
 /// נותן לחלון הזה **עותק פרטי של `pdfium.dll`**, ומכוון אליו את pdfrx.
@@ -1981,6 +1971,10 @@ Future<void> _isolatePdfiumForThisWindow(String windowRoot) async {
 Future<void> _installWindowCloseHandling() async {
   _appWindowListener = AppWindowListener(window: _appWindow);
   windowManager.addListener(_appWindowListener!);
+  if (MultiViewMode.enabled) {
+    final listener = _appWindowListener!;
+    ViewWindowOpener.instance.endProcess = listener.quitFromLastViewWindow;
+  }
   await windowManager.setPreventClose(true);
   await AppWindowListener.enableMacOSCloseHandling();
 }

@@ -104,13 +104,15 @@ class ViewWindowRegistry extends ChangeNotifier {
 
   bool get canOpenAnotherWindow => _windows.length + 1 < maxWindows;
 
-  /// פותח חלון, עם [initialTab] אם ניתנה; null כשהגענו לתקרה.
+  /// פותח חלון, עם [initialTab] אם ניתנה; null בתקרה או כש-[slot] תפוסה.
   ViewWindowEntry? open({
     required Size size,
     String title = 'אוצריא',
     OpenedTab? initialTab,
+    int? slot,
   }) {
     if (!canOpenAnotherWindow) return null;
+    if (slot != null && isSlotOpen(slot)) return null;
     late final ViewWindowEntry entry;
     final handle = _factory(
       size: size,
@@ -118,7 +120,12 @@ class ViewWindowRegistry extends ChangeNotifier {
       onCloseRequested: (_) => unawaited(entry.requestClose()),
       onDestroyed: (_) => _remove(entry),
     );
-    entry = ViewWindowEntry._(_freeSlot(), handle, _native, initialTab);
+    entry = ViewWindowEntry._(
+      slot ?? freeSlot(),
+      handle,
+      _native,
+      initialTab,
+    );
     AppWindowKeys.register(entry.keys);
     _windows.add(entry);
     notifyListeners();
@@ -127,8 +134,11 @@ class ViewWindowRegistry extends ChangeNotifier {
     return entry;
   }
 
-  int _freeSlot() {
-    final used = {for (final w in _windows) w.slot};
+  bool isSlotOpen(int slot) => _windows.any((w) => w.slot == slot);
+
+  /// המשבצת הפנויה הראשונה מ-2, בלי [excluding] (משבצות שממתינות לשחזור).
+  int freeSlot({Set<int> excluding = const {}}) {
+    final used = {for (final w in _windows) w.slot, ...excluding};
     var slot = 2;
     while (used.contains(slot)) {
       slot++;

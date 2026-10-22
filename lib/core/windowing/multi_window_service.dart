@@ -12,6 +12,7 @@ import 'package:otzaria/core/windowing/drag_preview_colors.dart';
 import 'package:otzaria/core/windowing/new_window_placement.dart';
 import 'package:otzaria/core/windowing/window_bus.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
+import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/library/hidden/hidden_library_selection.dart';
 import 'package:otzaria/core/messages/settings_messages.dart';
 import 'package:otzaria/tabs/models/combined_tab.dart';
@@ -515,7 +516,7 @@ class MultiWindowService implements WindowOpener {
   static String _encodePayload(OpenedTab? tab) {
     return jsonEncode({
       'version': 1,
-      if (tab != null) 'tab': tab.toJson(),
+      if (tab != null) 'tab': tab.toTransferJson(),
       'settings': _snapshotPreferences(),
     });
   }
@@ -637,7 +638,7 @@ class MultiWindowService implements WindowOpener {
   /// לסרב (שינויים שלא נשמרו), וסירוב אינו כשל שהקורא יכול או צריך לטפל בו.
   static void closePeers() {
     closingAll = true;
-    if (!canOpenWindows) return;
+    if (MultiViewMode.enabled || !canOpenWindows) return;
     WindowBus.instance.broadcast({'type': requestCloseWindow});
   }
 

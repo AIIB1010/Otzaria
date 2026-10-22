@@ -5,6 +5,8 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/messages/plugin_messages.dart';
+import 'package:otzaria/core/windowing/app_window_keys.dart';
+import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/window_bus.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
 import 'package:otzaria/plugins/services/plugin_correction_session_service.dart';
@@ -231,9 +233,17 @@ Future<bool> _confirmAllWindowCorrections(BuildContext context) async {
       for (final state in unsaved)
         'תיקוני התוסף ‹${state.ownerName}› בספר "${state.bookId}" עדיין לא נשמרו לטיוטת ההתאוששות.',
     ]);
+    final tabs = <OpenedTab>{
+      ...context.read<TabsBloc>().state.tabs,
+      if (MultiViewMode.enabled)
+        for (final window in AppWindowKeys.registered)
+          if (window.navigator.currentContext case final other?
+              when other.mounted)
+            ...other.read<TabsBloc>().state.tabs,
+    };
     final confirmed = await confirmCloseTabs(
       context,
-      context.read<TabsBloc>().state.tabs,
+      tabs,
       subtitle: WindowBus.instance.hasOtherWindows
           ? unsavedChangesWindowCloseSubtitle
           : unsavedChangesAppCloseSubtitle,
