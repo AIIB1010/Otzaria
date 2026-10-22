@@ -5,39 +5,38 @@
 
 ---
 
-## שני מודלים: ריבוי תצוגות (ברירת המחדל ב-Windows) ומודל A
+## שני מודלים: ריבוי תצוגות (Windows) ומודל A (Linux/macOS)
 
-**ב-Windows ברירת המחדל היא ריבוי תצוגות:** מנוע אחד ו-isolate אחד, וכל
+**ב-Windows יש רק ריבוי תצוגות:** מנוע אחד ו-isolate אחד, וכל
 חלון נוסף הוא חלון Dart (`RegularWindowController`) עם `FlutterView` משלו
 באותו מנוע. הקוד ב-`lib/core/windowing/multiview/`; תקרה של 8 חלונות כולל
 הראשי (`ViewWindowRegistry.maxWindows`).
 
-**מודל A** (מנוע לכל חלון, כל שאר המסמך) נשאר:
-
-* ב-Linux וב-macOS — עד שריבוי התצוגות יועבר גם אליהן;
-* ב-Windows כ**פתח מילוט בזמן בנייה** בלבד:
-  `flutter build windows --dart-define=OTZARIA_MULTIVIEW=false`. אין מתג
-  בזמן ריצה, משתנה סביבה או הגדרה נסתרת.
+**מודל A** (מנוע לכל חלון, כל שאר המסמך) נשאר ב-Linux וב-macOS בלבד, עד
+שריבוי התצוגות יועבר גם אליהן. ב-runner של Windows אין עוד מנועים נוספים,
+משבצות או `secondaryWindowMain`, ואין מתג בנייה שמחזיר אותם.
 
 ### איך נקבע המצב
 
-* `kMultiView` = `bool.fromEnvironment('OTZARIA_MULTIVIEW', defaultValue: true)`.
-* `MultiViewMode.supported` = `kMultiView` ו-Windows. זהה ב-debug וב-release.
+* `MultiViewMode.supported` = Windows. זהה ב-debug וב-release.
+* `WindowOpener.current` ב-Windows הוא תמיד `ViewWindowOpener`
+  (`MultiViewMode.usesEngineWindows` שקרי שם).
 * `installWindowingOwner()` (ב-`main` מיד אחרי `ensureInitialized`) מתקין
   את בעלי החלונות של המסגרת **רק** כש-`supported` וה-binding משתמש
   ב-`PlatformDispatcher.instance` האמיתי.
 * `MultiViewMode.enabled` = `supported` ובעלים הותקן בפועל. בלי בעלים —
-  מודל A, ו-`createViewWindow` זורק `StateError` במקום לקרוס.
+  חלון יחיד: `ViewWindowOpener` אינו פותח חלונות, ו-`createViewWindow` זורק
+  `StateError` במקום לקרוס.
 
 ⚠️ **למה השמירה על ה-binding:** ב-integration_test ה-binding הוא
 `IntegrationTestWidgetsFlutterBinding`, ו-`TestPlatformDispatcher.engineId`
 מחזיר `1` קבוע. `WindowingOwnerWin32` מעביר את המזהה למנוע, ו-`GetEngineForId`
 מפרש אותו כמצביע — גישה ל-`0x1` וקריסה. לכן integration tests רצים היום
-במודל A; כיסוי ריבוי תצוגות בהם הוא שלב נפרד.
+בחלון יחיד; כיסוי ריבוי תצוגות בהם הוא שלב נפרד.
 
 **בדיקות יחידה:** `test/flutter_test_config.dart` מצמיד
-`MultiViewMode.debugOverride = false`, ובדיקות ריבוי התצוגות מדליקות אותו
-בעצמן (`debugOverride = true`).
+`MultiViewMode.debugOverride = false` (מדמה את מודל A של Linux/macOS בכל
+פלטפורמה), ובדיקות ריבוי התצוגות מדליקות אותו בעצמן (`debugOverride = true`).
 
 **Sentry:** בריבוי תצוגות כל החלונות מדווחים דרך ה-Sentry של ה-isolate
 היחיד; כל אירוע מתויג `window` = החלון הפעיל האחרון (`LastActiveWindow`).
@@ -62,12 +61,15 @@
    בודקים את הדגל וזורקים מחוץ ל-`withWindowing`. משתמשים ב-`View(view: ...)`.
 5. `flutter_internal_imports_test` עובר — `package:flutter/src/` מיובא רק
    ב-`multiview_flag.dart`, ושם בלבד יש לתקן.
-6. בניית release בלי define פותחת חלון Dart; עם `OTZARIA_MULTIVIEW=false`
-   פותחת מנוע נוסף.
+6. בניית release פותחת חלון Dart, והתהליך יוצא כשנסגר החלון הגלוי האחרון.
 
 ---
 
 ## המודל (מודל A)
+
+> מכאן והלאה המסמך מתאר את מודל A כפי שהוא רץ ב-Linux וב-macOS. ב-runner של
+> Windows נשארו ממנו רק הגרירה (`DescribeTarget`, `dragOutToSystem`), הסתרת
+> החלון הראשי במקום הריסה, ו-R1: התהליך אינו יוצא כל עוד חלון Dart גלוי.
 
 כל חלון הוא `FlutterEngine` נפרד ב-isolate נפרד, **באותו תהליך**.
 
