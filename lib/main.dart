@@ -79,6 +79,7 @@ import 'package:otzaria/core/user_state/window_bounds.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
 import 'package:otzaria/core/windowing/dock_progress_listener.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/core/windowing/window_bus_host.dart';
 import 'package:otzaria/core/windowing/window_bus.dart';
 import 'package:otzaria/core/windowing/window_role.dart';
@@ -1662,7 +1663,7 @@ Future<void> _runDeferredRestoreWindows() async {
     // ממשיכים בכל זאת — אחרת המשימה לא תרוץ כלל.
   }
   try {
-    const service = MultiWindowService();
+    final service = WindowOpener.current;
     for (final slot in slots) {
       final session = await WindowSessionStore.instance.load(slot);
       final bounds = WindowBounds.decode(session?.boundsJson)?.toPhysical();
@@ -1853,7 +1854,7 @@ void _maybeScheduleDebugSecondWindow() {
   );
   if (ms == null || ms <= 0) return;
   Timer(Duration(milliseconds: ms), () async {
-    final opened = await const MultiWindowService().openWindow();
+    final opened = await WindowOpener.current.openWindow();
     debugPrint('[debug] openWindow -> $opened');
   });
 }

@@ -12,6 +12,7 @@ import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/windowing/cross_window_tab_drag.dart';
 import 'package:otzaria/core/windowing/drag_preview_colors.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/history/bloc/history_bloc.dart';
 import 'package:otzaria/history/bloc/history_event.dart';
 import 'package:otzaria/navigation/view/reading_tab_strip.dart';
@@ -294,7 +295,7 @@ List<AppContextMenuEntry> buildTabContextMenuEntries(
     if (MultiWindowService.canOpenWindows)
       AppContextMenuEntry(
         label: context.settingsText('חלון חדש'),
-        onTap: () => unawaited(const MultiWindowService().openEmptyWindow()),
+        onTap: () => unawaited(WindowOpener.current.openEmptyWindow()),
       ),
     const AppContextMenuEntry.divider(),
   ];
@@ -389,8 +390,8 @@ Future<void> _moveTabToNewWindow(BuildContext context, OpenedTab tab) async {
   final tabsBloc = context.read<TabsBloc>();
   // ⚠️ נבדק **לפני** הפעולה ולא בדיעבד: `openWindow` ממתין עד 20 שניות,
   // והמשתמש היה מקבל "אפשר לפתוח עד N חלונות" רק בסופן.
-  if (!await const MultiWindowService().canOpenAnotherWindow()) {
-    await const MultiWindowService().reportOpenWindowFailure();
+  if (!await WindowOpener.current.canOpenAnotherWindow()) {
+    await WindowOpener.current.reportOpenWindowFailure();
     return;
   }
   if (!context.mounted) return;
@@ -398,11 +399,11 @@ Future<void> _moveTabToNewWindow(BuildContext context, OpenedTab tab) async {
     return;
   }
 
-  final opened = await const MultiWindowService().openWindow(tab: tab);
+  final opened = await WindowOpener.current.openWindow(tab: tab);
   if (opened) {
     tabsBloc.add(RemoveTab(tab));
   } else {
-    await const MultiWindowService().reportOpenWindowFailure();
+    await WindowOpener.current.reportOpenWindowFailure();
   }
 }
 

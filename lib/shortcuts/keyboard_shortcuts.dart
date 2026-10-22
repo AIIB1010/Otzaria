@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/focus_repository.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/navigation/bloc/navigation_bloc.dart';
 import 'package:otzaria/navigation/bloc/navigation_event.dart';
 import 'package:otzaria/navigation/bloc/navigation_state.dart';
@@ -419,7 +420,7 @@ class _KeyboardShortcutsState extends State<KeyboardShortcuts> {
           );
         }
       } else {
-        unawaited(const MultiWindowService().restoreLastClosedWindow());
+        unawaited(WindowOpener.current.restoreLastClosedWindow());
       }
       return KeyEventResult.handled;
     }
@@ -528,7 +529,7 @@ class _KeyboardShortcutsState extends State<KeyboardShortcuts> {
     if (MultiWindowService.canOpenWindows &&
         newWindowShortcut.isNotEmpty &&
         ShortcutHelper.matchesShortcut(event, newWindowShortcut)) {
-      unawaited(const MultiWindowService().openEmptyWindow());
+      unawaited(WindowOpener.current.openEmptyWindow());
       return KeyEventResult.handled;
     }
 

@@ -10,6 +10,7 @@ import 'package:otzaria/core/messages/window_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/windowing/drag_preview_colors.dart';
 import 'package:otzaria/core/windowing/window_bus.dart';
+import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/library/hidden/hidden_library_selection.dart';
 import 'package:otzaria/core/messages/settings_messages.dart';
 import 'package:otzaria/tabs/models/combined_tab.dart';
@@ -63,7 +64,7 @@ typedef VisibilityChangeResult = ({
 /// (בדיקה 10 של P-2, שטרם הורצה מול המימוש). שתי דרכים לא-בדוקות אם
 /// ההרעה גדולה מפי 2: יצירה על ה-thread הראשי ואז העברת בעלות ל-thread
 /// ייעודי, או הדגל `RunOnSeparateThread` — שעובד אך המנוע מכריז שיוסר.
-class MultiWindowService {
+class MultiWindowService implements WindowOpener {
   const MultiWindowService();
 
   /// הערוץ מול ה-runner.
@@ -121,6 +122,7 @@ class MultiWindowService {
   /// [bounds] היא מסגרת מדויקת שדוחה את [origin] — כך חלון שהמשתמש
   /// **הצמיד** בגרירה נוצר בדיוק במסגרת שההצמדה נתנה. בלעדיה ההצמדה
   /// שהמשתמש ראה נעלמת ברגע שהחלון האמיתי מופיע.
+  @override
   Future<bool> openWindow({
     OpenedTab? tab,
     ({int x, int y})? origin,
@@ -172,6 +174,7 @@ class MultiWindowService {
   ///
   /// התקרה נבדקת מראש כדי שהמשתמש לא ימתין ל-`openWindow` ורק אז יקבל
   /// "אפשר לפתוח עד N חלונות". מחזיר true רק אם החלון נוצר בפועל.
+  @override
   Future<bool> openEmptyWindow() async {
     if (!canOpenWindows) return false;
     if (!await canOpenAnotherWindow()) {
@@ -222,6 +225,7 @@ class MultiWindowService {
   ///
   /// ⚠️ מחזיר `null` כש**לא ידוע** (הערוץ זרק). "חלון יחיד" מוחזר רק כשזו
   /// באמת התשובה — הנחת "אני האחרון" בכשל הרגה את שאר החלונות ב-`exit(0)`.
+  @override
   Future<({int count, int max, int engines})?> windowCount() async {
     if (!canOpenWindows) return _singleWindow;
     try {
@@ -352,6 +356,7 @@ class MultiWindowService {
   ///
   /// ⚠️ אפשרי **רק** מפני שחלון סגור מוסתר ולא נהרס: המנוע שלו חי עם
   /// הכרטיסיות שהיו בו, ולכן השחזור הוא הצגה בלבד ולא טעינה מחדש.
+  @override
   Future<bool> restoreLastClosedWindow() => _guarded(
     canOpenWindows,
     'restoreLastClosedWindow',
@@ -812,6 +817,7 @@ class MultiWindowService {
   ///
   /// ⚠️ מקום אחד. הלוגיקה `windowCount → count >= max` והמחרוזות שלה
   /// שוכפלו בשלושה אתרי קריאה, ובכל אחד מהם נוסחו מחדש.
+  @override
   Future<void> reportOpenWindowFailure() async {
     final info = await windowCount();
     if (info != null && info.count >= info.max) {
@@ -826,6 +832,7 @@ class MultiWindowService {
   /// ⚠️ בלי הבדיקה המוקדמת המשתמש משלים גרירה שלמה (כולל בחירת אזור
   /// ב-Snap Layouts) או ממתין ל-`openWindow` עד 20 שניות, ורק אז מקבל
   /// "אפשר לפתוח עד N חלונות".
+  @override
   Future<bool> canOpenAnotherWindow() async {
     if (!canOpenWindows) return false;
     final info = await windowCount();
