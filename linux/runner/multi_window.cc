@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 
+#include "main_hide_policy.h"
+
 // נדרשים ל-`register_plugins_for_secondary_window`, שרושם תת-קבוצה של
 // התוספים. `generated_plugin_registrant.h` לבדו רושם הכול או כלום.
 //
@@ -91,6 +93,29 @@ WindowEntry* MainEntry() {
 bool IsShown(const WindowEntry* entry) {
   return !entry->closed_by_user && entry->window != nullptr &&
          gtk_widget_get_visible(GTK_WIDGET(entry->window));
+}
+
+bool IsRunnerWindow(GtkWindow* window) {
+  for (const WindowEntry* entry : Entries()) {
+    if (entry->window == window) return true;
+  }
+  return false;
+}
+
+// חלון Dart (ריבוי תצוגות) גלוי: חלון עליון שאינו של ה-runner ותוכנו FlView.
+bool HasVisibleDartViewWindow() {
+  GList* toplevels = gtk_window_list_toplevels();
+  bool found = false;
+  for (GList* item = toplevels; item != nullptr && !found; item = item->next) {
+    GtkWindow* window = GTK_WINDOW(item->data);
+    if (IsRunnerWindow(window) || !gtk_widget_get_visible(GTK_WIDGET(window))) {
+      continue;
+    }
+    GtkWidget* child = gtk_bin_get_child(GTK_BIN(window));
+    found = child != nullptr && FL_IS_VIEW(child);
+  }
+  g_list_free(toplevels);
+  return found;
 }
 
 // ── רישום תוספים לחלון משני ─────────────────────────────────────────────
@@ -189,7 +214,9 @@ void Hide(WindowEntry* entry) {
   entry->closed_by_user = true;
   entry->hidden_at = ++g_hidden_sequence;
   gtk_widget_hide(GTK_WIDGET(entry->window));
-  if (LiveWindowCount() > 0) return;
+  if (!ShouldExitOnWindowHide(LiveWindowCount(), HasVisibleDartViewWindow())) {
+    return;
+  }
   // ⚠️ נסגר החלון האחרון בלי שעבר את מסלול הסגירה של Dart (שם
   // `windowCount() <= 1` מוביל לכיבוי מלא). אין מה לשטוף — רק לצאת.
   // לא `g_application_quit`: יציאה מלולאת GTK הורסת את ה-FlView-ים ואת
@@ -496,6 +523,18 @@ void MultiWindowMethodCallCb(FlMethodChannel*, FlMethodCall* call,
     } else {
       RespondSuccess(call, nullptr);
     }
+    return;
+  }
+  if (strcmp(method, "mainWindowHandle") == 0) {
+    // ה-GtkWindow* של הראשי, לחלונות Dart; ל-window_manager אין getId ב-Linux.
+    WindowEntry* main_entry = MainEntry();
+    if (main_entry == nullptr || main_entry->window == nullptr) {
+      RespondSuccess(call, nullptr);
+      return;
+    }
+    g_autoptr(FlValue) value =
+        fl_value_new_int(reinterpret_cast<intptr_t>(main_entry->window));
+    RespondSuccess(call, value);
     return;
   }
   if (strcmp(method, "restoreLastClosedWindow") == 0) {

@@ -55,6 +55,8 @@ static void my_application_activate(GApplication* application) {
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(
       project, self->dart_entrypoint_arguments);
+  // ⚠️ אין לשנות את ui_thread_policy: חלונות Dart קוראים ל-GTK ב-FFI סינכרוני,
+  // ולכן ה-isolate חייב לרוץ על ה-thread הראשי (ברירת המחדל).
 
   FlView* view = fl_view_new(project);
   GdkRGBA background_color;
