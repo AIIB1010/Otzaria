@@ -138,6 +138,7 @@ void main() {
     await pumpEventQueue();
     _d.setVisiblePluginInstances(const {});
     await pumpEventQueue();
+    PluginRestoreStateStore.instance.set(_key(id), {'screen': id});
     c.evals.clear();
     c.calls.clear();
     return c;
@@ -462,9 +463,9 @@ void main() {
       await _d.checkDiscard();
       PluginUnsavedChangesRegistry.instance.removeInstance(_key());
 
-      _d.beginInstanceWork(_pid, instanceId: 'a');
+      final endWork = _d.beginInstanceWork(_pid, instanceId: 'a');
       await _d.checkDiscard();
-      _d.endInstanceWork(_pid, instanceId: 'a');
+      endWork();
 
       PluginToolbarRegistry.instance.register(
         _pid,

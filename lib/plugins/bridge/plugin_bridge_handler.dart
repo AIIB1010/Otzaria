@@ -37,10 +37,8 @@ class PluginBridgeHandler {
   final RateLimiter _rateLimiter;
   final PluginRegistryRepository _registry;
 
-  /// מופעלים בתחילת ובסוף כל RPC — מאפשרים למופע רקע לאותת "אני עסוק"
-  /// למנגנון הכיבוי אחרי חוסר פעילות, בלי לקטוע RPC ארוך באמצעו.
-  final void Function()? onWorkStarted;
-  final void Function()? onWorkEnded;
+  /// תחילת RPC מחזירה פעולת סיום של אותו מופע ודף.
+  final VoidCallback Function()? onWorkStarted;
 
   PluginBridgeHandler(
     this.plugin, {
@@ -48,7 +46,6 @@ class PluginBridgeHandler {
     PluginRegistryRepository? registry,
     RateLimiter? rateLimiter,
     this.onWorkStarted,
-    this.onWorkEnded,
   }) : _registry = registry ?? PluginRegistryRepository(),
        _rateLimiter = rateLimiter ?? RateLimiter();
 
@@ -179,11 +176,11 @@ class PluginBridgeHandler {
       return _errorResp("error.forbidden", "Bridge call is not authorized");
     }
 
-    onWorkStarted?.call();
+    final endWork = onWorkStarted?.call();
     try {
       return await _dispatchRpc(args, eventSink: eventSink);
     } finally {
-      onWorkEnded?.call();
+      endWork?.call();
     }
   }
 

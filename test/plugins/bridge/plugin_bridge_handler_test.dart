@@ -1072,13 +1072,17 @@ void main() {
   group('PluginBridgeHandler — דחייה לפני onWorkStarted', () {
     test('קריאה ללא nonce תקין אינה מסמנת תחילת עבודה ונספרת במגביל', () async {
       var workStarted = 0;
+      var workEnded = 0;
       final limiter = _BlockingRateLimiter();
       final handler = PluginBridgeHandler(
         _buildInstalledPlugin(),
         adapter: _FakeAdapter(),
         registry: _StubRegistry(true),
         rateLimiter: limiter,
-        onWorkStarted: () => workStarted++,
+        onWorkStarted: () {
+          workStarted++;
+          return () => workEnded++;
+        },
       );
 
       final resp =
@@ -1091,6 +1095,7 @@ void main() {
       expect(resp['error']['code'], 'error.rate_limited');
       expect(limiter.consumeCalls, 1);
       expect(workStarted, 0);
+      expect(workEnded, 0);
     });
 
     test('קריאה עם nonce תקין מסמנת תחילת עבודה וסיומה', () async {
@@ -1100,8 +1105,10 @@ void main() {
         _buildInstalledPlugin(permissions: const ['library.content.read']),
         adapter: _FakeAdapter(result: const {'ok': true}),
         registry: _StubRegistry(true),
-        onWorkStarted: () => workStarted++,
-        onWorkEnded: () => workEnded++,
+        onWorkStarted: () {
+          workStarted++;
+          return () => workEnded++;
+        },
       );
 
       await handler.handleRpcForTesting(_getBookContentRequest());

@@ -341,8 +341,10 @@ class _BackgroundPluginRunnerState extends State<_BackgroundPluginRunner>
     initPluginHost(
       onReload: _reloadFromDisk,
       onBackgroundInstanceDone: () => lazy.requestImmediateTeardown(pluginId),
-      onWorkStarted: () => lazy.beginWork(pluginId),
-      onWorkEnded: () => lazy.endWork(pluginId),
+      onWorkStarted: () {
+        lazy.beginWork(pluginId);
+        return () => lazy.endWork(pluginId);
+      },
     );
   }
 
@@ -442,8 +444,8 @@ class _BackgroundPluginRunnerState extends State<_BackgroundPluginRunner>
         statusBarEnabled: false,
         cacheEnabled: !widget.plugin.isDevelopment,
         isInspectable: kDebugMode,
-        // בלי זה נפילת ה-renderer ב-Android הורגת את כל האפליקציה.
-        useOnRenderProcessGone: true,
+        // Android dispose ממתין ל-about:blank; אחרי מות renderer אין הבטחת destroy.
+        useOnRenderProcessGone: false,
         resourceCustomSchemes: _usesAssetScheme
             ? const [pluginAssetScheme]
             : const [],

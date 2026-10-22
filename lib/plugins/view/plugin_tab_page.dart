@@ -93,8 +93,8 @@ InAppWebViewSettings buildPluginTabWebViewSettings({
     supportZoom: false,
     pinchZoomEnabled: false,
     cacheEnabled: !isDevelopment,
-    // בלי זה נפילת ה-renderer ב-Android הורגת את כל האפליקציה.
-    useOnRenderProcessGone: true,
+    // Android dispose ממתין ל-about:blank; אחרי מות renderer אין הבטחת destroy.
+    useOnRenderProcessGone: false,
     isInspectable: isDevelopment || kDebugMode,
     resourceCustomSchemes: pluginAssetSchemeEnabled
         ? const [pluginAssetScheme]
@@ -239,8 +239,6 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
       readerTab: widget.readerTab,
       onWorkStarted: () =>
           dispatcher.beginInstanceWork(pluginId, instanceId: instanceId),
-      onWorkEnded: () =>
-          dispatcher.endInstanceWork(pluginId, instanceId: instanceId),
     );
     dispatcher
       ..ensureLifecycleObserver()

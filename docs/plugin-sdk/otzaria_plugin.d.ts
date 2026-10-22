@@ -2493,7 +2493,7 @@ export interface OtzariaGlobal {
     payload?: { enabled?: boolean }
   ): Promise<OtzariaResponse<boolean>>;
 
-  /** שומר מצב שיחזור ב-`plugin.boot.restore` כשהדף של הכרטיסייה ייטען מחדש. */
+  /** שומר מצב שחזור ב-`plugin.boot.restore`; מצב שאינו null מאפשר פינוי אוטומטי של הכרטיסייה. */
   call(
     method: 'plugin.setRestoreState',
     payload: PluginSetRestoreStateArgs

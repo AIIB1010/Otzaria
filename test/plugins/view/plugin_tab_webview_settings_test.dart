@@ -24,9 +24,9 @@ void main() {
       expect(settings.cacheEnabled, isTrue);
     });
 
-    test('נפילת renderer ב-Android מטופלת ולא הורגת את האפליקציה', () {
+    test('התאוששות Android אינה מופעלת ללא destroy בטוח של renderer מת', () {
       final settings = buildPluginTabWebViewSettings(isDevelopment: false);
-      expect(settings.useOnRenderProcessGone, isTrue);
+      expect(settings.useOnRenderProcessGone, isFalse);
     });
 
     test('מצב פיתוח — ללא קאש ועם inspect', () {

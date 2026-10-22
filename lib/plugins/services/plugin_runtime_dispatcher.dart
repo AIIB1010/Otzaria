@@ -334,6 +334,7 @@ class PluginRuntimeDispatcher {
     // העברת פוקוס ל-WebView שהדף בו עוד לא נטען מקדימה את ה-autofocus שלו.
     _instanceFor(pluginId, instanceId)
       ..controller = controller
+      ..busyCount = 0
       ..released = false
       ..ready = false;
   }
@@ -388,15 +389,21 @@ class PluginRuntimeDispatcher {
     WidgetsBinding.instance.addObserver(observer);
   }
 
-  /// התחלת RPC של מופע קדמי — מופע עסוק אינו מפונה.
-  void beginInstanceWork(String pluginId, {required String instanceId}) {
+  /// תחילת RPC מחזירה פעולת סיום הקשורה לדף שהתחיל אותה.
+  VoidCallback beginInstanceWork(
+    String pluginId, {
+    required String instanceId,
+  }) {
     final instance = _instances[_keyOf(pluginId, instanceId)];
-    if (instance != null) instance.busyCount++;
-  }
-
-  void endInstanceWork(String pluginId, {required String instanceId}) {
-    final instance = _instances[_keyOf(pluginId, instanceId)];
-    if (instance != null && instance.busyCount > 0) instance.busyCount--;
+    final controller = instance?.controller;
+    if (instance == null || controller == null) return () {};
+    instance.busyCount++;
+    return () {
+      if (identical(instance.controller, controller) &&
+          instance.busyCount > 0) {
+        instance.busyCount--;
+      }
+    };
   }
 
   /// מעביר את פוקוס המקלדת אל המופע הקדמי [instanceId] של [pluginId], כדי
@@ -1019,8 +1026,9 @@ class PluginRuntimeDispatcher {
           memoryPressure: memoryPressure,
         );
         for (final key in victims) {
-          final host = _instances[key]?.host;
-          if (host == null) continue;
+          final instance = _instances[key];
+          if (instance == null || _isDiscardExempt(instance)) continue;
+          final host = instance.host!;
           debugPrint('PluginRuntimeDispatcher: discarding ${key.pluginId}');
           markInstanceReleased(
             key.pluginId,
@@ -1036,6 +1044,8 @@ class PluginRuntimeDispatcher {
     final pluginId = instance.pluginId;
     final host = instance.host;
     if (host == null || !host.canDiscard || !instance.ready) return true;
+    // תוסף שלא שמר מצב אינו יודע לשחזר את הדף אחרי פינוי.
+    if (!PluginRestoreStateStore.instance.has(key)) return true;
     if (instance.busyCount > 0 ||
         instance.graceTimer != null ||
         instance.pendingRedeliveries.isNotEmpty ||
@@ -1324,24 +1334,20 @@ class PluginRuntimeDispatcher {
       );
       if (selection.now.isEmpty && selection.queue.isEmpty) return;
       if (!await _canReceiveEvent(pluginId, topic)) return;
-      final targetControllers = [
-        for (final target in selection.now)
-          if (ownsController(
-            pluginId,
-            target.controller,
-            instanceId: target.instanceId,
-          ))
-            target.controller,
-      ];
-      for (final key in selection.queue) {
-        final instance = _instances[key];
-        final controller = instance?.controller;
-        if (instance == null || controller == null) continue;
-        if (instance.suspended) {
+      final targetControllers = <InAppWebViewController>[];
+      for (final target in [...selection.now, ...selection.queue]) {
+        if (!ownsController(
+          pluginId,
+          target.controller,
+          instanceId: target.instanceId,
+        )) {
+          continue;
+        }
+        final instance = _instances[_keyOf(pluginId, target.instanceId)]!;
+        if (instance.suspended && !instance.isBackground) {
           _enqueue(instance, queueKey, topic, json());
-        } else if (!targetControllers.contains(controller)) {
-          // הוחייה בזמן בדיקת ההרשאה — הוא כבר פעיל ומקבל עכשיו.
-          targetControllers.add(controller);
+        } else {
+          targetControllers.add(target.controller);
         }
       }
       if (targetControllers.isEmpty) return;
@@ -1686,7 +1692,7 @@ class PluginRuntimeDispatcher {
   ///
   /// `queue`: מופעים מושהים — תמיד לאירוע מצב ([isState]), כי כל מופע קדמי
   /// מצייר UI; ולאירוע חד-פעמי רק כשאין יעד אחר.
-  ({List<_EventTarget> now, List<PluginInstanceKey> queue}) _selectEventTargets(
+  ({List<_EventTarget> now, List<_EventTarget> queue}) _selectEventTargets(
     String pluginId, {
     required bool preferBackground,
     required bool isState,
@@ -1694,13 +1700,13 @@ class PluginRuntimeDispatcher {
     final keys = _instancesByPlugin[pluginId] ?? const <PluginInstanceKey>{};
     _EventTarget? background;
     final active = <_EventTarget>[];
-    final suspended = <PluginInstanceKey>[];
+    final suspended = <_EventTarget>[];
     for (final key in keys) {
       final instance = _instances[key];
       final controller = instance?.controller;
       if (instance == null || controller == null) continue;
       if (instance.suspended && !instance.isBackground) {
-        suspended.add(key);
+        suspended.add(_EventTarget(key.instanceId, controller));
         continue;
       }
       // מופע שאירוע קודם פג לו הזמן — כל שידור אליו עולה 3 שניות, ולכן הוא
@@ -1722,7 +1728,7 @@ class PluginRuntimeDispatcher {
         : <_EventTarget>[];
     return (
       now: now,
-      queue: isState || now.isEmpty ? suspended : const <PluginInstanceKey>[],
+      queue: isState || now.isEmpty ? suspended : const <_EventTarget>[],
     );
   }
 }

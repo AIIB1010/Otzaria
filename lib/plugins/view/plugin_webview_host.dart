@@ -167,8 +167,7 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
     required Future<void> Function() onReload,
     TextBookTab? readerTab,
     bool Function()? onBackgroundInstanceDone,
-    void Function()? onWorkStarted,
-    void Function()? onWorkEnded,
+    VoidCallback Function()? onWorkStarted,
   }) {
     pluginSystemBloc = context.read<PluginSystemBloc>();
     final historyBloc = context.read<HistoryBloc>();
@@ -327,7 +326,6 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
       adapter: adapter,
       registry: pluginRegistryRepository,
       onWorkStarted: onWorkStarted,
-      onWorkEnded: onWorkEnded,
     );
     // Pre-fetch so onLoadStop has no async gap
     ensurePackageInfo();
