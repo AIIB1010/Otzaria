@@ -67,6 +67,8 @@ dependencies:
       url: https://github.com/Otzaria/otzaria_icons
       ref: 5225cd36c59097fe1f24a39fb60f9c2c0e15e47c
   file_picker: ^13.1.0
+  # FilePickerWindowsOptions: בעלים מפורש לדיאלוג (חלון Dart ולא החלון שבחזית).
+  windows_file_picker: ^2.0.1
   provider: ^6.1.5+1
   printing: ^5.15.1
   pdf: ^3.13.1
@@ -173,6 +175,8 @@ dependency_overrides:
       path: packages/flutter
   # TODO: לחזור ל-pub.dev אחרי שחרור DavBfr/dart_pdf#1984, #1985, #1986, #1987, #1988
   # (הדפסה ב-Windows ב-thread נפרד, PDFium עצל ופרטי, השלמת עבודה שנכשלה ב-Linux). קומיט שילוב.
+  # TODO(ריבוי חלונות, S5): דיאלוגי ההדפסה בבעלות החלון הפעיל (ענף fix/windows-dialog-owner-active-window)
+  # טרם נדחף ל-palmoni5/dart_pdf; אחרי הדחיפה וה-PR לאפסטרים — לעדכן כאן את ה-ref.
   printing:
     git:
       url: https://github.com/palmoni5/dart_pdf
