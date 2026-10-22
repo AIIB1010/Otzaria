@@ -18,6 +18,8 @@ import 'package:otzaria_search_engine/otzaria_search_engine.dart'
         UserRegexMatcher,
         generateHighlightPattern,
         splitQueryWords;
+import 'package:otzaria/search/utils/literal_search_pattern.dart'
+    show literalQueryWordEdges;
 import 'package:otzaria/search/utils/user_regex_query.dart';
 
 /// רגקס להסרת תגי HTML.
@@ -1334,6 +1336,9 @@ String highLight(
     }
   }
 
+  if (partialWordMatch && !yellowBackground) {
+    matches = _anchoredToQueryEdges(matches, data, searchQuery);
+  }
   if (matches.isEmpty) return data;
 
   // מעבר אחד עם buffer: שרשור substring לכל התאמה מעתיק את כל השורה בכל פעם,
@@ -1412,7 +1417,7 @@ List<List<int>> computeHighlightRanges(
     for (final eligible in compiled.boundaryEligible)
       eligible && !partialWordMatch,
   ];
-  final matches = _findHighlightMatches(
+  var matches = _findHighlightMatches(
     data,
     compiled,
     requireTokenBoundaries,
@@ -1420,6 +1425,9 @@ List<List<int>> computeHighlightRanges(
     isSearchResultLine: isSearchResultLine,
     isFuzzy: isFuzzy,
   );
+  if (partialWordMatch) {
+    matches = _anchoredToQueryEdges(matches, data, searchQuery);
+  }
   final ranges = <List<int>>[];
   for (final highlightMatch in matches) {
     final base = highlightMatch.start;
@@ -1513,7 +1521,27 @@ List<_HighlightMatch> _queryMatches(
     for (final eligible in compiled.boundaryEligible)
       eligible && !partialWordMatch,
   ];
-  return _findHighlightMatches(text, compiled, requireTokenBoundaries);
+  final matches = _findHighlightMatches(text, compiled, requireTokenBoundaries);
+  return partialWordMatch
+      ? _anchoredToQueryEdges(matches, text, searchQuery)
+      : matches;
+}
+
+/// בהתאמה חלקית רווח בקצה השאילתה דורש גבול מילה באותו צד, כמו בחיפוש
+/// הליטרלי ([literalQueryWordEdges]).
+List<_HighlightMatch> _anchoredToQueryEdges(
+  List<_HighlightMatch> matches,
+  String data,
+  String searchQuery,
+) {
+  final edges = literalQueryWordEdges(searchQuery);
+  if (!edges.start && !edges.end) return matches;
+  return [
+    for (final match in matches)
+      if ((!edges.start || _hasTokenBoundaryBefore(data, match.start)) &&
+          (!edges.end || _hasTokenBoundaryAfter(data, match.end)))
+        match,
+  ];
 }
 
 Future<bool> hasTopic(
