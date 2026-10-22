@@ -1635,7 +1635,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
       settingsRepository: settingsRepository,
       // הדוק שייך לתהליך: מאזין אחד מעל היקף החלון.
       child: DockProgressListener(
-        // בלי הדגל הענף נגזם מהבנייה, יחד עם כל קוד חלונות ה-Dart.
+        // בבנייה עם OTZARIA_MULTIVIEW=false, או כשהבעלים לא הותקן, תמיד מודל A.
         child: MultiViewMode.enabled
             ? MultiViewHost(
                 contentBuilder: (context, entry) =>
