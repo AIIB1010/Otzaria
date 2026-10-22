@@ -400,6 +400,34 @@ void main() {
     expect(activations, ['p1', 'p1']);
   });
 
+  test(
+    'work from a crashed background page cannot finish its replacement job',
+    () {
+      service.syncPlugin(
+        'p1',
+        broadcastTopics: const {},
+        scheduleStartup: false,
+      );
+      final oldGeneration = service.activationGeneration('p1');
+      service.trackIdleTeardown('p1', generation: oldGeneration);
+      service.beginWork('p1');
+
+      service.onBackgroundProcessGone('p1', generation: oldGeneration);
+      expect(service.isBusy('p1'), isTrue);
+      final newGeneration = service.activationGeneration('p1');
+      expect(newGeneration, oldGeneration + 1);
+      service.trackIdleTeardown('p1', generation: newGeneration);
+      service.beginWork('p1');
+
+      service.onBackgroundInstanceClosed('p1', generation: oldGeneration);
+      service.endWork('p1');
+      expect(service.isBusy('p1'), isTrue);
+      service.endWork('p1');
+      expect(service.isBusy('p1'), isFalse);
+      service.removePlugin('p1');
+    },
+  );
+
   group('תנאי when על נושאי הפעלה', () {
     PluginWhenCondition darkModeIs(bool value) => PluginWhenCondition.fromJson({
       'setting': {'key': SettingsRepository.keyDarkMode, 'equals': value},
