@@ -348,6 +348,33 @@ void main() {
       expect(await sessions.loadAll(), hasLength(WindowBus.slotCount));
       expect((await sessions.load(4))!.tabsJson, contains('חלון 4'));
     });
+
+    test('הצירוף למארח שומר את הכרטיסיה הנוכחית והשולחן שלו', () async {
+      WindowBus.instance.register();
+      final host = WindowBus.instance.slot!;
+      await TabsRepository().saveTabs([_tab('א'), _tab('ב')], 1);
+      await sessions.saveActiveWorkspace(host, 'ws-main');
+      for (final slot in [2, 6]) {
+        await sessions.save(
+          slot,
+          tabsJson: '[${_encoded('חלון $slot')}]',
+          currentIndex: 0,
+        );
+      }
+      // תקרה 2: משבצת 2 נשארת, ו-3 ו-6 מצורפות לפי הסדר אחרי כרטיסיות המארח.
+      await sessions.save(3, tabsJson: '[${_encoded('ג')}]', currentIndex: 0);
+
+      expect(await sessions.compactAround(host, 2), [2]);
+      final own = (await sessions.load(host))!;
+      expect(own.currentIndex, 1);
+      expect(own.activeWorkspaceId, 'ws-main');
+      expect(
+        TabsRepository().loadTabs().map((t) => t.title),
+        ['א', 'ב', 'ג', 'חלון 6'],
+      );
+      expect((await sessions.load(2))!.tabsJson, contains('חלון 2'));
+      expect(await sessions.loadAll(), hasLength(2));
+    });
   });
 
   group('אימוץ סשנים יתומים', () {
