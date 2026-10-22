@@ -277,7 +277,7 @@ void main() {
       expect(await drops.sendTabToWindow(1, tab, index: 0), isTrue);
       final added = (tabs.events[0] as AddTab).tab;
       expect(added.title, 'גימטריה');
-      expect(tabs.events[1], MoveTab(added, 0));
+      expect(tabs.events.single, AddTab(added, index: 0));
       expect(nav.events.single, const NavigateToScreen(Screen.reading));
       await tester.pump();
       expect(runner.named('raiseSelf'), hasLength(1));
@@ -285,7 +285,7 @@ void main() {
       // bloc היעד נסגר באמצע: לא נקלטה, והמקור שומר את הכרטיסיה.
       await tabs.close();
       expect(await drops.sendTabToWindow(1, tab), isFalse);
-      expect(tabs.events, hasLength(2));
+      expect(tabs.events, hasLength(1));
 
       await tester.pumpWidget(const SizedBox());
       expect(await drops.sendTabToWindow(1, tab), isFalse);

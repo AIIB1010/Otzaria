@@ -138,7 +138,7 @@ class InProcessTabDrops {
     if (target == null) return false;
     final OpenedTab copy;
     try {
-      copy = OpenedTab.fromJson(tab.toJson());
+      copy = OpenedTab.fromJson(tab.toTransferJson());
     } catch (e) {
       debugPrint('InProcessTabDrops: failed to copy tab: $e');
       return false;
@@ -189,8 +189,7 @@ class _InProcessTabDropReceiverState extends State<InProcessTabDropReceiver> {
     if (tabsBloc.isClosed) return false;
     // החיווי נעלם ברגע שהכרטיסיה התקבלה.
     _dragState.drag.value = null;
-    tabsBloc.add(AddTab(tab));
-    if (index != null) tabsBloc.add(MoveTab(tab, index));
+    tabsBloc.add(AddTab(tab, index: index));
     context.read<NavigationBloc>().add(const NavigateToScreen(Screen.reading));
     unawaited(_raise());
     return true;
