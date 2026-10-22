@@ -48,11 +48,13 @@ class UiSnack {
 
   static void show(
     String message, {
+    AppWindowKeys? window,
     Duration? duration,
     IconData? icon,
     bool enableHaptic = true,
     VoidCallback? onTap,
   }) => _showOverlay(
+    window: window,
     message: message,
     variant: _SnackVariant.standard,
     duration: duration ?? const Duration(seconds: 6),
@@ -63,9 +65,11 @@ class UiSnack {
 
   static void showError(
     String message, {
+    AppWindowKeys? window,
     Duration? duration,
     VoidCallback? onTap,
   }) => _showOverlay(
+    window: window,
     message: message,
     variant: _SnackVariant.error,
     icon: FluentIcons.error_circle_24_regular,
@@ -76,9 +80,11 @@ class UiSnack {
 
   static void showSuccess(
     String message, {
+    AppWindowKeys? window,
     Duration? duration,
     VoidCallback? onTap,
   }) => _showOverlay(
+    window: window,
     message: message,
     variant: _SnackVariant.standard,
     icon: FluentIcons.checkmark_circle_24_regular,
@@ -89,9 +95,11 @@ class UiSnack {
 
   static void showWarning(
     String message, {
+    AppWindowKeys? window,
     Duration? duration,
     VoidCallback? onTap,
   }) => _showOverlay(
+    window: window,
     message: message,
     variant: _SnackVariant.warning,
     icon: FluentIcons.warning_24_regular,
@@ -123,7 +131,12 @@ class UiSnack {
   );
 
   /// בדיקה - חיצים מסתובבים, נשאר עד שמסתירים
-  static void showChecking(String message, {Object? owner}) => _showOverlay(
+  static void showChecking(
+    String message, {
+    Object? owner,
+    AppWindowKeys? window,
+  }) => _showOverlay(
+    window: window,
     owner: owner,
     message: message,
     variant: _SnackVariant.standard,
@@ -134,9 +147,9 @@ class UiSnack {
   );
 
   /// מסתיר את ההודעה הנוכחית, או רק הודעה ששייכת ל-[owner].
-  static void hide({Object? owner}) {
+  static void hide({Object? owner, AppWindowKeys? window}) {
     if (owner == null) {
-      _removeOverlay(AppWindowKeys.current._snackSlot);
+      _removeOverlay((window ?? AppWindowKeys.current)._snackSlot);
       return;
     }
     for (final slot in _liveSlots.toList()) {
@@ -146,6 +159,7 @@ class UiSnack {
   // ── Internal ────────────────────────────────────────────────────────────────
 
   static void _showOverlay({
+    AppWindowKeys? window,
     Object? owner,
     required String message,
     required _SnackVariant variant,
@@ -158,8 +172,9 @@ class UiSnack {
     VoidCallback? onTap,
   }) {
     // החלון נקבע פעם אחת, כדי שכל ההמשך (גם אחרי פריים) יוצג באותו חלון.
-    final navigator = AppWindowKeys.current.navigator;
-    final slot = AppWindowKeys.current._snackSlot;
+    final keys = window ?? AppWindowKeys.current;
+    final navigator = keys.navigator;
+    final slot = keys._snackSlot;
     _removeOverlay(slot);
     final notificationOwner = slot.owner = owner ?? Object();
     _liveSlots.add(slot);
@@ -167,6 +182,7 @@ class UiSnack {
     final context = navigator.currentContext;
     if (context == null) {
       debugPrint('⚠️ UiSnack: navigatorKey.currentContext is null');
+      _removeOverlay(slot);
       return;
     }
 

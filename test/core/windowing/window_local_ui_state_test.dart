@@ -1,3 +1,9 @@
+import 'package:otzaria/app_scope/app_scope_providers.dart';
+import 'package:otzaria/app_scope/window_scope_providers.dart';
+import 'package:otzaria/history/history_repository.dart';
+import 'package:otzaria/settings/engine/app_settings_store.dart';
+import 'package:otzaria/settings/engine/settings_repository.dart';
+import '../../helpers/memory_settings_cache.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/ui_snack.dart';
@@ -163,6 +169,114 @@ void main() {
       await tester.pump();
       expect(find.text('ליד תפריט'), findsNothing);
     });
+  });
+
+  testWidgets('סיום ריחוף סוגר את החלונית של החלון המקורי אחרי שינוי פוקוס', (
+    tester,
+  ) async {
+    final a = AppWindowKeys();
+    final b = AppWindowKeys();
+    await pumpTwoWindows(tester, a, b);
+    for (final keys in [a, b]) {
+      final label = identical(keys, a) ? 'חלון א' : 'חלון ב';
+      LinkPreviewOverlay.showContent(
+        tester.element(find.text(label)),
+        contentBuilder: (_) => Text(identical(keys, a) ? 'ריחוף א' : 'ריחוף ב'),
+        globalPosition: tester.getCenter(find.text(label)),
+        hoverMode: true,
+      );
+    }
+    await tester.pump();
+    AppWindowKeys.activate(b);
+    LinkPreviewOverlay.scheduleHide(a);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    expect(inWindow(a, 'ריחוף א'), findsNothing);
+    expect(inWindow(b, 'ריחוף ב'), findsOneWidget);
+    LinkPreviewOverlay.dismiss(window: b);
+    await tester.pump();
+  });
+
+  testWidgets('השלמת הודעה אסינכרונית נשארת בחלון שהתחיל אותה', (tester) async {
+    final a = AppWindowKeys();
+    final b = AppWindowKeys();
+    await pumpTwoWindows(tester, a, b);
+    final owner = Object();
+    AppWindowKeys.activate(b);
+    UiSnack.showChecking('מעביר בא', owner: owner, window: a);
+    UiSnack.showChecking('בדיקה בב', window: b);
+    await tester.pump();
+    await Future<void>.value();
+    UiSnack.hide(owner: owner);
+    UiSnack.showSuccess('הועבר בא', window: a);
+    await tester.pump();
+    expect(inWindow(a, 'הועבר בא'), findsOneWidget);
+    expect(inWindow(b, 'בדיקה בב'), findsOneWidget);
+    UiSnack.hide(window: a);
+    UiSnack.hide(window: b);
+    await tester.pump();
+  });
+
+  testWidgets('סגירת היקף חלון מנקה רק את החלוניות וההודעות שלו', (
+    tester,
+  ) async {
+    await Settings.init(cacheProvider: MemorySettingsCache());
+    final a = AppWindowKeys();
+    final b = AppWindowKeys();
+    var dismissedB = 0;
+    Widget tree(bool showB) => AppScopeProviders(
+      settingsRepository: SettingsRepository(),
+      child: Directionality(
+        textDirection: TextDirection.rtl,
+        child: Row(
+          children: [
+            for (final keys in [a, if (showB) b])
+              Expanded(
+                key: ObjectKey(keys),
+                child: AppWindowScope(
+                  controller: window,
+                  geometry: window,
+                  keys: keys,
+                  child: WindowScopeProviders(
+                    historyRepository: HistoryRepository(),
+                    child: MaterialApp(
+                      navigatorKey: keys.navigator,
+                      home: Scaffold(
+                        body: Text(identical(keys, a) ? 'א' : 'ב'),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+    await tester.pumpWidget(tree(true));
+    for (final keys in [a, b]) {
+      UiSnack.showChecking(
+        identical(keys, a) ? 'ממתין בא' : 'ממתין בב',
+        window: keys,
+      );
+      final context = tester.element(
+        inWindow(keys, identical(keys, a) ? 'א' : 'ב'),
+      );
+      LinkPreviewOverlay.showContent(
+        context,
+        contentBuilder: (_) =>
+            Text(identical(keys, a) ? 'חלונית א' : 'חלונית ב'),
+        globalPosition: const Offset(40, 40),
+        onDismissed: identical(keys, b) ? () => dismissedB++ : null,
+      );
+    }
+    await tester.pump();
+    AppWindowKeys.activate(a);
+    await tester.pumpWidget(tree(false));
+    expect(dismissedB, 1);
+    expect(inWindow(a, 'חלונית א'), findsOneWidget);
+    expect(inWindow(a, 'ממתין בא'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(tester.takeException(), isNull);
   });
 
   group('משגרי כלים ודפי תוספים', () {

@@ -162,9 +162,10 @@ class LinkPreviewOverlay {
     return token;
   }
 
-  /// החלונית ש-[token] מזהה, בכל חלון; `null` — זו של החלון הנוכחי.
-  static _PreviewSlot? _slotFor(Object? token) {
-    if (token == null) return AppWindowKeys.current._previewSlot;
+  /// מזהה חלונית או מפתחות חלון; בלי מזהה — [window] או החלון הפעיל.
+  static _PreviewSlot? _slotFor(Object? token, AppWindowKeys? window) {
+    if (token == null) return (window ?? AppWindowKeys.current)._previewSlot;
+    if (token is AppWindowKeys) return token._previewSlot;
     for (final slot in _liveSlots) {
       if (identical(slot.token, token)) return slot;
     }
@@ -173,17 +174,17 @@ class LinkPreviewOverlay {
 
   /// מתזמנת סגירה קרובה (הסמן עזב את העוגן). כניסת הסמן לחלונית מבטלת אותה.
   static void scheduleHide([Object? token]) {
-    _slotFor(token)?.activePanel?._scheduleHide();
+    _slotFor(token, null)?.activePanel?._scheduleHide();
   }
 
   /// מבטלת סגירה מתוזמנת (הסמן חזר לעוגן בזמן שהחלונית פתוחה).
   static void cancelScheduledHide([Object? token]) {
-    _slotFor(token)?.activePanel?._cancelHide();
+    _slotFor(token, null)?.activePanel?._cancelHide();
   }
 
   /// סוגרת את החלונית. [token] — סוגר רק אם היא עדיין המוצגת (ולא הוחלפה).
-  static void dismiss({Object? token}) {
-    final slot = _slotFor(token);
+  static void dismiss({Object? token, AppWindowKeys? window}) {
+    final slot = _slotFor(token, window);
     if (slot != null) _dismissSlot(slot);
   }
 

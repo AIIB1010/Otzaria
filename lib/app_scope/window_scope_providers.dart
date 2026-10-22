@@ -6,6 +6,7 @@ import 'package:otzaria/core/focus_repository.dart';
 import 'package:otzaria/core/messages/window_messages.dart';
 import 'package:otzaria/core/startup_timeline.dart';
 import 'package:otzaria/core/ui_snack.dart';
+import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
 import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/find_ref/bloc/find_ref_bloc.dart';
@@ -32,6 +33,7 @@ import 'package:otzaria/tabs/bloc/tabs_event.dart';
 import 'package:otzaria/tabs/models/tab.dart';
 import 'package:otzaria/tabs/tabs_repository.dart';
 import 'package:otzaria/utils/navigation/book_open_coordinator.dart';
+import 'package:otzaria/widgets/misc/link_preview_overlay.dart';
 import 'package:otzaria/work_status/work_status_cubit.dart';
 import 'package:otzaria/workspaces/bloc/workspace_bloc.dart';
 import 'package:otzaria/workspaces/bloc/workspace_event.dart';
@@ -53,6 +55,11 @@ class WindowScopeProviders extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiRepositoryProvider(
       providers: [
+        RepositoryProvider<_WindowUiLifetime>(
+          lazy: false,
+          create: (_) => _WindowUiLifetime(AppWindowKeys.of(context)),
+          dispose: (lifetime) => lifetime.dispose(),
+        ),
         RepositoryProvider<FocusRepository>(
           create: (_) => FocusRepository(),
         ),
@@ -224,6 +231,16 @@ class WindowScopeProviders extends StatelessWidget {
         child: child,
       ),
     );
+  }
+}
+
+class _WindowUiLifetime {
+  _WindowUiLifetime(this.keys);
+  final AppWindowKeys keys;
+
+  void dispose() {
+    UiSnack.hide(window: keys);
+    LinkPreviewOverlay.dismiss(window: keys);
   }
 }
 
