@@ -9,6 +9,7 @@ import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:otzaria_icons/otzaria_icons.dart';
 import 'package:otzaria/core/windowing/app_window_caption.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
+import 'package:otzaria/core/windowing/window_fullscreen_cubit.dart';
 import 'package:otzaria/core/windowing/window_manager_app_window_controller.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/tabs/models/combined_tab.dart';
@@ -550,6 +551,7 @@ void main() {
 
   group('שינוי הגדרות', () {
     late _TestSettingsBloc settingsBloc;
+    late WindowFullscreenCubit fullscreenCubit;
 
     Future<void> pumpBar(WidgetTester tester) async {
       final tabs = [for (var i = 0; i < 5; i++) _makeTextTab('ספר $i')];
@@ -558,6 +560,10 @@ void main() {
         const NavigationState(currentScreen: Screen.reading),
       );
       settingsBloc = _TestSettingsBloc(SettingsState.initial());
+      fullscreenCubit = WindowFullscreenCubit(
+        initial: false,
+        persist: (_) async {},
+      );
       addTearDown(() async {
         for (final tab in tabs) {
           tab.dispose();
@@ -565,6 +571,7 @@ void main() {
         await tabsBloc.close();
         await navigationBloc.close();
         await settingsBloc.close();
+        await fullscreenCubit.close();
       });
       await _setSurfaceSize(tester, const Size(1200, 800));
       await _pumpTitleBar(
@@ -572,6 +579,7 @@ void main() {
         tabsBloc: tabsBloc,
         navigationBloc: navigationBloc,
         settingsBloc: settingsBloc,
+        fullscreenCubit: fullscreenCubit,
       );
       await tester.pumpAndSettle();
     }
@@ -618,10 +626,8 @@ void main() {
       expect(find.byType(ReadingTabStrip), findsOneWidget);
       expect(find.byTooltip('מסך מלא'), findsOneWidget);
 
-      await emitSettings(
-        tester,
-        settingsBloc.state.copyWith(isFullscreen: true),
-      );
+      await fullscreenCubit.set(true);
+      await tester.pump();
       expect(find.byTooltip('צא ממסך מלא'), findsOneWidget);
 
       await Settings.setValue<String>('key-shortcut-open-history', 'ctrl+j');
@@ -2732,6 +2738,7 @@ Future<void> _pumpTitleBar(
   required SettingsBloc settingsBloc,
   HistoryBloc? historyBloc,
   WorkspaceBloc? workspaceBloc,
+  WindowFullscreenCubit? fullscreenCubit,
 }) async {
   await tester.pumpWidget(
     // CustomTitleBar שולף את החלון מ-[AppWindowScope] (maximize בלחיצה
@@ -2745,6 +2752,15 @@ Future<void> _pumpTitleBar(
           BlocProvider<TabsBloc>.value(value: tabsBloc),
           BlocProvider<NavigationBloc>.value(value: navigationBloc),
           BlocProvider<SettingsBloc>.value(value: settingsBloc),
+          if (fullscreenCubit != null)
+            BlocProvider<WindowFullscreenCubit>.value(value: fullscreenCubit)
+          else
+            BlocProvider<WindowFullscreenCubit>(
+              create: (_) => WindowFullscreenCubit(
+                initial: false,
+                persist: (_) async {},
+              ),
+            ),
           if (historyBloc != null)
             BlocProvider<HistoryBloc>.value(value: historyBloc),
           if (workspaceBloc != null)

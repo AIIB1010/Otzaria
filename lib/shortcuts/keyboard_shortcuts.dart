@@ -6,6 +6,7 @@ import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/focus_repository.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
+import 'package:otzaria/core/windowing/window_fullscreen_cubit.dart';
 import 'package:otzaria/navigation/bloc/navigation_bloc.dart';
 import 'package:otzaria/navigation/bloc/navigation_event.dart';
 import 'package:otzaria/navigation/bloc/navigation_state.dart';
@@ -614,16 +615,14 @@ class _KeyboardShortcutsState extends State<KeyboardShortcuts> {
       if (!FullscreenHelper.isAllowedInContext(context)) {
         return KeyEventResult.ignored;
       }
-      final settingsBloc = context.read<SettingsBloc>();
-      final newFullscreenState = !settingsBloc.state.isFullscreen;
+      final newFullscreenState = !context.read<WindowFullscreenCubit>().state;
       FullscreenHelper.toggleFullscreen(context, newFullscreenState);
       return KeyEventResult.handled;
     }
 
     // ESC - יציאה ממסך מלא
     if (ShortcutHelper.matchesShortcut(event, 'escape')) {
-      final settingsBloc = context.read<SettingsBloc>();
-      if (settingsBloc.state.isFullscreen) {
+      if (context.read<WindowFullscreenCubit>().state) {
         FullscreenHelper.toggleFullscreen(context, false);
         return KeyEventResult.handled;
       }

@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_inappwebview_windows/flutter_inappwebview_windows.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
+import 'package:otzaria/core/windowing/window_fullscreen_cubit.dart';
 import 'package:otzaria/plugins/models/installed_plugin.dart';
 import 'package:otzaria/plugins/models/plugin_manifest.dart';
 import 'package:otzaria/plugins/services/plugin_manifest_validator.dart';
@@ -680,7 +681,7 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
             handlerName: 'otzaria_escape_pressed',
             callback: (_) {
               if (!mounted) return;
-              if (context.read<SettingsBloc>().state.isFullscreen) {
+              if (context.read<WindowFullscreenCubit>().state) {
                 FullscreenHelper.toggleFullscreen(context, false);
               }
             },

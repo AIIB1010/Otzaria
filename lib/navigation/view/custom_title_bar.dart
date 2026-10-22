@@ -6,6 +6,7 @@ import 'package:otzaria/plugins/view/safe_mode_controls.dart';
 import 'package:otzaria/core/windowing/app_drag_to_move_area.dart';
 import 'package:otzaria/core/windowing/app_window_caption.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
+import 'package:otzaria/core/windowing/window_fullscreen_cubit.dart';
 import 'package:otzaria/theme/app_tokens.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -214,9 +215,11 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
           // הקיצורים נקראים מ-Settings ב-build, ולכן נבדקת זהות המפה.
           buildWhen: (previous, current) =>
               previous.readingTabsOnSide != current.readingTabsOnSide ||
-              previous.isFullscreen != current.isFullscreen ||
               !identical(previous.shortcuts, current.shortcuts),
           builder: (context, settingsState) {
+            final isFullscreen = context.select(
+              (WindowFullscreenCubit cubit) => cubit.state,
+            );
             final stackedTabs = _useStackedTabs(context, navState);
             // במסך עיון ללא טאבים פתוחים אין תוכן קריאה אמיתי, ולכן המסגרת
             // העליונה נצבעת כשאר מסכי הלוח (רקע לוח + גבול תחתון) במקום ברקע
@@ -290,9 +293,9 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
                                 const ManagedUpdateTitleBarIndicator(),
                                 _buildFullscreenCaptionButton(
                                   context,
-                                  settingsState,
+                                  isFullscreen,
                                 ),
-                                if (settingsState.isFullscreen)
+                                if (isFullscreen)
                                   _CaptionActionButton(
                                     brightness: Theme.of(context).brightness,
                                     tooltip: 'מזער',
@@ -309,7 +312,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
                                       await window.minimize();
                                     },
                                   ),
-                                if (settingsState.isFullscreen)
+                                if (isFullscreen)
                                   _CaptionActionButton(
                                     brightness: Theme.of(context).brightness,
                                     tooltip: 'סגור',
@@ -321,7 +324,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
                                           context,
                                         ).close(),
                                   ),
-                                if (!settingsState.isFullscreen)
+                                if (!isFullscreen)
                                   SizedBox(
                                     width: _kWindowCaptionButtonsWidth,
                                     height: 50,
@@ -747,7 +750,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
 
   Widget _buildFullscreenCaptionButton(
     BuildContext context,
-    SettingsState settingsState,
+    bool isFullscreen,
   ) {
     // הכפתור מוצג רק בהקשר שמתיר מסך מלא (עיון/כלים).
     if (!FullscreenHelper.isAllowedInContext(context)) {
@@ -755,12 +758,12 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
     }
     return _CaptionActionButton(
       brightness: Theme.of(context).brightness,
-      tooltip: settingsState.isFullscreen ? 'צא ממסך מלא' : 'מסך מלא',
-      icon: settingsState.isFullscreen
+      tooltip: isFullscreen ? 'צא ממסך מלא' : 'מסך מלא',
+      icon: isFullscreen
           ? FluentIcons.full_screen_minimize_24_regular
           : FluentIcons.full_screen_maximize_24_regular,
       onPressed: () async {
-        final newFullscreenState = !settingsState.isFullscreen;
+        final newFullscreenState = !isFullscreen;
         await FullscreenHelper.toggleFullscreen(context, newFullscreenState);
       },
     );

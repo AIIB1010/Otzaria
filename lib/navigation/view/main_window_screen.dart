@@ -33,6 +33,7 @@ import 'package:otzaria/indexing/indexing_work_status.dart';
 import 'package:otzaria/indexing/models/index_update_mode.dart';
 import 'package:otzaria/indexing/repository/indexing_repository.dart';
 import 'package:otzaria/core/windowing/window_title_sync.dart';
+import 'package:otzaria/core/windowing/window_fullscreen_cubit.dart';
 import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/navigation/utils/refresh_indexing_plan.dart';
 import 'package:otzaria/navigation/bloc/navigation_bloc.dart';
@@ -1102,11 +1103,8 @@ class MainWindowScreenState extends State<MainWindowScreen>
     // Listen for fullscreen changes from the window manager (e.g., user presses F11 in OS)
     appWindowListener?.onFullscreenChanged = (isFullscreen) {
       if (!mounted) return;
-      final settingsBloc = context.read<SettingsBloc>();
-      // Only update if the state is different to avoid loops
-      if (settingsBloc.state.isFullscreen != isFullscreen) {
-        settingsBloc.add(UpdateIsFullscreen(isFullscreen));
-      }
+      // ערך זהה אינו נכתב שוב, כך שאין לולאה מול toggleFullscreen.
+      context.read<WindowFullscreenCubit>().set(isFullscreen);
     };
 
     // שחזור פוקוס לאחר אירועי מצב חלון דיסקרטיים (maximize/unmaximize/fullscreen/restore)
@@ -2096,7 +2094,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
     final shouldExitFullscreen =
         FullscreenHelper.shouldExitFullscreenOnNavigation(
           platform: defaultTargetPlatform,
-          isFullscreen: context.read<SettingsBloc>().state.isFullscreen,
+          isFullscreen: context.read<WindowFullscreenCubit>().state,
           screen: state.currentScreen,
           hasOpenTabs: context.read<TabsBloc>().state.hasOpenTabs,
         );
@@ -3590,7 +3588,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
             final isImmersive = FullscreenHelper.shouldUseImmersiveLayout(
               platform: defaultTargetPlatform,
               isFullscreen: context.select(
-                (SettingsBloc b) => b.state.isFullscreen,
+                (WindowFullscreenCubit cubit) => cubit.state,
               ),
               screen: state.currentScreen,
               hasOpenTabs: hasOpenTabs,
