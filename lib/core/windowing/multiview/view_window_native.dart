@@ -89,14 +89,19 @@ class Win32ViewWindowNative implements ViewWindowNative {
   @override
   void focus(int hwnd) => SetForegroundWindow(_h(hwnd));
 
+  /// הפקודה ש-`windowManager.startDragging` שולח לחלון הראשי.
+  @visibleForTesting
+  static const int dragCommand = SC_MOVE | HTCAPTION;
+
   @override
   void startDragging(int hwnd) {
-    // כמו window_manager: לולאת ההזזה של המערכת, כאילו נלחצה הכותרת.
+    // כמו window_manager: SC_MOVE ישר ללולאה, בלי זיהוי הלחיצה של WM_NCLBUTTONDOWN.
+    // ב-Post ולא ב-Send: לולאה מודאלית בתוך קריאת FFI הייתה חוסמת את ה-isolate.
     ReleaseCapture();
     PostMessage(
       _h(hwnd),
-      WM_NCLBUTTONDOWN,
-      const WPARAM(HTCAPTION),
+      WM_SYSCOMMAND,
+      const WPARAM(dragCommand),
       const LPARAM(0),
     );
   }

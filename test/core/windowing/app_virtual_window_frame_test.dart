@@ -1,6 +1,7 @@
 import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:otzaria/core/windowing/app_drag_to_move_area.dart';
 import 'package:otzaria/core/windowing/app_virtual_window_frame.dart';
 import 'package:otzaria/core/windowing/app_window_id.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
@@ -16,7 +17,11 @@ void main() {
   late StubWindowController stub;
   late FakeViewWindowNative native;
 
-  Future<void> pumpFrame(WidgetTester tester, {Key? childKey}) async {
+  Future<void> pumpFrame(
+    WidgetTester tester, {
+    Key? childKey,
+    Widget? child,
+  }) async {
     stub = StubWindowController(SecondTestView(tester.view));
     native = FakeViewWindowNative();
     final window = HostWindowAppWindowController(
@@ -32,7 +37,9 @@ void main() {
         role: const AppWindowRole.view(),
         child: Directionality(
           textDirection: TextDirection.rtl,
-          child: AppVirtualWindowFrame(child: _Counter(key: childKey)),
+          child: AppVirtualWindowFrame(
+            child: child ?? _Counter(key: childKey),
+          ),
         ),
       ),
     );
@@ -57,6 +64,29 @@ void main() {
     // מתחת לפס הלחיצה מגיעה לתוכן.
     await tester.dragFrom(Offset(width / 2, 40), const Offset(0, 60));
     expect(native.resized, hasLength(3));
+    await tester.pump(kDoubleTapTimeout);
+  });
+
+  testWidgets('מתחת לפס של 8 פיקסלים סרגל הכותרת גורר את החלון', (
+    tester,
+  ) async {
+    // כמו בראשי: רק 8 הפיקסלים העליונים משנים גודל, וכל השאר גורר.
+    await pumpFrame(
+      tester,
+      child: const AppDragToMoveArea(child: SizedBox.expand()),
+    );
+    final width = tester.view.physicalSize.width / tester.view.devicePixelRatio;
+
+    for (final y in [10.0, 15.0, 25.0, 35.0]) {
+      await tester.dragFrom(Offset(width / 2, y), const Offset(90, 72));
+      await tester.pump(kDoubleTapTimeout);
+    }
+    expect(native.dragged, [5, 5, 5, 5]);
+    expect(native.resized, isEmpty);
+
+    await tester.dragFrom(Offset(width / 2, 5), const Offset(0, -40));
+    expect(native.resized, [(5, ResizeEdge.top)]);
+    expect(native.dragged, hasLength(4));
     await tester.pump(kDoubleTapTimeout);
   });
 
