@@ -20,7 +20,7 @@
 
 static const wchar_t* kSingleInstanceMutexName = L"OtzariaAppSingleInstance";
 static const wchar_t* kFlutterWindowClassName = L"FLUTTER_RUNNER_WIN32_WINDOW";
-// חלון Dart של המנוע (ריבוי תצוגות, OTZARIA_MULTIVIEW). בלי הדגל אין כזה.
+// חלון Dart של המנוע (ריבוי תצוגות). בבנייה עם OTZARIA_MULTIVIEW=false אין כזה.
 static const wchar_t* kDartHostWindowClassName = L"FLUTTER_HOST_WINDOW";
 static const wchar_t* kMainWindowTitle = L"אוצריא";
 

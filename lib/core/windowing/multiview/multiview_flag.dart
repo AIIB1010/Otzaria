@@ -1,7 +1,7 @@
 // ignore_for_file: implementation_imports, invalid_use_of_internal_member
 // הקובץ היחיד שנוגע ב-API הפנימי של Flutter לחלונות; כל השאר עובר דרכו.
 import 'dart:io';
-import 'dart:ui' show FlutterView;
+import 'dart:ui' show FlutterView, PlatformDispatcher;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/src/foundation/_features.dart' as features;
@@ -10,21 +10,32 @@ import 'package:flutter/src/widgets/_window_win32.dart'
     show WindowControllerWin32;
 import 'package:flutter/widgets.dart';
 
-/// חלונות Dart באותו מנוע (ריבוי תצוגות). נבנה עם
-/// `--dart-define=OTZARIA_MULTIVIEW=true`; בלעדיו הקוד נגזם מהבנייה.
-const bool kMultiView = bool.fromEnvironment('OTZARIA_MULTIVIEW');
+/// חלונות Dart באותו מנוע (ריבוי תצוגות). פעיל כברירת מחדל;
+/// `--dart-define=OTZARIA_MULTIVIEW=false` מחזיר למודל A (מנוע לכל חלון).
+const bool kMultiView = bool.fromEnvironment(
+  'OTZARIA_MULTIVIEW',
+  defaultValue: true,
+);
 
 /// התנאי היחיד לכל מסלול ריבוי התצוגות.
 abstract final class MultiViewMode {
   static bool? _override;
+  static bool _ownerInstalled = false;
 
-  // הדריסה קיימת רק ב-debug, כדי שבבנייה בלי הדגל הביטוי יהיה false קבוע.
-  static bool get enabled =>
-      (kMultiView || kDebugMode) &&
-      (_override ?? (kMultiView && Platform.isWindows));
+  /// הבנייה והפלטפורמה מאפשרות ריבוי תצוגות. Linux/macOS עדיין במודל A.
+  static bool get supported => kMultiView && Platform.isWindows;
+
+  /// פעיל רק אחרי ש-[installWindowingOwner] התקין בעלים אמיתי.
+  static bool get enabled => _override ?? (supported && _ownerInstalled);
+
+  /// האם הותקן בעלים אמיתי לחלונות ה-Dart.
+  static bool get ownerInstalled => _ownerInstalled;
 
   @visibleForTesting
   static set debugOverride(bool? value) => _override = value;
+
+  @visibleForTesting
+  static void debugResetOwnerInstalled() => _ownerInstalled = false;
 }
 
 /// מדליק את דגל החלונות של המסגרת רק למשך [body]. מחוץ לו הדגל כבוי, ולכן
@@ -39,10 +50,25 @@ T withWindowing<T>(T Function() body) {
   }
 }
 
-/// פעם אחת, אחרי אתחול ה-binding ולפני פתיחת חלון ראשון.
-void installWindowingOwner() => withWindowing(
-  () => WidgetsBinding.instance.windowingOwner = createDefaultWindowingOwner(),
-);
+/// פעם אחת, אחרי אתחול ה-binding ולפני פתיחת חלון ראשון. מחזיר אם הותקן.
+bool installWindowingOwner() {
+  if (MultiViewMode._ownerInstalled) return true;
+  if (!MultiViewMode.supported || !hasRealPlatformDispatcher()) return false;
+  withWindowing(
+    () => WidgetsBinding.instance.windowingOwner =
+        createDefaultWindowingOwner(),
+  );
+  return MultiViewMode._ownerInstalled = true;
+}
+
+/// binding של בדיקות מחזיר engineId=1, והמנוע מפרש אותו כמצביע וקורס.
+/// TODO(upstream): TestPlatformDispatcher.engineId; GetEngineForId בלי בדיקה.
+@visibleForTesting
+bool hasRealPlatformDispatcher() {
+  final dispatcher = WidgetsBinding.instance.platformDispatcher;
+  return identical(dispatcher, PlatformDispatcher.instance) &&
+      dispatcher.engineId != null;
+}
 
 /// חלון נייטיב שנוצר מ-Dart. עוטף את הבקר הפנימי כדי שהוא לא ידלוף החוצה.
 class ViewWindowHandle {
@@ -115,6 +141,9 @@ ViewWindowHandle createViewWindow({
   required void Function(ViewWindowHandle handle) onCloseRequested,
   required void Function(ViewWindowHandle handle) onDestroyed,
 }) {
+  if (!MultiViewMode.ownerInstalled) {
+    throw StateError('אין בעלים לחלונות Dart (installWindowingOwner לא הותקן)');
+  }
   final delegate = _ViewWindowDelegate(onCloseRequested, onDestroyed);
   final controller = withWindowing(
     () => RegularWindowController(

@@ -347,7 +347,8 @@ void main(List<String> args) async {
   Pdfrx.decodeLegacyHebrewText = true;
 
   SentryWidgetsFlutterBinding.ensureInitialized();
-  if (MultiViewMode.enabled) installWindowingOwner();
+  // בלי בעלים (בנייה עם false או binding של בדיקות) — מודל A.
+  installWindowingOwner();
 
   // אישור קבלה מוקדם לאתר החנות עבור קישורי התקנת תוסף שהגיעו כארגומנטים —
   // נורה כאן, לפני כל אתחול כבד ולפני עליית החלון, כדי שדף החנות יידע תוך

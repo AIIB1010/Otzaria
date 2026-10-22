@@ -165,6 +165,9 @@ void main() {
     expect(WindowOpener.current, same(ViewWindowOpener.instance));
     MultiViewMode.debugOverride = false;
     expect(WindowOpener.current, isA<MultiWindowService>());
+    // בלי דריסה הכול תלוי בבעלים, ותחת binding של בדיקות הוא לא מותקן.
+    MultiViewMode.debugOverride = null;
+    expect(WindowOpener.current, isA<MultiWindowService>());
   });
 
   testWidgets('openWindow: חלון עם כרטיסיה, שארית במשבצת נמחקת', (
