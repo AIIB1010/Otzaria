@@ -100,6 +100,7 @@ class _ViewWindowScopeState extends State<ViewWindowScope> {
     if (_entry.closeHandler == _close) {
       _entry.closeHandler = null;
     }
+    _closeFlow.abandon();
     // התוספים שהוצגו בחלון אינם מוצגים עוד; בלי זה היו נשארים רצים.
     PluginRuntimeDispatcher.instance.forgetWindow(_viewId);
     super.dispose();

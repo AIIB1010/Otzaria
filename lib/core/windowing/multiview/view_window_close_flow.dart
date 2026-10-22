@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otzaria/core/pre_close_registry.dart';
@@ -32,6 +34,12 @@ class ViewWindowCloseFlow {
   final Future<void> Function(int slot) _discardSession;
   final ViewWindowOpener? _opener;
   bool _running = false;
+  final Completer<bool> _abandoned = Completer<bool>();
+
+  /// עץ החלון פורק (אתחול מחדש): שאלה פתוחה נחשבת לביטול ומשחררת את התור.
+  void abandon() {
+    if (!_abandoned.isCompleted) _abandoned.complete(false);
+  }
 
   static Future<bool> _confirmUnsavedTabs(
     BuildContext context,
@@ -60,7 +68,12 @@ class ViewWindowCloseFlow {
         final context = entry.keys.navigator.currentContext;
         if (context != null && context.mounted) {
           final tabs = context.read<TabsBloc>().state.tabs;
-          if (!await _confirm(context, tabs)) return false;
+          // דיאלוג שה-Navigator שלו נהרס אינו חוזר; בלי זה התור ננעל לכל החלונות.
+          final confirmed = await Future.any([
+            _confirm(context, tabs),
+            _abandoned.future,
+          ]);
+          if (!confirmed || _abandoned.isCompleted) return false;
         }
         // מכאן החלון אינו יעד להעברה: הכרטיסיה לא הייתה נשמרת.
         entry.closing = true;
