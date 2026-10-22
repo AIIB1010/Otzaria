@@ -758,8 +758,8 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/core"
-      ref: beb13804b10efe6f9f246a3ac0835d41e94d61d7
-      resolved-ref: beb13804b10efe6f9f246a3ac0835d41e94d61d7
+      ref: "57080495ee8b89aeee156a4440b6de1c5e0f7ef2"
+      resolved-ref: "57080495ee8b89aeee156a4440b6de1c5e0f7ef2"
       url: "https://github.com/Otzaria/flutter_widget_from_html"
     source: git
     version: "0.17.4"

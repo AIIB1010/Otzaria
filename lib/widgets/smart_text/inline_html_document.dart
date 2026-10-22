@@ -915,17 +915,16 @@ class _InlineBuilder {
     if (expression is css.HexColorTerm) {
       final hex = expression.text.toUpperCase();
       String x2(String value) => value.split('').map((c) => c * 2).join();
-      return switch (hex.length) {
-        3 => _CssColor.value(Color(int.parse('0xFF${x2(hex)}'))),
-        4 => _CssColor.value(
-          Color(int.parse('0x${x2(hex[3])}${x2(hex.substring(0, 3))}')),
-        ),
-        6 => _CssColor.value(Color(int.parse('0xFF$hex'))),
-        8 => _CssColor.value(
-          Color(int.parse('0x${hex.substring(6, 8)}${hex.substring(0, 6)}')),
-        ),
+      final argb = switch (hex.length) {
+        3 => 'FF${x2(hex)}',
+        4 => '${x2(hex[3])}${x2(hex.substring(0, 3))}',
+        6 => 'FF$hex',
+        8 => '${hex.substring(6, 8)}${hex.substring(0, 6)}',
         _ => null,
       };
+      // csslib מחזיר HexColorTerm גם ל-`#ggg`; fwfh (הפורק) מתעלם ממנו.
+      final value = argb == null ? null : int.tryParse(argb, radix: 16);
+      return value == null ? null : _CssColor.value(Color(value));
     }
     if (expression is css.LiteralTerm) {
       return switch (expression.valueAsString) {

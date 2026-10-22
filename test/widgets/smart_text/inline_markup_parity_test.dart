@@ -55,6 +55,7 @@ final Map<String, List<String>> _cases = {
     '<span style="font-size:120%; font-family: SBL Hebrew;">$_taamim</span> רגיל',
     '<span style="font-family: \'SBL Hebrew\', serif;">גופן</span> <span style="color:Gray;">אפור</span> <span style="color=#123456">שבור</span>',
     '<span style="color:#2828AC; font-size:92%; font-family:FONT1;">שלוש</span> <span style="background-color:#ffff00; color:#000000;">רקע</span>',
+    '<span style="color: #ggg">hex פגום</span> <span style="color: #12">קצר</span> $_long',
     '<small style="color: gray;">(קטן אפור)</small> <b style="font-size:110%">מודגש גדול</b> $_long',
     '<span style="font-size:90%; font-weight: 600">משקל</span> <span style="font-weight:bold;">בולד</span> <span style="font-weight: normal">רגיל</span>',
     "<span style='font-size:92%'>גרש</span> <span class=\"H\">מחלקה</span> <span class=\"mediumGrey\">אחרת</span>",

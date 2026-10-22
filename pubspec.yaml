@@ -179,11 +179,12 @@ dependency_overrides:
       ref: f5efa21c2237002280f1ba056971ec1bf1e8cfd7
       path: printing
   # TODO: לחזור ל-pub.dev אחרי מיזוג ושחרור daohoangson/flutter_widget_from_html#1658, #1659,
-  # #1660, #1661, #1662 (מטמון CSS, מיזוג margins, מחרוזות debug עצלות, Flattener, FutureBuilder).
+  # #1660, #1661, #1662, #1663 (מטמון CSS, מיזוג margins, מחרוזות debug עצלות, Flattener,
+  # FutureBuilder, צבע hex פגום).
   flutter_widget_from_html_core:
     git:
       url: https://github.com/Otzaria/flutter_widget_from_html
-      ref: beb13804b10efe6f9f246a3ac0835d41e94d61d7
+      ref: 57080495ee8b89aeee156a4440b6de1c5e0f7ef2
       path: packages/core
   matcher: ^0.12.20
   analyzer: ^14.5.0
