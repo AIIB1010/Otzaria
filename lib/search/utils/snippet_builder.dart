@@ -39,10 +39,15 @@ class SnippetBuilder {
   static String _withLineBreakMarks(String html) =>
       html.replaceAll(_lineBreakTag, _lineBreakMark);
 
+  static final RegExp _spacedLineBreakMark = RegExp(' ?$_lineBreakMark ?');
+
   /// מכווץ רווחים ומחזיר את סימוני המעבר כמעבר שורה אמיתי, בלי רווח סביבו.
-  static String _collapseWhitespace(String text) => text
-      .replaceAll(_whitespace, ' ')
-      .replaceAll(RegExp(' ?$_lineBreakMark ?'), '\n');
+  static String _collapseWhitespace(String text) {
+    final collapsed = text.replaceAll(_whitespace, ' ');
+    // רוב קטעי הטקסט בלי <br>, ואז אין סימון להחליף.
+    if (!collapsed.contains(_lineBreakMark)) return collapsed;
+    return collapsed.replaceAll(_spacedLineBreakMark, '\n');
+  }
 
   /// ממיר HTML מודגש שמגיע ממנוע החיפוש לרשימת [InlineSpan].
   ///
