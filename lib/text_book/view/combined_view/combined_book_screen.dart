@@ -2353,7 +2353,8 @@ class _CombinedViewState extends State<CombinedView> {
           textMaxWidth: bloc.state.textMaxWidth,
         ),
       );
-      // נקרא ב-build ולא בכל הערכה: התלות נרשמת פעם אחת והבסיס נכנס ל-styleKey.
+      // נקרא ב-build ולא בכל הערכה. הבסיס נכנס למפתח הפריסה של הרשימה ולא
+      // ל-styleKey, כדי שגרירת חלון תידחה כמו שינוי רוחב.
       final baseWidth = widget.isPreviewMode
           ? null
           : ReadingAreaWidth.maybeOf(context);
@@ -2380,7 +2381,7 @@ class _CombinedViewState extends State<CombinedView> {
           metrics.fontBold ? FontWeight.bold : FontWeight.normal,
         ),
         lineHeight: metrics.lineHeight,
-        styleKey: (setting, setting < 0 ? baseWidth : null),
+        styleKey: setting,
         textWidth: columnWidthOrNull,
         crossAxisPadding: crossAxisPadding,
         builder: (estimator, estimationKey) =>
@@ -2439,7 +2440,11 @@ class _CombinedViewState extends State<CombinedView> {
             estimateExtent: estimateExtent,
             estimationKey: estimationKey,
             // הגבהים תלויים ברוחב העמודה בלבד; הבאנר שבפריט 0 פרוס ברוחב המלא.
-            crossAxisLayoutKey: state.protection.hasBanner ? null : columnWidth,
+            crossAxisLayoutKey: columnWidth == null
+                ? null
+                : state.protection.hasBanner
+                ? (width) => (width, columnWidth(width))
+                : columnWidth,
             padding: padding,
             itemPositionsListener: widget.tab.lines.positionsListener,
             notifyPositionsOnRebuild:

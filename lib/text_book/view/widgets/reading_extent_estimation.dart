@@ -36,7 +36,8 @@ class ReadingExtentEstimation extends StatefulWidget {
   final double contentWidthRatio;
   final double verticalPadding;
 
-  /// נקרא פעם אחת לכל רוחב; ערך שתלוי ב-context נקרא ב-build ונכנס ל-[styleKey].
+  /// נקרא פעם אחת לכל רוחב; ערך שתלוי ב-context נקרא ב-build ונכנס ל-[styleKey]
+  /// או ל-crossAxisLayoutKey של הרשימה.
   final double Function(double availableWidth)? textWidth;
   final Object? styleKey;
 
