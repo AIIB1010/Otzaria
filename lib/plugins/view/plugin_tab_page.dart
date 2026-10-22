@@ -175,6 +175,14 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
   @override
   BuildContext? get dialogContext => mounted ? context : null;
 
+  int? _viewId;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _viewId = View.of(context).viewId;
+  }
+
   late String localHtmlPath;
 
   /// נבדק פעם אחת ולא בכל build: existsSync בכל פריים resize הוא I/O סינכרוני,
@@ -485,10 +493,12 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
     unawaited(_settingsSub?.cancel());
     final pluginId = widget.plugin.pluginId;
     final instanceId = widget.instanceId;
+    final viewId = _viewId;
     disposePluginHost(
       onOwnerClosed: () => PluginPageLauncher.instance.markPageClosed(
         pluginId,
         instanceId: instanceId,
+        viewId: viewId,
       ),
     );
     super.dispose();

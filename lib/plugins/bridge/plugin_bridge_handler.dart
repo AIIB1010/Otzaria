@@ -178,7 +178,14 @@ class PluginBridgeHandler {
 
     final endWork = onWorkStarted?.call();
     try {
-      return await _dispatchRpc(args, eventSink: eventSink);
+      return await adapter.withWindowDependencies(
+        () => _dispatchRpc(args, eventSink: eventSink),
+        domain: (first['method'] is String)
+            ? (first['method'] as String).split('.').first
+            : null,
+      );
+    } catch (error) {
+      return _errorResp("error.internal", error.toString());
     } finally {
       endWork?.call();
     }

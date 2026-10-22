@@ -183,6 +183,7 @@ AppContextMenuEntry _buildEntry({
               },
               preferBackground: true,
               viewId: viewId,
+              windowKeys: windowKeys,
               instanceId: _targetInstanceId(dispatcher, pluginId, item, viewId),
             ),
           ),
@@ -312,6 +313,7 @@ Future<void> dispatchPluginContextMenuItemClick({
     payload,
     preferBackground: true,
     viewId: viewId,
+    windowKeys: windowKeys,
     instanceId: instanceId,
   );
   if (item.onClickEvent == null) {
@@ -321,6 +323,7 @@ Future<void> dispatchPluginContextMenuItemClick({
       payload,
       preferBackground: true,
       viewId: viewId,
+      windowKeys: windowKeys,
       instanceId: instanceId,
     );
   }

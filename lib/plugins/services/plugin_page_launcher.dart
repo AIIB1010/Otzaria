@@ -53,6 +53,7 @@ class PluginPageLauncher {
     int? viewId,
     AppWindowKeys? windowKeys,
   }) {
+    if (windowKeys != null && _navigators[windowKeys] == null) return;
     if (topic != null) {
       final ready = _readyPage(pluginId, viewId);
       if (ready != null) {
@@ -97,12 +98,26 @@ class PluginPageLauncher {
   void markPageClosed(
     String pluginId, {
     String instanceId = PluginInstanceIds.defaultForeground,
+    int? viewId,
   }) {
     final key = (pluginId: pluginId, instanceId: instanceId);
-    final viewId = _readyPages.remove(key);
-    if (_readyPage(pluginId, viewId) != null) return;
-    _pending.remove((pluginId: pluginId, viewId: viewId));
-    _deliveryChain.remove((pluginId: pluginId, viewId: viewId));
+    final ownerView = _readyPages.containsKey(key)
+        ? _readyPages.remove(key)
+        : viewId;
+    if (_readyPages.entries.any(
+      (entry) => entry.key.pluginId == pluginId && entry.value == ownerView,
+    )) {
+      return;
+    }
+    _pending.remove((pluginId: pluginId, viewId: ownerView));
+    _deliveryChain.remove((pluginId: pluginId, viewId: ownerView));
+  }
+
+  /// סגירה לפני יצירת דף אינה משאירה אירועים שממתינים לחלון שכבר איננו.
+  void forgetWindow(int viewId) {
+    _pending.removeWhere((key, _) => key.viewId == viewId);
+    _deliveryChain.removeWhere((key, _) => key.viewId == viewId);
+    _readyPages.removeWhere((_, owner) => owner == viewId);
   }
 
   void _enqueueDelivery(

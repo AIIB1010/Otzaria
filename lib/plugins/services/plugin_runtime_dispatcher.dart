@@ -3,6 +3,7 @@ import 'dart:collection';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:otzaria/plugins/plugin_constants.dart';
 import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
@@ -624,6 +625,7 @@ class PluginRuntimeDispatcher {
     PluginPageLauncher.instance.markPageClosed(
       pluginId,
       instanceId: instanceId,
+      viewId: instance.viewId,
     );
     PluginSearchFieldSessionService.instance.onInstanceUnregistered(
       pluginId,
@@ -698,6 +700,7 @@ class PluginRuntimeDispatcher {
 
   /// חלון Dart נסגר: המופעים שהציג כבר אינם מוצגים בו. החלון הראשי נשאר תמיד.
   void forgetWindow(int viewId) {
+    PluginPageLauncher.instance.forgetWindow(viewId);
     if (viewId == mainViewId || _windows.remove(viewId) == null) return;
     unawaited(_serializeLifecycle(_reconcileForeground));
   }
@@ -1453,6 +1456,7 @@ class PluginRuntimeDispatcher {
     bool resumeForegroundIfNeeded = false,
     PluginInstanceId? instanceId,
     int? viewId,
+    AppWindowKeys? windowKeys,
   }) async {
     await PluginSafeMode.ready;
     if (PluginSafeMode.isActive) return;
@@ -1470,7 +1474,10 @@ class PluginRuntimeDispatcher {
       debugPrint('PluginRuntimeDispatcher: $topic → queued (boot pending)');
       return;
     }
-    if (!_hasAnyController(pluginId)) {
+    if (!_hasAnyController(pluginId) ||
+        (viewId != null &&
+            _backgroundControllerOf(pluginId) == null &&
+            _primaryForegroundKey(pluginId, viewId: viewId) == null)) {
       // תנאי `when` שלא מתקיים = התוסף לא ביקש את האירוע; לא מעירים מנוע
       // וגם לא פותחים את דף התוסף.
       if (PluginLazyActivationService.instance.isActivationBlocked(
@@ -1495,6 +1502,8 @@ class PluginRuntimeDispatcher {
           pluginId,
           topic: topic,
           payload: payload,
+          viewId: viewId,
+          windowKeys: windowKeys,
         );
       } else {
         debugPrint('PluginRuntimeDispatcher: $topic → dropped (no engine)');

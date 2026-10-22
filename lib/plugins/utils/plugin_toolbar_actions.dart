@@ -241,5 +241,6 @@ Future<void> _dispatchItemClick({
     payload,
     preferBackground: true,
     viewId: viewId,
+    windowKeys: windowKeys,
   );
 }

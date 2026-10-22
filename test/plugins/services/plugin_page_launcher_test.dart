@@ -96,6 +96,41 @@ void main() {
     },
   );
 
+  test('סגירת דף לפני boot מנקה רק את ההמתנה בחלון שלו', () async {
+    final bController = _RecordingController();
+    dispatcher.registerController(
+      _kPid,
+      bController,
+      instanceId: 'b',
+      viewId: 2,
+    );
+    launcher.markPageReady(_kPid, viewId: 1);
+    launcher.open(_kPid, topic: 'cancelled.b', viewId: 2);
+    expect(launcher.hasPendingFor(_kPid), isTrue);
+    launcher.markPageClosed(_kPid, instanceId: 'b', viewId: 2);
+    expect(launcher.hasPendingFor(_kPid), isFalse);
+    launcher.markPageReady(_kPid, instanceId: 'b', viewId: 2);
+    launcher.open(_kPid, topic: 'still.a', viewId: 1);
+    await pumpMicrotasks();
+    expect(bController.jsCalls, isEmpty);
+    expect(controller.jsCalls.single, contains('still.a'));
+    launcher.markPageClosed(_kPid, instanceId: 'b', viewId: 2);
+    dispatcher.unregisterController(_kPid, instanceId: 'b');
+  });
+
+  test('פירוק חלון לפני בניית דף מנקה את האירועים הממתינים שלו', () async {
+    launcher.open(_kPid, topic: 'cancelled.view', viewId: 2);
+    launcher.forgetWindow(2);
+    expect(launcher.hasPendingFor(_kPid), isFalse);
+  });
+
+  test('אירוע מאוחר מחלון שנסגר אינו נרשם שוב כממתין', () {
+    final closed = AppWindowKeys();
+    launcher.open(_kPid, topic: 'closed.window', viewId: 2, windowKeys: closed);
+    expect(launcher.hasPendingFor(_kPid), isFalse);
+    expect(navigations, isEmpty);
+  });
+
   test('open ללא topic — רק מנווט, בלי אירוע', () async {
     launcher.open(_kPid);
     await pumpMicrotasks();
