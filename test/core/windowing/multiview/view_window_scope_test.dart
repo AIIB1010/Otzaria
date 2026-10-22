@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/app_scope/app_scope_providers.dart';
@@ -12,6 +13,7 @@ import 'package:otzaria/core/focus_repository.dart';
 import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/core/user_state/window_bounds.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
+import 'package:otzaria/core/windowing/app_window_controller.dart';
 import 'package:otzaria/core/windowing/app_window_id.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
@@ -33,6 +35,8 @@ import 'package:otzaria/settings/engine/settings_repository.dart';
 import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
 import 'package:otzaria/tabs/models/tab.dart';
 import 'package:otzaria/tabs/models/tool_tab.dart';
+import 'package:otzaria/widgets/misc/app_context_menu.dart';
+import 'package:otzaria/widgets/misc/app_popup_menu.dart';
 import 'package:otzaria/workspaces/bloc/workspace_bloc.dart';
 import 'package:otzaria/workspaces/workspace.dart';
 import 'package:otzaria/workspaces/workspace_repository.dart';
@@ -40,6 +44,9 @@ import 'package:otzaria/workspaces/workspace_repository.dart';
 import '../../../helpers/memory_settings_cache.dart';
 import '../../../test_helpers/fake_view_window.dart';
 import '../../../test_helpers/second_test_view.dart';
+
+class _FakeWindow extends Fake
+    implements AppWindowController, AppWindowGeometry {}
 
 void main() {
   late Directory tmp;
@@ -248,10 +255,83 @@ void main() {
     expect(LastActiveWindow.id, a.id);
     expect(AppWindowKeys.current, same(a.keys));
 
-    // שינוי גודל בחלון שכבר פעיל אינו "הפעלה" חדשה.
+    // הודעה מחלון שאינו ב-foreground אינה מפעילה אותו.
     AppWindowKeys.activateWindow(AppWindowId.primary);
-    windows.stubOf(a).notify();
+    windows.stubOf(a)
+      ..activated = false
+      ..notify();
     expect(LastActiveWindow.id, AppWindowId.primary);
+    expect(AppWindowKeys.current.id, AppWindowId.primary);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('ESC בחלון Dart שחזר לפוקוס אינו סוגר תפריט הקשר בראשי', (
+    tester,
+  ) async {
+    final windows = FakeViewWindows(tester);
+    final menuKey = GlobalKey<AppContextMenuRegionState>();
+    final mainWindow = _FakeWindow();
+    await tester.pumpWidget(
+      AppScopeProviders(
+        settingsRepository: SettingsRepository(),
+        child: MultiViewHost(
+          registry: windows.registry,
+          contentBuilder: (context, entry) => ViewWindowScope(
+            entry: entry,
+            child: const SizedBox.shrink(),
+          ),
+          child: AppWindowScope(
+            controller: mainWindow,
+            geometry: mainWindow,
+            keys: AppWindowKeys.byId(AppWindowId.primary),
+            child: MaterialApp(
+              home: Scaffold(
+                body: AppContextMenuRegion(
+                  key: menuKey,
+                  menuBuilder: (_, _) => [
+                    AppContextMenuEntry(label: 'פריט בתפריט', onTap: () {}),
+                  ],
+                  child: const SizedBox.expand(),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    final b = windows.registry.open(size: const Size(800, 600))!;
+    await tester.pump();
+    final stubB = windows.stubOf(b);
+    stubB
+      ..activated = true
+      ..notify();
+    expect(AppWindowKeys.current, same(b.keys));
+
+    // לחיצה על הראשי: ב-WA_INACTIVE של החלון הוא עוד ה-foreground.
+    stubB.notify();
+    AppWindowKeys.activateWindow(AppWindowId.primary);
+    stubB.activated = false;
+    await menuKey.currentState!.openMenuAt(const Offset(100, 100));
+    await tester.pumpAndSettle();
+    expect(find.text('פריט בתפריט'), findsOneWidget);
+
+    // חזרה לחלון Dart ו-ESC בו: התפריט בראשי נשאר.
+    stubB
+      ..activated = true
+      ..notify();
+    expect(AppWindowKeys.current, same(b.keys));
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('פריט בתפריט'), findsOneWidget);
+
+    // ESC בראשי עצמו סוגר אותו.
+    stubB.activated = false;
+    AppWindowKeys.activateWindow(AppWindowId.primary);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('פריט בתפריט'), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 1));

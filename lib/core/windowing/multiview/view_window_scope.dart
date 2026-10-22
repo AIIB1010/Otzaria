@@ -61,7 +61,6 @@ class _ViewWindowScopeState extends State<ViewWindowScope> {
     slot: () => _entry.tabsSession.slot,
     view: _entry.handle.view,
   );
-  bool _wasActive = false;
 
   @override
   void initState() {
@@ -76,9 +75,11 @@ class _ViewWindowScopeState extends State<ViewWindowScope> {
   Future<void> _close() => _closeFlow.run();
 
   void _onWindowChanged() {
-    final active = _entry.handle.isActivated;
-    if (active && !_wasActive) AppWindowKeys.activateWindow(_entry.id);
-    _wasActive = active;
+    // לא לפי מעבר: ב-WA_INACTIVE החלון עוד ב-foreground, ומעבר שנבלע שם
+    // השאיר את הראשי פעיל כשהמשתמש חזר לכאן (ESC סגר תפריט בראשי).
+    if (_entry.handle.isActivated && AppWindowKeys.current.id != _entry.id) {
+      AppWindowKeys.activateWindow(_entry.id);
+    }
     // אין הודעה על הזזה בלבד: מיקום חדש נשמר בשינוי הבא.
     _persistence.scheduleSave();
   }
