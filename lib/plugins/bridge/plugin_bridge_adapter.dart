@@ -956,7 +956,7 @@ class PluginBridgeAdapter {
   }
 
   // ----------------------------------------------------------------
-  // app.*
+  // fonts.*, app.*
   // ----------------------------------------------------------------
   Future<dynamic> _handleFonts(
     String action,
@@ -2175,7 +2175,6 @@ class PluginBridgeAdapter {
   // Book identity helpers (Plugin SDK)
   // ----------------------------------------------------------------
 
-  /// מחזיר את סוג הספר כמחרוזת עבור ה-Plugin SDK.
   Book? _findPluginBook(Library library, Map<String, dynamic> args) {
     final bound = readerTab?.book;
     final uid = args['bookUid'] as String?;
@@ -3517,7 +3516,7 @@ class PluginBridgeAdapter {
       );
     }
     final uid = bookUid?.trim();
-    // `bookUid` מזהה מדויק; בהיעדרו נשמר זיהוי לפי כותרת כמקודם.
+    // `bookUid` מזהה מדויק; בהיעדרו הזיהוי לפי כותרת.
     bool matchesBook(Book b) => uid != null && uid.isNotEmpty
         ? PluginBookIdentity.uidOf(b) == uid
         : b.title == bookId;
@@ -5980,10 +5979,8 @@ class PluginBridgeAdapter {
   ) async {
     final calendarState = _dependencies.calendarCubit.state;
 
-    // getDailyTimes/getHalachicTimes מקבלים אופציונלית date (ISO) ומיקום —
-    // עיר מרשימת הלוח (city) או קואורדינטות (lat+lng, עם elevation/timezone/
-    // inIsrael אופציונליים). בלי אף פרמטר מוחזרים זמני התאריך והעיר הנבחרים
-    // בלוח (התנהגות הגרסאות הקודמות).
+    // date (ISO) ומיקום אופציונליים: city מרשימת הלוח או lat+lng (ועוד
+    // elevation/timezone/inIsrael). בלי פרמטרים: זמני התאריך והעיר שנבחרו בלוח.
     Map<String, String> resolveDailyTimes() {
       final rawDate = args['date'];
       if (rawDate != null && rawDate is! String) {
@@ -6826,10 +6823,6 @@ class PluginBridgeAdapter {
   // flutter_local_notifications דוחה מזהה שאינו נכנס ב-32 ביט.
   static int _newNotificationId() => math.Random().nextInt(0x7FFFFFFF);
 
-  // ----------------------------------------------------------------
-  // Helpers
-  // ----------------------------------------------------------------
-
   Map<String, dynamic> _buildJewishDatePayload(DateTime date, bool inIsrael) {
     final jewishCalendar = JewishCalendar.fromDateTime(date)
       ..inIsrael = inIsrael;
@@ -6865,7 +6858,7 @@ class PluginBridgeAdapter {
     bool inIsrael,
     HebrewDateFormatter formatter,
   ) {
-    final dayOfWeek = date.weekday; // 1=Mon … 6=Sat, 7=Sun in Dart
+    final dayOfWeek = date.weekday;
     // Dart weekday: Mon=1 … Sat=6, Sun=7. Shabbat = Saturday = 6.
     final daysUntilShabbat = dayOfWeek == 6 ? 0 : (6 - dayOfWeek) % 7;
     final shabbatDate = addCalendarDays(date, daysUntilShabbat);
@@ -6950,11 +6943,6 @@ class PluginBridgeAdapter {
     return _pluginRepo.getGrantedPermissionNames(plugin.pluginId);
   }
 
-  /// הספר שמייצג טאב כלפי התוספים.
-  ///
-  /// בטאב מפוצל הכותרת המשולבת אינה ספר, ולכן מדווחת החלונית הפעילה (ובטאב
-  /// שאינו הנוכחי — הראשונה). דיווח כל החלוניות מחייב הרחבת הסכמה של
-  /// `openTabs`, שהיא שינוי API בפני עצמו.
   /// מצב המפרשים של טאב הקריאה כפי שהוא כבר טעון בטאב — בלי שאילתה נוספת.
   /// `null` כשאין טאב קריאה, כשמצב הטאב עדיין לא נטען או כשאין בו מפרשים.
   Map<String, dynamic>? _getActiveCommentators() {
@@ -7129,6 +7117,8 @@ class PluginBridgeAdapter {
     return tabs[index];
   }
 
+  /// בטאב מפוצל הכותרת המשולבת אינה ספר, ולכן מדווחת החלונית הפעילה (ובטאב
+  /// שאינו הנוכחי — הראשונה); דיווח כל החלוניות הוא שינוי API של `openTabs`.
   OpenedTab _paneForPlugins(OpenedTab tab) {
     if (tab is! CombinedTab) return tab;
     final state = _windowDependencies.tabsBloc.state;
