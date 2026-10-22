@@ -455,7 +455,10 @@ class CrossWindowTabDrag {
 
       // ⚠️ שורת המשימות אינה מחווה של "פתח חלון כאן". היא נגישה גם בחלון
       // ממוקסם, ולכן שחרור עליה הוא כמעט תמיד החטאה.
+      // ⚠️ לולאת ההזזה כולאת את הסמן באזור העבודה: מה שתחתיו אינו היעד,
+      // ולכן גם חלון אוצריא שם אינו קולט.
       if (outcome.isShellTray ||
+          (_inProcess != null && outcome.atTaskbarEdge) ||
           _outsideWorkArea(outcome.slot, outcome.inWorkArea)) {
         debugPrint('גרירה שוחררה מעל שורת המשימות — מבוטלת');
         return _hidePreview();
@@ -668,6 +671,7 @@ class CrossWindowTabDrag {
       isSelf: outcome.isSelf || _isSourceSlot(drops, slot),
       isShellTray: outcome.isShellTray,
       inWorkArea: outcome.inWorkArea,
+      atTaskbarEdge: outcome.atTaskbarEdge,
       hwnd: outcome.hwnd,
     );
   }

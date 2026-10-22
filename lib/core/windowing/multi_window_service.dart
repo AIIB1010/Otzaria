@@ -35,6 +35,7 @@ typedef SystemDragOutcome = ({
   bool isSelf,
   bool isShellTray,
   bool inWorkArea,
+  bool atTaskbarEdge,
   int? hwnd,
 });
 
@@ -396,6 +397,8 @@ class MultiWindowService implements WindowOpener {
       isShellTray: info['isShellTray'] == true,
       // runner ישן או מסלול בלי HWND אינו מדווח — בתוך אזור העבודה.
       inWorkArea: info['inWorkArea'] != false,
+      // הסמן נכלא בקצה אזור העבודה ליד שורת המשימות; רק מחלונות Dart.
+      atTaskbarEdge: info['atTaskbarEdge'] == true,
       hwnd: info['hwnd'] as int?,
     );
   });

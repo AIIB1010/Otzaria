@@ -517,6 +517,97 @@ void main() {
       await source.close();
     });
 
+    testWidgets(
+      'גרירה למערכת: סמן שנכלא בקצה אזור העבודה מעל חלון אוצריא — מבוטלת',
+      (tester) async {
+        final windows = FakeViewWindows(tester);
+        final view = windows.registry.open(size: const Size(800, 600))!;
+        final drops = makeDrops(windows.registry);
+        final t = _target(2);
+        drops.register(view.id, t.target);
+        final opener = _FakeOpener();
+        WindowOpener.debugOverride = opener;
+        final source = _RecordingTabsBloc();
+        final tab = ToolTab(toolId: 'builtin.calendar', title: 'לוח שנה');
+        // שחרור ב-(1250,1060) נמדד ב-(1250,1031), מעל חלון שכולו מעל השורה.
+        runner.target = {'hwnd': 31337, 'isSelf': false, 'isShellTray': false};
+        runner.systemDrag = {
+          'x': 1250,
+          'y': 1031,
+          'hwnd': view.handle.hwnd,
+          'inWorkArea': true,
+          'atTaskbarEdge': true,
+        };
+        final drag = CrossWindowTabDrag(inProcess: drops)
+          ..begin(tab, colors, tabsBloc: source);
+
+        await tester.pump(const Duration(seconds: 1));
+
+        expect(runner.named('dragOutToSystem'), hasLength(1));
+        expect(t.received, isEmpty);
+        expect(opener.opened, isEmpty);
+        expect(source.events, isEmpty);
+        expect(runner.named('endTabDrag'), isNotEmpty);
+        drag.dispose();
+        await source.close();
+      },
+    );
+
+    testWidgets(
+      'גרירה למערכת: סמן שנכלא בקצה אזור העבודה מעל שולחן העבודה — מבוטלת',
+      (tester) async {
+        final windows = FakeViewWindows(tester);
+        final drops = makeDrops(windows.registry);
+        final opener = _FakeOpener();
+        WindowOpener.debugOverride = opener;
+        final source = _RecordingTabsBloc();
+        final tab = ToolTab(toolId: 'builtin.calendar', title: 'לוח שנה');
+        runner.target = {'hwnd': 31337, 'isSelf': false, 'isShellTray': false};
+        runner.systemDrag = {
+          'y': 1031,
+          'hwnd': 4242,
+          'inWorkArea': true,
+          'atTaskbarEdge': true,
+        };
+        final drag = CrossWindowTabDrag(inProcess: drops)
+          ..begin(tab, colors, tabsBloc: source);
+
+        await tester.pump(const Duration(seconds: 1));
+
+        expect(runner.named('dragOutToSystem'), hasLength(1));
+        expect(opener.opened, isEmpty);
+        expect(source.events, isEmpty);
+        drag.dispose();
+        await source.close();
+      },
+    );
+
+    testWidgets('גרירה למערכת שהוצמדה (Snap) אינה מבוטלת בקצה אזור העבודה', (
+      tester,
+    ) async {
+      final windows = FakeViewWindows(tester);
+      final drops = makeDrops(windows.registry);
+      final opener = _FakeOpener();
+      WindowOpener.debugOverride = opener;
+      final source = _RecordingTabsBloc();
+      final tab = ToolTab(toolId: 'builtin.calendar', title: 'לוח שנה');
+      runner.target = {'hwnd': 31337, 'isSelf': false, 'isShellTray': false};
+      runner.systemDrag = {
+        'snapped': true,
+        'hwnd': 4242,
+        'atTaskbarEdge': true,
+      };
+      final drag = CrossWindowTabDrag(inProcess: drops)
+        ..begin(tab, colors, tabsBloc: source);
+
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(opener.opened, hasLength(1));
+      expect(source.events.single, RemoveTab(tab));
+      drag.dispose();
+      await source.close();
+    });
+
     testWidgets('חלון אוצריא מחוץ לאזור העבודה (מסך מלא) עדיין קולט', (
       tester,
     ) async {
@@ -584,6 +675,30 @@ void main() {
         ),
         isFalse,
       );
+      drag.dispose();
+      await source.close();
+    });
+
+    testWidgets('בלי הדגל: גרירה למערכת מתעלמת מ-atTaskbarEdge (מודל A)', (
+      tester,
+    ) async {
+      MultiViewMode.debugOverride = false;
+      final windows = FakeViewWindows(tester);
+      final drops = makeDrops(windows.registry);
+      final opener = _FakeOpener();
+      WindowOpener.debugOverride = opener;
+      final source = _RecordingTabsBloc();
+      final tab = ToolTab(toolId: 'builtin.calendar', title: 'לוח שנה');
+      runner.target = {'isSelf': false, 'isShellTray': false};
+      runner.systemDrag = {'atTaskbarEdge': true};
+      final drag = CrossWindowTabDrag(inProcess: drops)
+        ..begin(tab, colors, tabsBloc: source);
+
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(runner.named('dragOutToSystem').single.arguments, isNull);
+      expect(opener.opened, hasLength(1));
+      expect(source.events.single, RemoveTab(tab));
       drag.dispose();
       await source.close();
     });

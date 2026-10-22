@@ -373,6 +373,23 @@ HWND OwnWindowArg(const flutter::EncodableValue* arguments, const char* key) {
   return pid == ::GetCurrentProcessId() ? hwnd : nullptr;
 }
 
+// ⚠️ לולאת ההזזה של Windows כולאת את הסמן באזור העבודה, ולכן שחרור מעל
+// שורת המשימות נמדד בשורה האחרונה שלו, מעל מה שנמצא שם (BUG-7).
+bool HeldAtReservedEdge(POINT cursor) {
+  constexpr int kTolerance = 2;
+  const HMONITOR monitor = ::MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
+  MONITORINFO mi{};
+  mi.cbSize = sizeof(mi);
+  if (!monitor || !::GetMonitorInfoW(monitor, &mi)) return false;
+  const RECT& work = mi.rcWork;
+  const RECT& mon = mi.rcMonitor;
+  if (!::PtInRect(&work, cursor)) return false;
+  return (work.bottom < mon.bottom && cursor.y >= work.bottom - kTolerance) ||
+         (work.top > mon.top && cursor.y < work.top + kTolerance) ||
+         (work.left > mon.left && cursor.x < work.left + kTolerance) ||
+         (work.right < mon.right && cursor.x >= work.right - kTolerance);
+}
+
 // מתאר גרירה שהמערכת ניהלה: היעד, והמסגרת שהמשתמש עצר בה.
 flutter::EncodableValue DescribeSystemDrag(
     const drag_preview::SystemDragResult& drag, HWND self,
@@ -380,6 +397,10 @@ flutter::EncodableValue DescribeSystemDrag(
   flutter::EncodableMap info =
       DescribeTarget(drag.under, drag.cursor, self, report_hwnd);
   info[flutter::EncodableValue("ran")] = flutter::EncodableValue(drag.ran);
+  if (report_hwnd) {
+    info[flutter::EncodableValue("atTaskbarEdge")] =
+        flutter::EncodableValue(drag.ran && HeldAtReservedEdge(drag.cursor));
+  }
   // ⚠️ `snapped` הוא מה שמבדיל בין "פתח כאן" לבין "פתח **במסגרת הזו**".
   // התצוגה היא בגודל כרטיסיה, ושימוש עיוור במסגרת היה יוצר חלון אוצריא
   // של 176×40.
