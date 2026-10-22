@@ -346,10 +346,10 @@ flutter::EncodableMap DescribeTarget(HWND under, POINT cursor, HWND self,
     }
     info[flutter::EncodableValue("isSelf")] =
         flutter::EncodableValue(under != nullptr && under == self);
-    // שורת משימות או appbar גם כשהמחלקה אינה מזוהה כ-`isShellTray`.
-    info[flutter::EncodableValue("inWorkArea")] =
-        flutter::EncodableValue(in_work_area);
   }
+  // שורת משימות או appbar גם כשהמחלקה אינה מזוהה כ-`isShellTray`.
+  info[flutter::EncodableValue("inWorkArea")] =
+      flutter::EncodableValue(in_work_area);
   return info;
 }
 
@@ -398,10 +398,8 @@ flutter::EncodableValue DescribeSystemDrag(
   flutter::EncodableMap info =
       DescribeTarget(drag.under, drag.cursor, self, report_hwnd);
   info[flutter::EncodableValue("ran")] = flutter::EncodableValue(drag.ran);
-  if (report_hwnd) {
-    info[flutter::EncodableValue("atTaskbarEdge")] =
-        flutter::EncodableValue(drag.ran && HeldAtReservedEdge(drag.cursor));
-  }
+  info[flutter::EncodableValue("atTaskbarEdge")] =
+      flutter::EncodableValue(drag.ran && HeldAtReservedEdge(drag.cursor));
   // ⚠️ `snapped` הוא מה שמבדיל בין "פתח כאן" לבין "פתח **במסגרת הזו**".
   // התצוגה היא בגודל כרטיסיה, ושימוש עיוור במסגרת היה יוצר חלון אוצריא
   // של 176×40.

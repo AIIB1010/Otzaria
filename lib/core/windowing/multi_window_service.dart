@@ -395,9 +395,9 @@ class MultiWindowService implements WindowOpener {
       slot: info['slot'] as int?,
       isSelf: info['isSelf'] == true,
       isShellTray: info['isShellTray'] == true,
-      // runner ישן או מסלול בלי HWND אינו מדווח — בתוך אזור העבודה.
+      // runner ישן אינו מדווח — בתוך אזור העבודה.
       inWorkArea: info['inWorkArea'] != false,
-      // הסמן נכלא בקצה אזור העבודה ליד שורת המשימות; רק מחלונות Dart.
+      // הסמן נכלא בקצה אזור העבודה ליד שורת המשימות.
       atTaskbarEdge: info['atTaskbarEdge'] == true,
       hwnd: info['hwnd'] as int?,
     );
@@ -489,7 +489,7 @@ class MultiWindowService implements WindowOpener {
       slot: info['slot'] as int?,
       isSelf: info['isSelf'] == true,
       isShellTray: info['isShellTray'] == true,
-      // runner ישן או מסלול בלי HWND אינו מדווח — בתוך אזור העבודה.
+      // runner ישן אינו מדווח — בתוך אזור העבודה.
       inWorkArea: info['inWorkArea'] != false,
       approachingTop: info['approachingTop'] == true,
       // ערך חסר דורש נסיעה שמרנית יותר.
