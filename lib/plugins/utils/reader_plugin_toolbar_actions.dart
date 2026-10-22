@@ -18,7 +18,7 @@ List<ActionButtonData> buildReaderPluginActions(
 }) {
   final records = [
     ...PluginToolbarRegistry.instance.getAll(),
-    ...?context.read<PluginSystemBloc>().toolbarRegistry?.getAll(),
+    ...?context.read<PluginSystemBloc?>()?.toolbarRegistry?.getAll(),
   ];
   if (records.isEmpty) return const [];
   return buildPluginToolbarActions(
@@ -30,8 +30,8 @@ List<ActionButtonData> buildReaderPluginActions(
     locationPayload: () async =>
         (await resolveReaderLocation(tab))?.toJson() ?? const {},
     hostActionDispatcher: context
-        .read<PluginSystemBloc>()
-        .declarativeHost
+        .read<PluginSystemBloc?>()
+        ?.declarativeHost
         ?.dispatchAction,
   );
 }
@@ -44,7 +44,7 @@ List<(int, ActionButtonData)> buildReaderPluginOverflowActions(
 }) {
   final records = [
     ...PluginToolbarRegistry.instance.getAll(),
-    ...?context.read<PluginSystemBloc>().toolbarRegistry?.getAll(),
+    ...?context.read<PluginSystemBloc?>()?.toolbarRegistry?.getAll(),
   ];
   if (records.isEmpty) return const [];
   return buildOrderedPluginOverflowActions(
@@ -56,8 +56,8 @@ List<(int, ActionButtonData)> buildReaderPluginOverflowActions(
     locationPayload: () async =>
         (await resolveReaderLocation(tab))?.toJson() ?? const {},
     hostActionDispatcher: context
-        .read<PluginSystemBloc>()
-        .declarativeHost
+        .read<PluginSystemBloc?>()
+        ?.declarativeHost
         ?.dispatchAction,
   );
 }
@@ -66,5 +66,5 @@ List<(int, ActionButtonData)> buildReaderPluginOverflowActions(
 Listenable readerPluginToolbarListenable(BuildContext context) =>
     Listenable.merge([
       PluginToolbarRegistry.instance,
-      context.read<PluginSystemBloc>().toolbarRegistry,
+      context.read<PluginSystemBloc?>()?.toolbarRegistry,
     ]);
