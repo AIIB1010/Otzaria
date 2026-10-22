@@ -384,6 +384,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
       (mutex != nullptr && GetLastError() == ERROR_ALREADY_EXISTS);
 
   if (is_second_instance) {
+    const HWND running_window = FindRunningMainWindow();
+    DWORD running_pid = 0;
+    if (running_window && GetWindowThreadProcessId(running_window, &running_pid)) {
+      // המופע הקיים יעלה את יעד הקישור בלי להחליף קודם את החלון הפעיל.
+      AllowSetForegroundWindow(running_pid);
+    }
     // Enqueue any otzaria:// URIs (and .otzplugin file paths) passed on the
     // command line so the first instance can handle them via its file-watcher,
     // then exit immediately.
@@ -398,7 +404,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
       }
     }
     // המנתב מעלה את חלון היעד; העלאת הראשי כאן דורסת את החלון הפעיל האחרון.
-    if (!queued_uri) BringWindowToFront(FindRunningMainWindow());
+    if (!queued_uri) BringWindowToFront(running_window);
     CloseHandle(mutex);
     return EXIT_SUCCESS;
   }
