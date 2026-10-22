@@ -576,6 +576,34 @@ void main() {
     expect(await settle(tester, opener.restoreLastClosedWindow()), isFalse);
   });
 
+  testWidgets('מאישור הסגירה החלון אינו יעד; כשל לפני ההריסה מחזיר אותו', (
+    tester,
+  ) async {
+    final opener = makeOpener(tester);
+    await pumpHost(tester);
+    expect(await settle(tester, opener.openWindow()), isTrue);
+    final entry = windows.registry.windows.single;
+    expect(entry.isClosing, isFalse);
+    bool? closingDuringFlush;
+    final failing = ViewWindowCloseFlow(
+      entry: entry,
+      flush: () async {
+        closingDuringFlush = entry.isClosing;
+        throw StateError('flush');
+      },
+      discardSession: sessions.delete,
+      opener: opener,
+    );
+    final outcome = failing.run().then<Object?>(
+      (_) => null,
+      onError: (Object e) => e,
+    );
+    expect(await settle(tester, outcome), isStateError);
+    expect(closingDuringFlush, isTrue);
+    expect(entry.isClosing, isFalse);
+    expect(windows.stubOf(entry).destroyed, isFalse);
+  });
+
   testWidgets('החלון האחרון על המסך (הראשי מוסתר): סגירה היא יציאה', (
     tester,
   ) async {

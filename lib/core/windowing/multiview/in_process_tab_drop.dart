@@ -162,7 +162,8 @@ class InProcessTabDrops {
       ..sort((a, b) => a.slot.compareTo(b.slot));
     return [
       ?_peer(self, AppWindowId.primary, mainSlot, isVisible: _mainShown),
-      for (final entry in views) ?_peer(self, entry.id, entry.slot),
+      for (final entry in views)
+        if (!entry.isClosing) ?_peer(self, entry.id, entry.slot),
     ];
   }
 
@@ -202,6 +203,10 @@ class InProcessTabDrops {
     if (target == null) return false;
     // ראשי מוסתר: הכרטיסיה הייתה נעלמת בחלון שאינו על המסך.
     if (slot == mainSlot && !_mainShown) return false;
+    // חלון שסגירתו אושרה: הכרטיסיה הייתה נסגרת איתו.
+    if (_registry.windows.any((w) => w.slot == slot && w.isClosing)) {
+      return false;
+    }
     final OpenedTab copy;
     try {
       copy = OpenedTab.fromJson(tab.toTransferJson());
@@ -271,7 +276,10 @@ class _InProcessTabDropReceiverState extends State<InProcessTabDropReceiver> {
     return (
       title: tabs.currentTab?.title ?? 'חלון ריק',
       tabCount: tabs.tabs.length,
-      activeWorkspaceId: context.read<WorkspaceBloc?>()?.state.activeWorkspaceId,
+      activeWorkspaceId: context
+          .read<WorkspaceBloc?>()
+          ?.state
+          .activeWorkspaceId,
     );
   }
 

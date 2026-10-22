@@ -46,6 +46,7 @@ class ViewWindowCloseFlow {
   Future<bool> run() async {
     if (_running) return false;
     _running = true;
+    var destroyed = false;
     try {
       final opener = _opener ?? ViewWindowOpener.instance;
       return await opener.serializeClose(() async {
@@ -61,6 +62,8 @@ class ViewWindowCloseFlow {
           final tabs = context.read<TabsBloc>().state.tabs;
           if (!await _confirm(context, tabs)) return false;
         }
+        // מכאן החלון אינו יעד להעברה: הכרטיסיה לא הייתה נשמרת.
+        entry.closing = true;
         try {
           // שוטף את כל החלונות; כתיבה מיותרת בחלון אחר אינה מזיקה.
           await _flush();
@@ -77,9 +80,11 @@ class ViewWindowCloseFlow {
           debugPrint('view window close: discard failed: $e');
         }
         entry.handle.destroy();
+        destroyed = true;
         return true;
       });
     } finally {
+      if (!destroyed) entry.closing = false;
       _running = false;
     }
   }

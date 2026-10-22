@@ -231,6 +231,25 @@ void main() {
       expect(await drops.sendTabToWindow(a.slot, tab), isFalse);
     });
 
+    testWidgets('חלון שסגירתו אושרה אינו יעד ומסרב לקלוט', (tester) async {
+      final windows = FakeViewWindows(tester);
+      final a = windows.registry.open(size: const Size(800, 600))!;
+      final drops = makeDrops(windows.registry);
+      final t = _target(0);
+      drops.register(a.id, t.target);
+      final tab = ToolTab(toolId: 'builtin.calendar', title: 'לוח שנה');
+
+      a.closing = true;
+      expect(drops.peers(AppWindowId.primary), isEmpty);
+      expect(await drops.sendTabToWindow(a.slot, tab), isFalse);
+      expect(t.received, isEmpty);
+
+      // סגירה שבוטלה או נכשלה: שוב יעד.
+      a.closing = false;
+      expect(drops.peers(AppWindowId.primary).single.slot, a.slot);
+      expect(await drops.sendTabToWindow(a.slot, tab), isTrue);
+    });
+
     testWidgets('peers: הראשי ושאר החלונות, בלי החלון עצמו ובלי חלון בלי עץ', (
       tester,
     ) async {

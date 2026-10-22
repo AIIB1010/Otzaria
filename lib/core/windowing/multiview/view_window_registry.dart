@@ -73,6 +73,11 @@ class ViewWindowEntry {
   /// מכאן החלון אינו כותב לסשן שלו.
   void endSession() => _sessionEnded = true;
 
+  /// סגירה שאושרה: כרטיסיה שתועבר לחלון מעכשיו תאבד איתו.
+  bool get isClosing => _closing || _sessionEnded;
+  bool _closing = false;
+  set closing(bool value) => _closing = value;
+
   /// מסלול הסגירה של החלון, כשהעץ שלו מורכב; בלעדיו — הריסה ישירה.
   Future<void> Function()? closeHandler;
 
