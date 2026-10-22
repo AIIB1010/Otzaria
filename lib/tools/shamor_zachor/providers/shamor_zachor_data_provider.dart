@@ -158,7 +158,6 @@ class ShamorZachorDataProvider with ChangeNotifier {
           rootCat,
           categoryMap,
           booksByCatId,
-          repository,
           null,
           parentPath: [],
         );
@@ -234,7 +233,6 @@ class ShamorZachorDataProvider with ChangeNotifier {
     db_models.Category currentCat,
     Map<int, db_models.Category> allCatsMap,
     Map<int, List<db_models.Book>> booksByCatId,
-    SeforimRepository repository,
     String? inheritedContentType, {
     List<String> parentPath = const [],
   }) async {
@@ -260,7 +258,6 @@ class ShamorZachorDataProvider with ChangeNotifier {
       // Convert DB Book to BookDetails with the full category path
       final bookDetails = await _convertDbBookToDetails(
         dbBook,
-        repository,
         myContentType,
         currentPath,
       );
@@ -279,7 +276,6 @@ class ShamorZachorDataProvider with ChangeNotifier {
         child,
         allCatsMap,
         booksByCatId,
-        repository,
         myContentType,
         parentPath: currentPath,
       );
@@ -311,7 +307,6 @@ class ShamorZachorDataProvider with ChangeNotifier {
 
   Future<BookDetails> _convertDbBookToDetails(
     db_models.Book dbBook,
-    SeforimRepository repository,
     String contentType,
     List<String> categoryPath,
   ) async {
