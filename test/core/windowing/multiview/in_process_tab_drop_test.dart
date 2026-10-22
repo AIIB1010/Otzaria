@@ -679,7 +679,39 @@ void main() {
       await source.close();
     });
 
-    testWidgets('בלי הדגל: גרירה למערכת מתעלמת מ-atTaskbarEdge (מודל A)', (
+    testWidgets('בלי הדגל: גרירה למערכת שנכלאה בקצה אזור העבודה מבוטלת', (
+      tester,
+    ) async {
+      MultiViewMode.debugOverride = false;
+      final windows = FakeViewWindows(tester);
+      final drops = makeDrops(windows.registry);
+      final opener = _FakeOpener();
+      WindowOpener.debugOverride = opener;
+      final source = _RecordingTabsBloc();
+      final tab = ToolTab(toolId: 'builtin.calendar', title: 'לוח שנה');
+      var cancelled = 0;
+      // מודל A: שחרור ב-(1000,1060) נמדד ב-(1000,1031) מעל שולחן העבודה.
+      runner.target = {'isSelf': false, 'isShellTray': false};
+      runner.systemDrag = {
+        'y': 1031,
+        'inWorkArea': true,
+        'atTaskbarEdge': true,
+      };
+      final drag = CrossWindowTabDrag(inProcess: drops)
+        ..begin(tab, colors, tabsBloc: source, cancelDrag: () => cancelled++);
+
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(runner.named('dragOutToSystem').single.arguments, isNull);
+      expect(cancelled, 1);
+      expect(opener.opened, isEmpty);
+      expect(source.events, isEmpty);
+      expect(runner.named('endTabDrag'), isNotEmpty);
+      drag.dispose();
+      await source.close();
+    });
+
+    testWidgets('בלי הדגל: גרירה למערכת שהוצמדה בקצה אזור העבודה נפתחת', (
       tester,
     ) async {
       MultiViewMode.debugOverride = false;
@@ -690,16 +722,74 @@ void main() {
       final source = _RecordingTabsBloc();
       final tab = ToolTab(toolId: 'builtin.calendar', title: 'לוח שנה');
       runner.target = {'isSelf': false, 'isShellTray': false};
-      runner.systemDrag = {'atTaskbarEdge': true};
+      runner.systemDrag = {'snapped': true, 'atTaskbarEdge': true};
       final drag = CrossWindowTabDrag(inProcess: drops)
         ..begin(tab, colors, tabsBloc: source);
 
       await tester.pump(const Duration(seconds: 1));
 
-      expect(runner.named('dragOutToSystem').single.arguments, isNull);
       expect(opener.opened, hasLength(1));
       expect(source.events.single, RemoveTab(tab));
       drag.dispose();
+      await source.close();
+    });
+
+    testWidgets('בלי הדגל: שחרור על שולחן העבודה מחוץ לאזור העבודה מבוטל', (
+      tester,
+    ) async {
+      MultiViewMode.debugOverride = false;
+      final windows = FakeViewWindows(tester);
+      final drops = makeDrops(windows.registry);
+      final opener = _FakeOpener();
+      WindowOpener.debugOverride = opener;
+      final source = _RecordingTabsBloc();
+      final tab = ToolTab(toolId: 'builtin.calendar', title: 'לוח שנה');
+      runner.target = {
+        'isSelf': false,
+        'isShellTray': false,
+        'inWorkArea': false,
+      };
+
+      await CrossWindowTabDrag(inProcess: drops)
+          .handleDroppedOutside(tab, source);
+
+      expect(opener.opened, isEmpty);
+      expect(source.events, isEmpty);
+      expect(runner.named('endTabDrag'), hasLength(1));
+      await source.close();
+    });
+
+    testWidgets('בלי הדגל: חלון אוצריא מחוץ לאזור העבודה (מסך מלא) קולט', (
+      tester,
+    ) async {
+      MultiViewMode.debugOverride = false;
+      final windows = FakeViewWindows(tester);
+      final drops = makeDrops(windows.registry);
+      final opener = _FakeOpener();
+      WindowOpener.debugOverride = opener;
+      final source = _RecordingTabsBloc();
+      final tab = ToolTab(toolId: 'builtin.calendar', title: 'לוח שנה');
+      runner.target = {
+        'slot': 1,
+        'isSelf': false,
+        'isShellTray': false,
+        'inWorkArea': false,
+      };
+
+      // ההעברה עצמה עוברת באפיק, שאינו קיים כאן; נבדק רק שאין ביטול.
+      final logs = <String>[];
+      final original = debugPrint;
+      debugPrint = (message, {wrapWidth}) => logs.add(message ?? '');
+      try {
+        await CrossWindowTabDrag(
+          inProcess: drops,
+        ).handleDroppedOutside(tab, source);
+      } finally {
+        debugPrint = original;
+      }
+
+      expect(opener.opened, isEmpty);
+      expect(logs, isNot(contains(contains('שורת המשימות'))));
       await source.close();
     });
   });

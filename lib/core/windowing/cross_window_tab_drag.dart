@@ -458,7 +458,7 @@ class CrossWindowTabDrag {
       // ⚠️ לולאת ההזזה כולאת את הסמן באזור העבודה: מה שתחתיו אינו היעד,
       // ולכן גם חלון אוצריא שם אינו קולט.
       if (outcome.isShellTray ||
-          (_inProcess != null && outcome.atTaskbarEdge) ||
+          outcome.atTaskbarEdge ||
           _outsideWorkArea(outcome.slot, outcome.inWorkArea)) {
         debugPrint('גרירה שוחררה מעל שורת המשימות — מבוטלת');
         return _hidePreview();
@@ -611,10 +611,10 @@ class CrossWindowTabDrag {
 
   void _hidePreview() => unawaited(_service.endTabDrag());
 
-  /// ריבוי תצוגות: שחרור על "שולחן העבודה" מחוץ לאזור העבודה של כל צג הוא
-  /// שורת משימות או appbar, גם כשהמחלקה שלה לא זוהתה. חלון אוצריא שם קולט.
+  /// שחרור על "שולחן העבודה" מחוץ לאזור העבודה של כל צג הוא שורת משימות
+  /// או appbar, גם כשהמחלקה שלה לא זוהתה. חלון אוצריא שם קולט.
   bool _outsideWorkArea(int? slot, bool inWorkArea) =>
-      _inProcess != null && slot == null && !inWorkArea;
+      slot == null && !inWorkArea;
 
   /// ה-runner מסתיר את הרוח כשחלון מנוע נחשף, אבל אינו מכיר חלונות Dart.
   void _hideAfterViewOpened() {
