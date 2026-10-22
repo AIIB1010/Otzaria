@@ -34,6 +34,22 @@ typedef SystemDragOutcome = ({
   int? slot,
   bool isSelf,
   bool isShellTray,
+  bool inWorkArea,
+  bool atTaskbarEdge,
+  int? hwnd,
+});
+
+/// מה שתחת הסמן — ראו [MultiWindowService.windowAtCursor].
+typedef CursorTarget = ({
+  int? slot,
+  bool isSelf,
+  bool isShellTray,
+  bool inWorkArea,
+  bool approachingTop,
+  int minUpwardTravel,
+  int x,
+  int y,
+  int? hwnd,
 });
 
 typedef VisibilityChangeResult = ({
@@ -305,9 +321,11 @@ class MultiWindowService implements WindowOpener {
   /// ⚠️ הם היו מקודדים קשיח בגוונים בהירים בצד הנייטיב. בערכה כהה זה
   /// נראה כמו מלבן לבן זוהר על מסך כהה — הפוך בדיוק ממה שהמשתמש מצפה
   /// שייגרר.
+  /// [sourceHwnd] — חלון Dart שממנו גוררים; בלעדיו המקור הוא החלון הראשי.
   Future<void> beginTabDrag(
     String title, {
     required DragPreviewColors colors,
+    int? sourceHwnd,
   }) => _guarded(
     canDragTabsOut,
     'beginTabDrag',
@@ -315,6 +333,7 @@ class MultiWindowService implements WindowOpener {
     () => channel.invokeMethod<void>('beginTabDrag', {
       'title': title,
       ...colors.toArgb(),
+      'sourceHwnd': ?sourceHwnd,
     }),
   );
 
@@ -352,26 +371,37 @@ class MultiWindowService implements WindowOpener {
   ///
   /// ⚠️ הקריאה חוסמת לכל משך הגרירה, וזה במתכוון: התשובה היא המסגרת
   /// הסופית — כולל הצמדה, אם המשתמש הצמיד.
-  Future<SystemDragOutcome?> dragOutToSystem() =>
-      _guarded(canDragTabsOut, 'dragOutToSystem', null, () async {
-        final info = await channel.invokeMapMethod<String, dynamic>(
-          'dragOutToSystem',
-        );
-        if (info == null) return null;
-        return (
-          ran: info['ran'] == true,
-          snapped: info['snapped'] == true,
-          left: (info['left'] as int?) ?? 0,
-          top: (info['top'] as int?) ?? 0,
-          width: (info['width'] as int?) ?? 0,
-          height: (info['height'] as int?) ?? 0,
-          x: (info['x'] as int?) ?? 0,
-          y: (info['y'] as int?) ?? 0,
-          slot: info['slot'] as int?,
-          isSelf: info['isSelf'] == true,
-          isShellTray: info['isShellTray'] == true,
-        );
-      });
+  ///
+  /// [withHwnd] (חלונות Dart): התשובה כוללת את ה-HWND שתחת הסמן, ו-isSelf
+  /// נמדד מול [selfHwnd] (בלעדיו — החלון הראשי).
+  Future<SystemDragOutcome?> dragOutToSystem({
+    int? selfHwnd,
+    bool withHwnd = false,
+  }) => _guarded(canDragTabsOut, 'dragOutToSystem', null, () async {
+    final info = await channel.invokeMapMethod<String, dynamic>(
+      'dragOutToSystem',
+      withHwnd ? {'selfHwnd': ?selfHwnd} : null,
+    );
+    if (info == null) return null;
+    return (
+      ran: info['ran'] == true,
+      snapped: info['snapped'] == true,
+      left: (info['left'] as int?) ?? 0,
+      top: (info['top'] as int?) ?? 0,
+      width: (info['width'] as int?) ?? 0,
+      height: (info['height'] as int?) ?? 0,
+      x: (info['x'] as int?) ?? 0,
+      y: (info['y'] as int?) ?? 0,
+      slot: info['slot'] as int?,
+      isSelf: info['isSelf'] == true,
+      isShellTray: info['isShellTray'] == true,
+      // runner ישן או מסלול בלי HWND אינו מדווח — בתוך אזור העבודה.
+      inWorkArea: info['inWorkArea'] != false,
+      // הסמן נכלא בקצה אזור העבודה ליד שורת המשימות; רק מחלונות Dart.
+      atTaskbarEdge: info['atTaskbarEdge'] == true,
+      hwnd: info['hwnd'] as int?,
+    );
+  });
 
   /// עוצר את המעקב ומשאיר את התצוגה **גלויה במקום השחרור**.
   ///
@@ -405,18 +435,23 @@ class MultiWindowService implements WindowOpener {
   ///
   /// ⚠️ ההמרה ב-runner ולא כאן: המיקום מגיע מחלון אחר, ו-Flutter אינו
   /// יודע היכן החלון שלו יושב על המסך.
-  Future<Offset?> screenToClient(int x, int y, double devicePixelRatio) =>
-      _guarded(canDragTabsOut, 'screenToClient', null, () async {
-        final p = await channel.invokeMapMethod<String, dynamic>(
-          'screenToClient',
-          {'x': x, 'y': y},
-        );
-        if (p == null) return null;
-        return Offset(
-          ((p['x'] as int?) ?? 0) / devicePixelRatio,
-          ((p['y'] as int?) ?? 0) / devicePixelRatio,
-        );
-      });
+  /// [hwnd] — חלון Dart שאליו ממירים; בלעדיו — החלון הראשי.
+  Future<Offset?> screenToClient(
+    int x,
+    int y,
+    double devicePixelRatio, {
+    int? hwnd,
+  }) => _guarded(canDragTabsOut, 'screenToClient', null, () async {
+    final p = await channel.invokeMapMethod<String, dynamic>(
+      'screenToClient',
+      {'x': x, 'y': y, 'hwnd': ?hwnd},
+    );
+    if (p == null) return null;
+    return Offset(
+      ((p['x'] as int?) ?? 0) / devicePixelRatio,
+      ((p['y'] as int?) ?? 0) / devicePixelRatio,
+    );
+  });
 
   /// מודיע ל-runner באיזו משבצת באפיק החלון הזה יושב.
   ///
@@ -440,34 +475,30 @@ class MultiWindowService implements WindowOpener {
   /// של "שוחרר על שולחן העבודה". כלומר כשל ערוץ פתח חלון חדש בפינה (0,0)
   /// ומחק את הכרטיסיה מהמקור.
   /// ערכי ההתקרבות מחושבים בנייטיב לפי הצג וה-DPI שמתחת לסמן.
-  Future<
-    ({
-      int? slot,
-      bool isSelf,
-      bool isShellTray,
-      bool approachingTop,
-      int minUpwardTravel,
-      int x,
-      int y,
-    })?
-  >
-  windowAtCursor() =>
-      _guarded(canOpenWindows, 'windowAtCursor', null, () async {
-        final info = await channel.invokeMapMethod<String, dynamic>(
-          'windowAtCursor',
-        );
-        if (info == null) return null;
-        return (
-          slot: info['slot'] as int?,
-          isSelf: info['isSelf'] == true,
-          isShellTray: info['isShellTray'] == true,
-          approachingTop: info['approachingTop'] == true,
-          // ערך חסר דורש נסיעה שמרנית יותר.
-          minUpwardTravel: (info['minUpwardTravel'] as int?) ?? 24,
-          x: (info['x'] as int?) ?? 0,
-          y: (info['y'] as int?) ?? 0,
-        );
-      });
+  /// [selfHwnd] ו-[withHwnd] — כמו ב-[dragOutToSystem].
+  Future<CursorTarget?> windowAtCursor({
+    int? selfHwnd,
+    bool withHwnd = false,
+  }) => _guarded(canOpenWindows, 'windowAtCursor', null, () async {
+    final info = await channel.invokeMapMethod<String, dynamic>(
+      'windowAtCursor',
+      withHwnd ? {'selfHwnd': ?selfHwnd} : null,
+    );
+    if (info == null) return null;
+    return (
+      slot: info['slot'] as int?,
+      isSelf: info['isSelf'] == true,
+      isShellTray: info['isShellTray'] == true,
+      // runner ישן או מסלול בלי HWND אינו מדווח — בתוך אזור העבודה.
+      inWorkArea: info['inWorkArea'] != false,
+      approachingTop: info['approachingTop'] == true,
+      // ערך חסר דורש נסיעה שמרנית יותר.
+      minUpwardTravel: (info['minUpwardTravel'] as int?) ?? 24,
+      x: (info['x'] as int?) ?? 0,
+      y: (info['y'] as int?) ?? 0,
+      hwnd: info['hwnd'] as int?,
+    );
+  });
 
   /// סוגר את החלון הנוכחי בלי לסיים את התהליך.
   ///

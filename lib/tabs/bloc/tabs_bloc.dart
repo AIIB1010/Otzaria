@@ -416,15 +416,17 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
     final tab = await _withCompanion(event.tab);
     _separateHistorySlots([tab]);
     final newTabs = List<OpenedTab>.from(state.tabs);
-    final newIndex = event.insertAdjacent
-        ? min(state.currentTabIndex + 1, newTabs.length)
-        : newTabs.length;
+    final newIndex =
+        event.index?.clamp(0, newTabs.length) ??
+        (event.insertAdjacent
+            ? min(state.currentTabIndex + 1, newTabs.length)
+            : newTabs.length);
     newTabs.insert(newIndex, tab);
 
-    // ברקע נשארים על הטאב הנוכחי; ההוספה היא אחריו או בסוף, ולכן האינדקס
-    // שלו אינו זז. בלי טאב פתוח אין "נוכחי" להישאר עליו.
     final keepCurrent = event.inBackground && state.hasOpenTabs;
-    final currentIndex = keepCurrent ? state.currentTabIndex : newIndex;
+    final currentIndex = keepCurrent
+        ? state.currentTabIndex + (newIndex <= state.currentTabIndex ? 1 : 0)
+        : newIndex;
     emit(
       state.copyWith(
         tabs: newTabs,

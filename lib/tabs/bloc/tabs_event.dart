@@ -16,6 +16,9 @@ class AddTab extends TabsEvent {
   // אחרת – נוסף בסוף רשימת הטאבים, כברירת מחדל לפתיחת ספר חדש.
   final bool insertAdjacent;
 
+  /// מיקום מפורש ברצועה, למשל בהעברה מחלון אחר.
+  final int? index;
+
   /// פתיחה ברקע ("פתח בכרטיסייה חדשה"): הטאב נוסף אך המשתמש נשאר על הנוכחי.
   final bool inBackground;
 
@@ -23,10 +26,11 @@ class AddTab extends TabsEvent {
     this.tab, {
     this.insertAdjacent = false,
     this.inBackground = false,
+    this.index,
   });
 
   @override
-  List<Object?> get props => [tab, insertAdjacent, inBackground];
+  List<Object?> get props => [tab, insertAdjacent, inBackground, index];
 }
 
 class OpenOrFocusTab extends TabsEvent {
