@@ -8,6 +8,7 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_driver/driver_extension.dart';
+import 'package:otzaria/core/app_paths.dart';
 import 'package:otzaria/core/windowing/app_window_id.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/windowing/multiview/in_process_tab_drop.dart';
@@ -27,6 +28,16 @@ import 'package:window_manager/window_manager.dart';
 const _toolId = 'builtin.measurements';
 
 void main() {
+  // בלי מצב נייד האפליקציה הייתה כותבת לפרופיל האמיתי (APPDATA) ומתנגשת במופע הפתוח.
+  if (!AppPaths.isPortable) {
+    enableFlutterDriverExtension(
+      handler: (_) async => jsonEncode({
+        'error':
+            'portable.marker missing next to ${Platform.resolvedExecutable}',
+      }),
+    );
+    return;
+  }
   // הרמטי: סשן שנשאר מריצה קודמת משוחזר לחלון הראשי ומטה את הבדיקה.
   final data = Directory(
     p.join(p.dirname(Platform.resolvedExecutable), 'otzaria_data'),
