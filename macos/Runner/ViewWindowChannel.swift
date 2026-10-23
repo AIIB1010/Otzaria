@@ -10,7 +10,7 @@ final class OtzariaViewWindows {
   static let revealTimeout: TimeInterval = 20
   static let windowMethods: Set<String> = [
     "frame", "setFrame", "isVisible", "orderFront", "makeKey", "startDragging", "visibleFrame",
-    "makeFrameless", "reveal", "cloak",
+    "makeFrameless", "reveal", "cloak", "placement",
   ]
 
   private(set) var status: MultiViewEnabler.Status = .noImplicitView
@@ -170,6 +170,13 @@ final class OtzariaViewWindows {
         ViewWindowGeometry.dictionary(
           ViewWindowGeometry.topLeft(
             fromCocoa: window.frame, primaryScreenHeight: primaryScreenHeight)))
+
+    case "placement":
+      var placement: [String: Any] = ViewWindowGeometry.dictionary(
+        ViewWindowGeometry.topLeft(
+          fromCocoa: window.frame, primaryScreenHeight: primaryScreenHeight))
+      placement["maximized"] = window.isZoomed
+      result(placement)
 
     case "setFrame":
       guard let rect = ViewWindowGeometry.rect(from: args) else {

@@ -140,11 +140,12 @@ class CocoaViewWindowNative implements ViewWindowNative {
   /// ההיסט בנקודות, ולכן DPI 96 גם במסך Retina.
   @override
   Future<({Rect normal, bool maximized, int dpi})?> placement(int hwnd) async {
-    final frame = _rect(await _window<Object?>('frame', hwnd));
+    final value = await _window<Object?>('placement', hwnd);
+    final frame = _rect(value);
     if (frame == null) return null;
     return (
       normal: frame,
-      maximized: false,
+      maximized: value is Map && value['maximized'] == true,
       dpi: 96,
     );
   }

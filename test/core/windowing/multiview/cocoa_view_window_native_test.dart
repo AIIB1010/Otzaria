@@ -17,6 +17,7 @@ class _FakeRunner {
     'scale': 2.0,
   };
   bool ready = true;
+  bool zoomed = false;
   bool cloakResult = false;
   Set<int> knownHandles = {7};
 
@@ -38,6 +39,10 @@ class _FakeRunner {
     }
     return switch (call.method) {
       'frame' => frame == null ? null : {...frame!, 'height': 600.0},
+      'placement' =>
+        frame == null
+            ? null
+            : {...frame!, 'height': 600.0, 'maximized': zoomed},
       'visibleFrame' => visibleFrame,
       'isVisible' => true,
       'cloak' => cloakResult,
@@ -156,6 +161,13 @@ void main() {
     expect(placement.normal, const Rect.fromLTWH(100, 50, 800, 600));
     expect(placement.maximized, isFalse);
     expect(placement.dpi, 96);
+  });
+
+  test('placement קורא את מצב zoom של החלון מה-runner', () async {
+    runner.zoomed = true;
+    expect((await native.placement(7))!.maximized, isTrue);
+    runner.zoomed = false;
+    expect((await native.placement(7))!.maximized, isFalse);
   });
 
   test('visibleFrame null (אין מסך): אין אזור עבודה, וקנה המידה 1', () async {

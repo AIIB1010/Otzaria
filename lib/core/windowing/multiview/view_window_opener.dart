@@ -8,6 +8,7 @@ import 'package:otzaria/core/messages/window_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/user_state/window_bounds.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
+import 'package:otzaria/core/window_persistence.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
 import 'package:otzaria/core/windowing/multiview/cocoa_view_window_native.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
@@ -143,17 +144,25 @@ class ViewWindowOpener implements WindowOpener {
         placement.maximized ||
         (view?.handle.isFullscreen ?? await _isMainWindowFullscreen());
     var normal = placement.normal;
-    if (_native is GtkViewWindowNative && view == null && maximized) {
-      final saved = WindowBounds.decode(
-        (await _store.load(1))?.boundsJson,
-      )?.toPhysical();
-      if (saved != null) {
+    final cocoa = _native is CocoaViewWindowNative;
+    if (maximized &&
+        (cocoa || (_native is GtkViewWindowNative && view == null))) {
+      var saved = WindowBounds.decode(
+        (await _store.load(view?.slot ?? 1))?.boundsJson,
+      );
+      if (cocoa && view == null && saved?.hasRect != true) {
+        saved = await WindowPersistence.current.loadSavedBounds();
+      }
+      final bounds = saved?.toPhysical(screenPoints: cocoa);
+      if (bounds != null) {
         normal = Rect.fromLTWH(
-          saved.left.toDouble(),
-          saved.top.toDouble(),
-          saved.width.toDouble(),
-          saved.height.toDouble(),
+          bounds.left.toDouble(),
+          bounds.top.toDouble(),
+          bounds.width.toDouble(),
+          bounds.height.toDouble(),
         );
+      } else if (cocoa) {
+        normal = placement.normal.topLeft & WindowPersistence.defaultSize;
       }
     }
     return SourceWindowPlacement(

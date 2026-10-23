@@ -25,6 +25,7 @@ class WindowPersistence {
   static const double _minWidth = 420;
   static const double _minHeight = 400;
   static const Size minSize = Size(_minWidth, _minHeight);
+  static const Size defaultSize = Size(1280, 720);
   static const Duration _debounceDuration = Duration(milliseconds: 400);
 
   /// גובה רצועת האחיזה (פס הכותרת המותאם) בפיקסלים לוגיים. בדיקת הנגישות
@@ -129,7 +130,7 @@ class WindowPersistenceBinding {
 
   /// הגבולות של החלון הזה מהסשן שלו; בהיעדרם — מפתחות ההגדרות הישנים,
   /// שבהם נשמרו גבולות החלון היחיד לפני שכל חלון קיבל סשן.
-  Future<WindowBounds> _loadSavedBounds() async {
+  Future<WindowBounds> loadSavedBounds() async {
     final slot = _slot();
     // בהפעלה ראשונה אין עדיין ספרייה, ופתיחת המסד הייתה יוצרת אותו במיקום
     // ברירת מחדל לפני שהמשתמש בחר; גם אין שם גבולות לקרוא.
@@ -197,7 +198,7 @@ class WindowPersistenceBinding {
     _isRestoring = true;
 
     try {
-      final saved = await _loadSavedBounds();
+      final saved = await loadSavedBounds();
       final left = saved.left;
       final top = saved.top;
       final width = saved.width;
@@ -263,7 +264,7 @@ class WindowPersistenceBinding {
           : _devicePixelRatio();
       if (physicalBounds == null) {
         // אין גבולות שמורים (הפעלה ראשונה) — גודל ברירת מחדל ממורכז.
-        await _geometry.setSize(const Size(1280, 720));
+        await _geometry.setSize(WindowPersistence.defaultSize);
         await _window.center();
       } else if (await _isReachableOnConnectedDisplay(physicalBounds)) {
         // הגבולות כבר עברו clamp ל-minSize (420x400) ב-restoreIfAny, וגודל

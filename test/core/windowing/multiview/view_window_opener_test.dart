@@ -669,6 +669,162 @@ void main() {
     expect(windows.registry.windows, isEmpty);
   });
 
+  for (final scenario in [
+    (
+      name: 'ראשי zoom',
+      secondary: false,
+      fullscreen: false,
+      saved: true,
+      legacy: false,
+    ),
+    (
+      name: 'ראשי fullscreen',
+      secondary: false,
+      fullscreen: true,
+      saved: true,
+      legacy: false,
+    ),
+    (
+      name: 'משני zoom',
+      secondary: true,
+      fullscreen: false,
+      saved: true,
+      legacy: false,
+    ),
+    (
+      name: 'משני fullscreen',
+      secondary: true,
+      fullscreen: true,
+      saved: true,
+      legacy: false,
+    ),
+    (
+      name: 'ראשי legacy',
+      secondary: false,
+      fullscreen: false,
+      saved: false,
+      legacy: true,
+    ),
+    (
+      name: 'ראשי ללא normal שמור',
+      secondary: false,
+      fullscreen: true,
+      saved: false,
+      legacy: false,
+    ),
+  ]) {
+    testWidgets('Cocoa expanded source: ${scenario.name}', (tester) async {
+      makeOpener(tester);
+      await pumpHost(tester);
+      final source = scenario.secondary
+          ? windows.registry.open(size: const Size(800, 600))
+          : null;
+      if (source != null) {
+        windows.stubOf(source)
+          ..maximized = !scenario.fullscreen
+          ..fullscreen = scenario.fullscreen;
+      }
+      final sourceHandle = source?.handle.nativeHandle ?? 1;
+      final slot = source?.slot ?? 1;
+      const normal = WindowBounds(
+        left: 100,
+        top: 80,
+        width: 800,
+        height: 600,
+        dpr: 2,
+      );
+      if (scenario.saved) {
+        sessions.rows[slot] = WindowSession(
+          slot: slot,
+          tabsJson: '[]',
+          currentIndex: 0,
+          boundsJson: normal.encode(),
+        );
+      }
+      if (scenario.legacy) {
+        final values = {
+          'window_bounds_left': 100.0,
+          'window_bounds_top': 80.0,
+          'window_bounds_width': 800.0,
+          'window_bounds_height': 600.0,
+          'window_bounds_dpr': 2.0,
+        };
+        for (final entry in values.entries) {
+          await Settings.setValue(entry.key, entry.value);
+        }
+        addTearDown(() async {
+          for (final key in values.keys) {
+            await Settings.setValue<Object?>(key, null);
+          }
+        });
+      }
+      final frames = <int, Rect>{
+        sourceHandle: const Rect.fromLTWH(0, 0, 1920, 1080),
+      };
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(CocoaViewWindowNative.defaultChannel, (
+        call,
+      ) async {
+        final args = call.arguments as Map?;
+        final handle = args?['handle'] as int?;
+        if (call.method == 'keyWindow') return sourceHandle;
+        if (call.method == 'setFrame') {
+          frames[handle!] = Rect.fromLTWH(
+            args!['x'] as double,
+            args['y'] as double,
+            args['width'] as double,
+            args['height'] as double,
+          );
+        }
+        if (call.method == 'frame' || call.method == 'placement') {
+          final rect = frames[handle] ?? const Rect.fromLTWH(0, 0, 1000, 700);
+          return {
+            'x': rect.left,
+            'y': rect.top,
+            'width': rect.width,
+            'height': rect.height,
+            'maximized': !scenario.fullscreen,
+          };
+        }
+        if (call.method == 'visibleFrame') {
+          return {
+            'x': 0.0,
+            'y': 25.0,
+            'width': 1920.0,
+            'height': 1015.0,
+            'scale': 2.0,
+          };
+        }
+        if (call.method == 'reveal') return true;
+        return null;
+      });
+      addTearDown(
+        () => messenger.setMockMethodCallHandler(
+          CocoaViewWindowNative.defaultChannel,
+          null,
+        ),
+      );
+      final opener = ViewWindowOpener(
+        registry: windows.registry,
+        native: const CocoaViewWindowNative(),
+        sessions: sessions,
+        mainWindowHwnd: () async => 1,
+        isMainWindowFullscreen: () async => scenario.fullscreen,
+      );
+      expect(await settle(tester, opener.openWindow()), isTrue);
+      final created = windows.handles.last;
+      expect(created.stub.maximized, isTrue);
+      expect(created.stub.fullscreen, isFalse);
+      expect(
+        frames[created.fakeHwnd],
+        scenario.saved || scenario.legacy
+            ? const Rect.fromLTWH(130, 110, 800, 600)
+            : const Rect.fromLTWH(30, 30, 1280, 720),
+      );
+    });
+  }
+
   testWidgets('שחזור Cocoa משתמש בנקודות הסשן הישן עם DPR 2', (tester) async {
     makeOpener(tester);
     const saved = WindowBounds(
