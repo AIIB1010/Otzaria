@@ -504,10 +504,6 @@ class _ExternalSearchResultsSectionState
         counts[path] = (counts[path] ?? 0) + 1;
       }
     }
-    var totalHits = 0;
-    for (final entry in index) {
-      totalHits += entry.hits;
-    }
     // שורות הדלי בעץ הן הרשימה הזו, ואין להן סדר קטלוגי כמו לספרי הספרייה —
     // לכן העשיר במופעים ראשון, ובתיקו לפי שם, כדי שהסדר יהיה יציב וקריא.
     namedOther.sort((a, b) {
@@ -517,10 +513,8 @@ class _ExternalSearchResultsSectionState
 
     _categoryById = categories;
     _summary = ExternalSearchSummary(
-      provider: active.$1,
       sourceTitle: active.$2,
       totalBooks: index.length,
-      totalHits: totalHits,
       categoryBookCounts: counts,
       otherBooks: other,
       namedOtherBooks: namedOther,
