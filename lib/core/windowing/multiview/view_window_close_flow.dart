@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otzaria/core/pre_close_registry.dart';
@@ -32,6 +34,12 @@ class ViewWindowCloseFlow {
   final Future<void> Function(int slot) _discardSession;
   final ViewWindowOpener? _opener;
   bool _running = false;
+  final Completer<bool> _abandoned = Completer<bool>();
+
+  /// עץ החלון פורק (אתחול מחדש): שאלה פתוחה נחשבת לביטול ומשחררת את התור.
+  void abandon() {
+    if (!_abandoned.isCompleted) _abandoned.complete(false);
+  }
 
   static Future<bool> _confirmUnsavedTabs(
     BuildContext context,
@@ -44,23 +52,33 @@ class ViewWindowCloseFlow {
 
   /// מחזיר false כשהמשתמש ביטל; לחיצה חוזרת בזמן ריצה אינה עושה דבר.
   Future<bool> run() async {
-    if (_running) return false;
+    if (_running || _abandoned.isCompleted) return false;
     _running = true;
     var destroyed = false;
     try {
       final opener = _opener ?? ViewWindowOpener.instance;
       return await opener.serializeClose(() async {
+        if (_abandoned.isCompleted) return false;
         final endProcess = opener.endProcess;
-        if (endProcess != null && await opener.isLastVisibleWindow(entry)) {
-          // החלון האחרון על המסך: יציאה מהתוכנה, עם השאלות של יציאה. אם חזרה — בוטלה.
-          AppWindowKeys.activateWindow(entry.id);
-          await endProcess();
-          return false;
+        if (endProcess != null) {
+          final isLast = await opener.isLastVisibleWindow(entry);
+          if (_abandoned.isCompleted) return false;
+          if (isLast) {
+            // החלון האחרון על המסך: יציאה מהתוכנה, עם השאלות של יציאה. אם חזרה — בוטלה.
+            AppWindowKeys.activateWindow(entry.id);
+            await endProcess();
+            return false;
+          }
         }
         final context = entry.keys.navigator.currentContext;
         if (context != null && context.mounted) {
           final tabs = context.read<TabsBloc>().state.tabs;
-          if (!await _confirm(context, tabs)) return false;
+          // דיאלוג שה-Navigator שלו נהרס אינו חוזר; בלי זה התור ננעל לכל החלונות.
+          final confirmed = await Future.any([
+            _confirm(context, tabs),
+            _abandoned.future,
+          ]);
+          if (!confirmed || _abandoned.isCompleted) return false;
         }
         // מכאן החלון אינו יעד להעברה: הכרטיסיה לא הייתה נשמרת.
         entry.closing = true;
@@ -70,6 +88,8 @@ class ViewWindowCloseFlow {
         } on PreCloseFlushFailure catch (e) {
           debugPrint('view window close: flush failed: $e');
         }
+        if (_abandoned.isCompleted) return false;
+        // מכאן הסגירה שאושרה מושלמת גם אם העץ נבנה מחדש.
         await opener.rememberClosed(entry.slot);
         // סגירה מכוונת מוחקת את הסשן; קודם endSession, ששמירה באמצע לא תחזיר אותו.
         entry.endSession();

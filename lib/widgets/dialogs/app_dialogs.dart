@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:otzaria/widgets/controls/action_buttons.dart';
+import 'package:otzaria/widgets/dialogs/dialog_teardown.dart';
 import 'package:otzaria/widgets/misc/keyboard_dialog_navigation.dart';
 
 // ── AppDialog ─────────────────────────────────────────────────────────────────
@@ -228,7 +229,7 @@ Future<bool?> showSingleActionDialog({
   TextDirection? textDirection,
   bool barrierDismissible = true,
   bool Function()? onConfirm,
-}) => showDialog<bool>(
+}) => showDialogUntilTornDown<bool>(
   context: context,
   barrierDismissible: barrierDismissible,
   builder: (_) => _withOpenerDirection(
@@ -255,7 +256,7 @@ Future<bool?> showTwoActionsDialog({
   bool barrierDismissible = true,
   bool handleEnterKey = true,
   ValueListenable<bool>? hasUnsavedChanges,
-}) => showDialog<bool>(
+}) => showDialogUntilTornDown<bool>(
   context: context,
   barrierDismissible: barrierDismissible,
   builder: (_) => _withOpenerDirection(
@@ -282,7 +283,7 @@ Future<bool?> showWarningDialog({
   String confirmText = 'איפוס',
   TextDirection? textDirection,
   bool barrierDismissible = true,
-}) => showDialog<bool>(
+}) => showDialogUntilTornDown<bool>(
   context: context,
   barrierDismissible: barrierDismissible,
   builder: (_) => _withOpenerDirection(
