@@ -41,7 +41,12 @@ import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
 import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
 import 'package:otzaria/tabs/models/tab.dart';
+import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/tabs/models/tool_tab.dart';
+import 'package:otzaria/data/sqlite/sqlite3_api.dart' show sqlite3;
+import 'package:otzaria/models/books.dart';
+import 'package:otzaria/plugins/repository/plugin_correction_draft_repository.dart';
+import 'package:otzaria/plugins/services/plugin_correction_session_service.dart';
 import 'package:otzaria/widgets/misc/app_context_menu.dart';
 import 'package:otzaria/widgets/misc/app_popup_menu.dart';
 import 'package:otzaria/workspaces/bloc/workspace_bloc.dart';
@@ -657,6 +662,105 @@ void main() {
     // חלון שנהרס כבר אינו רשום: הפעלה לפי המזהה שלו אינה מחליפה מפתחות.
     AppWindowKeys.activateWindow(a.id);
     expect(AppWindowKeys.current, isNot(same(a.keys)));
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('סגירת חלון Dart מסיימת את סשני התיקון בכרטיסיות שלו', (
+    tester,
+  ) async {
+    final db = sqlite3.openInMemory();
+    final service = PluginCorrectionSessionService.instance
+      ..draftRepository = PluginCorrectionDraftRepository.direct(db);
+    addTearDown(db.close);
+    final windows = FakeViewWindows(tester);
+    final (contexts, _) = await pumpHost(
+      tester,
+      windows.registry,
+      closeFlow: (entry) => ViewWindowCloseFlow(
+        entry: entry,
+        opener: ViewWindowOpener(
+          registry: windows.registry,
+          native: windows.native,
+        ),
+        confirm: (_, _) async => true,
+        flush: () async {},
+      ),
+    );
+    final tab = TextBookTab(book: TextBook(title: 'ברכות'), index: 0);
+    final tabId = PluginCorrectionSessionService.tabIdFor(tab);
+    final a = windows.registry.open(
+      size: const Size(800, 600),
+      initialTab: tab,
+    )!;
+    await tester.pump();
+    final tabsA = contexts[a.slot]!.read<TabsBloc>();
+    await tester.pump(const Duration(seconds: 1));
+    expect(tabsA.state.tabs, [same(tab)]);
+    final ended = <Object?>[];
+    await tester.runAsync(
+      () => service.begin(
+        owner: 'p',
+        tabId: tabId,
+        bookId: 'ברכות',
+        bookUid: 'id:1',
+        libraryVersion: 'v1',
+        loadSource: (_) async => 'מקור',
+        onEvent: (topic, payload) {
+          if (topic == 'reader.correctionSessionEnded') {
+            ended.add(payload['reason']);
+          }
+        },
+      ),
+    );
+    expect(service.hasSessionForTab(tabId), isTrue);
+
+    await a.controller.close();
+    await tester.pump();
+    expect(windows.stubOf(a).destroyed, isTrue);
+    // מסתיים מיד ובסיבה window_closed, לפני שחרור הכרטיסיות.
+    expect(service.hasSessionForTab(tabId), isFalse);
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    await tester.pump(const Duration(seconds: 4));
+    expect(ended, ['window_closed']);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('סגירת חלון Dart משחררת את הכרטיסיות שלו', (tester) async {
+    final windows = FakeViewWindows(tester);
+    final (contexts, _) = await pumpHost(
+      tester,
+      windows.registry,
+      closeFlow: (entry) => ViewWindowCloseFlow(
+        entry: entry,
+        opener: ViewWindowOpener(
+          registry: windows.registry,
+          native: windows.native,
+        ),
+        confirm: (_, _) async => true,
+        flush: () async {},
+      ),
+    );
+    final tab = TextBookTab(book: TextBook(title: 'שבת'), index: 0);
+    // ה-bloc מאזין לזרם סטטי; בלי שחרור הוא והכרטיסיה נשארים חיים.
+    final bloc = tab.bloc;
+    final a = windows.registry.open(
+      size: const Size(800, 600),
+      initialTab: tab,
+    )!;
+    await tester.pump();
+    final tabsA = contexts[a.slot]!.read<TabsBloc>();
+    await tester.pump(const Duration(seconds: 1));
+    expect(tabsA.state.tabs, [same(tab)]);
+
+    await a.controller.close();
+    await tester.pump();
+    expect(windows.stubOf(a).destroyed, isTrue);
+    await tester.pump(const Duration(seconds: 1));
+    expect(bloc.isClosed, isTrue);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 1));

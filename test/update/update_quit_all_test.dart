@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/windowing/app_quit.dart';
 import 'package:otzaria/core/windowing/app_window_controller.dart';
-import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 
 /// המעדכן החיצוני מחליף קבצים רק אחרי שהתהליך יצא, ולכן "התקן כעת" יוצא מכל
 /// החלונות דרך [AppQuit.quitAll]. בריבוי תצוגות סגירת הראשי רק מסתירה אותו,
@@ -26,7 +25,6 @@ void main() {
 
   tearDown(() {
     AppQuit.resetForTest();
-    MultiViewMode.debugOverride = false;
   });
 
   test('מסלול העדכון יוצא מכל החלונות דרך AppQuit', () {
@@ -53,8 +51,7 @@ void main() {
     }
   });
 
-  test('ריבוי תצוגות: מסלול היציאה של התהליך, לא הסתרת הראשי', () async {
-    MultiViewMode.debugOverride = true;
+  test('מסלול היציאה של התהליך, לא הסתרת הראשי', () async {
     var quitProcess = 0;
     AppQuit.install(() async => quitProcess++);
     final window = _RecordingWindow();
@@ -65,20 +62,7 @@ void main() {
     expect(window.closes, 0, reason: 'סגירה רגילה רק מסתירה את הראשי');
   });
 
-  test('חלון יחיד: גם הוא יוצא במסלול של התהליך', () async {
-    MultiViewMode.debugOverride = false;
-    var quitProcess = 0;
-    AppQuit.install(() async => quitProcess++);
-    final window = _RecordingWindow();
-
-    await AppQuit.quitAll(AppQuitReason.update, window: window);
-
-    expect(quitProcess, 1);
-    expect(window.closes, 0);
-  });
-
   test('בלי מסלול מותקן: נופל לסגירה המנומסת', () async {
-    MultiViewMode.debugOverride = true;
     final window = _RecordingWindow();
 
     await AppQuit.quitAll(AppQuitReason.update, window: window);

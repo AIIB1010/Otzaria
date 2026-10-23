@@ -21,7 +21,7 @@ class NoTimer implements Timer {
 
 void main() {
   test(
-    'primary must discover events created later by secondary window',
+    'a sender must discover events queued later by another writer',
     () async {
       final dir = await Directory.systemTemp.createTemp('audit1758_discovery_');
       addTearDown(() => dir.delete(recursive: true));
@@ -29,11 +29,10 @@ void main() {
         ..state = 'granted'
         ..version = 1;
       final posts = <http.Request>[];
-      SearchFeedbackService service(bool secondary) => SearchFeedbackService(
+      SearchFeedbackService service() => SearchFeedbackService(
         storageDirectory: () async => dir,
         consentPersistence: consent,
         clock: () => kStart.add(const Duration(seconds: 5)),
-        isSecondaryWindow: () => secondary,
         buildAllowsSending: true,
         sendingAllowed: () => true,
         appVersion: () => '1.2.3',
@@ -58,9 +57,9 @@ void main() {
         }),
         baseUrl: Uri.parse('https://example.test'),
       );
-      final primary = service(false);
+      final primary = service();
       await primary.flush(); // loads empty shared directory
-      final secondary = service(true);
+      final secondary = service();
       secondary.recordSearch(searchContext());
       await secondary.whenQueued();
       expect(
@@ -159,31 +158,28 @@ void main() {
     expect((await sending).kind, SearchFeedbackOutcomeKind.retryLater);
     expect(posts, 0);
   });
-  test('secondary stale consent cannot enqueue after primary revoke', () async {
+  test('stale consent cannot enqueue after another instance revokes', () async {
     final dir = await Directory.systemTemp.createTemp('sf_stale_consent');
     addTearDown(() => dir.delete(recursive: true));
-    SearchFeedbackService service(
-      MemoryConsentPersistence consent,
-      bool secondary,
-    ) => SearchFeedbackService(
-      storageDirectory: () async => dir,
-      consentPersistence: consent,
-      platform: () => 'windows',
-      isSecondaryWindow: () => secondary,
-      buildAllowsSending: false,
-      timerFactory: (_, _) => NoTimer(),
-      appVersion: () => '1.2.3',
-      osVersion: () => '10.0',
-      locale: () => 'he',
-    );
+    SearchFeedbackService service(MemoryConsentPersistence consent) =>
+        SearchFeedbackService(
+          storageDirectory: () async => dir,
+          consentPersistence: consent,
+          platform: () => 'windows',
+          buildAllowsSending: false,
+          timerFactory: (_, _) => NoTimer(),
+          appVersion: () => '1.2.3',
+          osVersion: () => '10.0',
+          locale: () => 'he',
+        );
     final primaryConsent = MemoryConsentPersistence()
       ..state = 'granted'
       ..version = 1;
     final secondaryConsent = MemoryConsentPersistence()
       ..state = 'granted'
       ..version = 1;
-    final primary = service(primaryConsent, false);
-    final secondary = service(secondaryConsent, true);
+    final primary = service(primaryConsent);
+    final secondary = service(secondaryConsent);
     await primary.revoke();
     secondary.recordSearch(searchContext());
     await secondary.whenQueued();

@@ -1476,8 +1476,7 @@ class _RunnerOpener implements WindowOpener {
   Future<bool> canOpenAnotherWindow() async => true;
 
   @override
-  Future<({int count, int max, int engines})?> windowCount() async =>
-      (count: 1, max: 8, engines: 1);
+  Future<({int count, int max})?> windowCount() async => (count: 1, max: 8);
 
   @override
   Future<void> reportOpenWindowFailure() async {}
@@ -1499,7 +1498,7 @@ class _FakeDrops extends InProcessTabDrops {
   final Map<int, _FakePeer> receivers = {};
 
   @override
-  int? resolve({int? hwnd, int? busSlot}) => busSlot;
+  int? resolve({int? hwnd, int? runnerSlot}) => runnerSlot;
 
   @override
   int? slotOf(AppWindowId id) => null;

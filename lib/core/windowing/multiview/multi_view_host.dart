@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
 
 /// בונה את תוכן החלון הנוסף.
@@ -41,13 +40,11 @@ class _MultiViewHostState extends State<MultiViewHost> {
 
   @override
   Widget build(BuildContext context) {
-    final child = widget.child;
-    if (!MultiViewMode.enabled) return child;
     final windows = widget.registry ?? ViewWindowRegistry.instance;
     // ViewAnchor קבוע גם בלי חלונות, כדי שפתיחת הראשון לא תבנה מחדש את child.
     return ListenableBuilder(
       listenable: windows,
-      child: child,
+      child: widget.child,
       builder: (context, child) {
         final entries = windows.windows;
         return ViewAnchor(

@@ -493,9 +493,7 @@ Future<void> _initializeSentry() async {
 
         options.beforeSend = (event, hint) {
           // כל החלונות ב-isolate אחד; החלון הפעיל האחרון מקרב את המקור.
-          if (MultiViewMode.enabled) {
-            event.tags = {...?event.tags, 'window': LastActiveWindow.id.value};
-          }
+          event.tags = {...?event.tags, 'window': LastActiveWindow.id.value};
           return shouldReportSentryEvent(
                 event: event,
                 currentBuild: currentBuild,
@@ -1528,23 +1526,18 @@ class _AppBootstrapState extends State<AppBootstrap> {
     final historyRepository = _historyRepository!;
     final settingsRepository = _settingsRepository!;
 
-    final mainWindow = WindowScopeProviders(
-      historyRepository: historyRepository,
-      child: const App(),
-    );
-
     return AppScopeProviders(
       settingsRepository: settingsRepository,
       // הדוק שייך לתהליך: מאזין אחד מעל היקף החלון.
       child: DockProgressListener(
-        // בלי בעלים (macOS בלי handshake, integration_test) — חלון יחיד.
-        child: MultiViewMode.enabled
-            ? MultiViewHost(
-                contentBuilder: (context, entry) =>
-                    ViewWindowScope(entry: entry, child: const App()),
-                child: mainWindow,
-              )
-            : mainWindow,
+        child: MultiViewHost(
+          contentBuilder: (context, entry) =>
+              ViewWindowScope(entry: entry, child: const App()),
+          child: WindowScopeProviders(
+            historyRepository: historyRepository,
+            child: const App(),
+          ),
+        ),
       ),
     );
   }

@@ -17,7 +17,7 @@ import 'package:flutter/src/widgets/_window_win32.dart'
 import 'package:flutter/widgets.dart';
 import 'package:otzaria/core/windowing/multiview/cocoa_view_window_native.dart';
 
-/// התנאי היחיד לכל מסלול ריבוי התצוגות (חלונות Dart באותו מנוע).
+/// האם אפשר לפתוח חלונות Dart נוספים באותו מנוע; בלעדיהם — חלון יחיד.
 abstract final class MultiViewMode {
   static bool? _override;
   static bool _ownerInstalled = false;
@@ -33,7 +33,7 @@ abstract final class MultiViewMode {
   static bool get supported =>
       _isMacOS ? _macRunnerReady : Platform.isWindows || Platform.isLinux;
 
-  /// פעיל רק אחרי ש-[installWindowingOwner] התקין בעלים אמיתי.
+  /// רק אחרי ש-[installWindowingOwner] התקין בעלים אמיתי (לא בבדיקות).
   static bool get enabled => _override ?? (supported && _ownerInstalled);
 
   /// האם הותקן בעלים אמיתי לחלונות ה-Dart.

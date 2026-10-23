@@ -38,10 +38,7 @@ void main() {
     if (await dir.exists()) await dir.delete(recursive: true);
   });
 
-  SearchFeedbackService makeService({
-    bool secondary = false,
-    Uri? baseUrl,
-  }) => SearchFeedbackService(
+  SearchFeedbackService makeService({Uri? baseUrl}) => SearchFeedbackService(
     client: MockClient((request) async {
       requests.add(request);
       if (request.url.path.endsWith('/register')) {
@@ -64,7 +61,6 @@ void main() {
     osVersion: () => '10.0',
     locale: () => 'he',
     timerFactory: (_, _) => _NoTimer(),
-    isSecondaryWindow: () => secondary,
   );
 
   List<http.Request> eventPosts() =>
@@ -90,7 +86,7 @@ void main() {
   }
 
   test('האירועים נכתבים לתור בסדר שבו נרשמו', () async {
-    final service = makeService(secondary: true);
+    final service = makeService();
     await service.grant();
     final context = searchContext();
     service.recordSearch(context);
@@ -99,21 +95,6 @@ void main() {
     await service.whenQueued();
 
     expect(queuedEventTypes(), ['search', 'results_shown', 'vote']);
-  });
-
-  test('חלון משני רק כותב לתור; החלון הראשי שולח גם את מקטעיו', () async {
-    final secondary = makeService(secondary: true);
-    await secondary.grant();
-    secondary.recordSearch(searchContext());
-    await secondary.whenQueued();
-    await secondary.flush();
-    expect(requests, isEmpty);
-
-    final primary = makeService();
-    await primary.flush();
-
-    expect(eventPosts(), hasLength(1));
-    expect(queuedEventTypes(), isEmpty);
   });
 
   test('ביטול בחלון אחר מוחק את המפתח, והחלון הזה אינו משחזר אותו', () async {

@@ -475,8 +475,7 @@ class _FakeWindowOpener implements WindowOpener {
   }
 
   @override
-  Future<({int count, int max, int engines})?> windowCount() async =>
-      (count: 1, max: 4, engines: 1);
+  Future<({int count, int max})?> windowCount() async => (count: 1, max: 4);
 
   @override
   Future<void> reportOpenWindowFailure() async {

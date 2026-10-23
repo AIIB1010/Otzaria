@@ -11,7 +11,6 @@ import 'package:otzaria_icons/otzaria_icons.dart';
 import 'package:otzaria/app_report/view/app_report_dialog.dart';
 import 'package:otzaria/app_scope/process_duties.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
-import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
 import 'package:otzaria/core/startup_timeline.dart';
 import 'package:otzaria/core/windowing/runner_window_channel.dart';
@@ -266,6 +265,14 @@ Map<String, dynamic> hebrewBooksPathSettingsChangedPayload(String path) => {
   'key': SettingsRepository.keyHebrewBooksPath,
   'newValue': path,
 };
+
+/// האם קישור חיצוני מעלה את החלון לפני הטיפול. "חלון חדש" לא ביקש חלון קיים,
+/// אלא בחלון יחיד: שם הוא לא ייפתח, ולכן מציגים את הראשי (גם מוסתר).
+@visibleForTesting
+bool externalActionRaisesWindow(
+  ExternalUriAction action, {
+  required bool canOpenWindows,
+}) => action is! OpenNewWindowAction || !canOpenWindows;
 
 /// האם למקד אוטומטית את שדה החיפוש בכניסה למסך הספרייה — במובייל המקלדת
 /// הייתה נפתחת בכל כניסה, כולל בחזרה מההגדרות, ומכסה חצי מסך.
@@ -636,12 +643,10 @@ class MainWindowScreenState extends State<MainWindowScreen>
       !_role.isPrimaryView && _role.openedWithTab;
 
   /// עבודה של bloc ברמת התהליך: עם חלונות Dart כל המסכים מאזינים לו.
-  bool get _ownsSharedLibraryUpdate =>
-      !MultiViewMode.enabled || _duties.isProcessOwner;
+  bool get _ownsSharedLibraryUpdate => _duties.isProcessOwner;
 
   /// דיאלוג שנולד מ-bloc משותף מוצג רק בחלון שהמשתמש עובד בו.
-  bool get _showsSharedPrompts =>
-      !MultiViewMode.enabled || identical(AppWindowKeys.current, _windowKeys);
+  bool get _showsSharedPrompts => identical(AppWindowKeys.current, _windowKeys);
 
   /// תפקיד החלון והעבודה פר-תהליך שלו; נקראים פעם אחת, ב-[initState].
   late final AppWindowRole _role;
@@ -1408,8 +1413,12 @@ class MainWindowScreenState extends State<MainWindowScreen>
         return false;
       }
 
-      // "חלון חדש" לא ביקש חלון קיים — הרמת חלון שרירותי (אולי מוסתר) מפתיעה.
-      if (action is! OpenNewWindowAction) await _bringWindowToFront();
+      if (externalActionRaisesWindow(
+        action,
+        canOpenWindows: RunnerWindowChannel.canOpenWindows,
+      )) {
+        await _bringWindowToFront();
+      }
       if (!mounted) return false;
       return await _dispatchExternalUriAction(action);
     } catch (e, stackTrace) {

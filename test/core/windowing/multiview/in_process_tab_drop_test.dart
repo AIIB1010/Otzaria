@@ -10,7 +10,6 @@ import 'package:otzaria/core/windowing/drag_preview_colors.dart';
 import 'package:otzaria/core/windowing/external_tab_drag.dart';
 import 'package:otzaria/core/windowing/runner_window_channel.dart';
 import 'package:otzaria/core/windowing/multiview/in_process_tab_drop.dart';
-import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/navigation/bloc/navigation_bloc.dart';
@@ -155,14 +154,12 @@ void main() {
   }
 
   setUp(() {
-    MultiViewMode.debugOverride = true;
     RunnerWindowChannel.debugSupportedOverride = true;
     runner = _Runner()..install();
   });
 
   tearDown(() {
     runner.uninstall();
-    MultiViewMode.debugOverride = false;
     RunnerWindowChannel.debugSupportedOverride = null;
     WindowOpener.debugOverride = null;
     AppWindowKeys.resetForTest();
@@ -178,9 +175,12 @@ void main() {
       final drops = makeDrops(windows.registry);
 
       expect(drops.resolve(hwnd: a.handle.hwnd), a.slot);
-      expect(drops.resolve(hwnd: b.handle.hwnd, busSlot: 1), b.slot);
+      expect(drops.resolve(hwnd: b.handle.hwnd, runnerSlot: 1), b.slot);
       // ה-HWND של הראשי אינו ברשימה; המשבצת שה-runner מדווח היא שמזהה אותו.
-      expect(drops.resolve(hwnd: 4242, busSlot: 1), InProcessTabDrops.mainSlot);
+      expect(
+        drops.resolve(hwnd: 4242, runnerSlot: 1),
+        InProcessTabDrops.mainSlot,
+      );
       expect(drops.resolve(hwnd: 4242), isNull);
       expect(drops.resolve(), isNull);
       expect(drops.slotOf(a.id), a.slot);
@@ -712,10 +712,9 @@ void main() {
       await source.close();
     });
 
-    testWidgets('בלי הדגל: גרירה למערכת שנכלאה בקצה אזור העבודה מבוטלת', (
+    testWidgets('גרירה למערכת שנכלאה בקצה אזור העבודה מבוטלת', (
       tester,
     ) async {
-      MultiViewMode.debugOverride = false;
       final windows = FakeViewWindows(tester);
       final drops = makeDrops(windows.registry);
       final opener = _FakeOpener();
@@ -744,10 +743,9 @@ void main() {
       await source.close();
     });
 
-    testWidgets('בלי הדגל: גרירה למערכת שהוצמדה בקצה אזור העבודה נפתחת', (
+    testWidgets('גרירה למערכת שהוצמדה בקצה אזור העבודה נפתחת', (
       tester,
     ) async {
-      MultiViewMode.debugOverride = false;
       final windows = FakeViewWindows(tester);
       final drops = makeDrops(windows.registry);
       final opener = _FakeOpener();
@@ -767,10 +765,9 @@ void main() {
       await source.close();
     });
 
-    testWidgets('בלי הדגל: שחרור על שולחן העבודה מחוץ לאזור העבודה מבוטל', (
+    testWidgets('שחרור על שולחן העבודה מחוץ לאזור העבודה מבוטל', (
       tester,
     ) async {
-      MultiViewMode.debugOverride = false;
       final windows = FakeViewWindows(tester);
       final drops = makeDrops(windows.registry);
       final opener = _FakeOpener();
@@ -793,10 +790,9 @@ void main() {
       await source.close();
     });
 
-    testWidgets('בלי הדגל: חלון אוצריא מחוץ לאזור העבודה (מסך מלא) קולט', (
+    testWidgets('חלון אוצריא מחוץ לאזור העבודה (מסך מלא) קולט', (
       tester,
     ) async {
-      MultiViewMode.debugOverride = false;
       final windows = FakeViewWindows(tester);
       final drops = makeDrops(windows.registry);
       final opener = _FakeOpener();

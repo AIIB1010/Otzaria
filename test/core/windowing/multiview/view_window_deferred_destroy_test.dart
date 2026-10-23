@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/windowing/multiview/multi_view_host.dart';
-import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 
 import '../../../test_helpers/fake_view_window.dart';
 
@@ -10,7 +9,6 @@ import '../../../test_helpers/fake_view_window.dart';
 /// כמה פריימים, ורק אז הריסה.
 void main() {
   tearDown(() {
-    MultiViewMode.debugOverride = null;
     AppWindowKeys.resetForTest();
   });
 
@@ -18,7 +16,6 @@ void main() {
     WidgetTester tester, {
     required bool defersDestroy,
   }) async {
-    MultiViewMode.debugOverride = true;
     final windows = FakeViewWindows(tester)..defersDestroy = defersDestroy;
     await tester.pumpWidget(
       MultiViewHost(

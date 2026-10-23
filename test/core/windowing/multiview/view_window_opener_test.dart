@@ -228,7 +228,7 @@ void main() {
     expect(windows.native.hooked, [windows.handleOf(entry).fakeHwnd]);
     expect(windows.native.frameless, [windows.handleOf(entry).fakeHwnd]);
     final count = (await opener.windowCount())!;
-    expect((count.count, count.max, count.engines), (2, 8, 1));
+    expect((count.count, count.max), (2, 8));
   });
 
   testWidgets('openWindow: החלון מקבל עותק, ושחרור המקור אינו סוגר אותו', (

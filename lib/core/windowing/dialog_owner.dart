@@ -2,7 +2,6 @@ import 'package:flutter/widgets.dart';
 import 'package:otzaria/core/windowing/app_window_id.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/windowing/multiview/in_process_tab_drop.dart';
-import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
 
 /// החלון שדיאלוג מערכת (קבצים, הדפסה) צריך להיות מודאלי אליו. עם חלונות Dart
@@ -24,7 +23,7 @@ abstract final class DialogOwner {
     final id = context != null
         ? AppWindowKeys.of(context).id
         : AppWindowKeys.current.id;
-    if (MultiViewMode.enabled && id != AppWindowId.primary) {
+    if (id != AppWindowId.primary) {
       final entry = (registry ?? ViewWindowRegistry.instance).windows
           .where((w) => w.id == id)
           .firstOrNull;
@@ -34,9 +33,7 @@ abstract final class DialogOwner {
       if (context != null) return null;
     }
     // ראשי מוסתר אינו בעלים: דיאלוג שלו לא היה מופיע מעל חלון שרואים.
-    final mainShown =
-        !MultiViewMode.enabled ||
-        (isMainShown ?? InProcessTabDrops.instance.isMainShown);
+    final mainShown = isMainShown ?? InProcessTabDrops.instance.isMainShown;
     return mainShown ? _mainWindowHwnd : null;
   }
 

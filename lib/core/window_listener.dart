@@ -18,7 +18,6 @@ import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/windowing/runner_window_channel.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
 import 'package:otzaria/core/windowing/multiview/in_process_tab_drop.dart';
-import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_focus_sync.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_opener.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
@@ -277,10 +276,8 @@ class AppWindowListener extends WindowListener {
   /// האחרון", שמסיימת את התהליך.
   Future<bool> _isLastWindowClosing() async {
     try {
-      // ⚠️ timeout חובה. השאלה הזו יושבת **לפני** חימוש שעון היציאה הכפויה
-      // (הצעד הראשון ב-`_shutdownProcessUpToFlush`), ולכן ערוץ שלא עונה
-      // היה משאיר את החלון פתוח ואת התהליך חי בלי שום רשת ביטחון —
-      // המשתמש לוחץ X ושום דבר לא קורה, לנצח.
+      // ⚠️ timeout חובה: השאלה קודמת לחימוש שעון היציאה הכפויה, ותשובה
+      // שלא מגיעה הייתה משאירה את החלון פתוח ואת התהליך חי לנצח.
       final info = await WindowOpener.current.windowCount().timeout(
         const Duration(seconds: 2),
       );
@@ -316,8 +313,8 @@ class AppWindowListener extends WindowListener {
         (_) => handleWindowClose(canClose: canClose, quit: true),
       );
     }
-    if (!MultiViewMode.enabled || quit) {
-      return _startWindowClose(canClose: canClose, quit: quit);
+    if (quit) {
+      return _startWindowClose(canClose: canClose, quit: true);
     }
     final pending = _queuedClose;
     if (pending != null) return Future.value();
@@ -369,7 +366,7 @@ class AppWindowListener extends WindowListener {
       // לכן הוא רץ אחרי האישור ולפני חימושו.
       await prepareUpdateForClose?.call();
 
-      // סגירת חלון מנקה את מעקב התוספים והאתחול של ה-isolate שלו.
+      // סגירה מסודרת: מנקה את מעקב הקריסות של התוספים ושל האתחול.
       PluginCrashGuard.markCleanShutdownSync();
       StartupCrashCounter.markStableSync();
 
@@ -395,7 +392,7 @@ class AppWindowListener extends WindowListener {
         AppCrashSession.markCleanExitSync();
         await _shutdownProcessUpToFlush();
       }
-      // ה-flush הפר-חלוני חייב להישאר בין שני חלקי כיבוי התהליך.
+      // ה-flush חייב להישאר בין שני חלקי כיבוי התהליך.
       final flushFailure = await _closeWindowScoped();
       if (endsProcess) {
         await _shutdownProcessAfterFlush(flushFailure);
@@ -405,20 +402,13 @@ class AppWindowListener extends WindowListener {
           await TabsRepository().discardWindowSession();
         }
 
-        if (MultiViewMode.enabled) {
-          // ה-flush של החלון האחרון ירוץ גם כאן (isolate אחד): בלי השהיה
-          // הסשן שנמחק היה נכתב מחדש. הטיוטות שייכות לכל החלונות ונשארות.
-          WindowTabsSession.current.suspend();
-          await ViewWindowOpener.instance.beforeMainWindowHides();
-          InProcessTabDrops.instance.setMainShown(false);
-          // הנראות נשמרת לפי חלון: רק התוספים של הראשי מושהים.
-          PluginRuntimeDispatcher.instance.setWindowShown(false);
-        } else {
-          // המנוע נשאר חי, ולכן הכתיבות האחרונות לטיוטה ממשיכות אחרי ההסתרה.
-          PluginCorrectionSessionService.instance.endAll('window_closed');
-          // מוסתר ולא נהרס: תוספים שממשיכים לרוץ היו צורכים משאבים ברקע.
-          PluginRuntimeDispatcher.instance.setWindowShown(false);
-        }
+        // ה-flush של החלון האחרון ירוץ גם כאן (isolate אחד): בלי השהיה
+        // הסשן שנמחק היה נכתב מחדש. הטיוטות שייכות לכל החלונות ונשארות.
+        WindowTabsSession.current.suspend();
+        await ViewWindowOpener.instance.beforeMainWindowHides();
+        InProcessTabDrops.instance.setMainShown(false);
+        // הנראות נשמרת לפי חלון: רק התוספים של הראשי מושהים.
+        PluginRuntimeDispatcher.instance.setWindowShown(false);
 
         // ⚠️ דרך ה-runner ולא `quitApplication()`: האחרון הוא
         // `PostQuitMessage` — הוא סוגר את התוכנה כולה ולא את החלון הזה.
@@ -482,8 +472,8 @@ class AppWindowListener extends WindowListener {
 
   /// Step 2: Flush pending in-memory writes to Hive.
   ///
-  /// זהו הצעד הפר-חלוני היחיד ברצף: [PreCloseRegistry] הוא סינגלטון
-  /// פר-isolate, ולכן הוא שוטף את הכתיבות התלויות של החלון הזה בלבד.
+  /// הצעד היחיד שרץ גם כשהראשי רק מוסתר: [PreCloseRegistry] שוטף את
+  /// הכתיבות התלויות של כל החלונות (isolate אחד).
   ///
   /// A flush failure must NOT prevent Hive.close() — closing Hive without
   /// flushing first is safe, but skipping Hive.close() would corrupt the DB.
@@ -501,7 +491,7 @@ class AppWindowListener extends WindowListener {
   }
 
   /// מסלול הסגירה המלא מסתיים ב-`exit(0)` ואינו ניתן לבדיקה, אבל דווקא
-  /// הצעד הפר-חלוני הוא זה שחייב להחזיר את הכשל ולא לבלוע אותו.
+  /// צעד ה-flush הוא זה שחייב להחזיר את הכשל ולא לבלוע אותו.
   @visibleForTesting
   Future<Object?> closeWindowScopedForTest() => _closeWindowScoped();
 
@@ -552,7 +542,7 @@ class AppWindowListener extends WindowListener {
 
       // ⚠️ אחרי השטיפה, כך שהסשנים שלהם נשמרים; בלי Job Object היו נשארים
       // על המסך עד `exit(0)`.
-      if (MultiViewMode.enabled) ViewWindowOpener.instance.destroyAllForQuit();
+      ViewWindowOpener.instance.destroyAllForQuit();
 
       if (!kIsWeb &&
           (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
@@ -681,10 +671,8 @@ class AppWindowListener extends WindowListener {
     ViewFocusSync.mainWindowActivated();
     // חלון שהוחזר מהסתרה מקבל פוקוס — זה האות שהוא מוצג שוב.
     PluginRuntimeDispatcher.instance.setWindowShown(true);
-    if (MultiViewMode.enabled) {
-      WindowTabsSession.current.resume();
-      InProcessTabDrops.instance.setMainShown(true);
-    }
+    WindowTabsSession.current.resume();
+    InProcessTabDrops.instance.setMainShown(true);
   }
 
   @override

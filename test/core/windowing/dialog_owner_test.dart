@@ -5,7 +5,6 @@ import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
 import 'package:otzaria/core/windowing/dialog_owner.dart';
 import 'package:otzaria/core/windowing/last_active_window.dart';
-import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/utils/file/file_picker_dialog_options.dart';
 import 'package:windows_file_picker/windows_file_picker.dart';
 
@@ -17,12 +16,10 @@ void main() {
   const mainHwnd = 7;
 
   setUp(() {
-    MultiViewMode.debugOverride = true;
     DialogOwner.mainWindowHwnd = mainHwnd;
   });
 
   tearDown(() {
-    MultiViewMode.debugOverride = false;
     DialogOwner.resetForTest();
     AppWindowKeys.resetForTest();
     LastActiveWindow.resetForTest();
@@ -105,11 +102,6 @@ void main() {
   test('ראשי מוסתר אינו בעלים: הפלאגין נופל לחלון שבחזית', () {
     expect(DialogOwner.hwnd(isMainShown: false), isNull);
     expect(DialogOwner.hwnd(isMainShown: true), mainHwnd);
-  });
-
-  test('בלי ריבוי תצוגות — תמיד הראשי', () {
-    MultiViewMode.debugOverride = false;
-    expect(DialogOwner.hwnd(isMainShown: false), mainHwnd);
   });
 
   test('אפשרויות בורר הקבצים: מודאלי, עם הבעלים המפורש', () {

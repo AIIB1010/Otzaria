@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/windowing/app_window_id.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
-import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/data/sqlite/sqlite3_api.dart' show Database, sqlite3;
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/plugins/repository/plugin_correction_draft_repository.dart';
@@ -236,14 +235,12 @@ void main() {
     late AppWindowKeys view;
 
     setUp(() {
-      MultiViewMode.debugOverride = true;
       mainTabs = TabsBloc(repository: _FakeTabsRepository());
       viewTabs = TabsBloc(repository: _FakeTabsRepository());
       view = AppWindowKeys(id: const AppWindowId('window-view-2'));
       AppWindowKeys.register(view);
     });
     tearDown(() async {
-      MultiViewMode.debugOverride = false;
       AppWindowKeys.resetForTest();
       PluginUnsavedChangesRegistry.instance.removeInstance(key);
       await mainTabs.close();
@@ -373,7 +370,6 @@ void main() {
     late String tabId;
 
     setUp(() {
-      MultiViewMode.debugOverride = true;
       PluginCorrectionSessionService.flushTimeout = const Duration(
         milliseconds: 100,
       );
@@ -391,7 +387,6 @@ void main() {
     });
 
     tearDown(() async {
-      MultiViewMode.debugOverride = false;
       AppWindowKeys.resetForTest();
       drafts.failWrites = false;
       if (!service.processQuitPending) await service.purgeOwner('p');

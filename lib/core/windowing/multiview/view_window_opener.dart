@@ -203,6 +203,11 @@ class ViewWindowOpener implements WindowOpener {
     return result;
   }
 
+  /// התור חי מעבר לבדיקה, וממשיך ב-zone שבו נוצר; ב-FakeAsync של בדיקה אחרת
+  /// הוא לא היה מתקדם לעולם.
+  @visibleForTesting
+  void resetCloseQueueForTest() => _closeQueue = Future.value();
+
   @override
   Future<bool> openWindow({
     OpenedTab? tab,
@@ -340,10 +345,9 @@ class ViewWindowOpener implements WindowOpener {
 
   /// החלון הראשי נספר תמיד, גם מוסתר: הוא חי ותופס מקום בתקרה.
   @override
-  Future<({int count, int max, int engines})?> windowCount() async => (
+  Future<({int count, int max})?> windowCount() async => (
     count: registry.windows.length + 1,
     max: ViewWindowRegistry.maxWindows,
-    engines: 1,
   );
 
   @override
