@@ -269,6 +269,38 @@ void main() {
     await SqliteDataProvider.instance.reopenAfterExternalWrite();
   });
 
+  test('בזמן החלפת ספרייה ארוכה הקורא ממתין מעבר לתקרה עד שהמסד נפתח, '
+      'והתקרה חוזרת לאחר ההחלפה', () async {
+    SqliteDataProvider.instance.debugSetExternalWriteWait(
+      pollInterval: const Duration(milliseconds: 20),
+      maxPolls: 3,
+    );
+    final gate = LibraryAccessGate(renameProbe: false);
+
+    // כמו הורדה מחדש מ-EmptyLibrary: המסד סגור הרבה מעבר לתקרה.
+    final suspension = await gate.suspendAll();
+    await SqliteDataProvider.instance.closeForExternalWrite();
+    var readerDone = false;
+    final reader = SqliteDataProvider.instance.initialize().then(
+      (_) => readerDone = true,
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    expect(readerDone, isFalse, reason: 'הקורא ממתין לסוף ההחלפה');
+
+    await SqliteDataProvider.instance.reopenAfterExternalWrite();
+    await gate.resumeAll(suspension, dbReplaced: true);
+    await reader.timeout(const Duration(seconds: 5));
+    expect(SqliteDataProvider.instance.isInitialized, isTrue);
+
+    // אחרי ההחלפה, session שדלף שוב מוגבל בתקרה.
+    await SqliteDataProvider.instance.closeForExternalWrite();
+    await SqliteDataProvider.instance.initialize().timeout(
+      const Duration(seconds: 5),
+    );
+    expect(SqliteDataProvider.instance.isInitialized, isFalse);
+    await SqliteDataProvider.instance.reopenAfterExternalWrite();
+  });
+
   test(
     'initialize() מתאוששת מיד כש-reopen מגיע אחרי השהיה (לא ממתינה פעימה מלאה)',
     () async {

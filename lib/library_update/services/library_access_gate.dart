@@ -140,6 +140,7 @@ class LibraryAccessGate {
         'מסד הספרייה כבר מוחלף בחלון אחר. נסו שוב בעוד רגע.',
       );
     }
+    SqliteDataProvider.instance.libraryReplacing = true;
     return _active = LibrarySuspension._();
   }
 
@@ -150,7 +151,10 @@ class LibraryAccessGate {
   }) async {
     if (suspension._resumed) return;
     suspension._resumed = true;
-    if (identical(_active, suspension)) _active = null;
+    if (identical(_active, suspension)) {
+      _active = null;
+      SqliteDataProvider.instance.libraryReplacing = false;
+    }
   }
 
   /// זורק [LibraryStillOpenException] אם [dbPath] עדיין פתוח בתהליך.
