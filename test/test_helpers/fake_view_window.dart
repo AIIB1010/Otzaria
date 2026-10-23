@@ -77,15 +77,20 @@ class StubWindowHandle extends ViewWindowHandle {
     this.stub,
     this._onCloseRequested, {
     this.fakeHwnd,
+    this.fakeFlutterView,
     super.defersDestroy,
   }) : super.forTesting(stub);
 
   final StubWindowController stub;
   final void Function(ViewWindowHandle handle) _onCloseRequested;
   final int? fakeHwnd;
+  final int? fakeFlutterView;
 
   @override
   int? get hwnd => isDestroyed ? null : fakeHwnd;
+
+  @override
+  int? get flutterViewHandle => isDestroyed ? null : fakeFlutterView;
 
   @override
   int? get nativeHandle => hwnd;
@@ -178,6 +183,7 @@ class FakeViewWindows {
       stub,
       onCloseRequested,
       fakeHwnd: id,
+      fakeFlutterView: id + 1000,
       defersDestroy: defersDestroy,
     );
     stub.onDestroy = () => onDestroyed(handle);
