@@ -372,7 +372,7 @@ class ViewWindowOpener implements WindowOpener {
     _native.setWindowRect(hwnd, clampToArea(moved, area));
   }
 
-  /// כמו `OriginForDrop` ב-runner: מזיז לתוך אזור העבודה, ומקטין כשאינו נכנס.
+  /// מזיז את המסגרת לתוך אזור העבודה, ומקטין אותה כשאינה נכנסת.
   @visibleForTesting
   static Rect clampToArea(Rect rect, Rect area) {
     final width = rect.width.clamp(0.0, area.width);

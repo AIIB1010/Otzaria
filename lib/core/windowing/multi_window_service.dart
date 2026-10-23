@@ -70,8 +70,7 @@ typedef VisibilityChangeResult = ({
 /// 2,092ms ב-thread משותף, פי 20. **המימוש לא הצליח לספק אותו:** יצירת
 /// מנוע על thread ייעודי קורסת בעקביות ברגע שהחלון הראשון רץ
 /// (`Isolate main is already scheduled on mutator thread`), וזהו גם מה
-/// שעושה `desktop_multi_window`. ראו ההערה ב-
-/// `CreateSecondaryWindowOnThisThread`.
+/// שעושה `desktop_multi_window`. ראו `docs/multi-window.md`.
 ///
 /// המשמעות המעשית: **חלון עסוק יכול להקפיא את השני.** התוכנה רצה בתצורת
 /// הבקרה, זו של 2,092ms. גרסה קודמת של התיעוד כאן הצהירה על ה-thread
