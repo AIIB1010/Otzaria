@@ -52,18 +52,23 @@ class ViewWindowCloseFlow {
 
   /// מחזיר false כשהמשתמש ביטל; לחיצה חוזרת בזמן ריצה אינה עושה דבר.
   Future<bool> run() async {
-    if (_running) return false;
+    if (_running || _abandoned.isCompleted) return false;
     _running = true;
     var destroyed = false;
     try {
       final opener = _opener ?? ViewWindowOpener.instance;
       return await opener.serializeClose(() async {
+        if (_abandoned.isCompleted) return false;
         final endProcess = opener.endProcess;
-        if (endProcess != null && await opener.isLastVisibleWindow(entry)) {
-          // החלון האחרון על המסך: יציאה מהתוכנה, עם השאלות של יציאה. אם חזרה — בוטלה.
-          AppWindowKeys.activateWindow(entry.id);
-          await endProcess();
-          return false;
+        if (endProcess != null) {
+          final isLast = await opener.isLastVisibleWindow(entry);
+          if (_abandoned.isCompleted) return false;
+          if (isLast) {
+            // החלון האחרון על המסך: יציאה מהתוכנה, עם השאלות של יציאה. אם חזרה — בוטלה.
+            AppWindowKeys.activateWindow(entry.id);
+            await endProcess();
+            return false;
+          }
         }
         final context = entry.keys.navigator.currentContext;
         if (context != null && context.mounted) {
@@ -83,7 +88,9 @@ class ViewWindowCloseFlow {
         } on PreCloseFlushFailure catch (e) {
           debugPrint('view window close: flush failed: $e');
         }
+        if (_abandoned.isCompleted) return false;
         await opener.rememberClosed(entry.slot);
+        if (_abandoned.isCompleted) return false;
         // סגירה מכוונת מוחקת את הסשן; קודם endSession, ששמירה באמצע לא תחזיר אותו.
         entry.endSession();
         try {
@@ -92,6 +99,7 @@ class ViewWindowCloseFlow {
           // השורה תאומץ בהפעלה הבאה; החלון נסגר בכל מקרה.
           debugPrint('view window close: discard failed: $e');
         }
+        if (_abandoned.isCompleted) return false;
         entry.handle.destroy();
         destroyed = true;
         return true;

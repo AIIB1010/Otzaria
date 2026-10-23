@@ -1,10 +1,12 @@
 import 'dart:io';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/app_scope/app_scope_providers.dart';
 import 'package:otzaria/core/app_paths.dart';
+import 'package:otzaria/core/user_state/window_session_store.dart';
 import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/core/windowing/app_quit.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
@@ -128,12 +130,16 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('לסגור?'), findsOneWidget);
 
+    final queuedB = b.controller.close();
+
     // אתחול מחדש מ-B מפרק את ה-Navigator של A עם הדיאלוג.
     AppQuit.restartAll(contexts[b.slot]!);
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     expect(find.text('לסגור?'), findsNothing);
     expect(closedA, isFalse);
+    expect(windows.stubOf(b).destroyed, isFalse);
+    await queuedB;
     expect(windows.registry.windows, [a, b]);
 
     // התור משוחרר: X ב-B פותח דיאלוג, ואישור סוגר את B.
@@ -191,6 +197,72 @@ void main() {
           ) ==
           true,
     );
+  });
+
+  for (final phase in ['flush', 'remember', 'discard']) {
+    testWidgets('אתחול מחדש מבטל סגירה שממתינה ב-$phase', (tester) async {
+      final windows = FakeViewWindows(tester);
+      final entered = Completer<void>();
+      final release = Completer<void>();
+      Future<void> wait() {
+        entered.complete();
+        return release.future;
+      }
+
+      final opener = ViewWindowOpener(
+        registry: windows.registry,
+        native: windows.native,
+        sessions: phase == 'remember' ? _GateSessions(wait) : null,
+      );
+      final contexts = await pumpApp(
+        tester,
+        windows.registry,
+        (entry) => ViewWindowCloseFlow(
+          entry: entry,
+          opener: opener,
+          confirm: (_, _) async => true,
+          flush: phase == 'flush' ? wait : () async {},
+          discardSession: phase == 'discard' ? (_) => wait() : (_) async {},
+        ),
+      );
+      final entry = windows.registry.open(size: const Size(800, 600))!;
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      final closing = entry.controller.close();
+      await tester.pump();
+      expect(entered.isCompleted, isTrue);
+      AppQuit.restartAll(contexts[entry.slot]!);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      release.complete();
+      await tester.pump();
+      await closing;
+      expect(windows.stubOf(entry).destroyed, isFalse);
+      expect(windows.registry.windows, [entry]);
+      expect(entry.closeHandler, isNotNull);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(seconds: 1));
+    });
+  }
+
+  testWidgets('דיאלוג שפורק לפני הפריים הראשון משלים null', (tester) async {
+    final navigator = GlobalKey<NavigatorState>();
+    await tester.pumpWidget(
+      MaterialApp(navigatorKey: navigator, home: const SizedBox()),
+    );
+    var done = false;
+    bool? value = true;
+    showDialogUntilTornDown<bool>(
+      context: navigator.currentContext!,
+      builder: (_) => const Text('שאלה'),
+    ).then((result) {
+      done = true;
+      value = result;
+    });
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+    expect(done, isTrue);
+    expect(value, isNull);
   });
 
   testWidgets('showDialogUntilTornDown: תשובה רגילה עוברת כמו שהיא', (
@@ -259,4 +331,15 @@ class _BootstrapState extends State<_Bootstrap> {
   @override
   Widget build(BuildContext context) =>
       _ready ? widget.child : const SizedBox.shrink();
+}
+
+class _GateSessions extends WindowSessionStore {
+  _GateSessions(this.wait);
+  final Future<void> Function() wait;
+
+  @override
+  Future<WindowSession?> load(int slot) async {
+    await wait();
+    return null;
+  }
 }
