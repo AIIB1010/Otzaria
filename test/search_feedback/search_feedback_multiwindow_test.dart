@@ -9,7 +9,6 @@ import 'package:otzaria/search_feedback/search_feedback_api.dart';
 import 'package:otzaria/search_feedback/search_feedback_identity.dart';
 import 'package:otzaria/search_feedback/search_feedback_queue.dart';
 import 'package:otzaria/search_feedback/search_feedback_service.dart';
-import 'package:otzaria/settings/engine/settings_repository.dart';
 
 import 'search_feedback_test_support.dart';
 
@@ -42,7 +41,6 @@ void main() {
   SearchFeedbackService makeService({
     bool secondary = false,
     Uri? baseUrl,
-    Stream<String>? otherWindows,
   }) => SearchFeedbackService(
     client: MockClient((request) async {
       requests.add(request);
@@ -67,7 +65,6 @@ void main() {
     locale: () => 'he',
     timerFactory: (_, _) => _NoTimer(),
     isSecondaryWindow: () => secondary,
-    settingsChangesFromOtherWindows: otherWindows,
   );
 
   List<http.Request> eventPosts() =>
@@ -142,25 +139,6 @@ void main() {
 
     expect(secondKey, isNot(firstKey));
     expect(jsonDecode(keyFile.readAsStringSync())['seed'], secondKey);
-  });
-
-  test('הסכמה שבוטלה בחלון אחר נקלטת בשימוש הבא', () async {
-    final otherWindows = StreamController<String>();
-    final service = makeService(otherWindows: otherWindows.stream);
-    await service.grant();
-    final changes = <SearchFeedbackConsent>[];
-    service.changes.listen(changes.add);
-
-    consent.state = 'declined';
-    otherWindows.add(SettingsRepository.keySearchFeedbackConsent);
-    await pumpEventQueue();
-
-    await service
-        .flush(); // Drain the already-started session flush before cleanup.
-    expect(requests, isEmpty);
-    expect(changes, [SearchFeedbackConsent.declined]);
-    expect(service.isCollecting, isFalse);
-    await otherWindows.close();
   });
 
   group('תצוגה מקדימה בפיתוח', () {

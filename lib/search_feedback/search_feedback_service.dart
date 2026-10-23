@@ -9,7 +9,6 @@ import 'package:http/http.dart' as http;
 import 'package:otzaria/core/app_paths.dart';
 import 'package:otzaria/core/error_log_file.dart';
 import 'package:otzaria/core/http_client_registry.dart';
-import 'package:otzaria/core/windowing/settings_sync.dart';
 import 'package:otzaria/app_scope/process_duties.dart';
 import 'package:otzaria/search_feedback/search_feedback_api.dart';
 import 'package:otzaria/search_feedback/search_feedback_events.dart';
@@ -128,7 +127,6 @@ class SearchFeedbackService
     Random? random,
     SearchFeedbackTimerFactory? timerFactory,
     bool Function()? isSecondaryWindow,
-    Stream<String>? settingsChangesFromOtherWindows,
     this.flushDebounce = const Duration(seconds: 30),
     this.periodicInterval = const Duration(minutes: 10),
     int maxQueuedEvents = 5000,
@@ -167,10 +165,6 @@ class SearchFeedbackService
       client: _httpClient,
       baseUrl: _baseUrl,
       clock: _clock,
-    );
-    // הסכמה שהשתנתה בחלון אחר מגיעה ל-box המקומי דרך SettingsSync.
-    (settingsChangesFromOtherWindows ?? SettingsSync.instance.changes).listen(
-      _onSettingChangedElsewhere,
     );
   }
 
@@ -296,18 +290,6 @@ class SearchFeedbackService
 
   @visibleForTesting
   Future<void> settle() => whenQueued();
-
-  void _onSettingChangedElsewhere(String key) {
-    if (key != SettingsRepository.keySearchFeedbackConsent && key.isNotEmpty) {
-      return;
-    }
-    final current = consent;
-    if (current != SearchFeedbackConsent.granted) {
-      _epoch++;
-      _cancelTimers();
-    }
-    _changes.add(current);
-  }
 
   // ── הסכמה ────────────────────────────────────────────────────────────────
 
