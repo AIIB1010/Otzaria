@@ -10,7 +10,7 @@ import 'package:otzaria/core/windowing/multiview/gtk_view_window_native.dart';
 import 'package:win32/win32.dart';
 import 'package:window_manager/window_manager.dart' show ResizeEdge;
 
-/// מה שחלון Dart צריך מהמערכת ואין לו בבקר של המסגרת. הכול בפיקסלים פיזיים.
+/// מה שחלון Dart צריך מהמערכת ואין לו בבקר של המסגרת. ב-Windows/Linux בפיקסלים פיזיים; ב-macOS בנקודות מסך.
 /// `hwnd` הוא `ViewWindowHandle.nativeHandle`: HWND ב-Windows, `GtkWindow*` ב-Linux,
 /// `NSWindow*` ב-macOS. FutureOr: ב-macOS הכול עובר בערוץ, ובשאר סינכרוני.
 abstract interface class ViewWindowNative {

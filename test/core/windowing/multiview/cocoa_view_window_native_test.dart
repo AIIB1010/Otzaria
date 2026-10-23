@@ -64,19 +64,80 @@ void main() {
 
   tearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-  test('מסגרת: נקודות מה-runner כפול קנה המידה של המסך, לפי ידית', () async {
+  for (final (initial, saved) in [
+    (
+      const Rect.fromLTWH(100, 100, 800, 600),
+      const Rect.fromLTWH(1500, 100, 800, 600),
+    ),
+    (
+      const Rect.fromLTWH(1500, 100, 800, 600),
+      const Rect.fromLTWH(100, 100, 800, 600),
+    ),
+    (
+      const Rect.fromLTWH(100, 100, 800, 600),
+      const Rect.fromLTWH(-1600, -100, 800, 600),
+    ),
+  ]) {
+    test('שחזור בין מסכי 1x/2x: $saved', () async {
+      // Primary: [0,1440) points at 2x. Secondary: [1440,3360) points at 1x.
+      // Saved secondary window: x=1500,y=100,w=800,h=600, all at 1x.
+      var actual = initial;
+      double scale() => actual.center.dx < 1440 ? 2 : 1;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'visibleFrame') {
+          return {
+            'x': scale() == 2 ? 0.0 : 1440.0,
+            'y': 25.0,
+            'width': scale() == 2 ? 1440.0 : 1920.0,
+            'height': 875.0,
+            'scale': scale(),
+          };
+        }
+        if (call.method == 'setFrame') {
+          final a = call.arguments as Map;
+          actual = Rect.fromLTWH(
+            a['x'] as double,
+            a['y'] as double,
+            a['width'] as double,
+            a['height'] as double,
+          );
+        }
+        if (call.method == 'frame') {
+          return {
+            'x': actual.left,
+            'y': actual.top,
+            'width': actual.width,
+            'height': actual.height,
+          };
+        }
+        return null;
+      });
+      await native.setWindowRect(7, saved);
+      // This is precisely the retry condition used by ViewWindowOpener._place.
+      if (await native.windowRect(7) != saved) {
+        await native.setWindowRect(7, saved);
+      }
+      expect(
+        actual,
+        saved,
+        reason: 'המסגרת נשמרת בנקודות, בלי תלות במסך שהחלון נוצר עליו.',
+      );
+    });
+  }
+
+  test('מסגרת: נקודות גלובליות מה-runner, גם ב-Retina', () async {
     expect(
       await native.windowRect(7),
-      const Rect.fromLTWH(200, 100, 1600, 1200),
+      const Rect.fromLTWH(100, 50, 800, 600),
     );
-    expect(runner.methods, ['frame', 'visibleFrame']);
+    expect(runner.methods, ['frame']);
     expect(runner.calls.first.arguments, {'handle': 7});
   });
 
   test(
-    'setWindowRect: פיזי חלקי קנה המידה, בצורת הארגומנטים של setFrame',
+    'setWindowRect: נקודות ללא המרה לפי המסך הנוכחי',
     () async {
-      await native.setWindowRect(7, const Rect.fromLTWH(200, 100, 1600, 1200));
+      await native.setWindowRect(7, const Rect.fromLTWH(100, 50, 800, 600));
       final setFrame = runner.calls.last;
       expect(setFrame.method, 'setFrame');
       expect(setFrame.arguments, {
@@ -89,12 +150,12 @@ void main() {
     },
   );
 
-  test('אזור עבודה ומיקום: לפי visibleFrame, DPI 96 לכל 1x', () async {
-    expect(await native.workArea(7), const Rect.fromLTWH(0, 50, 2880, 1750));
+  test('אזור עבודה ומיקום: באותו מרחב נקודות, DPI 96 להיסט', () async {
+    expect(await native.workArea(7), const Rect.fromLTWH(0, 25, 1440, 875));
     final placement = (await native.placement(7))!;
-    expect(placement.normal, const Rect.fromLTWH(200, 100, 1600, 1200));
+    expect(placement.normal, const Rect.fromLTWH(100, 50, 800, 600));
     expect(placement.maximized, isFalse);
-    expect(placement.dpi, 192);
+    expect(placement.dpi, 96);
   });
 
   test('visibleFrame null (אין מסך): אין אזור עבודה, וקנה המידה 1', () async {

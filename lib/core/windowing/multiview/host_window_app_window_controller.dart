@@ -4,13 +4,14 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart' show Listenable;
 import 'package:otzaria/core/windowing/app_window_controller.dart';
 import 'package:otzaria/core/windowing/app_window_id.dart';
+import 'package:otzaria/core/windowing/multiview/cocoa_view_window_native.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_native.dart';
 import 'package:window_manager/window_manager.dart'
     show ResizeEdge, TitleBarStyle;
 
 /// החלון של חלון Dart: המצב מהבקר של המסגרת, המיקום דרך [ViewWindowNative].
-/// הגבולות לוגיים לפי ה-DPR של התצוגה, כמו ב-`window_manager`.
+/// הגבולות לוגיים: macOS בנקודות מסך, ובשאר פיזי חלקי DPR, כמו window_manager.
 final class HostWindowAppWindowController
     implements AppWindowController, AppWindowGeometry, AppWindowResizing {
   HostWindowAppWindowController({
@@ -28,6 +29,7 @@ final class HostWindowAppWindowController
   final ViewWindowNative _native;
 
   double get _dpr {
+    if (_native is CocoaViewWindowNative) return 1;
     final dpr = _handle.view.devicePixelRatio;
     return dpr > 0 ? dpr : 1.0;
   }

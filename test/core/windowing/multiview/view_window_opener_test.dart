@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:ui' show ViewFocusEvent, ViewFocusState;
 
 import 'package:flutter/material.dart';
+import 'package:otzaria/core/windowing/multiview/cocoa_view_window_native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/user_state/window_bounds.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
@@ -668,6 +669,64 @@ void main() {
     expect(windows.registry.windows, isEmpty);
   });
 
+  testWidgets('שחזור Cocoa משתמש בנקודות הסשן הישן עם DPR 2', (tester) async {
+    makeOpener(tester);
+    const saved = WindowBounds(
+      left: -1600,
+      top: 100,
+      width: 800,
+      height: 600,
+      dpr: 2,
+    );
+    sessions.rows[2] = WindowSession(
+      slot: 2,
+      tabsJson: '[]',
+      currentIndex: 0,
+      boundsJson: saved.encode(),
+    );
+    var actual = const Rect.fromLTWH(100, 100, 800, 600);
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(CocoaViewWindowNative.defaultChannel, (
+      call,
+    ) async {
+      if (call.method == 'setFrame') {
+        final args = call.arguments as Map;
+        actual = Rect.fromLTWH(
+          args['x'] as double,
+          args['y'] as double,
+          args['width'] as double,
+          args['height'] as double,
+        );
+      }
+      if (call.method == 'frame') {
+        return {
+          'x': actual.left,
+          'y': actual.top,
+          'width': actual.width,
+          'height': actual.height,
+        };
+      }
+      if (call.method == 'reveal') return true;
+      return null;
+    });
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(
+        CocoaViewWindowNative.defaultChannel,
+        null,
+      ),
+    );
+    final opener = ViewWindowOpener(
+      registry: windows.registry,
+      native: const CocoaViewWindowNative(),
+      sessions: sessions,
+    );
+    await pumpHost(tester);
+    await settle(tester, opener.restoreAllWindows([2]));
+    expect(actual, const Rect.fromLTWH(-1600, 100, 800, 600));
+    expect(windows.registry.windows.single.slot, 2);
+  });
+
   testWidgets('Ctrl+Shift+T: חלון שנסגר חוזר עם הסשן שלו; אחריו הראשי', (
     tester,
   ) async {
@@ -958,6 +1017,7 @@ void main() {
   testWidgets('אחרי הפריים הראשון: reveal, ובמק אירוע פוקוס לתצוגה החדשה', (
     tester,
   ) async {
+    ViewFocusSync.debugMacOSOverride = false;
     final focus = _FocusEvents();
     tester.binding.addObserver(focus);
     addTearDown(() {

@@ -9,6 +9,7 @@ import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/user_state/window_bounds.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/multiview/cocoa_view_window_native.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/gtk_view_window_native.dart';
 import 'package:otzaria/core/windowing/multiview/view_focus_sync.dart';
@@ -19,7 +20,7 @@ import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/tabs/models/tab.dart';
 import 'package:window_manager/window_manager.dart';
 
-/// מסגרת פיזית, כמו ב-[WindowOpener.openWindow].
+/// מסגרת מסך: macOS בנקודות גלובליות; Windows/Linux בפיקסלים פיזיים.
 typedef PhysicalBounds = ({int left, int top, int width, int height});
 
 /// חלון שנסגר ואפשר לשחזר ב-Ctrl+Shift+T: סשן של חלון Dart, או החלון הראשי.
@@ -267,7 +268,7 @@ class ViewWindowOpener implements WindowOpener {
     final saved = WindowBounds.decode(session?.boundsJson);
     return _open(
       slot: slot,
-      bounds: saved?.toPhysical(),
+      bounds: saved?.toPhysical(screenPoints: _native is CocoaViewWindowNative),
       maximized: saved?.maximized ?? false,
     );
   }

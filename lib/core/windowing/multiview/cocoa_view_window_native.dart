@@ -6,7 +6,7 @@ import 'package:otzaria/core/windowing/multiview/view_window_native.dart';
 import 'package:window_manager/window_manager.dart' show ResizeEdge;
 
 /// macOS: ערוץ `otzaria/view_window` של ה-runner. הידית היא `NSWindow*`.
-/// ה-runner עובד בנקודות; כאן כופלים ב-`backingScaleFactor` של המסך שהחלון עליו.
+/// הגאומטריה נשארת בנקודות מסך גלובליות, גם בין מסכים בעלי קנה מידה שונה.
 class CocoaViewWindowNative implements ViewWindowNative {
   const CocoaViewWindowNative({this._channel = defaultChannel});
 
@@ -50,28 +50,6 @@ class CocoaViewWindowNative implements ViewWindowNative {
     );
   }
 
-  static Rect _scaled(Rect rect, double factor) => Rect.fromLTWH(
-    rect.left * factor,
-    rect.top * factor,
-    rect.width * factor,
-    rect.height * factor,
-  );
-
-  /// אזור העבודה של המסך שהחלון עליו (בנקודות) וקנה המידה שלו; null בלי מסך.
-  Future<({Rect area, double scale})?> _screen(int hwnd) async {
-    final value = await _window<Object?>('visibleFrame', hwnd);
-    final area = _rect(value);
-    if (area == null || value is! Map) return null;
-    final scale = value['scale'];
-    return (
-      area: area,
-      scale: scale is num && scale > 0 ? scale.toDouble() : 1.0,
-    );
-  }
-
-  Future<double> _scaleOf(int hwnd) async =>
-      (await _screen(hwnd))?.scale ?? 1.0;
-
   /// null כשמוכן; אחרת הסיבה מה-runner. לפני [installWindowingOwner] במק.
   Future<String?> multiViewUnavailableReason({
     Duration timeout = handshakeTimeout,
@@ -113,19 +91,16 @@ class CocoaViewWindowNative implements ViewWindowNative {
 
   @override
   Future<Rect?> windowRect(int hwnd) async {
-    final frame = _rect(await _window<Object?>('frame', hwnd));
-    if (frame == null) return null;
-    return _scaled(frame, await _scaleOf(hwnd));
+    return _rect(await _window<Object?>('frame', hwnd));
   }
 
   @override
   Future<void> setWindowRect(int hwnd, Rect rect) async {
-    final points = _scaled(rect, 1 / await _scaleOf(hwnd));
     await _window<void>('setFrame', hwnd, {
-      'x': points.left,
-      'y': points.top,
-      'width': points.width,
-      'height': points.height,
+      'x': rect.left,
+      'y': rect.top,
+      'width': rect.width,
+      'height': rect.height,
     });
   }
 
@@ -156,24 +131,21 @@ class CocoaViewWindowNative implements ViewWindowNative {
 
   @override
   Future<Rect?> workArea(int hwnd) async {
-    final screen = await _screen(hwnd);
-    if (screen == null) return null;
-    return _scaled(screen.area, screen.scale);
+    return _rect(await _window<Object?>('visibleFrame', hwnd));
   }
 
   @override
   Future<int?> foregroundWindow() => _invoke<int>('keyWindow');
 
-  /// אין בערוץ מצב zoom: המסגרת הנוכחית היא ה"רגילה". DPI כמו ב-Windows (96 לכל 1x).
+  /// ההיסט בנקודות, ולכן DPI 96 גם במסך Retina.
   @override
   Future<({Rect normal, bool maximized, int dpi})?> placement(int hwnd) async {
     final frame = _rect(await _window<Object?>('frame', hwnd));
     if (frame == null) return null;
-    final scale = await _scaleOf(hwnd);
     return (
-      normal: _scaled(frame, scale),
+      normal: frame,
       maximized: false,
-      dpi: (96 * scale).round(),
+      dpi: 96,
     );
   }
 
