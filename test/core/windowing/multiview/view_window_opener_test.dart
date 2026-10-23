@@ -1019,6 +1019,43 @@ void main() {
     expect(mainRestores, 0);
   });
 
+  testWidgets('macOS: שחזור אינו מוחק שורה שמורה שחלון חדש כבר תפס', (
+    tester,
+  ) async {
+    final opener = makeOpener(tester, keepsProcess: true);
+    await pumpHost(tester);
+    opener.endProcess = () async {};
+    expect(await settle(tester, opener.openWindow()), isTrue);
+    final a = windows.registry.windows.single;
+    await sessions.save(a.slot, tabsJson: '["a"]', currentIndex: 0);
+    mainVisible = false;
+    expect(
+      await settle(
+        tester,
+        ViewWindowCloseFlow(
+          entry: a,
+          flush: () async {},
+          discardSession: sessions.delete,
+          opener: opener,
+        ).run(),
+      ),
+      isTrue,
+    );
+    await tester.pump();
+
+    // חלון חדש תופס את המשבצת של השורה השמורה.
+    mainVisible = true;
+    expect(await settle(tester, opener.openWindow()), isTrue);
+    final fresh = windows.registry.windows.single;
+    expect(fresh.slot, a.slot);
+    await sessions.save(fresh.slot, tabsJson: '["fresh"]', currentIndex: 0);
+
+    expect(await settle(tester, opener.restoreLastClosedWindow()), isTrue);
+    expect(sessions.rows[fresh.slot]!.tabsJson, '["fresh"]');
+    final restored = windows.registry.windows.last;
+    expect(sessions.rows[restored.slot]!.tabsJson, '["a"]');
+  });
+
   testWidgets('Dock בלי חלון סגור: הראשי, ואם לא שוחזר — הצגה', (tester) async {
     final opener = makeOpener(tester);
     await pumpHost(tester);

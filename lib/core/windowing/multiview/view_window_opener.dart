@@ -293,8 +293,11 @@ class ViewWindowOpener implements WindowOpener {
       final slot = registry.freeSlot(excluding: _pendingRestore);
       await _store.delete(slot);
       // השורה שנשארה תשוחזר כאן; בלי זה ההפעלה הבאה הייתה פותחת אותה שוב.
+      // משבצת שחלון חדש כבר תפס — השורה כבר שלו.
       final kept = closed.keptSlot;
-      if (kept != null && kept != slot) await _store.delete(kept);
+      if (kept != null && kept != slot && !registry.isSlotOpen(kept)) {
+        await _store.delete(kept);
+      }
       await _store.save(
         slot,
         tabsJson: session.tabsJson,
