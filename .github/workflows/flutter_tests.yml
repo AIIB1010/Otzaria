@@ -476,6 +476,7 @@ jobs:
           path: |
             build/windows/x64/**/*.log
             build/windows/x64/**/*.tlog
+            build/windows/x64/runner/Debug/otzaria_data/logs/**
           if-no-files-found: ignore
           retention-days: 7
 
