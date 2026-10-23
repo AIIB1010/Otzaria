@@ -69,6 +69,16 @@ Map<String, TextBookTab> _correctionPanes(Iterable<OpenedTab> tabs) => {
         ?PluginCorrectionSessionService.knownTabIdFor(pane): pane,
 };
 
+/// הכרטיסיות של חלון Dart שנסגר אינן משוחררות; בלי זה הספר היה נשאר "בעריכה".
+void endWindowCorrectionSessions(Iterable<OpenedTab> tabs) {
+  for (final tabId in _correctionPanes(tabs).keys) {
+    PluginCorrectionSessionService.instance.removeTab(
+      tabId,
+      reason: 'window_closed',
+    );
+  }
+}
+
 /// תיקונים שלא נשמרו ושאינם שייכים לאף אחת מ-[tabs] — הלשונית שלהם נסגרה.
 Future<List<String>> unsavedClosedTabCorrections(
   Iterable<OpenedTab> tabs, {

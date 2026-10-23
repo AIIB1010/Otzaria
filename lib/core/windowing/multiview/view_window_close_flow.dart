@@ -15,8 +15,8 @@ import 'package:otzaria/tabs/utils/confirm_close_tabs.dart';
 typedef ViewWindowCloseConfirm =
     Future<bool> Function(BuildContext context, List<OpenedTab> tabs);
 
-/// סגירת חלון Dart: רק מה ששייך לחלון הזה. העבודה של התהליך (שומר
-/// התוספים, טיוטות התיקונים, יציאה) שייכת לחלון הראשי ואינה רצה כאן.
+/// סגירת חלון Dart: רק מה ששייך לחלון הזה, כולל סשני התיקון שבכרטיסיות
+/// שלו. העבודה של התהליך (שומר התוספים, יציאה) שייכת לחלון הראשי.
 class ViewWindowCloseFlow {
   ViewWindowCloseFlow({
     required this.entry,
@@ -72,8 +72,9 @@ class ViewWindowCloseFlow {
           return false;
         }
         final context = entry.keys.navigator.currentContext;
+        var tabs = const <OpenedTab>[];
         if (context != null && context.mounted) {
-          final tabs = context.read<TabsBloc>().state.tabs;
+          tabs = context.read<TabsBloc>().state.tabs;
           // דיאלוג שה-Navigator שלו נהרס אינו חוזר; בלי זה התור ננעל לכל החלונות.
           final confirmed = await Future.any([
             _confirm(context, tabs),
@@ -100,6 +101,7 @@ class ViewWindowCloseFlow {
           // השורה תאומץ בהפעלה הבאה; החלון נסגר בכל מקרה.
           debugPrint('view window close: discard failed: $e');
         }
+        endWindowCorrectionSessions(tabs);
         entry.handle.destroy();
         destroyed = true;
         return true;
