@@ -670,7 +670,6 @@ class CalendarWidgetState extends State<CalendarWidget> {
 
   Widget _buildSidePanel(BuildContext context, CalendarState state) {
     return CalendarSidePanel(
-      state: state,
       activeView: _sidePanelView,
       timesPanel: CalendarTimesPanel(
         state: state,
