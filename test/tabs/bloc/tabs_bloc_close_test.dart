@@ -38,6 +38,59 @@ void main() {
     expect(reader.isClosed, isTrue);
   });
 
+  test('שכפול שכבר בתור מסיים גם פתיחת מלווה לפני הניקוי', () async {
+    final source = TextBookTab(book: TextBook(title: 'משנה ברורה'), index: 0);
+    final sourceReader = source.bloc;
+    final companion = TextBookTab(
+      book: TextBook(title: 'ביאור הלכה'),
+      index: 0,
+    );
+    final companionReader = companion.bloc;
+    final started = Completer<void>();
+    final release = Completer<void>();
+    late TextBookTab clone;
+    final tabs = TabsBloc(
+      repository: _Repository(restored: [source]),
+      withCompanion: (tab) async {
+        clone = tab as TextBookTab;
+        clone.bloc;
+        started.complete();
+        await release.future;
+        return CombinedTab(rightTab: tab, leftTab: companion);
+      },
+    )..add(LoadTabs());
+    await tabs.stream.firstWhere((state) => state.tabs.length == 1);
+    tabs.add(CloneTab(source));
+    final closing = tabs.close();
+    var done = false;
+    closing.then((_) => done = true);
+    await started.future;
+    await Future<void>.delayed(Duration.zero);
+    expect(done, isFalse);
+    final cloneReader = clone.bloc;
+    release.complete();
+    await closing;
+    await Future<void>.delayed(Duration.zero);
+    expect(
+      [sourceReader, companionReader, cloneReader].every((r) => r.isClosed),
+      isTrue,
+    );
+  });
+
+  test('סגירת כרטיסיה שבתור רשאית לשלוח את אירוע ההסרה שלה', () async {
+    final source = TextBookTab(book: TextBook(title: 'פתוח'), index: 0);
+    final reader = source.bloc;
+    final tabs = TabsBloc(
+      repository: _Repository(restored: [source]),
+      disposeDelay: Duration.zero,
+    )..add(LoadTabs());
+    await tabs.stream.firstWhere((state) => state.tabs.length == 1);
+    tabs.add(const CloseCurrentTab());
+    await tabs.close();
+    await Future<void>.delayed(Duration.zero);
+    expect(reader.isClosed, isTrue);
+  });
+
   for (final openOrFocus in [false, true]) {
     test(
       'סגירה מנקזת פתיחה לפני שחרור הקוראים: openOrFocus=$openOrFocus',
@@ -64,7 +117,6 @@ void main() {
         tabs.add(openOrFocus ? OpenOrFocusTab(primary) : AddTab(primary));
         await started.future;
         final closing = tabs.close();
-        expect(() => tabs.add(LoadTabs()), throwsStateError);
         var done = false;
         closing.then((_) => done = true);
         await Future<void>.delayed(Duration.zero);

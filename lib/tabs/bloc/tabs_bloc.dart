@@ -300,14 +300,6 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
   }
 
   @override
-  void add(TabsEvent event) {
-    if (_closeFuture != null) {
-      throw StateError('Cannot add new events after calling close');
-    }
-    super.add(event);
-  }
-
-  @override
   void onEvent(TabsEvent event) {
     super.onEvent(event);
     // הרישום נעשה בשליחה: גם פתיחה שממתינה בתור חייבת להקדים את הסגירה.
@@ -326,10 +318,12 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
   Future<void> close() => _closeFuture ??= Future<void>.sync(() async {
     PreCloseRegistry.unregister(_preCloseCallback);
     try {
-      await Future.wait([
-        for (final pending in _pendingOpenTabs) pending.future,
-        for (final pending in _pendingAddTabs) pending.future,
-      ]);
+      do {
+        await Future.wait([
+          for (final pending in _pendingOpenTabs) pending.future,
+          for (final pending in _pendingAddTabs) pending.future,
+        ]);
+      } while (_pendingOpenTabs.isNotEmpty || _pendingAddTabs.isNotEmpty);
       await _flushPendingSaves();
     } finally {
       final closing = super.close();
