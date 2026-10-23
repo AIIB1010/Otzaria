@@ -30,8 +30,11 @@ void main() {
     expect(installWindowingOwner(), isFalse);
     expect(MultiViewMode.ownerInstalled, isFalse);
     expect(MultiViewMode.enabled, isFalse);
-    // גם בלי בעלים, Windows אינו חוזר למנוע לכל חלון.
-    expect(MultiViewMode.usesEngineWindows, !Platform.isWindows);
+    // גם בלי בעלים, Windows ו-Linux אינם חוזרים למנוע לכל חלון.
+    expect(
+      MultiViewMode.usesEngineWindows,
+      !(Platform.isWindows || Platform.isLinux),
+    );
   });
 
   test('בלי בעלים, יצירת חלון נכשלת בשגיאת Dart ולא בקריסה נייטיבית', () {

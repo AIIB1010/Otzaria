@@ -167,11 +167,11 @@ void main() {
     expect(WindowOpener.current, same(ViewWindowOpener.instance));
     MultiViewMode.debugOverride = false;
     expect(WindowOpener.current, isA<MultiWindowService>());
-    // בלי דריסה: ב-Windows תמיד חלונות Dart, גם בלי בעלים; אחרת מודל A.
+    // בלי דריסה: ב-Windows וב-Linux תמיד חלונות Dart, גם בלי בעלים; אחרת מודל A.
     MultiViewMode.debugOverride = null;
     expect(
       WindowOpener.current,
-      Platform.isWindows
+      Platform.isWindows || Platform.isLinux
           ? same(ViewWindowOpener.instance)
           : isA<MultiWindowService>(),
     );
