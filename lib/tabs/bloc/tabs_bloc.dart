@@ -557,7 +557,7 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
         existingTab: matchingTab,
         incomingTab: event.tab,
       );
-      event.tab.dispose();
+      if (!identical(event.tab, matchingTab)) event.tab.dispose();
       final tabsToSave = state.tabs;
       final readerTarget = event.tab is TextBookTab
           ? _resolveTextBookTab(
