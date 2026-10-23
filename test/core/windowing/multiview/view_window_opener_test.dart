@@ -202,6 +202,8 @@ void main() {
 
     expect(await opener.canOpenAnotherWindow(), isFalse);
     expect(await opener.openWindow(), isFalse);
+    // חלון יחיד: האפשרות מוסתרת, ולכן גם אין הודעה.
+    expect(await opener.openEmptyWindow(), isFalse);
     expect(windows.registry.windows, isEmpty);
   });
 

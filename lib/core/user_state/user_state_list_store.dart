@@ -21,9 +21,6 @@ class UserStateListStore {
 
   static final UserStateListStore instance = UserStateListStore();
 
-  /// הודעת האפיק ש-[handleRequest] משרת.
-  static const String requestChanged = 'userStateChanged';
-
   final UserStateDatabase _database;
   final StreamController<UserStateListChange> _changes =
       StreamController<UserStateListChange>.broadcast();
@@ -69,16 +66,6 @@ class UserStateListStore {
     final db = await _database.database;
     db.execute('DELETE FROM lists WHERE box = ? AND key = ?', [box, key]);
     _notifyPeers(box, key, origin);
-  }
-
-  /// מטפל בהודעת [requestChanged] שהגיעה באפיק. מחזיר null כשאינה שלנו.
-  Object? handleRequest(Map<String, dynamic> request) {
-    if (request['type'] != requestChanged) return null;
-    final box = request['box'];
-    final key = request['key'];
-    if (box is! String || key is! String) return null;
-    _changes.add((box: box, key: key, origin: null));
-    return true;
   }
 
   List<dynamic> _readIn(Database db, String box, String key) {

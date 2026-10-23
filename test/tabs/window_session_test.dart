@@ -1,22 +1,15 @@
 import 'dart:io';
-import 'dart:isolate';
-import 'dart:ui' as ui show IsolateNameServer;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/app_scope/process_duties.dart';
 import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
-import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/user_state/user_state_slot.dart';
 import 'package:otzaria/core/windowing/multiview/in_process_tab_drop.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
-import 'package:otzaria/core/windowing/window_bus.dart';
-import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/tabs/models/tool_tab.dart';
 import 'package:otzaria/tabs/tabs_repository.dart';
-
-/// ⚠️ קידומת ייחודית לסוויטה — [ui.IsolateNameServer] גלובלי לתהליך.
-const String _namespace = 'otzaria.test.windowsession';
 
 ToolTab _tab(String title) => ToolTab(toolId: 'builtin.calendar', title: title);
 
@@ -28,11 +21,6 @@ void main() {
   late WindowSessionStore sessions;
 
   setUp(() async {
-    WindowBus.namespace = _namespace;
-    WindowRole.isSecondary = false;
-    // ⚠️ בלי זה `UserStateSlot.current` נופל למשבצת החלון היחיד בלינוקס
-    // (ה-CI), והבדיקה "בלי משבצת אינו כותב" הייתה ירוקה מסיבה שגויה.
-    MultiWindowService.debugSupportedOverride = true;
     tmp = Directory.systemTemp.createTempSync('otzaria_window_session_');
     database = UserStateDatabase.openAt('${tmp.path}/user_state.db');
     await database.database;
@@ -43,23 +31,15 @@ void main() {
   tearDown(() async {
     MultiViewMode.debugOverride = false;
     TabsRepository.debugSessions = null;
-    MultiWindowService.debugSupportedOverride = null;
     database.close();
-    WindowRole.isSecondary = false;
     ProcessDuties.debugOverride = null;
-    WindowBus.instance.unregister();
-    for (var i = 1; i <= WindowBus.slotCount; i++) {
-      ui.IsolateNameServer.removePortNameMapping('$_namespace.$i');
-    }
-    ui.IsolateNameServer.removePortNameMapping('$_namespace.owner');
-    WindowBus.namespace = 'otzaria.window';
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });
 
   group('החלון הראשון', () {
     test('שומר וטוען את המשבצת שלו', () async {
-      final slot = WindowBus.instance.register();
-      expect(slot, 1, reason: 'המשבצת הראשונה הפנויה — כמו במיגרציה מ-Hive');
+      const slot = UserStateSlot.main;
+      expect(slot, 1, reason: 'הסשנים השמורים ממופתחים לפי משבצת 1');
 
       final repo = TabsRepository();
       await repo.saveTabs([_tab('לוח שנה')], 0);
@@ -69,87 +49,8 @@ void main() {
     });
   });
 
-  group('חלון משני', () {
-    test('כותב למשבצת שלו, ולא על הסשן של החלון הראשון', () async {
-      // חלון ראשון חי שתופס את משבצת 1.
-      final occupied = ReceivePort();
-      ui.IsolateNameServer.registerPortWithName(
-        occupied.sendPort,
-        '$_namespace.1',
-      );
-      addTearDown(occupied.close);
-      await sessions.save(
-        1,
-        tabsJson: '[${_encoded('של הראשון')}]',
-        currentIndex: 0,
-      );
-
-      WindowRole.isSecondary = true;
-      final slot = WindowBus.instance.register();
-      expect(slot, 2);
-      await TabsRepository().saveTabs([_tab('של המשני')], 0);
-
-      expect((await sessions.load(1))!.tabsJson, contains('של הראשון'));
-      expect((await sessions.load(2))!.tabsJson, contains('של המשני'));
-    });
-
-    test('משחזר את הסשן של המשבצת שלו — חלון שמת בלי סגירה מסודרת', () async {
-      WindowRole.isSecondary = true;
-      WindowBus.instance.register();
-      final slot = WindowBus.instance.slot;
-      expect(slot, isNotNull);
-
-      await TabsRepository().saveTabs([_tab('נשמר')], 0);
-      expect((await sessions.load(slot!)), isNotNull);
-      expect(TabsRepository().loadTabs().single.title, 'נשמר');
-    });
-
-    test('בלי משבצת אינו כותב כלל', () async {
-      WindowBus.instance.register();
-      await TabsRepository().saveTabs([_tab('של הראשון')], 0);
-      final hostSlot = WindowBus.instance.slot!;
-      WindowBus.instance.unregister();
-
-      WindowRole.isSecondary = true;
-      await TabsRepository().saveTabs([_tab('לא אמור להישמר')], 0);
-
-      final own = await sessions.load(hostSlot);
-      expect(own!.tabsJson, contains('של הראשון'));
-      expect(await sessions.loadAll(), hasLength(1));
-    });
-
-    test('discardWindowSession מוחק את הסשן', () async {
-      WindowRole.isSecondary = true;
-      WindowBus.instance.register();
-      final slot = WindowBus.instance.slot!;
-      final repo = TabsRepository();
-      await repo.saveTabs([_tab('נסגר')], 0);
-      await repo.discardWindowSession();
-
-      expect(await sessions.load(slot), isNull);
-    });
-  });
-
   group('ייבוא מגיבוי', () {
-    test('בלי משבצת אינו כותב לסשן של חלון אחר', () async {
-      await sessions.save(
-        1,
-        tabsJson: '[${_encoded('של אחר')}]',
-        currentIndex: 0,
-      );
-      WindowRole.isSecondary = true;
-
-      await TabsRepository().importRaw({
-        'tabs': ['x'],
-        'currentTab': 0,
-      });
-
-      expect((await sessions.load(1))!.tabsJson, contains('של אחר'));
-      expect(await TabsRepository().exportRaw(), isNull);
-    });
-
     test('מקדם את דור הסשן — bloc שנבנה קודם לא ישמור', () async {
-      WindowBus.instance.register();
       final before = TabsRepository.sessionGeneration;
       await TabsRepository().importRaw({'tabs': <dynamic>[], 'currentTab': 0});
       expect(TabsRepository.sessionGeneration, before + 1);
@@ -158,8 +59,7 @@ void main() {
 
   group('דחיסת סשנים ל"שחזר את כל החלונות"', () {
     test('מסדר את האחרים ברצף אחרי המארח ומחזיר את המשבצות', () async {
-      WindowBus.instance.register();
-      final host = WindowBus.instance.slot!;
+      const host = UserStateSlot.main;
       await TabsRepository().saveTabs([_tab('שלי')], 0);
       await sessions.save(
         host + 2,
@@ -183,8 +83,7 @@ void main() {
     });
 
     test('כשלמארח אין סשן, הראשון שבתור הופך לשלו', () async {
-      WindowBus.instance.register();
-      final host = WindowBus.instance.slot!;
+      const host = UserStateSlot.main;
       await sessions.save(
         host + 1,
         tabsJson: '[${_encoded('א')}]',
@@ -202,34 +101,30 @@ void main() {
     });
 
     test('אידמפוטנטי ואינו מייצר סשנים מעבר למספר המשבצות', () async {
-      WindowBus.instance.register();
-      final host = WindowBus.instance.slot!;
+      const host = UserStateSlot.main;
       await TabsRepository().saveTabs([_tab('שלי')], 0);
-      for (var slot = 2; slot <= WindowBus.slotCount; slot++) {
+      for (var slot = 2; slot <= ViewWindowRegistry.maxWindows; slot++) {
         await sessions.save(slot, tabsJson: '[]', currentIndex: 0);
       }
 
       final first = await TabsRepository.compactWindowSessions();
-      expect(first, hasLength(WindowBus.slotCount - 1));
+      expect(first, hasLength(ViewWindowRegistry.maxWindows - 1));
       expect(await TabsRepository.compactWindowSessions(), first);
-      expect(await sessions.loadAll(), hasLength(WindowBus.slotCount));
+      expect(
+        await sessions.loadAll(),
+        hasLength(ViewWindowRegistry.maxWindows),
+      );
       expect(first, isNot(contains(host)));
     });
 
-    group('ריבוי תצוגות', () {
-      setUp(() => MultiViewMode.debugOverride = true);
-      tearDown(() => MultiViewMode.debugOverride = false);
-
-      test('התקרה היא של חלונות ה-Dart (8), לא של האפיק (4)', () async {
+    group('תקרת 8 חלונות, בכל מצב', () {
+      test('התקרה היא של חלונות ה-Dart (8)', () async {
         expect(TabsRepository.maxWindowSlot, ViewWindowRegistry.maxWindows);
-        MultiViewMode.debugOverride = false;
-        expect(TabsRepository.maxWindowSlot, WindowBus.slotCount);
+        MultiViewMode.debugOverride = true;
+        expect(TabsRepository.maxWindowSlot, ViewWindowRegistry.maxWindows);
       });
 
       test('סשן במשבצת 7 נשאר חלון נפרד, ונדחס למשבצת פנויה', () async {
-        WindowBus.instance.register();
-        final host = WindowBus.instance.slot!;
-        expect(host, 1);
         await TabsRepository().saveTabs([_tab('שלי')], 0);
         for (final (slot, title) in [(3, 'ג'), (5, 'ה'), (6, 'ו'), (7, 'ז')]) {
           await sessions.save(
@@ -246,7 +141,6 @@ void main() {
       });
 
       test('כל 7 המשבצות של חלונות ה-Dart נשמרות', () async {
-        WindowBus.instance.register();
         await TabsRepository().saveTabs([_tab('שלי')], 0);
         for (var slot = 2; slot <= ViewWindowRegistry.maxWindows; slot++) {
           await sessions.save(
@@ -266,7 +160,6 @@ void main() {
 
   test('ריבוי תצוגות משחזר את כל שמונת הסשנים בלי למחוק חלונות', () async {
     MultiViewMode.debugOverride = true;
-    WindowBus.instance.register();
     for (var slot = 1; slot <= ViewWindowRegistry.maxWindows; slot++) {
       await sessions.save(slot, tabsJson: '["$slot"]', currentIndex: 0);
     }
@@ -296,7 +189,6 @@ void main() {
 
     test('שחזור כל החלונות: סשני 2-4 נשארים במקומם לחלונות ה-Dart', () async {
       MultiViewMode.debugOverride = true;
-      WindowBus.instance.register();
       expect(WindowTabsSession.current.slot, InProcessTabDrops.mainSlot);
       await modelASessions();
 
@@ -316,7 +208,6 @@ void main() {
 
     test('בלי שחזור כל החלונות: מאומצים לראשי', () async {
       MultiViewMode.debugOverride = true;
-      WindowBus.instance.register();
       await modelASessions();
 
       expect(await TabsRepository.adoptOrphanWindowSessions(), 3);
@@ -329,29 +220,8 @@ void main() {
       expect(await sessions.loadAll(), hasLength(1));
     });
 
-    test('חזרה למודל A: סשנים מעבר ל-4 מצורפים לראשי ולא נמחקים', () async {
-      WindowBus.instance.register();
-      await TabsRepository().saveTabs([_tab('ראשי')], 0);
-      for (var slot = 2; slot <= ViewWindowRegistry.maxWindows; slot++) {
-        await sessions.save(
-          slot,
-          tabsJson: '[${_encoded('חלון $slot')}]',
-          currentIndex: 0,
-        );
-      }
-
-      expect(await TabsRepository.compactWindowSessions(), [2, 3, 4]);
-      expect(TabsRepository().loadTabs().map((t) => t.title), [
-        'ראשי',
-        for (var slot = 5; slot <= 8; slot++) 'חלון $slot',
-      ]);
-      expect(await sessions.loadAll(), hasLength(WindowBus.slotCount));
-      expect((await sessions.load(4))!.tabsJson, contains('חלון 4'));
-    });
-
     test('הצירוף למארח שומר את הכרטיסיה הנוכחית והשולחן שלו', () async {
-      WindowBus.instance.register();
-      final host = WindowBus.instance.slot!;
+      const host = UserStateSlot.main;
       await TabsRepository().saveTabs([_tab('א'), _tab('ב')], 1);
       await sessions.saveActiveWorkspace(host, 'ws-main');
       for (final slot in [2, 6]) {
@@ -379,8 +249,7 @@ void main() {
 
   group('אימוץ סשנים יתומים', () {
     test('מצרף למשבצת המארח ומוחק את האחרות', () async {
-      WindowBus.instance.register();
-      final host = WindowBus.instance.slot!;
+      const host = UserStateSlot.main;
       await TabsRepository().saveTabs([_tab('של הראשון')], 0);
       await sessions.save(
         host + 1,
@@ -404,8 +273,7 @@ void main() {
     });
 
     test('אידמפוטנטי — הרצה שנייה אינה מכפילה', () async {
-      WindowBus.instance.register();
-      final host = WindowBus.instance.slot!;
+      const host = UserStateSlot.main;
       await sessions.save(
         host + 1,
         tabsJson: '[${_encoded('יתום')}]',
@@ -415,35 +283,6 @@ void main() {
       expect(await TabsRepository.adoptOrphanWindowSessions(), 1);
       expect(await TabsRepository.adoptOrphanWindowSessions(), 0);
       expect(TabsRepository().loadTabs(), hasLength(1));
-    });
-
-    test('אינו רץ בחלון משני', () async {
-      WindowBus.instance.register();
-      final host = WindowBus.instance.slot!;
-      await sessions.save(
-        host + 1,
-        tabsJson: '[${_encoded('יתום')}]',
-        currentIndex: 0,
-      );
-
-      WindowRole.isSecondary = true;
-      expect(await TabsRepository.adoptOrphanWindowSessions(), 0);
-      expect(await sessions.load(host + 1), isNotNull);
-    });
-
-    test('אינו רץ כשאינו בעל התהליך, גם בחלון ראשי', () async {
-      WindowBus.instance.register();
-      final host = WindowBus.instance.slot!;
-      await sessions.save(
-        host + 1,
-        tabsJson: '[${_encoded('יתום')}]',
-        currentIndex: 0,
-      );
-
-      ProcessDuties.debugOverride = ProcessDuties(isProcessOwner: () => false);
-      expect(await TabsRepository.adoptOrphanWindowSessions(), 0);
-      expect(await TabsRepository.compactWindowSessions(), isEmpty);
-      expect(await sessions.load(host + 1), isNotNull);
     });
   });
 }

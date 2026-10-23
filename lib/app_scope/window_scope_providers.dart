@@ -188,7 +188,6 @@ class WindowScopeProviders extends StatelessWidget {
               final windowId = windowKeys.id;
               return WorkspaceBloc(
                 windowKeys: windowKeys,
-                // ריבוי תצוגות: החלונות האחרים בתהליך ולא האפיק.
                 isOpenInOtherWindow: MultiViewMode.enabled
                     ? (id) => InProcessTabDrops.current
                           .isWorkspaceOpenElsewhere(windowId, id)

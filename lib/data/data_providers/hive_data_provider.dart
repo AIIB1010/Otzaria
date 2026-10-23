@@ -6,29 +6,11 @@ import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:path/path.dart' as p;
 import 'package:otzaria/core/app_paths.dart';
 
-String? _hiveRootOverride;
-
-/// התיקייה שתחתיה יושבים שורשי ה-Hive הפרטיים של חלונות משניים.
-///
-/// `<dataRoot>/windows/slot-N`. אינה מגובה ואינה נטענת בהפעלה קרה — ראו
-/// [deleteStaleWindowRoots].
+/// `<dataRoot>/windows/slot-N`: שורשי Hive ועותקי `pdfium-window-N.dll` שהשאירו
+/// גרסאות שבהן כל חלון היה מנוע נפרד. אינה מגובה — ראו [deleteStaleWindowRoots].
 const String windowRootsDirName = 'windows';
 
-/// מודל A בלבד (`secondaryWindowMain`): box הגדרות פרטי למנוע משני, כי
-/// `hive_ce` נועל את ה-`.lock` פר-handle. בריבוי תצוגות לא נקרא.
-void configureHiveRootForWindow(String path) {
-  _hiveRootOverride = path;
-}
-
-/// שורש קובצי ה-Hive: שורש הנתונים, למעט מנוע משני של מודל A.
-Future<String> hiveRootPath() async =>
-    _hiveRootOverride ?? await AppPaths.getDataRootPath();
-
-/// מוחק את שורשי ה-Hive הפרטיים שנשארו מהפעלה קודמת.
-///
-/// ⚠️ נקרא **רק** מהחלון הראשון ובהפעלה קרה, לפני שנפתח חלון משני. באותו
-/// רגע אין אף חלון משני חי ולכן כל התיקיות שם הן שאריות; קריאה בכל עת אחרת
-/// תמחוק קובצי Hive שחלון חי פתח.
+/// הגירה לגרסה אחת: מוחק את [windowRootsDirName] שנשארה מגרסה קודמת.
 ///
 /// כשל מדולג בשקט: אי אפשר למחוק תיקייה שקובץ בה נעול, וזה לא מצדיק לעצור
 /// את העלייה.
@@ -85,7 +67,7 @@ class HiveCache extends CacheProvider {
   @override
   Future<void> init() async {
     if (!kIsWeb) {
-      final defaultDirectory = await hiveRootPath();
+      final defaultDirectory = await AppPaths.getDataRootPath();
       _preferences = await Hive.openBox<dynamic>(
         keyName,
         path: defaultDirectory,

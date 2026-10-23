@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
-import 'package:otzaria/core/windowing/multi_window_service.dart';
 import 'package:otzaria/plugins/services/plugin_restore_state_store.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
@@ -25,7 +24,6 @@ void main() {
 
   setUp(() async {
     await Settings.init(cacheProvider: MemorySettingsCache());
-    MultiWindowService.debugSupportedOverride = false;
     directory = await Directory.systemTemp.createTemp('tool-restore-ownership');
     database = UserStateDatabase.openAt('${directory.path}/user_state.db');
     await database.database;
@@ -36,7 +34,6 @@ void main() {
 
   tearDown(() async {
     database.close();
-    MultiWindowService.debugSupportedOverride = null;
     await directory.delete(recursive: true);
   });
 

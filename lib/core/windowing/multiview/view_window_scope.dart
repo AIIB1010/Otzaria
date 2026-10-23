@@ -19,8 +19,7 @@ import 'package:otzaria/tabs/models/tab.dart';
 typedef ViewWindowCloseFlowFactory =
     ViewWindowCloseFlow Function(ViewWindowEntry entry);
 
-/// היקף החלון של חלון Dart: בקר, מפתחות, תפקיד וספקי חלון משלו, בלי
-/// `WindowBusHost` (האפיק שייך ל-isolate, ומופע שני היה גונב את הבקשות).
+/// היקף החלון של חלון Dart: בקר, מפתחות, תפקיד וספקי חלון משלו.
 class ViewWindowScope extends StatefulWidget {
   const ViewWindowScope({
     super.key,

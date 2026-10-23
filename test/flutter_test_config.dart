@@ -20,7 +20,7 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
       Platform.environment['OTZARIA_REQUIRE_SEARCH_ENGINE'] == '1') {
     throw StateError(searchEngineSkipReason);
   }
-  // מודל A כברירת מחדל בבדיקות; בדיקות ריבוי התצוגות מדליקות את הדגל בעצמן.
+  // חלון יחיד כברירת מחדל בבדיקות; בדיקות ריבוי התצוגות מדליקות את הדגל בעצמן.
   MultiViewMode.debugOverride = false;
   // שורש נתונים זמני לכל קובץ בדיקה — אחרת לוג השגיאות והאינדקס נכתבים
   // לפרופיל האמיתי של המפתח.

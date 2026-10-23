@@ -36,9 +36,6 @@ abstract final class MultiViewMode {
   /// פעיל רק אחרי ש-[installWindowingOwner] התקין בעלים אמיתי.
   static bool get enabled => _override ?? (supported && _ownerInstalled);
 
-  /// מנועים נוספים אינם זמינים אחרי הסרת סנכרון המצב בין המנועים.
-  static bool get usesEngineWindows => false;
-
   /// האם הותקן בעלים אמיתי לחלונות ה-Dart.
   static bool get ownerInstalled => _ownerInstalled;
 

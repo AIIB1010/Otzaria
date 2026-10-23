@@ -112,7 +112,7 @@ class WindowPersistenceBinding {
     double Function()? devicePixelRatio,
     FlutterView? view,
   }) : _window = controller,
-       _slot = slot ?? (() => UserStateSlot.current),
+       _slot = slot ?? (() => UserStateSlot.main),
        _devicePixelRatio =
            devicePixelRatio ??
            (view == null

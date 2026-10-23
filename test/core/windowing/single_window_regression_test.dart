@@ -1,26 +1,19 @@
 import 'dart:io';
-import 'dart:ui' as ui show IsolateNameServer;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/bookmarks/models/bookmark.dart';
 import 'package:otzaria/bookmarks/repository/bookmark_repository.dart';
 import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/core/user_state/user_state_list_store.dart';
-import 'package:otzaria/core/windowing/window_bus.dart';
-import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/history/history_repository.dart';
 import 'package:otzaria/models/books.dart';
-
-/// ⚠️ קידומת ייחודית לסוויטה — [ui.IsolateNameServer] גלובלי לתהליך.
-const String _namespace = 'otzaria.test.singlewindow';
 
 /// **הבדיקה שמגנה על 99% מהמשתמשים.**
 ///
 /// שכבת מצב המשתמש המשותף נוספה עבור ריבוי חלונות, אבל היא יושבת על מסלול
 /// הכתיבה של **כל** משתמש — כולל מי שלעולם לא יפתח חלון שני. שתי דרישות:
 ///
-/// 1. **אפס המתנה.** אין קריאת בקשה-תשובה על האפיק, כלומר אין מסלול שבו
-///    שמירת סימנייה ממתינה ל-timeout.
+/// 1. **אפס המתנה.** אין מסלול שבו שמירת סימנייה ממתינה ל-timeout.
 /// 2. **אפס שינוי התנהגות.** הוספה, הסרה ומחיקה עובדות בדיוק כמו קודם,
 ///    מול מסד אמיתי.
 void main() {
@@ -35,27 +28,18 @@ void main() {
   late UserStateListStore store;
 
   setUp(() async {
-    WindowBus.namespace = _namespace;
-    WindowRole.isSecondary = false;
     tmp = Directory.systemTemp.createTempSync('otzaria_single_window_');
     database = UserStateDatabase.openAt('${tmp.path}/user_state.db');
     await database.database;
     store = UserStateListStore(database: database);
-    WindowBus.instance.register(asOwner: true);
   });
 
   tearDown(() async {
-    WindowBus.instance.unregister();
-    for (var i = 1; i <= WindowBus.slotCount; i++) {
-      ui.IsolateNameServer.removePortNameMapping('$_namespace.$i');
-    }
-    ui.IsolateNameServer.removePortNameMapping('$_namespace.owner');
-    WindowBus.namespace = 'otzaria.window';
     database.close();
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });
 
-  test('[יחיד] היסטוריה: הוספה, קריאה והסרה, בלי אף הודעת אפיק', () async {
+  test('[יחיד] היסטוריה: הוספה, קריאה והסרה, בלי המתנה', () async {
     final repo = HistoryRepository(store: store);
     final started = DateTime.now();
 
@@ -72,8 +56,7 @@ void main() {
     );
     expect((await repo.loadHistory()).map((b) => b.book.title), ['בראשית']);
 
-    // ⚠️ המספר הוא הראיה שלא הומתן לשום timeout: `peers` ממתין 800ms
-    // ובקשת מארח 8 שניות — אף אחד מהם אינו על המסלול הזה.
+    // ⚠️ המספר הוא הראיה שלא הומתן לשום timeout.
     final elapsed = DateTime.now().difference(started);
     expect(elapsed.inMilliseconds, lessThan(500));
   });

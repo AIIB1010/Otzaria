@@ -15,7 +15,7 @@ import 'package:otzaria/core/app_paths.dart';
 import 'package:otzaria/core/messages/settings_messages.dart';
 import 'package:otzaria/core/app_runtime_reset.dart';
 import 'package:otzaria/core/update_check_frequency.dart';
-import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/runner_window_channel.dart';
 import 'package:otzaria/core/windowing/app_quit.dart';
 import 'package:otzaria/data/data_providers/hive_data_provider.dart';
 import 'package:otzaria/settings/engine/settings_engine_exports.dart';
@@ -1193,7 +1193,7 @@ class _SystemSettingsTabState extends State<SystemSettingsTab> {
       cardId: 'system.advanced',
       title: context.settingsText('מתקדם'),
       children: [
-        if (MultiWindowService.canOpenWindows)
+        if (RunnerWindowChannel.canOpenWindows)
           SettingsActionTile.switchTile(
             icon: FluentIcons.window_apps_24_regular,
             title: context.settingsText('שחזר את כל החלונות בהפעלה'),

@@ -14,7 +14,7 @@ import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
 import 'package:otzaria/core/startup_timeline.dart';
-import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/runner_window_channel.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/widgets/misc/rtl_icon.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -629,7 +629,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
 
   /// האם לדלג על בניית קטלוג הספרייה בעלייה.
   ///
-  /// ⚠️ רק בחלון משני שנפתח עם כרטיסיה: המשתמש רואה ספר, לא את הספרייה,
+  /// ⚠️ רק בחלון Dart שנפתח עם כרטיסיה: המשתמש רואה ספר, לא את הספרייה,
   /// ובניית הקטלוג מעכבת את החשיפה בכ-700ms. `LibraryBrowser` טוען אותו
   /// ב-`initState` שלו כשנכנסים אליו, ולכן שום דבר לא אובד.
   bool get _skipsEagerLibraryLoad =>
@@ -1431,8 +1431,8 @@ class MainWindowScreenState extends State<MainWindowScreen>
     if (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS) return;
     if (!mounted) return;
     // `raiseSelf` מעלה את חלון ה-runner, כלומר את הראשי ולא חלון Dart.
-    if (MultiWindowService.canOpenWindows && !_role.isViewWindow) {
-      await const MultiWindowService().raiseSelf();
+    if (!_role.isViewWindow) {
+      await const RunnerWindowChannel().raiseSelf();
       return;
     }
     final window = AppWindowScope.controllerOf(context);

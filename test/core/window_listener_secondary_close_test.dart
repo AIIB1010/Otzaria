@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:otzaria/indexing/utils/indexing_crash_canary.dart';
 import 'dart:io';
-import 'dart:ui' as ui show IsolateNameServer;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -9,7 +8,6 @@ import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/app_paths.dart';
 import 'package:otzaria/core/ui_snack.dart';
-import 'package:otzaria/plugins/services/plugin_unsaved_changes_registry.dart';
 import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
 import 'package:otzaria/tabs/bloc/tabs_state.dart';
 import 'package:otzaria/data/sqlite/sqlite3_api.dart';
@@ -18,8 +16,8 @@ import 'package:otzaria/plugins/repository/plugin_correction_draft_repository.da
 import 'package:otzaria/plugins/services/plugin_correction_session_service.dart';
 import 'package:otzaria/plugins/storage/plugin_correction_draft_store.dart';
 import 'package:otzaria/tabs/models/tab.dart';
-import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/tabs/models/tool_tab.dart';
+import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/tabs/utils/confirm_close_tabs.dart';
 
 import '../test_helpers/controllable_correction_draft_repository.dart';
@@ -28,21 +26,17 @@ import 'package:otzaria/core/pre_close_registry.dart';
 import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
 import 'package:otzaria/core/window_listener.dart';
-import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/app_quit.dart';
+import 'package:otzaria/core/windowing/app_window_controller.dart';
+import 'package:otzaria/core/windowing/runner_window_channel.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_opener.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
-import 'package:otzaria/core/windowing/app_quit.dart';
-import 'package:otzaria/core/windowing/app_window_controller.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_close_flow.dart';
 import 'package:otzaria/core/windowing/multiview/in_process_tab_drop.dart';
 import '../test_helpers/fake_view_window.dart';
-import 'package:otzaria/core/windowing/window_bus.dart';
-import 'package:otzaria/core/windowing/window_role.dart';
+import 'package:otzaria/core/user_state/user_state_slot.dart';
 import 'package:otzaria/tabs/tabs_repository.dart';
-
-/// ⚠️ קידומת ייחודית לסוויטה — [ui.IsolateNameServer] גלובלי לתהליך.
-const String _namespace = 'otzaria.test.secondaryclose';
 
 /// סגירה מנומסת שומרת סשן לעדכון ומוחקת סשן בסגירת X רגילה.
 void main() {
@@ -58,11 +52,9 @@ void main() {
   });
 
   setUp(() async {
-    WindowBus.namespace = _namespace;
-    WindowRole.isSecondary = false;
     MultiViewMode.debugOverride = false;
     // ה-runner מדומה כדי לבדוק את מסלול ריבוי החלונות בכל פלטפורמה.
-    MultiWindowService.debugSupportedOverride = true;
+    RunnerWindowChannel.debugSupportedOverride = true;
     runner = _FakeRunner()..install();
     tmp = Directory.systemTemp.createTempSync('otzaria_secclose_');
     AppPaths.debugProfileDataRootPath = tmp.path;
@@ -80,18 +72,9 @@ void main() {
     AppWindowListener.prepareUpdateForClose = null;
     AppPaths.debugProfileDataRootPath = null;
     TabsRepository.debugSessions = null;
-    MultiWindowService.closingAll = false;
     database.close();
     runner.uninstall();
-    MultiWindowService.debugSupportedOverride = null;
-    WindowRole.isSecondary = false;
-    WindowBus.instance.onRequest = null;
-    WindowBus.instance.unregister();
-    for (var i = 1; i <= WindowBus.slotCount; i++) {
-      ui.IsolateNameServer.removePortNameMapping('$_namespace.$i');
-    }
-    ui.IsolateNameServer.removePortNameMapping('$_namespace.owner');
-    WindowBus.namespace = 'otzaria.window';
+    RunnerWindowChannel.debugSupportedOverride = null;
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });
 
@@ -103,7 +86,6 @@ void main() {
   }
 
   test('סגירת חלון בלי כיבוי התהליך משמרת canary', () async {
-    WindowBus.instance.register();
     IndexingCrashCanary.start('${tmp.path}/index');
     final canary = IndexingCrashCanary.current!;
     canary.begin('id:crashing');
@@ -118,7 +100,6 @@ void main() {
   });
 
   test('הכנת העדכון מסתיימת לפני flush וסגירה, גם באירוע כפול', () async {
-    WindowBus.instance.register();
     final preparing = Completer<void>();
     final started = Completer<void>();
     final steps = <String>[];
@@ -163,7 +144,6 @@ void main() {
       WindowOpener.debugOverride = null;
       WindowTabsSession.current.resume();
     });
-    WindowBus.instance.register();
     final released = Completer<void>();
     final started = Completer<void>();
     final otherClose = ViewWindowOpener.instance.serializeClose(() async {
@@ -195,7 +175,6 @@ void main() {
         WindowOpener.debugOverride = null;
         WindowTabsSession.current.resume();
       });
-      WindowBus.instance.register();
       holdQuitPreparation();
       await tester.pumpWidget(
         BlocProvider<TabsBloc>.value(
@@ -246,7 +225,6 @@ void main() {
       WindowOpener.debugOverride = null;
       WindowTabsSession.current.resume();
     });
-    WindowBus.instance.register();
     final prepared = Completer<void>();
     final released = Completer<void>();
     AppWindowListener.prepareUpdateForClose = () async {
@@ -276,7 +254,6 @@ void main() {
     tester,
   ) async {
     MultiViewMode.debugOverride = true;
-    WindowBus.instance.register();
     holdQuitPreparation();
     final tab = ToolTab(toolId: 'p', title: 'תוסף', instanceId: 'update');
     await tester.pumpWidget(
@@ -297,11 +274,9 @@ void main() {
     );
     expect(window.closes, 0, reason: 'סגירה רגילה רק מסתירה את הראשי');
     expect(WindowTabsSession.current.slot, isNotNull);
-    expect(MultiWindowService.closingAll, isFalse);
   });
 
   test('כשל בהכנת העדכון אינו נועל את ניסיון הסגירה הבא', () async {
-    WindowBus.instance.register();
     final listener = AppWindowListener();
     AppWindowListener.prepareUpdateForClose = () async {
       throw StateError('preparation failed');
@@ -366,8 +341,7 @@ void main() {
   test('החלון הראשון שאינו האחרון: הסשן שלו נמחק כמו של כל חלון', () async {
     // ⚠️ ההצדקה זהה לזו של חלון משני — הוא נסגר במכוון בעוד אחרים
     // פתוחים — ולכן הכרטיסיות שלו אינן "פתוחות" יותר.
-    WindowBus.instance.register();
-    final slot = WindowBus.instance.slot!;
+    const slot = UserStateSlot.main;
     await TabsRepository().saveTabs(const [], 0);
 
     await AppWindowListener().handleWindowClose();
@@ -386,8 +360,7 @@ void main() {
         WindowOpener.debugOverride = null;
         WindowTabsSession.current.resume();
       });
-      WindowBus.instance.register();
-      final slot = WindowBus.instance.slot!;
+      const slot = UserStateSlot.main;
       await TabsRepository().saveTabs(const [], 0);
       final closedBefore = ViewWindowOpener.instance.closedCountForTest;
 
@@ -407,133 +380,6 @@ void main() {
       expect(WindowTabsSession.current.slot, slot);
     },
   );
-
-  test('סגירה לעדכון כשחלון אחר עוד פתוח: הסשן נשמר (issue #2095)', () async {
-    // `closePeers` אינו ממתין, ולכן החלון שמתקין רואה עוד חלון פתוח.
-    WindowBus.instance.register();
-    final slot = WindowBus.instance.slot!;
-    await TabsRepository().saveTabs(const [], 0);
-
-    MultiWindowService.closePeers();
-    await AppWindowListener().handleWindowClose();
-
-    expect(runner.closeSelfCalls, 1);
-    expect(await sessions.load(slot), isNotNull);
-  });
-
-  test('X אחרי החזרת חלון שנסגר לעדכון מוחק את הסשן', () async {
-    WindowBus.instance.register();
-    final slot = WindowBus.instance.slot!;
-    final repository = TabsRepository();
-    final listener = AppWindowListener();
-    final tab = ToolTab(
-      toolId: 'p.editor',
-      title: 'עורך',
-      instanceId: 'revived',
-    );
-    await repository.saveTabs([tab], 0);
-
-    MultiWindowService.closePeers();
-    await listener.handleWindowClose();
-    expect(await sessions.load(slot), isNotNull);
-    expect(await const MultiWindowService().restoreLastClosedWindow(), isTrue);
-    await repository.saveTabs([tab], 0);
-    await listener.handleWindowClose();
-
-    expect(runner.closeSelfCalls, 2);
-    expect(await sessions.adoptInto(slot == 1 ? 2 : 1), 0);
-  });
-
-  for (final cancellationCheck in [1, 2]) {
-    test(
-      'ביטול canClose בבדיקה $cancellationCheck אינו שומר כוונת עדכון',
-      () async {
-        WindowBus.instance.register();
-        final slot = WindowBus.instance.slot!;
-        await TabsRepository().saveTabs(const [], 0);
-        final listener = AppWindowListener();
-        var checks = 0;
-
-        MultiWindowService.closePeers();
-        await listener.handleWindowClose(
-          canClose: () => ++checks < cancellationCheck,
-        );
-        expect(runner.closeSelfCalls, 0);
-        expect(await sessions.load(slot), isNotNull);
-        await listener.handleWindowClose();
-
-        expect(runner.closeSelfCalls, 1);
-        expect(await sessions.load(slot), isNull);
-      },
-    );
-  }
-
-  for (final beforeGuard in [false, true]) {
-    for (final confirm in [false, true]) {
-      testWidgets(
-        'עדכון ${beforeGuard ? 'לפני' : 'בזמן'} שומר X ואז ${confirm ? 'אישור' : 'ביטול'}',
-        (
-          tester,
-        ) async {
-          WindowBus.instance.register();
-          final slot = WindowBus.instance.slot!;
-          final tab = ToolTab(
-            toolId: 'p.editor',
-            title: 'עורך',
-            instanceId: 'guard',
-          );
-          final key = (pluginId: tab.toolId, instanceId: tab.instanceId);
-          await tester.runAsync(() => TabsRepository().saveTabs([tab], 0));
-          PluginUnsavedChangesRegistry.instance.set(key, hasChanges: true);
-          addTearDown(
-            () => PluginUnsavedChangesRegistry.instance.removeInstance(key),
-          );
-          await tester.pumpWidget(
-            BlocProvider<TabsBloc>.value(
-              value: _GuardTabs(tab),
-              child: MaterialApp(
-                navigatorKey: navigatorKey,
-                home: const SizedBox(),
-              ),
-            ),
-          );
-          addTearDown(() => tester.pumpWidget(const SizedBox()));
-          final listener = AppWindowListener();
-          if (beforeGuard) MultiWindowService.closePeers();
-          final closing = listener.handleWindowClose();
-          await tester.pumpAndSettle();
-          expect(find.text(unsavedChangesDialogTitle), findsOneWidget);
-
-          MultiWindowService.closePeers();
-          final duplicate = listener.handleWindowClose();
-          await tester.pump();
-          expect(runner.closeSelfCalls, 0);
-          expect(MultiWindowService.closingAll, isTrue);
-          await tester.tap(
-            find.text(confirm ? unsavedChangesCloseAnyway : 'ביטול'),
-          );
-          await tester.pumpAndSettle();
-          await tester.runAsync(() async {
-            await closing;
-            await duplicate;
-          });
-          expect(runner.closeSelfCalls, confirm ? 1 : 0);
-          expect(await tester.runAsync(() => sessions.load(slot)), isNotNull);
-          expect(MultiWindowService.closingAll, isFalse);
-
-          PluginUnsavedChangesRegistry.instance.removeInstance(key);
-          if (confirm) {
-            expect(
-              await const MultiWindowService().restoreLastClosedWindow(),
-              isTrue,
-            );
-          }
-          await tester.runAsync(() => listener.handleWindowClose());
-          expect(await tester.runAsync(() => sessions.load(slot)), isNull);
-        },
-      );
-    }
-  }
 
   group('סשן תיקון בלשונית קורא', () {
     final service = PluginCorrectionSessionService.instance;
@@ -585,7 +431,6 @@ void main() {
       );
       drafts.failWrites = failing;
       service.editParagraph(tabId, 0, 'מקור', 'תיקון');
-      WindowBus.instance.register();
       await tester.pumpWidget(
         BlocProvider<TabsBloc>.value(
           value: _GuardTabs(tab),
@@ -699,8 +544,7 @@ void main() {
     PreCloseRegistry.register(flush);
     addTearDown(() => PreCloseRegistry.unregister(flush));
 
-    WindowBus.instance.register();
-    final slot = WindowBus.instance.slot!;
+    const slot = UserStateSlot.main;
     await TabsRepository().saveTabs(const [], 0);
 
     await AppWindowListener().handleWindowClose();
@@ -716,7 +560,7 @@ void main() {
   });
 }
 
-/// ה-runner המדומה. `windowCount` מחזיר שניים כברירת מחדל — "אינך האחרון".
+/// `windowCount` מחזיר שניים כברירת מחדל — "אינך האחרון".
 class _TwoWindowsOpener extends Fake implements WindowOpener {
   _TwoWindowsOpener([this.count]);
   final int Function()? count;
@@ -733,15 +577,13 @@ class _FakeRunner {
   void install() {
     WindowOpener.debugOverride = _TwoWindowsOpener(() => windowCount);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(MultiWindowService.channel, (call) async {
+        .setMockMethodCallHandler(RunnerWindowChannel.channel, (call) async {
           switch (call.method) {
             case 'closeSelf':
               closeSelfCalls++;
               return null;
             case 'restoreLastClosedWindow':
               return true;
-            case 'setBusSlot':
-              return null;
             default:
               return null;
           }
@@ -751,7 +593,7 @@ class _FakeRunner {
   void uninstall() {
     WindowOpener.debugOverride = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(MultiWindowService.channel, null);
+        .setMockMethodCallHandler(RunnerWindowChannel.channel, null);
   }
 }
 

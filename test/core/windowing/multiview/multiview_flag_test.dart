@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
-import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/runner_window_channel.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_opener.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,7 +25,6 @@ void main() {
     MultiViewMode.debugOverride = null;
     final supported = Platform.isWindows || Platform.isLinux;
     expect(MultiViewMode.supported, supported);
-    expect(MultiViewMode.usesEngineWindows, isFalse);
   });
 
   test('binding של בדיקות: הבעלים לא מותקן וריבוי התצוגות כבוי', () {
@@ -35,11 +34,8 @@ void main() {
     expect(installWindowingOwner(), isFalse);
     expect(MultiViewMode.ownerInstalled, isFalse);
     expect(MultiViewMode.enabled, isFalse);
-    // גם בלי בעלים, Windows ו-Linux אינם חוזרים למנוע לכל חלון.
-    expect(
-      MultiViewMode.usesEngineWindows,
-      isFalse,
-    );
+    expect(RunnerWindowChannel.canOpenWindows, isFalse);
+    expect(WindowOpener.current, same(ViewWindowOpener.instance));
   });
 
   test('בלי בעלים, יצירת חלון נכשלת בשגיאת Dart ולא בקריסה נייטיבית', () {
@@ -57,10 +53,8 @@ void main() {
   test('debugOverride גובר על מצב הבעלים', () {
     MultiViewMode.debugOverride = true;
     expect(MultiViewMode.enabled, isTrue);
-    expect(MultiViewMode.usesEngineWindows, isFalse);
     MultiViewMode.debugOverride = false;
     expect(MultiViewMode.enabled, isFalse);
-    expect(MultiViewMode.usesEngineWindows, isFalse);
   });
 
   test('nativeHandle: בקר שאינו נייטיב או חלון שנהרס מחזירים null', () {
@@ -101,7 +95,6 @@ void main() {
 
     test('לפני ה-handshake: חלון יחיד', () {
       expect(MultiViewMode.supported, isFalse);
-      expect(MultiViewMode.usesEngineWindows, isFalse);
       expect(installWindowingOwner(), isFalse);
     });
 
@@ -109,18 +102,17 @@ void main() {
       runnerAnswers(true);
       expect(await awaitMacRunnerHandshake(), isNull);
       expect(MultiViewMode.supported, isTrue);
-      expect(MultiViewMode.usesEngineWindows, isFalse);
     });
 
     test('לא מוכן: חלון יחיד, עם הסיבה', () async {
       runnerAnswers(false);
       expect(await awaitMacRunnerHandshake(), 'flip not applied');
       expect(MultiViewMode.supported, isFalse);
-      expect(MultiViewMode.usesEngineWindows, isFalse);
       expect(MultiViewMode.enabled, isFalse);
-      expect(MultiWindowService.canOpenWindows, isFalse);
-      expect(MultiWindowService.canDragTabsOut, isFalse);
+      expect(RunnerWindowChannel.canOpenWindows, isFalse);
+      expect(RunnerWindowChannel.canDragTabsOut, isFalse);
       expect(WindowOpener.current, same(ViewWindowOpener.instance));
+      expect(await WindowOpener.current.canOpenAnotherWindow(), isFalse);
       expect(await WindowOpener.current.openEmptyWindow(), isFalse);
     });
 
@@ -128,7 +120,7 @@ void main() {
       runnerAnswers(false);
       await awaitMacRunnerHandshake();
       final calls = <String>[];
-      messenger.setMockMethodCallHandler(MultiWindowService.channel, (
+      messenger.setMockMethodCallHandler(RunnerWindowChannel.channel, (
         call,
       ) async {
         calls.add(call.method);
@@ -136,12 +128,12 @@ void main() {
       });
       addTearDown(
         () => messenger.setMockMethodCallHandler(
-          MultiWindowService.channel,
+          RunnerWindowChannel.channel,
           null,
         ),
       );
-      const runner = MultiWindowService();
-      expect(await runner.openWindow(), isFalse);
+      const runner = RunnerWindowChannel();
+      expect(await WindowOpener.current.openWindow(), isFalse);
       await runner.closeSelf();
       await runner.raiseSelf();
       expect(await runner.restoreLastClosedWindow(), isTrue);

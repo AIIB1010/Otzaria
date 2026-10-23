@@ -6,9 +6,8 @@ import 'package:otzaria/core/windowing/app_window_id.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
 import 'package:otzaria/core/windowing/external_tab_drag.dart';
-import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/runner_window_channel.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
-import 'package:otzaria/core/windowing/window_bus.dart' show WindowPeer;
 import 'package:otzaria/navigation/bloc/navigation_bloc.dart';
 import 'package:otzaria/navigation/bloc/navigation_event.dart';
 import 'package:otzaria/navigation/bloc/navigation_state.dart';
@@ -17,7 +16,7 @@ import 'package:otzaria/tabs/models/tab.dart';
 import 'package:otzaria/workspaces/bloc/workspace_bloc.dart';
 
 /// ממיר נקודת מסך לחלון [hwnd] (null — החלון הראשי); ראו
-/// [MultiWindowService.screenToClient].
+/// [RunnerWindowChannel.screenToClient].
 typedef ScreenToClient =
     Future<Offset?> Function(
       int x,
@@ -25,6 +24,50 @@ typedef ScreenToClient =
       double devicePixelRatio, {
       int? hwnd,
     });
+
+/// חלון אחר בתהליך, כפי שמוצג ב"העבר לחלון קיים" ובאזהרת השולחן.
+@immutable
+class WindowPeer {
+  const WindowPeer({
+    required this.slot,
+    required this.title,
+    required this.tabCount,
+    this.isOwner = false,
+    this.isVisible = true,
+    this.activeWorkspaceId,
+  });
+
+  /// משבצת הסשן: 1 לראשי, ומ-2 לחלונות Dart.
+  final int slot;
+
+  /// כותרת לתצוגה בתפריט — בדרך כלל שם הכרטיסיה הפעילה באותו חלון.
+  final String title;
+
+  final int tabCount;
+
+  /// האם זה החלון הראשי.
+  final bool isOwner;
+
+  /// ⚠️ ראשי שנסגר מוסתר ולא נהרס; כרטיסיה שתועבר אליו הייתה נעלמת.
+  final bool isVisible;
+
+  /// השולחן שהחלון עומד עליו, אם בחר אחד.
+  final String? activeWorkspaceId;
+
+  @override
+  bool operator ==(Object other) =>
+      other is WindowPeer &&
+      other.slot == slot &&
+      other.title == title &&
+      other.tabCount == tabCount &&
+      other.isOwner == isOwner &&
+      other.isVisible == isVisible &&
+      other.activeWorkspaceId == activeWorkspaceId;
+
+  @override
+  int get hashCode =>
+      Object.hash(slot, title, tabCount, isOwner, isVisible, activeWorkspaceId);
+}
 
 /// חלון אחד באותו isolate שכרטיסיה נגררת יכולה לנחות בו.
 class InProcessTabDropTarget {
@@ -46,22 +89,22 @@ class InProcessTabDropTarget {
   final InProcessWindowInfo Function()? describe;
 }
 
-/// תיאור חלון לתפריט ולאזהרת השולחן, כמו תשובת `describe` באפיק.
+/// תיאור חלון לתפריט ולאזהרת השולחן.
 typedef InProcessWindowInfo = ({
   String title,
   int tabCount,
   String? activeWorkspaceId,
 });
 
-/// העברת כרטיסיות בין חלונות התהליך (ריבוי תצוגות), ישירות בין ה-`TabsBloc`
-/// שלהם ובלי אפיק. "משבצת" כאן היא משבצת הסשן: 1 לראשי, ומ-2 לחלונות Dart.
+/// העברת כרטיסיות בין חלונות התהליך, ישירות בין ה-`TabsBloc` שלהם.
+/// "משבצת" כאן היא משבצת הסשן: 1 לראשי, ומ-2 לחלונות Dart.
 class InProcessTabDrops {
   InProcessTabDrops({
     ViewWindowRegistry? registry,
     ScreenToClient? screenToClient,
   }) : _registryOverride = registry,
        _screenToClient =
-           screenToClient ?? const MultiWindowService().screenToClient;
+           screenToClient ?? const RunnerWindowChannel().screenToClient;
 
   static final InProcessTabDrops instance = InProcessTabDrops();
 
@@ -118,8 +161,8 @@ class InProcessTabDrops {
   int? hwndOf(AppWindowId id) =>
       id == AppWindowId.primary ? null : _entryOf(id)?.handle.hwnd;
 
-  /// החלון שתחת הסמן: חלון Dart לפי ה-HWND שלו, הראשי לפי משבצת האפיק
-  /// (עם הדגל רק הוא תופס משבצת); null — שולחן העבודה או תוכנה אחרת.
+  /// החלון שתחת הסמן: חלון Dart לפי ה-HWND שלו, הראשי לפי המשבצת שה-runner
+  /// מדווח עליו בלבד; null — שולחן העבודה או תוכנה אחרת.
   int? resolve({int? hwnd, int? busSlot}) {
     if (hwnd != null) {
       for (final entry in _registry.windows) {
@@ -267,7 +310,7 @@ class _InProcessTabDropReceiverState extends State<InProcessTabDropReceiver> {
     return true;
   }
 
-  /// כמו `describe` באפיק: הכרטיסיה הפעילה, מספר הכרטיסיות והשולחן הפעיל.
+  /// הכרטיסיה הפעילה, מספר הכרטיסיות והשולחן הפעיל.
   InProcessWindowInfo _describe() {
     if (!mounted) {
       return (title: 'חלון ריק', tabCount: 0, activeWorkspaceId: null);
@@ -286,7 +329,7 @@ class _InProcessTabDropReceiverState extends State<InProcessTabDropReceiver> {
   /// המשתמש עובר עם הכרטיסיה לחלון היעד.
   Future<void> _raise() async {
     if (_id == AppWindowId.primary) {
-      return const MultiWindowService().raiseSelf();
+      return const RunnerWindowChannel().raiseSelf();
     }
     final scope = context.getInheritedWidgetOfExactType<AppWindowScope>();
     await scope?.controller.focus();

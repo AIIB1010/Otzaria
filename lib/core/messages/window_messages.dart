@@ -26,24 +26,13 @@ abstract class WindowMessages {
   /// ⚠️ **בלי הבטחה על היסטוריה.** הנוסח הקודם הצהיר "היא נשמרה
   /// בהיסטוריה", ואין במסלול הזה שום קוד שמוסיף להיסטוריה: החלון המקורי
   /// עשה `RemoveTab` בלבד. המסלול אמור להיות בלתי-נגיש
-  /// ([MultiWindowService.canTransfer] בודק בדיוק את מסע ההלוך-ושוב הזה),
+  /// ([RunnerWindowChannel.canTransfer] בודק בדיוק את מסע ההלוך-ושוב הזה),
   /// וההודעה היא רשת ביטחון — ולכן היא חייבת להיות מדויקת.
   static const String transferredTabDecodeFailed =
       'הכרטיסיה לא נפתחה בחלון החדש. יש לפתוח אותה שוב מהספרייה.';
 
-  // ── יכולות שאינן זמינות בחלון משני ─────────────────────────────────────
-
   static const String workspaceOpenInOtherWindow =
       'שולחן העבודה הזה פתוח גם בחלון אחר. שינויים בו עלולים לדרוס זה את זה.';
-
-  /// חלון ראשי מוסתר אינו נבנה מחדש אחרי שחזור, והיה דורס את הנתונים ששוחזרו.
-  static const String restoreNeedsOpenMainWindow =
-      'כדי לשחזר גיבוי יש לפתוח שוב את החלון הראשי של אוצריא (Ctrl+Shift+T) '
-      'ולנסות שוב.';
-
-  /// המארח לא נמצא או לא ענה על פעולה שחלון משני העביר אליו.
-  static const String mainWindowRequestFailed =
-      'לא ניתן היה להעביר את הבקשה לחלון הראשי של אוצריא. נסה שוב.';
 
   /// כרטיסיית חלון אחר בתת-התפריט "העבר לחלון קיים".
   static String peerWithTabs(String title, int tabCount) => switch (tabCount) {

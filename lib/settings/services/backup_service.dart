@@ -41,7 +41,6 @@ import 'package:otzaria/indexing/repository/indexing_repository.dart';
 import 'package:otzaria/data/sqlite/sqlite3_api.dart' as sqlite3;
 import 'package:otzaria/core/user_state/pending_report_store.dart';
 import 'package:otzaria/core/messages/settings_messages.dart';
-import 'package:otzaria/core/messages/window_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/settings/services/backup/backup_import_merge.dart';
 import 'package:otzaria/settings/services/backup/backup_maintenance.dart';
@@ -276,8 +275,8 @@ class BackupService {
         'מונה הפעלות שהסתיימו לפני שהתוכנה התייצבה; מקומי לריצה במכשיר זה',
     'biographies.tsb': 'נתוני ביוגרפיות ארוזים באפליקציה ומתעדכנים מהרשת',
     windowRootsDirName:
-        'עותקי box ההגדרות של חלונות נוספים; נמחקים בהפעלה קרה '
-        '(deleteStaleWindowRoots) ומסונכרנים חי עם ההגדרות של החלון הראשון',
+        'שאריות של חלונות נוספים מגרסה קודמת; נמחקות בהפעלה '
+        '(deleteStaleWindowRoots)',
     'cache.db': 'קאש חישובים, נבנה מחדש לפי הצורך',
     'search_feedback':
         'זהות אנונימית של ההתקנה ותור משוב שלא נשלח — אסור שיעברו להתקנה אחרת',
@@ -837,54 +836,6 @@ class BackupService {
     }
 
     return shamorZachorData;
-  }
-
-  /// בקשת האפיק ש-[handleRestoreRequest] משרת.
-  static const String requestRestore = 'backup.restore';
-
-  /// מבצע שחזור שהתבקש באפיק.
-  static Future<Map<String, Object?>> handleRestoreRequest(
-    Map<String, dynamic> request,
-  ) async {
-    final path = request['path'];
-    final mode = BackupImportMode.values.asNameMap()[request['mode']];
-    if (path is! String || mode == null) {
-      return {'error': WindowMessages.mainWindowRequestFailed};
-    }
-    try {
-      return restoreResultToMap(await restoreFromBackup(path, mode: mode));
-    } catch (error) {
-      return {'error': _errorText(error)};
-    }
-  }
-
-  static String _errorText(Object error) => switch (error) {
-    StateError(:final message) => message,
-    _ => '$error'.replaceFirst('Exception: ', ''),
-  };
-
-  @visibleForTesting
-  static Map<String, Object?> restoreResultToMap(BackupRestoreResult result) {
-    final added = result.added;
-    return {
-      'skippedSections': result.skippedSections,
-      'missingCustomFolders': result.missingCustomFolders,
-      'hasLegacyPartialSettings': result.hasLegacyPartialSettings,
-      'notesWithoutAnchor': result.notesWithoutAnchor,
-      'restoredPlugins': result.restoredPlugins,
-      'userBooksNotReplaced': result.userBooksNotReplaced,
-      if (added != null)
-        'added': {
-          'bookmarks': added.bookmarks,
-          'bookmarkGroups': added.bookmarkGroups,
-          'history': added.history,
-          'notes': added.notes,
-          'notesUpdated': added.notesUpdated,
-          'workspaces': added.workspaces,
-          'plugins': added.plugins,
-          'shamorZachorBooks': added.shamorZachorBooks,
-        },
-    };
   }
 
   /// Restore from backup file.

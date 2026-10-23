@@ -13,12 +13,10 @@ import 'package:otzaria/attached_libraries/repository/attached_library_probe.dar
 import 'package:otzaria/attached_libraries/repository/attached_library_registry.dart';
 import 'package:otzaria/core/app_paths.dart';
 import 'package:otzaria/core/user_state/pending_report_store.dart';
-import 'package:otzaria/core/messages/window_messages.dart';
-import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/core/user_state/user_state_slot.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
-import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/runner_window_channel.dart';
 import 'package:otzaria/data/data_providers/hive_data_provider.dart';
 import 'package:otzaria/data/data_providers/user_books_database_holder.dart';
 import 'package:otzaria/migration/database/daos/database.dart';
@@ -60,8 +58,7 @@ void main() {
     Hive.init(tempDir.path);
     box = await Hive.openBox<dynamic>(HiveCache.keyName);
     // בלי אפיק חלונות, ולכן המשבצת היא של החלון היחיד.
-    MultiWindowService.debugSupportedOverride = false;
-    WindowRole.isSecondary = false;
+    RunnerWindowChannel.debugSupportedOverride = false;
     UserStateDatabase.instance.overridePath(
       p.join(tempDir.path, 'user_state.db'),
     );
@@ -83,22 +80,9 @@ void main() {
     // פתוחים), ומאפס את ה-override של נתיב הנתונים.
     PluginSystemDatabase.instance.resetForTests();
     UserStateDatabase.instance.close();
-    MultiWindowService.debugSupportedOverride = null;
-    WindowRole.isSecondary = false;
+    RunnerWindowChannel.debugSupportedOverride = null;
     AppPaths.debugOverrideDataRootPath(null);
     await tempDir.delete(recursive: true);
-  });
-
-  test('handleRestoreRequest מחזיר כשל במקום לזרוק', () async {
-    final response = await BackupService.handleRestoreRequest({
-      'path': p.join(tempDir.path, 'missing.json'),
-      'mode': 'replace',
-    });
-    expect(response, {'error': 'קובץ הגיבוי לא נמצא'});
-    expect(
-      await BackupService.handleRestoreRequest({'path': 'x', 'mode': '?'}),
-      {'error': WindowMessages.mainWindowRequestFailed},
-    );
   });
 
   test('createBackup מגבה מפתחות sz דינמיים מה-Box', () async {
@@ -403,17 +387,6 @@ void main() {
       });
     }
   }
-
-  test('חלון משני אינו מגדיר ואינו סוגר את מקור הספרים האישיים', () async {
-    final engine = FakeLineSourceEngine();
-    LibraryLineSource.debugReset(engine: engine);
-    addTearDown(LibraryLineSource.debugReset);
-    WindowRole.isSecondary = true;
-
-    await UserBooksDatabaseHolder.instance.repository;
-    await UserBooksDatabaseHolder.instance.close();
-    expect(engine.userBooksCalls, isEmpty);
-  });
 
   test('מפתחות ההסתרה מוצהרים ונכנסים גם במסלול הנסיגה (issue #1448)', () {
     // כש-Hive אינו פתוח הגיבוי אוסף את הרשימה המוצהרת בלבד. מפתח שאינו שם
@@ -1506,11 +1479,11 @@ void main() {
 
     /// הכרטיסיות בסשן של החלון הזה, כפי שנשמרו.
     Future<List<dynamic>> storedTabs() async =>
-        jsonDecode((await sessions.load(UserStateSlot.single))!.tabsJson)
+        jsonDecode((await sessions.load(UserStateSlot.main))!.tabsJson)
             as List<dynamic>;
 
     Future<void> putTabs(List<dynamic> tabs, int currentIndex) => sessions.save(
-      UserStateSlot.single,
+      UserStateSlot.main,
       tabsJson: jsonEncode(tabs),
       currentIndex: currentIndex,
     );
@@ -1543,7 +1516,7 @@ void main() {
       await BackupService.restoreFromBackup(path);
 
       expect(await storedTabs(), hasLength(2));
-      expect((await sessions.load(UserStateSlot.single))!.currentIndex, 1);
+      expect((await sessions.load(UserStateSlot.main))!.currentIndex, 1);
     });
 
     test('גיבוי בלי סעיף טאבים אינו מרוקן את הטאבים הקיימים', () async {

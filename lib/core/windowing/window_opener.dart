@@ -1,6 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:otzaria/core/windowing/multi_window_service.dart';
-import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_opener.dart';
 import 'package:otzaria/tabs/models/tab.dart';
 
@@ -8,12 +6,8 @@ import 'package:otzaria/tabs/models/tab.dart';
 /// כל פתיחת חלון עוברת דרך [WindowOpener.current], ולא ישירות דרך המימוש.
 abstract interface class WindowOpener {
   /// המימוש הפעיל. ניתן להחלפה בבדיקות דרך [debugOverride].
-  /// ב-Windows וב-Linux תמיד חלונות Dart; בלי בעלים הם פשוט אינם נפתחים.
-  static WindowOpener get current =>
-      debugOverride ??
-      (MultiViewMode.usesEngineWindows
-          ? const MultiWindowService()
-          : ViewWindowOpener.instance);
+  /// תמיד חלונות Dart; בלי ריבוי תצוגות (בלי בעלים) הם פשוט אינם נפתחים.
+  static WindowOpener get current => debugOverride ?? ViewWindowOpener.instance;
 
   @visibleForTesting
   static WindowOpener? debugOverride;
@@ -33,7 +27,7 @@ abstract interface class WindowOpener {
 
   Future<bool> canOpenAnotherWindow();
 
-  /// `null` כשלא ידוע — ראו [MultiWindowService.windowCount].
+  /// `null` כשלא ידוע.
   Future<({int count, int max, int engines})?> windowCount();
 
   Future<void> reportOpenWindowFailure();

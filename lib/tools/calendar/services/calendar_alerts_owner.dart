@@ -132,15 +132,6 @@ class CalendarAlertsOwner {
   static set instanceForTesting(CalendarAlertsOwner? owner) =>
       _instance = owner;
 
-  /// בקשת אפיק ש-[handleBusRequest] משרת.
-  static const String requestCommand = 'calendarAlerts.command';
-
-  /// שידור: המצב השתנה.
-  static const String requestStateChanged = 'calendarAlerts.stateChanged';
-
-  /// שידור: תוצאת ריצת תזמון.
-  static const String requestScheduleStatus = 'calendarAlerts.scheduleStatus';
-
   final CalendarAlertsStore _store;
   final NotificationService? _notificationsOverride;
   final PluginNotificationIdStore? _pluginIdsOverride;
@@ -221,16 +212,7 @@ class CalendarAlertsOwner {
     _requestReconcile();
   });
 
-  /// מטפל בבקשת [requestCommand] שהגיעה באפיק.
-  Future<Object?> handleBusRequest(Map<String, dynamic> request) {
-    final args = request['args'];
-    return execute(
-      request['op'] as String? ?? '',
-      args is Map ? Map<String, Object?>.from(args) : const {},
-    );
-  }
-
-  /// מבצע פקודה ומחזיר אישור שעובר בין isolates.
+  /// מבצע פקודה ומחזיר אישור.
   ///
   /// האישור של פקודת מצב חוזר אחרי השמירה ולפני התזמון.
   Future<Map<String, Object?>> execute(

@@ -266,11 +266,6 @@ class CalendarCubit extends Cubit<CalendarState> {
     }
     if (isClosed) return;
     _updateTimesForDate(state.selectedGregorianDate, state.selectedCity);
-    // ההגדרות של חלון משני הן עותק; הבעלים מחזיר את המצב העדכני.
-    if (_alerts.needsSnapshot) {
-      await _alerts.send('snapshot');
-      if (isClosed) return;
-    }
     await _refreshGoogleConnectionStatus();
     if (isClosed) return;
     if (googleCalendarEnabled) {
