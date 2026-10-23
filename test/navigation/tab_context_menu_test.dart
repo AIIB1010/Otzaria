@@ -7,10 +7,9 @@ import 'package:otzaria/core/messages/window_messages.dart';
 import 'package:otzaria/core/windowing/app_window_id.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
 import 'package:otzaria/core/windowing/external_tab_drag.dart';
-import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/runner_window_channel.dart';
 import 'package:otzaria/core/windowing/multiview/in_process_tab_drop.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
-import 'package:otzaria/core/windowing/window_bus.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/history/bloc/history_bloc.dart';
 import 'package:otzaria/history/bloc/history_event.dart';
@@ -197,14 +196,14 @@ void main() {
 
     setUp(() {
       MultiViewMode.debugOverride = true;
-      MultiWindowService.debugSupportedOverride = true;
+      RunnerWindowChannel.debugSupportedOverride = true;
       received.clear();
     });
 
     tearDown(() {
       InProcessTabDrops.debugOverride = null;
       MultiViewMode.debugOverride = false;
-      MultiWindowService.debugSupportedOverride = null;
+      RunnerWindowChannel.debugSupportedOverride = null;
     });
 
     testWidgets('מהראשי: מפרט את חלונות ה-Dart ומעביר ישירות', (tester) async {
@@ -216,11 +215,6 @@ void main() {
       drops.register(AppWindowId.primary, target(1, 'ראשי'));
       drops.register(a.id, target(a.slot, 'חלון א'));
       drops.register(b.id, target(b.slot, 'חלון ב'));
-      // מטמון האפיק אינו משפיע בריבוי תצוגות.
-      MultiWindowService.publishKnownPeers(const [
-        WindowPeer(slot: 4, title: 'אפיק', tabCount: 1),
-      ]);
-      addTearDown(() => MultiWindowService.publishKnownPeers(const []));
 
       final tab = ToolTab(toolId: 'builtin.calendar', title: 'לוח שנה');
       final entries = await buildEntries(
@@ -300,12 +294,12 @@ void main() {
   });
 
   group('"חלון חדש"', () {
-    tearDown(() => MultiWindowService.debugSupportedOverride = null);
+    tearDown(() => RunnerWindowChannel.debugSupportedOverride = null);
 
     testWidgets('macOS בלי handshake: אף פריט של חלון אחר אינו מופיע', (
       tester,
     ) async {
-      MultiWindowService.debugSupportedOverride = null;
+      RunnerWindowChannel.debugSupportedOverride = null;
       MultiViewMode.debugOverride = null;
       MultiViewMode.debugIsMacOS = true;
       addTearDown(() {
@@ -326,7 +320,7 @@ void main() {
     });
 
     testWidgets('אינו מופיע כשריבוי חלונות אינו נתמך', (tester) async {
-      MultiWindowService.debugSupportedOverride = false;
+      RunnerWindowChannel.debugSupportedOverride = false;
       final tab = _StubTab('ספר א');
       final entries = await buildEntries(
         tester,
@@ -342,14 +336,14 @@ void main() {
     late _FakeWindowOpener opener;
 
     setUp(() {
-      MultiWindowService.debugSupportedOverride = true;
+      RunnerWindowChannel.debugSupportedOverride = true;
       opener = _FakeWindowOpener();
       WindowOpener.debugOverride = opener;
     });
 
     tearDown(() {
       WindowOpener.debugOverride = null;
-      MultiWindowService.debugSupportedOverride = null;
+      RunnerWindowChannel.debugSupportedOverride = null;
     });
 
     for (final accepted in [true, false]) {

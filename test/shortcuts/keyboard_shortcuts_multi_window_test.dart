@@ -16,7 +16,7 @@ import 'package:otzaria/core/windowing/app_window_controller.dart';
 import 'package:otzaria/core/windowing/app_window_id.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
-import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/runner_window_channel.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/history/bloc/history_bloc.dart';
@@ -205,7 +205,7 @@ void main() {
   setUp(() {
     ShortcutHelper.isMacForTesting = false;
     ShortcutHelper.isWindowsForTesting = false;
-    MultiWindowService.debugSupportedOverride = true;
+    RunnerWindowChannel.debugSupportedOverride = true;
     opener = _CountingOpener();
     WindowOpener.debugOverride = opener;
     settings = _MockSettingsBloc();
@@ -226,7 +226,7 @@ void main() {
     await settingsChanges.close();
     AppWindowKeys.resetForTest();
     WindowOpener.debugOverride = null;
-    MultiWindowService.debugSupportedOverride = null;
+    RunnerWindowChannel.debugSupportedOverride = null;
     ShortcutHelper.isMacForTesting = null;
     ShortcutHelper.isWindowsForTesting = null;
   });
@@ -375,7 +375,7 @@ void main() {
     tester,
   ) async {
     // ⚠️ בלי דריסה: כך נגזר חלון יחיד כשה-runner לא הפך את ריבוי התצוגות.
-    MultiWindowService.debugSupportedOverride = null;
+    RunnerWindowChannel.debugSupportedOverride = null;
     MultiViewMode.debugOverride = null;
     MultiViewMode.debugIsMacOS = true;
     addTearDown(() {

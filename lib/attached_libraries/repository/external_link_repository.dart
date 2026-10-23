@@ -44,10 +44,6 @@ class ExternalLinkRepository {
 
   static ExternalLinkRepository instance = ExternalLinkRepository();
 
-  /// בקשות האפיק ש-[handleWindowRequest] משרת.
-  static const String requestCommand = 'externalLinks.command';
-  static const String requestState = 'externalLinks.state';
-
   final AttachedLibraryRegistry? _registryOverride;
   final Future<String> Function() _cacheDbPath;
   final ReadOnlyDbTarget? Function()? _officialTargetOverride;
@@ -620,48 +616,6 @@ class ExternalLinkRepository {
   void requestRebuild(String slug) {
     _request(slug, () => rebuild(slug));
   }
-
-  /// מטפל בבקשות האפיק של אינדקס הקישורים.
-  Object? handleWindowRequest(Map<String, dynamic> request) {
-    switch (request['type']) {
-      case requestState:
-        return _hostSnapshot();
-      case requestCommand:
-        final slug = request['slug'];
-        switch (request['command']) {
-          case 'pause':
-            pauseBuild();
-          case 'resume':
-            resumeBuild();
-          case 'cancel':
-            cancelBuild();
-          case 'economy':
-            final on = request['on'];
-            if (on is! bool) return false;
-            setBuildEconomy(on);
-          case 'requestResume' when slug is String:
-            requestResume(slug);
-          case 'requestRebuild' when slug is String:
-            requestRebuild(slug);
-          default:
-            return false;
-        }
-        return true;
-    }
-    return null;
-  }
-
-  Map<String, Object?> _hostSnapshot() => {
-    'progress': {
-      for (final MapEntry(:key, :value) in buildProgress.value.entries)
-        key: [value.done, value.total],
-    },
-    'paused': buildPaused.value,
-    'economy': buildEconomy.value,
-    'tooLarge': tooLargeSlugs.value.toList(),
-    'building': buildingSlugs.value.toList(),
-    'incomplete': incompleteSlugs.value.toList(),
-  };
 
   final Set<String> _requestedSlugs = {};
 

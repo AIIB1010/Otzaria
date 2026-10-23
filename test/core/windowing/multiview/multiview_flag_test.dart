@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
-import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/runner_window_channel.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_opener.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -34,7 +34,7 @@ void main() {
     expect(installWindowingOwner(), isFalse);
     expect(MultiViewMode.ownerInstalled, isFalse);
     expect(MultiViewMode.enabled, isFalse);
-    expect(MultiWindowService.canOpenWindows, isFalse);
+    expect(RunnerWindowChannel.canOpenWindows, isFalse);
     expect(WindowOpener.current, same(ViewWindowOpener.instance));
   });
 
@@ -109,8 +109,8 @@ void main() {
       expect(await awaitMacRunnerHandshake(), 'flip not applied');
       expect(MultiViewMode.supported, isFalse);
       expect(MultiViewMode.enabled, isFalse);
-      expect(MultiWindowService.canOpenWindows, isFalse);
-      expect(MultiWindowService.canDragTabsOut, isFalse);
+      expect(RunnerWindowChannel.canOpenWindows, isFalse);
+      expect(RunnerWindowChannel.canDragTabsOut, isFalse);
       expect(WindowOpener.current, same(ViewWindowOpener.instance));
       expect(await WindowOpener.current.canOpenAnotherWindow(), isFalse);
       expect(await WindowOpener.current.openEmptyWindow(), isFalse);
@@ -120,7 +120,7 @@ void main() {
       runnerAnswers(false);
       await awaitMacRunnerHandshake();
       final calls = <String>[];
-      messenger.setMockMethodCallHandler(MultiWindowService.channel, (
+      messenger.setMockMethodCallHandler(RunnerWindowChannel.channel, (
         call,
       ) async {
         calls.add(call.method);
@@ -128,11 +128,11 @@ void main() {
       });
       addTearDown(
         () => messenger.setMockMethodCallHandler(
-          MultiWindowService.channel,
+          RunnerWindowChannel.channel,
           null,
         ),
       );
-      const runner = MultiWindowService();
+      const runner = RunnerWindowChannel();
       expect(await WindowOpener.current.openWindow(), isFalse);
       await runner.closeSelf();
       await runner.raiseSelf();

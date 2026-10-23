@@ -8,7 +8,7 @@ import 'package:otzaria/core/windowing/app_window_scope.dart';
 import 'package:otzaria/core/windowing/cross_window_tab_drag.dart';
 import 'package:otzaria/core/windowing/drag_preview_colors.dart';
 import 'package:otzaria/core/windowing/external_tab_drag.dart';
-import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/runner_window_channel.dart';
 import 'package:otzaria/core/windowing/multiview/in_process_tab_drop.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
@@ -85,7 +85,7 @@ class _Runner {
   void install() => TestDefaultBinaryMessengerBinding
       .instance
       .defaultBinaryMessenger
-      .setMockMethodCallHandler(MultiWindowService.channel, (call) async {
+      .setMockMethodCallHandler(RunnerWindowChannel.channel, (call) async {
         calls.add(call);
         if (call.method == 'windowAtCursor') {
           return {'x': 300, 'y': 40, ...target};
@@ -111,7 +111,7 @@ class _Runner {
   void uninstall() => TestDefaultBinaryMessengerBinding
       .instance
       .defaultBinaryMessenger
-      .setMockMethodCallHandler(MultiWindowService.channel, null);
+      .setMockMethodCallHandler(RunnerWindowChannel.channel, null);
 
   List<MethodCall> named(String method) =>
       calls.where((c) => c.method == method).toList();
@@ -156,20 +156,20 @@ void main() {
 
   setUp(() {
     MultiViewMode.debugOverride = true;
-    MultiWindowService.debugSupportedOverride = true;
+    RunnerWindowChannel.debugSupportedOverride = true;
     runner = _Runner()..install();
   });
 
   tearDown(() {
     runner.uninstall();
     MultiViewMode.debugOverride = false;
-    MultiWindowService.debugSupportedOverride = null;
+    RunnerWindowChannel.debugSupportedOverride = null;
     WindowOpener.debugOverride = null;
     AppWindowKeys.resetForTest();
   });
 
   group('InProcessTabDrops', () {
-    testWidgets('HWND של חלון Dart → המשבצת שלו; משבצת אפיק → הראשי', (
+    testWidgets('HWND של חלון Dart → המשבצת שלו; המשבצת מה-runner → הראשי', (
       tester,
     ) async {
       final windows = FakeViewWindows(tester);
@@ -179,7 +179,7 @@ void main() {
 
       expect(drops.resolve(hwnd: a.handle.hwnd), a.slot);
       expect(drops.resolve(hwnd: b.handle.hwnd, busSlot: 1), b.slot);
-      // ה-HWND של הראשי אינו ברשימה; המשבצת שלו באפיק היא שמזהה אותו.
+      // ה-HWND של הראשי אינו ברשימה; המשבצת שה-runner מדווח היא שמזהה אותו.
       expect(drops.resolve(hwnd: 4242, busSlot: 1), InProcessTabDrops.mainSlot);
       expect(drops.resolve(hwnd: 4242), isNull);
       expect(drops.resolve(), isNull);
@@ -490,7 +490,7 @@ void main() {
       await source.close();
     });
 
-    testWidgets('שחרור מעל חלון המקור (Dart) מבוטל גם בלי משבצת אפיק', (
+    testWidgets('שחרור מעל חלון המקור (Dart) מבוטל גם בלי משבצת מה-runner', (
       tester,
     ) async {
       final windows = FakeViewWindows(tester);
@@ -712,51 +712,6 @@ void main() {
       await source.close();
     });
 
-    testWidgets('בלי הדגל: אותן קריאות כמו היום, ושום העברה ישירה', (
-      tester,
-    ) async {
-      MultiViewMode.debugOverride = false;
-      final windows = FakeViewWindows(tester);
-      final view = windows.registry.open(size: const Size(800, 600))!;
-      final drops = makeDrops(windows.registry);
-      final t = _target(0);
-      drops.register(view.id, t.target);
-      // מודל A פותח מנוע דרך ה-runner; כאן רק נבדק שהשחרור הגיע לפתיחה.
-      final opener = _FakeOpener();
-      WindowOpener.debugOverride = opener;
-      final source = _RecordingTabsBloc();
-      final tab = ToolTab(toolId: 'builtin.calendar', title: 'לוח שנה');
-      final drag = CrossWindowTabDrag(inProcess: drops)
-        ..begin(tab, colors, tabsBloc: source, sourceWindow: view.id);
-      runner.target = {
-        'hwnd': view.handle.hwnd,
-        'isSelf': false,
-        'isShellTray': false,
-      };
-      drag.end();
-
-      await drag.handleDroppedOutside(tab, source);
-
-      expect(t.received, isEmpty);
-      expect(opener.opened, hasLength(1));
-      expect(source.events.single, RemoveTab(tab));
-      // הרוח נשארת: ה-runner מסתיר אותה כשהמנוע החדש נחשף.
-      expect(runner.named('endTabDrag'), isEmpty);
-      expect(screenCalls, isEmpty);
-      expect(
-        runner.named('windowAtCursor').map((c) => c.arguments),
-        allOf(isNotEmpty, everyElement(isNull)),
-      );
-      expect(
-        (runner.named('beginTabDrag').single.arguments as Map).containsKey(
-          'sourceHwnd',
-        ),
-        isFalse,
-      );
-      drag.dispose();
-      await source.close();
-    });
-
     testWidgets('בלי הדגל: גרירה למערכת שנכלאה בקצה אזור העבודה מבוטלת', (
       tester,
     ) async {
@@ -768,7 +723,7 @@ void main() {
       final source = _RecordingTabsBloc();
       final tab = ToolTab(toolId: 'builtin.calendar', title: 'לוח שנה');
       var cancelled = 0;
-      // מודל A: שחרור ב-(1000,1060) נמדד ב-(1000,1031) מעל שולחן העבודה.
+      // שחרור ב-(1000,1060) נמדד ב-(1000,1031) מעל שולחן העבודה.
       runner.target = {'isSelf': false, 'isShellTray': false};
       runner.systemDrag = {
         'y': 1031,
@@ -780,7 +735,7 @@ void main() {
 
       await tester.pump(const Duration(seconds: 1));
 
-      expect(runner.named('dragOutToSystem').single.arguments, isNull);
+      expect(runner.named('dragOutToSystem'), hasLength(1));
       expect(cancelled, 1);
       expect(opener.opened, isEmpty);
       expect(source.events, isEmpty);
@@ -855,7 +810,7 @@ void main() {
         'inWorkArea': false,
       };
 
-      // ההעברה עצמה עוברת באפיק, שאינו קיים כאן; נבדק רק שאין ביטול.
+      // אין כאן יעד רשום לראשי; נבדק רק שאין ביטול.
       final logs = <String>[];
       final original = debugPrint;
       debugPrint = (message, {wrapWidth}) => logs.add(message ?? '');

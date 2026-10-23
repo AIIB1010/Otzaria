@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/windowing/app_quit.dart';
 import 'package:otzaria/core/windowing/app_window_controller.dart';
-import 'package:otzaria/core/windowing/multi_window_service.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 
 /// המעדכן החיצוני מחליף קבצים רק אחרי שהתהליך יצא, ולכן "התקן כעת" יוצא מכל
@@ -28,7 +27,6 @@ void main() {
   tearDown(() {
     AppQuit.resetForTest();
     MultiViewMode.debugOverride = false;
-    MultiWindowService.closingAll = false;
   });
 
   test('מסלול העדכון יוצא מכל החלונות דרך AppQuit', () {
@@ -38,9 +36,7 @@ void main() {
     );
     expect(
       updateSource.any(
-        (line) =>
-            line.contains('MultiWindowService.closePeers') ||
-            line.contains('_appWindow.close('),
+        (line) => line.contains('_appWindow.close('),
       ),
       isFalse,
       reason: 'סגירת הראשי בלבד משאירה את התהליך חי כשחלונות Dart פתוחים',
@@ -57,19 +53,6 @@ void main() {
     }
   });
 
-  test('מודל A: בקשה לשאר המנועים וסגירה מנומסת של החלון, כמו קודם', () async {
-    MultiViewMode.debugOverride = false;
-    var quitProcess = 0;
-    AppQuit.install(() async => quitProcess++);
-    final window = _RecordingWindow();
-
-    await AppQuit.quitAll(AppQuitReason.update, window: window);
-
-    expect(MultiWindowService.closingAll, isTrue);
-    expect(window.closes, 1);
-    expect(quitProcess, 0);
-  });
-
   test('ריבוי תצוגות: מסלול היציאה של התהליך, לא הסתרת הראשי', () async {
     MultiViewMode.debugOverride = true;
     var quitProcess = 0;
@@ -80,10 +63,21 @@ void main() {
 
     expect(quitProcess, 1);
     expect(window.closes, 0, reason: 'סגירה רגילה רק מסתירה את הראשי');
-    expect(MultiWindowService.closingAll, isFalse);
   });
 
-  test('ריבוי תצוגות בלי מסלול מותקן: נופל לסגירה המנומסת', () async {
+  test('חלון יחיד: גם הוא יוצא במסלול של התהליך', () async {
+    MultiViewMode.debugOverride = false;
+    var quitProcess = 0;
+    AppQuit.install(() async => quitProcess++);
+    final window = _RecordingWindow();
+
+    await AppQuit.quitAll(AppQuitReason.update, window: window);
+
+    expect(quitProcess, 1);
+    expect(window.closes, 0);
+  });
+
+  test('בלי מסלול מותקן: נופל לסגירה המנומסת', () async {
     MultiViewMode.debugOverride = true;
     final window = _RecordingWindow();
 

@@ -12,7 +12,6 @@ import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
 import 'package:otzaria/plugins/services/bundled_plugin_ids.dart';
 import 'package:otzaria/plugins/services/plugin_installer_service.dart';
 import 'package:otzaria/plugins/services/plugin_new_tab_page_registry.dart';
-import 'package:otzaria/plugins/services/plugin_new_tab_page_service.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
 import 'package:otzaria/update/app_release_version.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -224,7 +223,6 @@ class BundledPluginSeedService {
       );
       if (isUpgrade && grantedPermissions['navigation.write'] != true) {
         PluginNewTabPageRegistry.instance.remove(pluginId);
-        PluginNewTabPageService.broadcastChanged();
       }
       return true;
     } on PluginOverwriteException {

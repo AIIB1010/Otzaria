@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:otzaria/core/error_log_file.dart';
-import 'package:otzaria/core/windowing/window_bus.dart';
 import 'package:otzaria/data/data_providers/sqlite_data_provider.dart';
 
 /// החלפת המסד לא התחילה, כי החלפה אחרת כבר רצה. הספרייה נשארה פתוחה.
@@ -85,21 +84,6 @@ class LibraryAccessGate {
        _renameProbe = renameProbe ?? Platform.isWindows;
 
   static LibraryAccessGate instance = LibraryAccessGate();
-
-  /// תופס משבצת באפיק החלונות; יוסר עם האפיק.
-  int? registerWindow({bool asOwner = false}) =>
-      WindowBus.instance.register(asOwner: asOwner);
-
-  // בקשות האפיק של מנוע לכל חלון; אין להן עוד שולח, ויוסרו עם WindowBusHost.
-  static const String requestSuspend = 'library.suspend';
-  static const String requestResume = 'library.resume';
-  static const String requestOwnerExited = 'library.ownerExited';
-
-  Future<Object?> handlePeerRequest(Map<String, dynamic> request) =>
-      Future.value();
-
-  /// אינו נקרא: חלונות התצוגה מתעדכנים דרך LibraryBloc. יוסר עם WindowBusHost.
-  void Function()? onLibraryReplaced;
 
   final LibraryAccessRoutine selfAccess;
   final bool _renameProbe;

@@ -9,7 +9,7 @@ import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/user_state/window_bounds.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
 import 'package:otzaria/core/window_persistence.dart';
-import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/runner_window_channel.dart';
 import 'package:otzaria/core/windowing/multiview/cocoa_view_window_native.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/gtk_view_window_native.dart';
@@ -58,7 +58,7 @@ class ViewWindowOpener implements WindowOpener {
        _isMainWindowVisible = isMainWindowVisible ?? windowManager.isVisible,
        _restoreMainWindow =
            restoreMainWindow ??
-           const MultiWindowService().restoreLastClosedWindow,
+           const RunnerWindowChannel().restoreLastClosedWindow,
        _defaultSize = defaultSize ?? _implicitViewSize,
        _mainWindowHwnd = mainWindowHwnd ?? _windowManagerHwnd,
        _isMainWindowFullscreen =

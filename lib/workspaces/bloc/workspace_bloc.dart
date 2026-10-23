@@ -8,7 +8,6 @@ import 'package:otzaria/core/messages/notes_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/messages/window_messages.dart';
-import 'package:otzaria/core/windowing/multi_window_service.dart';
 import 'package:otzaria/workspaces/bloc/workspace_event.dart';
 import 'package:otzaria/workspaces/bloc/workspace_state.dart';
 import 'package:otzaria/workspaces/workspace.dart';
@@ -42,7 +41,7 @@ class WorkspaceBloc extends Bloc<WorkspaceEvent, WorkspaceState> {
   /// הופיע בתפריט, ושולחן שנמחק שם עוד הוצג ולחיצה עליו זרקה.
   StreamSubscription<void>? _remoteChanges;
 
-  /// האם חלון מוצג אחר עומד על השולחן; null — לפי האפיק (מודל A).
+  /// האם חלון מוצג אחר עומד על השולחן; null — חלון יחיד, בלי אזהרה.
   final bool Function(String workspaceId)? isOpenInOtherWindow;
 
   WorkspaceBloc({
@@ -71,14 +70,8 @@ class WorkspaceBloc extends Bloc<WorkspaceEvent, WorkspaceState> {
   /// שולחן שחלון אחר עומד עליו: שני חלונות דורסים זה לזה את ה-stash, ולכן
   /// מזהירים — אבל לא חוסמים; זו בחירה של המשתמש.
   void _warnIfOpenElsewhere(String workspaceId) {
-    if (!MultiWindowService.canOpenWindows) return;
     final check = isOpenInOtherWindow;
-    final taken = check != null
-        ? check(workspaceId)
-        : MultiWindowService.knownPeers.any(
-            (peer) => peer.isVisible && peer.activeWorkspaceId == workspaceId,
-          );
-    if (taken) {
+    if (check != null && check(workspaceId)) {
       UiSnack.show(
         WindowMessages.workspaceOpenInOtherWindow,
         window: _windowKeys,

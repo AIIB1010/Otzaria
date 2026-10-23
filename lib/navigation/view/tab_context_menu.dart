@@ -12,10 +12,8 @@ import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/windowing/cross_window_tab_drag.dart';
 import 'package:otzaria/core/windowing/drag_preview_colors.dart';
-import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/runner_window_channel.dart';
 import 'package:otzaria/core/windowing/multiview/in_process_tab_drop.dart';
-import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
-import 'package:otzaria/core/windowing/window_bus.dart' show WindowPeer;
 import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/history/bloc/history_bloc.dart';
 import 'package:otzaria/history/bloc/history_event.dart';
@@ -119,7 +117,7 @@ ReadingTabStrip buildTabsReadingTabStrip(
         crossWindowDrag.applySnapshot(snapshot, generation),
     onDragFinishedAnywhere: crossWindowDrag.end,
     onDragLeftStrip: crossWindowDrag.notePointerLeftStrip,
-    onDroppedOutside: MultiWindowService.canDragTabsOut
+    onDroppedOutside: RunnerWindowChannel.canDragTabsOut
         ? (tab) => crossWindowDrag.handleDroppedOutside(
             tab,
             context.read<TabsBloc>(),
@@ -230,7 +228,7 @@ List<AppContextMenuEntry> buildTabContextMenuEntries(
   final tabIndex = state.tabs.indexOf(tab);
   final hasClosableAfter =
       tabIndex != -1 && state.tabs.skip(tabIndex + 1).any((t) => !t.isPinned);
-  final transferTargets = MultiWindowService.canOpenWindows
+  final transferTargets = RunnerWindowChannel.canOpenWindows
       ? _transferTargets(context)
       : const <WindowPeer>[];
   final entries = <AppContextMenuEntry>[
@@ -279,7 +277,7 @@ List<AppContextMenuEntry> buildTabContextMenuEntries(
     // הכרטיסיה עוברת לחלון חדש: היא נפתחת שם ונסגרת כאן. הסדר חשוב —
     // פותחים תחילה, וסוגרים רק אחרי שהבקשה נמסרה ל-runner, כדי שכשל
     // בפתיחה לא יאבד את הכרטיסיה.
-    if (MultiWindowService.canOpenWindows)
+    if (RunnerWindowChannel.canOpenWindows)
       AppContextMenuEntry(
         label: context.settingsText('העבר לחלון חדש'),
         onTap: () => _moveTabToNewWindow(context, tab),
@@ -299,7 +297,7 @@ List<AppContextMenuEntry> buildTabContextMenuEntries(
             ),
         ],
       ),
-    if (MultiWindowService.canOpenWindows)
+    if (RunnerWindowChannel.canOpenWindows)
       AppContextMenuEntry(
         label: context.settingsText('חלון חדש'),
         onTap: () => unawaited(WindowOpener.current.openEmptyWindow()),
@@ -383,16 +381,14 @@ List<AppContextMenuEntry> buildTabContextMenuEntries(
   return entries;
 }
 
-/// ריבוי תצוגות: החלונות שבתהליך מלבד זה שהתפריט נפתח בו. מודל A: האפיק.
+/// החלונות שבתהליך מלבד זה שהתפריט נפתח בו.
 List<WindowPeer> _transferTargets(BuildContext context) =>
-    MultiViewMode.enabled
-    ? InProcessTabDrops.current.transferTargets(AppWindowKeys.of(context).id)
-    : MultiWindowService.transferTargets;
+    InProcessTabDrops.current.transferTargets(AppWindowKeys.of(context).id);
 
 /// בדיקות משותפות ל"העבר לחלון חדש" ול"העבר לחלון קיים": כרטיסיה שאינה
 /// ניתנת להעברה, ומצב ה-JS של תוסף שאובד בהעברה.
 Future<bool> _confirmTabTransfer(BuildContext context, OpenedTab tab) async {
-  if (!MultiWindowService.canTransfer(tab)) {
+  if (!RunnerWindowChannel.canTransfer(tab)) {
     UiSnack.showError(WindowMessages.cannotTransferTab);
     return false;
   }
@@ -433,9 +429,7 @@ Future<void> _moveTabToExistingWindow(
   // ⚠️ ההסרה רק אחרי אישור מהיעד. הרשימה עשויה להיות מעט לא-עדכנית, וחלון
   // שנסגר בדיוק עכשיו לא יאשר — ואז הכרטיסיה נשארת כאן במקום להיעלם משני
   // הצדדים.
-  final sent = MultiViewMode.enabled
-      ? await InProcessTabDrops.current.sendTabToWindow(slot, tab)
-      : await const MultiWindowService().sendTabToWindow(slot, tab);
+  final sent = await InProcessTabDrops.current.sendTabToWindow(slot, tab);
   if (sent == true) {
     tabsBloc.add(RemoveTab(tab));
     return;

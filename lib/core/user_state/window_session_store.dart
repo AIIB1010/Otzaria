@@ -13,7 +13,7 @@ class WindowSession {
     this.boundsJson,
   });
 
-  /// המשבצת באפיק (ראה `UserStateSlot`).
+  /// משבצת החלון (ראה `UserStateSlot`).
   final int slot;
   final String tabsJson;
   final int currentIndex;

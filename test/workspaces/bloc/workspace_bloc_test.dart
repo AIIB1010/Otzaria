@@ -7,8 +7,6 @@ import 'package:otzaria/core/windowing/app_window_id.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/messages/window_messages.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
-import 'package:otzaria/core/windowing/multi_window_service.dart';
-import 'package:otzaria/core/windowing/window_bus.dart' show WindowPeer;
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/tabs/models/tab.dart';
 import 'package:otzaria/tabs/models/text_tab.dart';
@@ -23,8 +21,6 @@ void main() {
 
   testWidgets('אזהרת שולחן נשארת בחלון המקור אחרי מעבר פוקוס', (tester) async {
     await Settings.init(cacheProvider: _MemoryCacheProvider());
-    MultiWindowService.debugSupportedOverride = true;
-    addTearDown(() => MultiWindowService.debugSupportedOverride = null);
     final a = AppWindowKeys(id: const AppWindowId('a'));
     final b = AppWindowKeys(id: const AppWindowId('b'));
     await tester.pumpWidget(
@@ -304,19 +300,12 @@ void main() {
     test(
       'אזהרת "פתוח בחלון אחר" שואלת את המקור שהוזרק (ריבוי תצוגות)',
       () async {
-        MultiWindowService.debugSupportedOverride = true;
-        addTearDown(() => MultiWindowService.debugSupportedOverride = null);
         final first = Workspace(name: 'א', tabs: const []);
         final second = Workspace(name: 'ב', tabs: const []);
         final repository = _FakeWorkspaceRepository(
           workspaces: [first, second],
           activeWorkspaceId: first.id,
         );
-        // מטמון האפיק אינו נשאל כשיש מקור מוזרק.
-        MultiWindowService.publishKnownPeers([
-          WindowPeer(slot: 2, title: 'x', tabCount: 1, activeWorkspaceId: '?'),
-        ]);
-        addTearDown(() => MultiWindowService.publishKnownPeers(const []));
         final asked = <String>[];
         final bloc = WorkspaceBloc(
           repository: repository,

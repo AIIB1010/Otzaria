@@ -131,11 +131,6 @@ class SemanticSearchRepository {
   final Map<SemanticQuantization, SemanticModelRelease?> _modelReleases;
   final Duration _busyRetryDelay;
 
-  /// בקשות האפיק ש-[handleWindowRequest] משרת.
-  static const String requestCommand = 'semantic.command';
-  static const String requestState = 'semantic.state';
-  static const String requestRelease = 'semantic.release';
-
   final StreamController<SemanticAvailability> _changes =
       StreamController<SemanticAvailability>.broadcast();
   SemanticAvailability _availability = SemanticAvailability.initial;
@@ -535,62 +530,6 @@ class SemanticSearchRepository {
     if (identical(this, _instance)) {
       _sharedChanges.add(next);
     }
-  }
-
-  /// מטפל בבקשות האפיק של החיפוש הסמנטי.
-  static Future<Object?> handleWindowRequest(
-    Map<String, dynamic> request,
-  ) async {
-    switch (request['type']) {
-      case requestState:
-        return availabilityToMap(await instance.refresh());
-      case requestRelease:
-        final repository = _instance;
-        if (repository == null) return true;
-        repository._cancelAllSearches();
-        await repository._closeSession();
-        return true;
-      case requestCommand:
-        final repository = instance;
-        switch (request['command']) {
-          case 'download':
-            unawaited(repository.enableAndDownload());
-          case 'cancel':
-            unawaited(repository.cancelDownload());
-          case 'remove':
-            unawaited(repository.removeData());
-          case 'quantization':
-            final value = SemanticQuantization.values
-                .asNameMap()[request['value']];
-            if (value == null) return false;
-            unawaited(repository.setQuantization(value));
-          default:
-            return false;
-        }
-        return true;
-    }
-    return null;
-  }
-
-  @visibleForTesting
-  static Map<String, Object?> availabilityToMap(SemanticAvailability value) {
-    final progress = value.progress;
-    return {
-      'phase': value.phase.name,
-      'consentGranted': value.consentGranted,
-      'failure': value.failure?.kind.name,
-      'unpublishedLibraryVersion': value.unpublishedLibraryVersion,
-      if (progress != null)
-        'progress': {
-          'item': progress.item.name,
-          'receivedBytes': progress.receivedBytes,
-          'totalBytes': progress.totalBytes,
-          'step': progress.step,
-          'stepCount': progress.stepCount,
-          'checking': progress.checking,
-          'staged': progress.staged,
-        },
-    };
   }
 
   bool _isConsentGranted() {

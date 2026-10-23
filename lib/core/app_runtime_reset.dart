@@ -1,7 +1,6 @@
 import 'package:otzaria/attached_libraries/repository/attached_library_registry.dart';
 import 'package:otzaria/attached_libraries/repository/external_link_repository.dart';
 import 'package:otzaria/core/app_paths.dart';
-import 'package:otzaria/core/windowing/multi_window_service.dart';
 import 'package:otzaria/library/hidden/hidden_library_store.dart';
 import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/data/cache/acronyms_cache.dart';
@@ -61,7 +60,6 @@ Future<void> resetLibraryRuntimeState() async {
 Future<void> _prepareLibraryRuntimeReset({
   String? correctionStorageMoveRequestId,
 }) async {
-  MultiWindowService.clearVisibilityRequestsForRestart();
   await PluginCorrectionSessionService.instance.prepareForRuntimeReset(
     requestId: correctionStorageMoveRequestId,
   );

@@ -7,7 +7,7 @@ import 'package:otzaria/migration/database/sqlite3_utils.dart';
 /// חלונות ותורי דיווח.
 ///
 /// קובץ אחד שכל חלון פותח ישירות (WAL, כמה כותבים מאותו תהליך). אין "חלון
-/// בעלים": הסדר בין כותבים מוכרע בנעילת SQLite, לא בניתוב באפיק.
+/// בעלים": הסדר בין כותבים מוכרע בנעילת SQLite.
 class UserStateDatabase {
   UserStateDatabase._();
 

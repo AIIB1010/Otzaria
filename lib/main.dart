@@ -51,7 +51,6 @@ import 'package:otzaria/data/data_providers/sqlite_data_provider.dart';
 import 'package:otzaria/data/constants/database_constants.dart';
 import 'package:otzaria/empty_library/bloc/empty_library_bloc.dart';
 import 'package:otzaria/library_update/changes_notes/library_changes_notes.dart';
-import 'package:otzaria/library_update/services/library_access_gate.dart';
 import 'package:otzaria/library_update/services/startup_recovery_check.dart';
 
 import 'package:otzaria_search_engine/otzaria_search_engine.dart';
@@ -84,9 +83,8 @@ import 'package:otzaria/core/windowing/dialog_owner.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_opener.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_scope.dart';
 import 'package:otzaria/core/windowing/dock_progress_listener.dart';
-import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/runner_window_channel.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
-import 'package:otzaria/core/windowing/window_bus_host.dart';
 import 'package:otzaria/core/windowing/window_manager_app_window_controller.dart';
 import 'package:otzaria/settings/services/backup_service.dart';
 import 'package:otzaria/core/http_client_registry.dart';
@@ -583,8 +581,6 @@ Future<void> _runAppBootstrap() async {
     // ה-splash נייטיבי ב-runner והחלון הראשי נשאר מוסתר עד presentMainWindow,
     // שם הוא נחשף ישר בגבולותיו הסופיים — לכן אין כאן waitUntilReadyToShow.
   }
-
-  _claimWindowBusSlot();
 
   // ה-scope עוטף את כל העץ כדי שכל widget יוכל להגיע לחלון שהוא יושב בו
   // בלי לפנות ל-singleton גלובלי. היום יש חלון אחד, ולכן הבקר הוא של
@@ -1534,10 +1530,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
 
     final mainWindow = WindowScopeProviders(
       historyRepository: historyRepository,
-      // מתחת לכל ה-blocs: האפיק עונה על בקשות מחלונות אחרים, ושתי
-      // הבקשות הנתמכות — "תאר את עצמך" ו"קלוט כרטיסיה" — זקוקות
-      // ל-TabsBloc ול-NavigationBloc.
-      child: const WindowBusHost(child: App()),
+      child: const App(),
     );
 
     return AppScopeProviders(
@@ -1577,7 +1570,7 @@ Future<void> initHive() async {
 /// "שחזר את כל החלונות בהפעלה" — כל סשן שנשאר נפתח בחלון משלו במקום
 /// להתמזג לחלון הראשון. בחלון יחיד הסשנים תמיד מתמזגים לראשי.
 bool get _restoresAllWindows =>
-    MultiWindowService.canOpenWindows &&
+    RunnerWindowChannel.canOpenWindows &&
     (Settings.getValue<bool>(SettingsRepository.keyRestoreAllWindows) ?? false);
 
 /// המשבצות שסשנים ממתינים בהן לחלון, כפי ש-[initHive] סידר אותן.
@@ -1640,12 +1633,10 @@ void _maybeScheduleDebugSecondWindow() {
 Future<void> _installWindowCloseHandling() async {
   _appWindowListener = AppWindowListener(window: _appWindow);
   windowManager.addListener(_appWindowListener!);
-  if (MultiViewMode.enabled) {
-    final listener = _appWindowListener!;
-    ViewWindowOpener.instance.endProcess = listener.quitFromLastViewWindow;
-    // אותו מסלול: עדכון ויציאה מכל החלונות אינם עוברים דרך הסתרת הראשי.
-    AppQuit.install(listener.quitFromLastViewWindow);
-  }
+  final listener = _appWindowListener!;
+  ViewWindowOpener.instance.endProcess = listener.quitFromLastViewWindow;
+  // אותו מסלול: עדכון ויציאה מכל החלונות אינם עוברים דרך הסתרת הראשי.
+  AppQuit.install(listener.quitFromLastViewWindow);
   await windowManager.setPreventClose(true);
   await AppWindowListener.enableMacOSCloseHandling();
   if (Platform.isMacOS && MultiViewMode.enabled) {
@@ -1655,32 +1646,6 @@ Future<void> _installWindowCloseHandling() async {
         ViewWindowOpener.instance.reopenFromDock,
       ),
     );
-  }
-}
-
-/// תופס את משבצת החלון באפיק ההודעות, **לפני `runApp`**.
-///
-/// ⚠️ העיתוי אינו נוחות. התפיסה הייתה ב-`WindowBusHost.initState`, שהוא
-/// **צאצא** של `MultiBlocProvider` — כלומר ה-blocs נבנים לפניו, ושניים
-/// מהם ניגשים למצב שתלוי במשבצת עוד לפני שהיא קיימת:
-///
-/// * `TabsRepository.saveTabs` בחלון משני זקוק למשבצת כדי לדעת לאיזה מפתח
-///   סשן לכתוב, ובלעדיה הוא **מדלג על השמירה** במכוון (הנפילה למפתח של
-///   החלון הראשון הייתה דורסת את הכרטיסיות שלו). כלומר הכרטיסיה שהועברה
-///   לחלון החדש עלולה לא להישמר עד השינוי הבא.
-/// * הבעלים רושם כאן את הכינוי `otzaria.window.owner`, שדרכו כל חלון משני
-///   מאתר אותו.
-///
-/// הסדר בין `BlocProvider.create` ל-`initState` תלוי בעצלנות של הספק, ולכן
-/// הוא אינו משהו שאפשר להישען עליו. `register` אידמפוטנטי, ולכן הקריאה
-/// ב-`WindowBusHost` נשארת כרשת ביטחון.
-void _claimWindowBusSlot() {
-  // ⚠️ מגודר בפלטפורמה: בלי זה גם מובייל פתח `ReceivePort` ורשם כינוי
-  // בעלים בשביל אפיק שאף אחד לא ידבר בו.
-  if (!MultiWindowService.canOpenWindows) return;
-  final slot = LibraryAccessGate.instance.registerWindow(asOwner: true);
-  if (slot == null) {
-    debugPrint('⚠️ כל משבצות האפיק תפוסות — החלון הזה לא יוכל לשתף מצב');
   }
 }
 
