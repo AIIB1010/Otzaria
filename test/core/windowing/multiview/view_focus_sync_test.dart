@@ -52,4 +52,15 @@ void main() {
     ViewFocusSync.mainWindowActivated();
     expect(observer.events, isEmpty);
   });
+
+  test('macOS: חלון שנחשף מקבל אירוע פוקוס ראשון; בשאר הפלטפורמות לא', () {
+    ViewFocusSync.debugMacOSOverride = false;
+    ViewFocusSync.viewWindowRevealed(9);
+    expect(observer.events, isEmpty);
+
+    ViewFocusSync.debugMacOSOverride = true;
+    ViewFocusSync.viewWindowRevealed(9);
+    expect(observer.events.single.viewId, 9);
+    expect(observer.events.single.state, ViewFocusState.focused);
+  });
 }

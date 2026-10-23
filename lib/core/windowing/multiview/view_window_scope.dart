@@ -1,3 +1,5 @@
+import 'dart:ui' show ViewFocusEvent, ViewFocusState;
+
 import 'package:flutter/widgets.dart';
 import 'package:otzaria/app_scope/process_duties.dart';
 import 'package:otzaria/app_scope/window_scope_providers.dart';
@@ -48,7 +50,8 @@ class ViewWindowScope extends StatefulWidget {
   State<ViewWindowScope> createState() => _ViewWindowScopeState();
 }
 
-class _ViewWindowScopeState extends State<ViewWindowScope> {
+class _ViewWindowScopeState extends State<ViewWindowScope>
+    with WidgetsBindingObserver {
   late final ViewWindowEntry _entry = widget.entry;
   late final OpenedTab? _initialTab;
   late final ViewWindowCloseFlow _closeFlow = widget.closeFlow(_entry);
@@ -74,6 +77,7 @@ class _ViewWindowScopeState extends State<ViewWindowScope> {
     _entry.closeHandler = _close;
     WindowTitleSync.bind(_entry.keys, _titleSync);
     _entry.handle.changes.addListener(_onWindowChanged);
+    WidgetsBinding.instance.addObserver(this);
     _onWindowChanged();
   }
 
@@ -95,8 +99,21 @@ class _ViewWindowScopeState extends State<ViewWindowScope> {
   }
 
   @override
+  void didChangeViewFocus(ViewFocusEvent event) {
+    if (!ViewFocusSync.activationFollowsViewFocus ||
+        event.viewId != _viewId ||
+        event.state != ViewFocusState.focused) {
+      return;
+    }
+    if (AppWindowKeys.current.id != _entry.id) {
+      AppWindowKeys.activateWindow(_entry.id);
+    }
+  }
+
+  @override
   void dispose() {
     _entry.handle.changes.removeListener(_onWindowChanged);
+    WidgetsBinding.instance.removeObserver(this);
     _persistence.dispose();
     WindowTitleSync.unbind(_entry.keys, _titleSync);
     if (_entry.closeHandler == _close) {

@@ -39,8 +39,30 @@ abstract final class ViewFocusSync {
   }
 
   @visibleForTesting
+  static bool? debugMacOSOverride;
+
+  /// macOS: המנוע שולח את האירוע במעבר key, אבל הבקר אינו מודיע על הפעלה.
+  static bool get activationFollowsViewFocus =>
+      debugMacOSOverride ??
+      (!kIsWeb && Platform.isMacOS && MultiViewMode.enabled);
+
+  /// חלון Dart נחשף. במק החלון נעשה key לפני שה-delegate שלו חובר, ולכן
+  /// אין לו אירוע פוקוס ראשון: בלעדיו המקשים היו הולכים לחלון הקודם.
+  static void viewWindowRevealed(int viewId) {
+    if (!activationFollowsViewFocus) return;
+    WidgetsBinding.instance.handleViewFocusChanged(
+      ViewFocusEvent(
+        viewId: viewId,
+        state: ViewFocusState.focused,
+        direction: ViewFocusDirection.undefined,
+      ),
+    );
+  }
+
+  @visibleForTesting
   static void resetForTest() {
     _focusedViewId = null;
     debugEnabledOverride = null;
+    debugMacOSOverride = null;
   }
 }

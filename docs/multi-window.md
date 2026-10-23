@@ -18,7 +18,10 @@
 
 ### איך נקבע המצב
 
-* `MultiViewMode.supported` = Windows. זהה ב-debug וב-release.
+* `MultiViewMode.supported` = Windows ו-Linux. ב-macOS רק אחרי ה-handshake
+  `multiViewReady` מה-runner (`awaitMacRunnerHandshake` ב-`main`, לפני
+  `installWindowingOwner`); בלעדיו — מודל A, והסיבה נרשמת ל-`errors.txt`.
+  זהה ב-debug וב-release.
 * `WindowOpener.current` ב-Windows הוא תמיד `ViewWindowOpener`
   (`MultiViewMode.usesEngineWindows` שקרי שם).
 * `installWindowingOwner()` (ב-`main` מיד אחרי `ensureInitialized`) מתקין
@@ -62,6 +65,9 @@
 5. `flutter_internal_imports_test` עובר — `package:flutter/src/` מיובא רק
    ב-`multiview_flag.dart`, ושם בלבד יש לתקן.
 6. בניית release פותחת חלון Dart, והתהליך יוצא כשנסגר החלון הגלוי האחרון.
+7. macOS: `_multiViewEnabled` עדיין BOOL ב-`FlutterEngine.mm`, ו-`enableMultiView`
+   עדיין מוגן ב-assert. RunnerTests `testFlutterEngineStillHasMultiViewEnabledBoolIvar`
+   מכסה.
 
 ---
 

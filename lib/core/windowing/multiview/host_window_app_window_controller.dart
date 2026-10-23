@@ -1,15 +1,17 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart' show Listenable;
 import 'package:otzaria/core/windowing/app_window_controller.dart';
 import 'package:otzaria/core/windowing/app_window_id.dart';
+import 'package:otzaria/core/windowing/multiview/cocoa_view_window_native.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_native.dart';
 import 'package:window_manager/window_manager.dart'
     show ResizeEdge, TitleBarStyle;
 
 /// החלון של חלון Dart: המצב מהבקר של המסגרת, המיקום דרך [ViewWindowNative].
-/// הגבולות לוגיים לפי ה-DPR של התצוגה, כמו ב-`window_manager`.
+/// הגבולות לוגיים: macOS בנקודות מסך, ובשאר פיזי חלקי DPR, כמו window_manager.
 final class HostWindowAppWindowController
     implements AppWindowController, AppWindowGeometry, AppWindowResizing {
   HostWindowAppWindowController({
@@ -27,13 +29,14 @@ final class HostWindowAppWindowController
   final ViewWindowNative _native;
 
   double get _dpr {
+    if (_native is CocoaViewWindowNative) return 1;
     final dpr = _handle.view.devicePixelRatio;
     return dpr > 0 ? dpr : 1.0;
   }
 
-  Future<void> _withHwnd(void Function(int hwnd) body) async {
+  Future<void> _withHwnd(FutureOr<void> Function(int hwnd) body) async {
     final hwnd = _handle.nativeHandle;
-    if (hwnd != null) body(hwnd);
+    if (hwnd != null) await body(hwnd);
   }
 
   @override
@@ -56,11 +59,11 @@ final class HostWindowAppWindowController
   Future<void> unmaximize() async => _handle.setMaximized(false);
 
   @override
-  Future<void> center() => _withHwnd((hwnd) {
-    final rect = _native.windowRect(hwnd);
-    final area = _native.workArea(hwnd);
+  Future<void> center() => _withHwnd((hwnd) async {
+    final rect = await _native.windowRect(hwnd);
+    final area = await _native.workArea(hwnd);
     if (rect == null || area == null) return;
-    _native.setWindowRect(
+    await _native.setWindowRect(
       hwnd,
       Rect.fromCenter(
         center: area.center,
@@ -91,7 +94,7 @@ final class HostWindowAppWindowController
   @override
   Future<bool> isVisible() async {
     final hwnd = _handle.nativeHandle;
-    return hwnd != null && _native.isVisible(hwnd);
+    return hwnd != null && await _native.isVisible(hwnd);
   }
 
   @override
@@ -109,7 +112,7 @@ final class HostWindowAppWindowController
   @override
   Future<Rect> getBounds() async {
     final hwnd = _handle.nativeHandle;
-    final rect = hwnd == null ? null : _native.windowRect(hwnd);
+    final rect = hwnd == null ? null : await _native.windowRect(hwnd);
     if (rect == null) return Rect.zero;
     return _scale(rect, 1 / _dpr);
   }
@@ -119,10 +122,10 @@ final class HostWindowAppWindowController
       _withHwnd((hwnd) => _native.setWindowRect(hwnd, _scale(bounds, _dpr)));
 
   @override
-  Future<void> setSize(Size size) => _withHwnd((hwnd) {
-    final rect = _native.windowRect(hwnd);
+  Future<void> setSize(Size size) => _withHwnd((hwnd) async {
+    final rect = await _native.windowRect(hwnd);
     if (rect == null) return;
-    _native.setWindowRect(hwnd, rect.topLeft & size * _dpr);
+    await _native.setWindowRect(hwnd, rect.topLeft & size * _dpr);
   });
 
   @override

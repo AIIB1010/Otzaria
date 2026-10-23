@@ -10,17 +10,28 @@ import 'package:flutter/src/foundation/_features.dart' as features;
 import 'package:flutter/src/widgets/_window.dart';
 import 'package:flutter/src/widgets/_window_linux.dart'
     show WindowControllerLinux;
+import 'package:flutter/src/widgets/_window_macos.dart'
+    show WindowControllerMacOS, WindowingOwnerMacOS;
 import 'package:flutter/src/widgets/_window_win32.dart'
     show WindowControllerWin32;
 import 'package:flutter/widgets.dart';
+import 'package:otzaria/core/windowing/multiview/cocoa_view_window_native.dart';
 
 /// התנאי היחיד לכל מסלול ריבוי התצוגות (חלונות Dart באותו מנוע).
 abstract final class MultiViewMode {
   static bool? _override;
   static bool _ownerInstalled = false;
+  static bool _macRunnerReady = false;
 
-  /// ב-Windows וב-Linux תמיד ריבוי תצוגות. macOS עדיין במודל A (מנוע לכל חלון).
-  static bool get supported => Platform.isWindows || Platform.isLinux;
+  @visibleForTesting
+  static bool? debugIsMacOS;
+
+  static bool get _isMacOS => debugIsMacOS ?? Platform.isMacOS;
+
+  /// ב-Windows וב-Linux תמיד ריבוי תצוגות. macOS רק אחרי אישור ה-runner
+  /// ([awaitMacRunnerHandshake]); בלעדיו מודל A (מנוע לכל חלון).
+  static bool get supported =>
+      _isMacOS ? _macRunnerReady : Platform.isWindows || Platform.isLinux;
 
   /// פעיל רק אחרי ש-[installWindowingOwner] התקין בעלים אמיתי.
   static bool get enabled => _override ?? (supported && _ownerInstalled);
@@ -36,6 +47,31 @@ abstract final class MultiViewMode {
 
   @visibleForTesting
   static void debugResetOwnerInstalled() => _ownerInstalled = false;
+
+  @visibleForTesting
+  static void debugResetMacRunner() {
+    _macRunnerReady = false;
+    debugIsMacOS = null;
+  }
+}
+
+/// macOS, לפני [installWindowingOwner]: ה-runner הפך את ריבוי התצוגות במנוע?
+/// בלי זה החלון הראשון של Dart היה קורס על ה-assert של `enableMultiView`.
+/// מחזיר null כשמוכן, ואחרת את הסיבה (מודל A).
+Future<String?> awaitMacRunnerHandshake({
+  CocoaViewWindowNative native = const CocoaViewWindowNative(),
+}) async {
+  final reason = await native.multiViewUnavailableReason();
+  MultiViewMode._macRunnerReady = reason == null;
+  return reason;
+}
+
+/// macOS: ה-`NSWindow*` של החלון הראשי (התצוגה המרומזת); null כשאין.
+int? implicitViewWindowHandle() {
+  final view = WidgetsBinding.instance.platformDispatcher.implicitView;
+  if (view == null) return null;
+  final address = WindowingOwnerMacOS.getWindowHandle(view).address;
+  return address == 0 ? null : address;
 }
 
 /// מדליק את דגל החלונות של המסגרת רק למשך [body]. מחוץ לו הדגל כבוי, ולכן
@@ -100,7 +136,7 @@ class ViewWindowHandle {
   /// האם החלון כבר נהרס (WM_DESTROY).
   bool get isDestroyed => _destroyed;
 
-  /// החלון העליון כמספר: HWND ב-Windows, `GtkWindow*` ב-Linux; null אחרי ההריסה.
+  /// החלון העליון כמספר: HWND, `GtkWindow*` או `NSWindow*`; null אחרי ההריסה.
   int? get nativeHandle {
     final controller = _controller;
     if (_destroyed) return null;
@@ -109,6 +145,9 @@ class ViewWindowHandle {
     }
     if (controller is WindowControllerLinux) {
       return (controller as WindowControllerLinux).windowHandle.address;
+    }
+    if (controller is WindowControllerMacOS) {
+      return (controller as WindowControllerMacOS).windowHandle.address;
     }
     return null;
   }

@@ -60,15 +60,16 @@ class ViewWindowCloseFlow {
       return await opener.serializeClose(() async {
         if (_abandoned.isCompleted) return false;
         final endProcess = opener.endProcess;
-        if (endProcess != null) {
-          final isLast = await opener.isLastVisibleWindow(entry);
-          if (_abandoned.isCompleted) return false;
-          if (isLast) {
-            // החלון האחרון על המסך: יציאה מהתוכנה, עם השאלות של יציאה. אם חזרה — בוטלה.
-            AppWindowKeys.activateWindow(entry.id);
-            await endProcess();
-            return false;
-          }
+        final isLast =
+            endProcess != null && await opener.isLastVisibleWindow(entry);
+        if (_abandoned.isCompleted) return false;
+        // macOS: נשארים ב-Dock, והסשן נשמר להפעלה הבאה כמו בחלון הראשי.
+        final staysInDock = isLast && opener.keepsProcessAfterLastWindow;
+        if (endProcess != null && isLast && !staysInDock) {
+          // החלון האחרון על המסך: יציאה מהתוכנה, עם השאלות של יציאה. אם חזרה — בוטלה.
+          AppWindowKeys.activateWindow(entry.id);
+          await endProcess();
+          return false;
         }
         final context = entry.keys.navigator.currentContext;
         if (context != null && context.mounted) {
@@ -90,11 +91,11 @@ class ViewWindowCloseFlow {
         }
         if (_abandoned.isCompleted) return false;
         // מכאן הסגירה שאושרה מושלמת גם אם העץ נבנה מחדש.
-        await opener.rememberClosed(entry.slot);
+        await opener.rememberClosed(entry.slot, keptRow: staysInDock);
         // סגירה מכוונת מוחקת את הסשן; קודם endSession, ששמירה באמצע לא תחזיר אותו.
         entry.endSession();
         try {
-          await _discardSession(entry.slot);
+          if (!staysInDock) await _discardSession(entry.slot);
         } catch (e) {
           // השורה תאומץ בהפעלה הבאה; החלון נסגר בכל מקרה.
           debugPrint('view window close: discard failed: $e');
