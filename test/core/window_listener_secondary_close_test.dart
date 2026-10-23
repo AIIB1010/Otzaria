@@ -433,18 +433,48 @@ void main() {
       addTearDown(() => tester.pumpWidget(const SizedBox()));
     }
 
-    /// מריץ את הסגירה האמיתית עד הדיאלוג (אם יש); ההמשך נשמר ב-[closing].
     late Future<void> closing;
+    var closeDone = false;
+
+    Future<void> advanceClose(
+      WidgetTester tester, {
+      bool allowDialog = false,
+    }) async {
+      bool reachedBoundary() =>
+          closeDone ||
+          (allowDialog &&
+              find.text(unsavedChangesDialogTitle).evaluate().isNotEmpty);
+      final elapsed = Stopwatch()..start();
+      while (!reachedBoundary() &&
+          elapsed.elapsed < const Duration(seconds: 5)) {
+        await tester.pump(const Duration(milliseconds: 50));
+        // גם I/O אמיתי וגם טיימרים מדומים משתתפים בסגירה.
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 1)),
+        );
+      }
+      expect(
+        reachedBoundary(),
+        isTrue,
+        reason: 'הסגירה חייבת להסתיים או להציג את שומר הסגירה',
+      );
+      await tester.pumpAndSettle();
+    }
+
     Future<void> startClose(
       WidgetTester tester,
       AppWindowListener listener,
     ) async {
-      closing = listener.handleWindowClose();
-      // פעולות המאגר והטיימרים רצים בשעון המדומה; pumpAndSettle לבדו אינו מקדם אותו.
-      for (var i = 0; i < 10; i++) {
-        await tester.pump(const Duration(milliseconds: 50));
-      }
-      await tester.pumpAndSettle();
+      closeDone = false;
+      closing = listener.handleWindowClose().whenComplete(
+        () => closeDone = true,
+      );
+      await advanceClose(tester, allowDialog: true);
+    }
+
+    Future<void> finishClose(WidgetTester tester) async {
+      await advanceClose(tester);
+      await closing;
     }
 
     Future<Map<String, Object?>?> stored(WidgetTester tester) => tester
@@ -457,8 +487,8 @@ void main() {
       await openWindow(tester);
       await startClose(tester, AppWindowListener());
       expect(find.text(unsavedChangesDialogTitle), findsNothing);
+      await finishClose(tester);
       await tester.runAsync(() async {
-        await closing;
         for (var i = 0; i < 20; i++) {
           await Future<void>.delayed(Duration.zero);
         }
@@ -484,7 +514,7 @@ void main() {
         expect(find.text(unsavedChangesDialogTitle), findsOneWidget);
         await tester.tap(find.text('ביטול'));
         await tester.pumpAndSettle();
-        await tester.runAsync(() => closing);
+        await finishClose(tester);
         expect(runner.closeSelfCalls, 0);
         expect(service.hasSessionForTab(tabId), isTrue);
         expect(service.displayText(tabId, 0, 'מקור'), 'תיקון');
@@ -492,7 +522,7 @@ void main() {
         await startClose(tester, listener);
         await tester.tap(find.text(unsavedChangesCloseAnyway));
         await tester.pumpAndSettle();
-        await tester.runAsync(() => closing);
+        await finishClose(tester);
         expect(runner.closeSelfCalls, 1);
         expect(service.hasSessionForTab(tabId), isTrue);
         expect(
