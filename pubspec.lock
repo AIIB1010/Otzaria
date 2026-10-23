@@ -1412,9 +1412,9 @@ packages:
     dependency: "direct main"
     description:
       path: printing
-      ref: f5efa21c2237002280f1ba056971ec1bf1e8cfd7
-      resolved-ref: f5efa21c2237002280f1ba056971ec1bf1e8cfd7
-      url: "https://github.com/palmoni5/dart_pdf"
+      ref: "742a2a967fdbd09afff08c1f2153df6c79b8e200"
+      resolved-ref: "742a2a967fdbd09afff08c1f2153df6c79b8e200"
+      url: "https://github.com/Otzaria/dart_pdf"
     source: git
     version: "5.15.1"
   process:
@@ -2082,7 +2082,7 @@ packages:
     source: git
     version: "0.5.2"
   windows_file_picker:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: windows_file_picker
       sha256: "18452aa293de3b6961c6d05b0e71b4be7bb90c67635abdd3aa5c4e75dd875072"

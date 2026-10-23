@@ -30,6 +30,7 @@ import 'package:otzaria/settings/search/settings_search_models.dart';
 import 'package:otzaria/settings/view/settings_screen.dart';
 import 'package:otzaria/settings/widgets/settings_widgets_exports.dart';
 import 'package:otzaria/settings/services/per_book_settings_service.dart';
+import 'package:otzaria/utils/file/file_picker_dialog_options.dart';
 import 'package:otzaria/widgets/widgets_exports.dart';
 
 /// מסך ניהול הספרים והקטגוריות שהוסתרו מהממשק (issue #1448).
@@ -324,9 +325,14 @@ class _HiddenBooksPanelState extends State<HiddenBooksPanel> {
   }
 
   Future<String?> _pickFile() async {
-    final result = await FilePicker.pickFile(
-      type: FileType.custom,
-      allowedExtensions: const ['csv', 'json', 'txt'],
+    final result = await withFilePickerOwner(
+      context,
+      () => FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: const ['csv', 'json', 'txt'],
+        windowsOptions: modalWindowsOptions(context),
+        linuxOptions: kModalLinuxOptions,
+      ),
     );
     return result?.path;
   }

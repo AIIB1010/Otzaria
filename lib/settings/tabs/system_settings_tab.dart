@@ -46,6 +46,7 @@ import 'package:otzaria/widgets/misc/app_popup_menu.dart';
 import 'package:otzaria/widgets/misc/app_dropdown_field.dart';
 import 'package:otzaria/tools/calendar/helpers/calendar_date_helpers.dart';
 import 'package:otzaria/tour/bloc/tour_cubit.dart';
+import 'package:otzaria/utils/file/file_picker_dialog_options.dart';
 import 'package:otzaria/utils/file/open_in_file_manager.dart';
 import 'package:otzaria/utils/file/save_file_with_extension.dart';
 import 'package:otzaria/plugins/view/webview_environment_holder.dart';
@@ -872,7 +873,9 @@ class _SystemSettingsTabState extends State<SystemSettingsTab> {
   Future<void> _exportBackupFile(File file) async {
     try {
       final bytes = await file.readAsBytes();
+      if (!mounted) return;
       final path = await saveFileWithExtension(
+        context: context,
         fileName: p.basename(file.path),
         extension: 'json',
         bytes: bytes,
@@ -888,9 +891,14 @@ class _SystemSettingsTabState extends State<SystemSettingsTab> {
   /// שחזור מקובץ גיבוי שהמשתמש בוחר — הדרך היחידה לשחזר אחרי התקנה מחדש
   /// במובייל, שבו תיקיית הגיבוי הפנימית נמחקת עם האפליקציה.
   Future<void> _restoreFromPickedFile() async {
-    final result = await FilePicker.pickFile(
-      type: FileType.custom,
-      allowedExtensions: ['json'],
+    final result = await withFilePickerOwner(
+      context,
+      () => FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+        windowsOptions: modalWindowsOptions(context),
+        linuxOptions: kModalLinuxOptions,
+      ),
     );
     final filePath = result?.path;
     if (filePath == null || !mounted) return;
@@ -913,9 +921,14 @@ class _SystemSettingsTabState extends State<SystemSettingsTab> {
   /// ייבוא ממזג מגיבוי של מכשיר אחר — מוסיף פריטים ואינו מוחק דבר, ולכן
   /// דיאלוג רגיל ולא אזהרה.
   Future<void> _importMergeFromPickedFile() async {
-    final result = await FilePicker.pickFile(
-      type: FileType.custom,
-      allowedExtensions: ['json'],
+    final result = await withFilePickerOwner(
+      context,
+      () => FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+        windowsOptions: modalWindowsOptions(context),
+        linuxOptions: kModalLinuxOptions,
+      ),
     );
     final filePath = result?.path;
     if (filePath == null || !mounted) return;

@@ -80,6 +80,8 @@ class InProcessTabDrops {
   /// החלון הראשי שנסגר מוסתר ולא נהרס, ואינו יעד עד שיוצג שוב.
   bool _mainShown = true;
 
+  bool get isMainShown => _mainShown;
+
   void setMainShown(bool shown) => _mainShown = shown;
 
   ViewWindowRegistry get _registry =>

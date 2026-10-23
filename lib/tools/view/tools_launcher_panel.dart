@@ -235,11 +235,14 @@ class _ToolsLauncherPanelState extends State<ToolsLauncherPanel> {
   Future<void> _installPlugin() async {
     final verified = await verifySaferModePassword(context);
     if (!verified || !mounted) return;
-    final result = await FilePicker.pickFile(
-      type: FileType.custom,
-      allowedExtensions: ['otzplugin'],
-      windowsOptions: kModalWindowsOptions,
-      linuxOptions: kModalLinuxOptions,
+    final result = await withFilePickerOwner(
+      context,
+      () => FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: ['otzplugin'],
+        windowsOptions: modalWindowsOptions(context),
+        linuxOptions: kModalLinuxOptions,
+      ),
     );
     final path = result?.path;
     if (path == null || !mounted) return;
@@ -251,9 +254,12 @@ class _ToolsLauncherPanelState extends State<ToolsLauncherPanel> {
   Future<void> _loadDevPlugin() async {
     final verified = await verifySaferModePassword(context);
     if (!verified || !mounted) return;
-    final rootPath = await FilePicker.getDirectoryPath(
-      windowsOptions: kModalWindowsOptions,
-      linuxOptions: kModalLinuxOptions,
+    final rootPath = await withFilePickerOwner(
+      context,
+      () => FilePicker.getDirectoryPath(
+        windowsOptions: modalWindowsOptions(context),
+        linuxOptions: kModalLinuxOptions,
+      ),
     );
     if (rootPath == null || !mounted) return;
     context.read<PluginSystemBloc>().add(

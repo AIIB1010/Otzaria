@@ -84,6 +84,7 @@ import 'package:otzaria/core/windowing/multiview/multi_view_host.dart';
 import 'package:otzaria/core/windowing/last_active_window.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/app_quit.dart';
+import 'package:otzaria/core/windowing/dialog_owner.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_opener.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_scope.dart';
 import 'package:otzaria/core/windowing/dock_progress_listener.dart';
@@ -553,6 +554,15 @@ Future<void> _runAppBootstrap() async {
       'windowManager',
       windowManager.ensureInitialized,
     );
+    if (Platform.isWindows) {
+      // בעלי דיאלוגי הקבצים מהחלון הראשי; בלי לעכב את העלייה.
+      unawaited(
+        windowManager.getId().then<void>(
+          (hwnd) => DialogOwner.mainWindowHwnd = hwnd,
+          onError: (Object e) => debugPrint('main window hwnd failed: $e'),
+        ),
+      );
+    }
     WindowPersistence.splashMode = true;
     // WindowPersistence היא static ואין לה BuildContext — היא מקבלת את
     // אותו מופע שנכנס ל-AppWindowScope, כדי שיהיה מקור אמת אחד.
