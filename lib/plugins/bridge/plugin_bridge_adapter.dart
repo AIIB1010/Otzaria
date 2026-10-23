@@ -4444,10 +4444,13 @@ class PluginBridgeAdapter {
       return null;
     }
     if (!context.mounted) return null;
-    return FilePicker.getDirectoryPath(
-      windowsOptions: windowsOptions,
-      linuxOptions: kModalLinuxOptions,
-      dialogTitle: title,
+    return withFilePickerOwner(
+      context,
+      () => FilePicker.getDirectoryPath(
+        windowsOptions: windowsOptions,
+        linuxOptions: kModalLinuxOptions,
+        dialogTitle: title,
+      ),
     );
   }
 
@@ -5097,12 +5100,15 @@ class PluginBridgeAdapter {
     final hasExtensions =
         allowedExtensions != null && allowedExtensions.isNotEmpty;
     if (!context.mounted) return null;
-    final result = await FilePicker.pickFile(
-      dialogTitle: title,
-      windowsOptions: windowsOptions,
-      linuxOptions: kModalLinuxOptions,
-      type: hasExtensions ? FileType.custom : FileType.any,
-      allowedExtensions: hasExtensions ? allowedExtensions : null,
+    final result = await withFilePickerOwner(
+      context,
+      () => FilePicker.pickFile(
+        dialogTitle: title,
+        windowsOptions: windowsOptions,
+        linuxOptions: kModalLinuxOptions,
+        type: hasExtensions ? FileType.custom : FileType.any,
+        allowedExtensions: hasExtensions ? allowedExtensions : null,
+      ),
     );
     return result?.path;
   }
@@ -5339,10 +5345,13 @@ class PluginBridgeAdapter {
       return null;
     }
     if (!context.mounted) return null;
-    final folder = await FilePicker.getDirectoryPath(
-      dialogTitle: pluginSaveFolderDialogTitle(title),
-      windowsOptions: windowsOptions,
-      linuxOptions: kModalLinuxOptions,
+    final folder = await withFilePickerOwner(
+      context,
+      () => FilePicker.getDirectoryPath(
+        dialogTitle: pluginSaveFolderDialogTitle(title),
+        windowsOptions: windowsOptions,
+        linuxOptions: kModalLinuxOptions,
+      ),
     );
     if (folder == null) return null;
 

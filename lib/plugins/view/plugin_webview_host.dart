@@ -273,10 +273,13 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
       pickFolder: ({String? title}) async {
         final ctx = await _verifiedDialogContext();
         if (ctx == null || !ctx.mounted) return null;
-        return FilePicker.getDirectoryPath(
-          windowsOptions: modalWindowsOptions(ctx),
-          linuxOptions: kModalLinuxOptions,
-          dialogTitle: title,
+        return withFilePickerOwner(
+          ctx,
+          () => FilePicker.getDirectoryPath(
+            windowsOptions: modalWindowsOptions(ctx),
+            linuxOptions: kModalLinuxOptions,
+            dialogTitle: title,
+          ),
         );
       },
       onBackgroundInstanceDone: onBackgroundInstanceDone,
@@ -285,12 +288,15 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
         if (ctx == null || !ctx.mounted) return null;
         final hasExtensions =
             allowedExtensions != null && allowedExtensions.isNotEmpty;
-        final result = await FilePicker.pickFile(
-          dialogTitle: title,
-          windowsOptions: modalWindowsOptions(ctx),
-          linuxOptions: kModalLinuxOptions,
-          type: hasExtensions ? FileType.custom : FileType.any,
-          allowedExtensions: hasExtensions ? allowedExtensions : null,
+        final result = await withFilePickerOwner(
+          ctx,
+          () => FilePicker.pickFile(
+            dialogTitle: title,
+            windowsOptions: modalWindowsOptions(ctx),
+            linuxOptions: kModalLinuxOptions,
+            type: hasExtensions ? FileType.custom : FileType.any,
+            allowedExtensions: hasExtensions ? allowedExtensions : null,
+          ),
         );
         return result?.path;
       },
@@ -302,10 +308,13 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
           }) async {
             final ctx = await _verifiedDialogContext();
             if (ctx == null || !ctx.mounted) return null;
-            final folder = await FilePicker.getDirectoryPath(
-              dialogTitle: pluginSaveFolderDialogTitle(title),
-              windowsOptions: modalWindowsOptions(ctx),
-              linuxOptions: kModalLinuxOptions,
+            final folder = await withFilePickerOwner(
+              ctx,
+              () => FilePicker.getDirectoryPath(
+                dialogTitle: pluginSaveFolderDialogTitle(title),
+                windowsOptions: modalWindowsOptions(ctx),
+                linuxOptions: kModalLinuxOptions,
+              ),
             );
             if (folder == null || !ctx.mounted) return null;
             final typed = await showInputDialog(

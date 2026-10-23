@@ -70,12 +70,17 @@ class AppReportImageSources {
 
   /// פותח את בוחר הקבצים. מחזיר רשימה ריקה בביטול.
   Future<List<AppReportImage>> pickFiles() async {
-    final files = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: AppReportImage.supportedExtensions,
-      windowsOptions: modalWindowsOptions(),
-      linuxOptions: kModalLinuxOptions,
-    );
+    final files =
+        (await withFilePickerOwner(
+          null,
+          () => FilePicker.pickFiles(
+            type: FileType.custom,
+            allowedExtensions: AppReportImage.supportedExtensions,
+            windowsOptions: modalWindowsOptions(),
+            linuxOptions: kModalLinuxOptions,
+          ),
+        )) ??
+        [];
     final images = <AppReportImage>[];
     for (final file in files) {
       final mimeType = AppReportImage.mimeTypeForPath(file.name);

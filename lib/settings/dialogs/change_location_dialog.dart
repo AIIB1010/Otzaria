@@ -727,9 +727,12 @@ class _ChangeLocationDialogContentState
       (_selectedPath ?? widget.currentPath) == widget.defaultPath;
 
   Future<void> _pickFolder() async {
-    final path = await FilePicker.getDirectoryPath(
-      windowsOptions: modalWindowsOptions(context),
-      linuxOptions: kModalLinuxOptions,
+    final path = await withFilePickerOwner(
+      context,
+      () => FilePicker.getDirectoryPath(
+        windowsOptions: modalWindowsOptions(context),
+        linuxOptions: kModalLinuxOptions,
+      ),
     );
     if (path != null && mounted) setState(() => _selectedPath = path);
   }

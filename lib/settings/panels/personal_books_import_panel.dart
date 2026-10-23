@@ -95,13 +95,18 @@ class _PersonalBooksImportPanelState extends State<PersonalBooksImportPanel> {
     final override = widget.pickFilesOverride;
     if (override != null) return override();
 
-    final files = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: kSupportedBookExtensions,
-      dialogTitle: context.settingsText('בחר קבצי ספרים לייבוא'),
-      windowsOptions: modalWindowsOptions(context),
-      linuxOptions: kModalLinuxOptions,
-    );
+    final files =
+        (await withFilePickerOwner(
+          context,
+          () => FilePicker.pickFiles(
+            type: FileType.custom,
+            allowedExtensions: kSupportedBookExtensions,
+            dialogTitle: context.settingsText('בחר קבצי ספרים לייבוא'),
+            windowsOptions: modalWindowsOptions(context),
+            linuxOptions: kModalLinuxOptions,
+          ),
+        )) ??
+        [];
     return files.map((f) => f.path).whereType<String>().toList();
   }
 

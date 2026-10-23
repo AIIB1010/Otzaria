@@ -11,6 +11,7 @@ import 'package:otzaria/settings/engine/settings_event.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
 import 'package:otzaria/settings/engine/settings_state.dart';
 import 'package:otzaria/utils/file/save_file_with_extension.dart';
+import 'package:otzaria/utils/file/file_picker_dialog_options.dart';
 
 void main() {
   late Directory tempDir;
@@ -21,6 +22,26 @@ void main() {
 
   tearDown(() async {
     await tempDir.delete(recursive: true);
+  });
+
+  testWidgets('חלון מקור שכבר פורק מבטל את הבורר לפני הפלאגין', (tester) async {
+    late BuildContext origin;
+    await tester.pumpWidget(
+      Builder(
+        builder: (context) {
+          origin = context;
+          return const SizedBox.shrink();
+        },
+      ),
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    var invoked = false;
+    final result = await withFilePickerOwner<String>(origin, () async {
+      invoked = true;
+      return 'wrong window';
+    });
+    expect(invoked, isFalse);
+    expect(result, isNull);
   });
 
   group('ensureFileExtension', () {

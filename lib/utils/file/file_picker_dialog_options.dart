@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/widgets.dart';
 import 'package:otzaria/core/windowing/dialog_owner.dart';
@@ -13,3 +15,17 @@ WindowsOptions modalWindowsOptions([BuildContext? context]) =>
     );
 
 const kModalLinuxOptions = LinuxOptions(lockParentWindow: true);
+
+/// מקור שאינו זמין מבטל את הבורר, במקום לפתוח אותו מעל חלון אחר.
+Future<T?> withFilePickerOwner<T>(
+  BuildContext? context,
+  Future<T?> Function() action,
+) {
+  if (context != null && !context.mounted) return Future.value();
+  if (Platform.isWindows &&
+      context != null &&
+      DialogOwner.hwnd(context: context) == null) {
+    return Future.value();
+  }
+  return action();
+}

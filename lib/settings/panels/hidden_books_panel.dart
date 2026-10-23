@@ -325,11 +325,14 @@ class _HiddenBooksPanelState extends State<HiddenBooksPanel> {
   }
 
   Future<String?> _pickFile() async {
-    final result = await FilePicker.pickFile(
-      type: FileType.custom,
-      allowedExtensions: const ['csv', 'json', 'txt'],
-      windowsOptions: modalWindowsOptions(context),
-      linuxOptions: kModalLinuxOptions,
+    final result = await withFilePickerOwner(
+      context,
+      () => FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: const ['csv', 'json', 'txt'],
+        windowsOptions: modalWindowsOptions(context),
+        linuxOptions: kModalLinuxOptions,
+      ),
     );
     return result?.path;
   }

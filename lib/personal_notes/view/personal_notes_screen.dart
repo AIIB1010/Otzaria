@@ -640,12 +640,15 @@ class _PersonalNotesManagerScreenState
   Future<void> _importNotes() async {
     if (!await verifySaferModePassword(context)) return;
     if (!mounted) return;
-    final picked = await FilePicker.pickFile(
-      dialogTitle: 'בחר קובץ ייבוא',
-      allowedExtensions: ['json'],
-      type: FileType.custom,
-      windowsOptions: modalWindowsOptions(context),
-      linuxOptions: kModalLinuxOptions,
+    final picked = await withFilePickerOwner(
+      context,
+      () => FilePicker.pickFile(
+        dialogTitle: 'בחר קובץ ייבוא',
+        allowedExtensions: ['json'],
+        type: FileType.custom,
+        windowsOptions: modalWindowsOptions(context),
+        linuxOptions: kModalLinuxOptions,
+      ),
     );
     if (!mounted) return;
     final pickedPath = picked?.path;

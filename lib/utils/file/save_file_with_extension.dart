@@ -30,13 +30,16 @@ Future<String?> saveFileWithExtension({
     return null;
   }
   if (effectiveContext != null && !effectiveContext.mounted) return null;
-  final uri = await FilePicker.saveFile(
-    dialogTitle: dialogTitle,
-    fileName: fileName,
-    initialDirectory: initialDirectory,
-    bytes: bytes,
-    windowsOptions: windowsOptions,
-    linuxOptions: kModalLinuxOptions,
+  final uri = await withFilePickerOwner(
+    effectiveContext,
+    () => FilePicker.saveFile(
+      dialogTitle: dialogTitle,
+      fileName: fileName,
+      initialDirectory: initialDirectory,
+      bytes: bytes,
+      windowsOptions: windowsOptions,
+      linuxOptions: kModalLinuxOptions,
+    ),
   );
   if (uri == null) return null;
   // ב-Android השמירה חוזרת כ-content:// — אין נתיב מקומי לתקן, אבל היא הצליחה.

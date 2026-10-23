@@ -891,11 +891,14 @@ class _SystemSettingsTabState extends State<SystemSettingsTab> {
   /// שחזור מקובץ גיבוי שהמשתמש בוחר — הדרך היחידה לשחזר אחרי התקנה מחדש
   /// במובייל, שבו תיקיית הגיבוי הפנימית נמחקת עם האפליקציה.
   Future<void> _restoreFromPickedFile() async {
-    final result = await FilePicker.pickFile(
-      type: FileType.custom,
-      allowedExtensions: ['json'],
-      windowsOptions: modalWindowsOptions(context),
-      linuxOptions: kModalLinuxOptions,
+    final result = await withFilePickerOwner(
+      context,
+      () => FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+        windowsOptions: modalWindowsOptions(context),
+        linuxOptions: kModalLinuxOptions,
+      ),
     );
     final filePath = result?.path;
     if (filePath == null || !mounted) return;
@@ -918,11 +921,14 @@ class _SystemSettingsTabState extends State<SystemSettingsTab> {
   /// ייבוא ממזג מגיבוי של מכשיר אחר — מוסיף פריטים ואינו מוחק דבר, ולכן
   /// דיאלוג רגיל ולא אזהרה.
   Future<void> _importMergeFromPickedFile() async {
-    final result = await FilePicker.pickFile(
-      type: FileType.custom,
-      allowedExtensions: ['json'],
-      windowsOptions: modalWindowsOptions(context),
-      linuxOptions: kModalLinuxOptions,
+    final result = await withFilePickerOwner(
+      context,
+      () => FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+        windowsOptions: modalWindowsOptions(context),
+        linuxOptions: kModalLinuxOptions,
+      ),
     );
     final filePath = result?.path;
     if (filePath == null || !mounted) return;
