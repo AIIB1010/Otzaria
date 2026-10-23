@@ -16,7 +16,7 @@ class _Repository extends TabsRepository {
   _Repository({this.restored = const []});
   final List<OpenedTab> restored;
   @override
-  List<OpenedTab> loadTabs() => restored;
+  List<OpenedTab> loadTabs({bool newRuntime = false}) => restored;
   @override
   int loadCurrentTabIndex() => 0;
   @override

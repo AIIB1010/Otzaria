@@ -335,7 +335,7 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
   void _onLoadTabs(LoadTabs event, Emitter<TabsState> emit) {
     // הטאבים והאינדקס מנורמלים יחד כדי לשמור על הטאב הפעיל.
     final restored = flattenRestoredSplits(
-      _repository.loadTabs(),
+      _repository.loadTabs(newRuntime: true),
       currentIndex: _repository.loadCurrentTabIndex(),
     );
     final tabs = restored.tabs;

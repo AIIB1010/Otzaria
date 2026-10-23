@@ -117,7 +117,7 @@ class _StubTextBookBloc extends Bloc<TextBookEvent, TextBookState>
 
 class _FakeTabsRepository extends TabsRepository {
   @override
-  List<OpenedTab> loadTabs() => const [];
+  List<OpenedTab> loadTabs({bool newRuntime = false}) => const [];
 
   @override
   int loadCurrentTabIndex() => 0;

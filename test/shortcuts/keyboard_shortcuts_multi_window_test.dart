@@ -65,7 +65,7 @@ class _StubNavigationBloc extends Bloc<NavigationEvent, NavigationState>
 
 class _FakeTabsRepository extends TabsRepository {
   @override
-  List<OpenedTab> loadTabs() => const [];
+  List<OpenedTab> loadTabs({bool newRuntime = false}) => const [];
 
   @override
   int loadCurrentTabIndex() => 0;
