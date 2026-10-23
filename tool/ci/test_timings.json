@@ -114,7 +114,6 @@
   "test/core/windowing/cross_window_tab_drag_test.dart": 26.6,
   "test/core/windowing/dock_progress_test.dart": 3.8,
   "test/core/windowing/last_active_window_test.dart": 1.7,
-  "test/core/windowing/linux_plugin_registrant_parity_test.dart": 3.9,
   "test/core/windowing/mac_menu_bar_test.dart": 2.6,
   "test/core/windowing/payload_roundtrip_test.dart": 4.1,
   "test/core/windowing/pdf_tab_transfer_test.dart": 1.6,

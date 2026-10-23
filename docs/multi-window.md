@@ -522,4 +522,4 @@ Win32 ריק שכבר קיים.
 |---|---|
 | **thread אחד** | כל החלונות חולקים את ה-isolate ואת ה-thread הראשי, ולכן חלון עסוק מקפיא את השני |
 | **שער ההפעלה** | עוקף התנהגות של מנוע Flutter ולא מתקן אותה. ראוי לדווח במעלה הזרם |
-| **macOS ולינוקס** | הגרירה החוצה אינה ממומשת שם (`canDragTabsOut` — Windows בלבד; ב-Wayland אין מיקום חלון לפי הסמן). ב-macOS בלי handshake — חלון יחיד. הקוד הנייטיב נבנה ונבדק ב-CI בלבד |
+| **macOS ולינוקס** | ה-runner (`linux/runner/multi_window.cc`, `OtzariaWindowManager` ב-`macos/Runner/MainFlutterWindow.swift`) מחזיק רק את החלון הראשי. הגרירה החוצה אינה ממומשת שם (`canDragTabsOut` — Windows בלבד; ב-Wayland אין מיקום חלון לפי הסמן). ב-macOS בלי handshake — חלון יחיד. הקוד הנייטיב נבנה ונבדק ב-CI בלבד |

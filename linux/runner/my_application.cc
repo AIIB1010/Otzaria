@@ -74,8 +74,7 @@ static void my_application_activate(GApplication* application) {
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 
-  // ריבוי חלונות: ערוץ `otzaria/multiwindow` על המנוע הראשי. חובה **אחרי**
-  // רישום התוספים — ראו multi_window.h.
+  // ערוץ `otzaria/multiwindow` של החלון הראשי (הסתרה, הבאה לחזית ושחזור).
   otzaria_multi_window_register_main(window, view);
 
   // ערוץ "otzaria/splash" לסגירת ה-splash הנייטיב בעת חשיפת החלון הראשי.

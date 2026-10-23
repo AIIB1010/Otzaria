@@ -27,13 +27,9 @@ class AppDelegate: FlutterAppDelegate {
     _ sender: NSApplication, hasVisibleWindows flag: Bool
   ) -> Bool {
     if flag { return true }
-    // חלונות Dart: רק Dart יודע מה נסגר אחרון. אם לא שחזר — כמו במודל A, ואז הראשי.
-    let askedDart = OtzariaViewWindows.shared.requestReopen { [weak self] in
-      guard !OtzariaWindowManager.shared.restoreLastClosedWindow(),
-        let main = self.flatMap({ $0.mainWindow(of: sender) })
-      else { return }
-      main.makeKeyAndOrderFront(nil)
-      NSApp.activate(ignoringOtherApps: true)
+    // רק Dart יודע איזה חלון נסגר אחרון. אם לא שחזר — מציגים את הראשי.
+    let askedDart = OtzariaViewWindows.shared.requestReopen {
+      OtzariaWindowManager.shared.showMainWindow()
     }
     if askedDart || OtzariaWindowManager.shared.restoreLastClosedWindow() {
       return false
