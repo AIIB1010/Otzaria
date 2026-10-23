@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -90,6 +91,18 @@ class _DpiChangeNative extends FakeViewWindowNative {
   );
 }
 
+class _GatedRevealNative extends FakeViewWindowNative {
+  final revealStarted = Completer<void>();
+  final allowReveal = Completer<void>();
+
+  @override
+  Future<void> reveal(int hwnd) async {
+    revealStarted.complete();
+    await allowReveal.future;
+    await super.reveal(hwnd);
+  }
+}
+
 /// מסד שהמחיקה בו נכשלת (נעול, למשל).
 class _FailingDeleteSessions extends _MemorySessions {
   @override
@@ -167,11 +180,11 @@ void main() {
     expect(WindowOpener.current, same(ViewWindowOpener.instance));
     MultiViewMode.debugOverride = false;
     expect(WindowOpener.current, isA<MultiWindowService>());
-    // בלי דריסה: ב-Windows תמיד חלונות Dart, גם בלי בעלים; אחרת מודל A.
+    // בלי דריסה: ב-Windows וב-Linux תמיד חלונות Dart, גם בלי בעלים; אחרת מודל A.
     MultiViewMode.debugOverride = null;
     expect(
       WindowOpener.current,
-      Platform.isWindows
+      Platform.isWindows || Platform.isLinux
           ? same(ViewWindowOpener.instance)
           : isA<MultiWindowService>(),
     );
@@ -590,6 +603,61 @@ void main() {
       expect(opener.pendingRestoreForTest, isEmpty);
     },
   );
+
+  testWidgets('הסתרת הראשי ממתינה לחשיפה הנייטיבית, מעבר לפריים הראשון', (
+    tester,
+  ) async {
+    final native = _GatedRevealNative();
+    final opener = makeOpener(tester, native: native);
+    await pumpHost(tester);
+    final opened = opener.openWindow();
+    for (var i = 0; i < 6; i++) {
+      await tester.pump();
+    }
+    expect(native.revealStarted.isCompleted, isTrue);
+    var canHide = false;
+    final hide = opener.beforeMainWindowHides().then((_) => canHide = true);
+    await tester.pump();
+    expect(canHide, isFalse);
+    native.allowReveal.complete();
+    await tester.pump();
+    await hide;
+    expect(await opened, isTrue);
+    expect(native.revealed, hasLength(1));
+    expect(canHide, isTrue);
+  });
+
+  testWidgets(
+    'חלון שנהרס אחרי פריים ראשון ולפני אישור החשיפה אינו יעד שהצליח',
+    (tester) async {
+      final native = _GatedRevealNative();
+      final opener = makeOpener(tester, native: native);
+      await pumpHost(tester);
+      final opened = opener.openWindow();
+      for (var i = 0; i < 6; i++) {
+        await tester.pump();
+      }
+      expect(native.revealStarted.isCompleted, isTrue);
+      windows.registry.windows.single.handle.destroy();
+      native.allowReveal.complete();
+      await tester.pump();
+      expect(await opened, isFalse);
+      expect(windows.registry.windows, isEmpty);
+    },
+  );
+
+  testWidgets('כשל פתיחה מסתיים לפני הסתרת הראשי ואינו משאיר חלון', (
+    tester,
+  ) async {
+    final opener = makeOpener(tester, timeout: const Duration(seconds: 1));
+    final opened = opener.openWindow();
+    await tester.pump();
+    final hide = opener.beforeMainWindowHides();
+    await tester.pump(const Duration(seconds: 2));
+    await hide;
+    expect(await opened, isFalse);
+    expect(windows.registry.windows, isEmpty);
+  });
 
   testWidgets('Ctrl+Shift+T: חלון שנסגר חוזר עם הסשן שלו; אחריו הראשי', (
     tester,

@@ -8,7 +8,7 @@ import 'package:otzaria/core/windowing/multiview/view_window_native.dart';
 import 'package:window_manager/window_manager.dart'
     show ResizeEdge, TitleBarStyle;
 
-/// החלון של חלון Dart: מצב החלון מהבקר של המסגרת, ומיקום ומסגרת דרך win32.
+/// החלון של חלון Dart: המצב מהבקר של המסגרת, המיקום דרך [ViewWindowNative].
 /// הגבולות לוגיים לפי ה-DPR של התצוגה, כמו ב-`window_manager`.
 final class HostWindowAppWindowController
     implements AppWindowController, AppWindowGeometry, AppWindowResizing {
@@ -16,8 +16,8 @@ final class HostWindowAppWindowController
     required this.id,
     required this._handle,
     required this._onClose,
-    this._native = const Win32ViewWindowNative(),
-  });
+    ViewWindowNative? native,
+  }) : _native = native ?? ViewWindowNative.platform();
 
   @override
   final AppWindowId id;
@@ -32,7 +32,7 @@ final class HostWindowAppWindowController
   }
 
   Future<void> _withHwnd(void Function(int hwnd) body) async {
-    final hwnd = _handle.hwnd;
+    final hwnd = _handle.nativeHandle;
     if (hwnd != null) body(hwnd);
   }
 
@@ -90,7 +90,7 @@ final class HostWindowAppWindowController
 
   @override
   Future<bool> isVisible() async {
-    final hwnd = _handle.hwnd;
+    final hwnd = _handle.nativeHandle;
     return hwnd != null && _native.isVisible(hwnd);
   }
 
@@ -108,7 +108,7 @@ final class HostWindowAppWindowController
 
   @override
   Future<Rect> getBounds() async {
-    final hwnd = _handle.hwnd;
+    final hwnd = _handle.nativeHandle;
     final rect = hwnd == null ? null : _native.windowRect(hwnd);
     if (rect == null) return Rect.zero;
     return _scale(rect, 1 / _dpr);

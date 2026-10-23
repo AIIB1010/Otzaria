@@ -1,7 +1,8 @@
 import 'dart:async';
-import 'dart:ui' show Rect, Size;
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart' show WidgetsBinding;
 import 'package:otzaria/core/messages/window_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
@@ -9,6 +10,7 @@ import 'package:otzaria/core/user_state/window_bounds.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
+import 'package:otzaria/core/windowing/multiview/gtk_view_window_native.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_native.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
 import 'package:otzaria/core/windowing/new_window_placement.dart';
@@ -41,7 +43,7 @@ class ViewWindowOpener implements WindowOpener {
     Future<int?> Function()? mainWindowHwnd,
     Future<bool> Function()? isMainWindowFullscreen,
     this.firstFrameTimeout = const Duration(seconds: 20),
-  }) : _native = native ?? const Win32ViewWindowNative(),
+  }) : _native = native ?? ViewWindowNative.platform(),
        _isMainWindowVisible = isMainWindowVisible ?? windowManager.isVisible,
        _restoreMainWindow =
            restoreMainWindow ??
@@ -93,6 +95,12 @@ class ViewWindowOpener implements WindowOpener {
 
   static Future<int?> _windowManagerHwnd() async {
     try {
+      // ל-window_manager אין getId ב-Linux; ה-runner מחזיר את ה-GtkWindow*.
+      if (Platform.isLinux) {
+        return await const MethodChannel(
+          'otzaria/multiwindow',
+        ).invokeMethod<int>('mainWindowHandle');
+      }
       return await windowManager.getId();
     } catch (e) {
       debugPrint('main window hwnd failed: $e');
@@ -104,19 +112,34 @@ class ViewWindowOpener implements WindowOpener {
   Future<SourceWindowPlacement?> _sourceWindow() async {
     final foreground = _native.foregroundWindow();
     final view = registry.windows
-        .where((w) => w.handle.hwnd == foreground)
+        .where((w) => w.handle.nativeHandle == foreground)
         .firstOrNull;
-    final hwnd = view?.handle.hwnd ?? await _mainWindowHwnd();
+    final hwnd = view?.handle.nativeHandle ?? await _mainWindowHwnd();
     if (hwnd == null) return null;
     final placement = _native.placement(hwnd);
     final area = _native.workArea(hwnd);
     if (placement == null || area == null) return null;
+    final maximized =
+        placement.maximized ||
+        (view?.handle.isFullscreen ?? await _isMainWindowFullscreen());
+    var normal = placement.normal;
+    if (_native is GtkViewWindowNative && view == null && maximized) {
+      final saved = WindowBounds.decode(
+        (await _store.load(1))?.boundsJson,
+      )?.toPhysical();
+      if (saved != null) {
+        normal = Rect.fromLTWH(
+          saved.left.toDouble(),
+          saved.top.toDouble(),
+          saved.width.toDouble(),
+          saved.height.toDouble(),
+        );
+      }
+    }
     return SourceWindowPlacement(
-      normal: _physical(placement.normal),
+      normal: _physical(normal),
       workArea: _physical(area),
-      maximized:
-          placement.maximized ||
-          (view?.handle.isFullscreen ?? await _isMainWindowFullscreen()),
+      maximized: maximized,
       dpi: placement.dpi,
     );
   }
@@ -314,21 +337,28 @@ class ViewWindowOpener implements WindowOpener {
       tab?.dispose();
       return false;
     }
-    _place(entry, origin: origin, bounds: bounds, size: size);
     try {
+      _place(entry, origin: origin, bounds: bounds, size: size);
       await entry.firstFrame.timeout(firstFrameTimeout);
-    } on TimeoutException {
-      // הקורא לא יסיר את הכרטיסיה מהמקור, ולכן החלון לא יוצג אחר כך עם עותק.
+      bool live() =>
+          registry.windows.contains(entry) &&
+          !entry.isClosing &&
+          !entry.handle.isRetiring;
+      if (!live()) return false;
+      if (maximized) entry.handle.setMaximized(true);
+      final hwnd = entry.handle.nativeHandle;
+      if (hwnd == null) throw StateError('View window has no native handle');
+      await _native.reveal(hwnd);
+      if (!live()) return false;
+      return true;
+    } catch (error) {
+      debugPrint('View window failed to open: $error');
       entry.endSession();
-      // עותק שלא נקלט עדיין בעץ החלון אינו של אף אחד.
       entry.takeInitialTab()?.dispose();
       entry.handle.destroy();
-      // סשן משוחזר נשאר: הוא יאומץ בהפעלה הבאה.
       if (deleteRowOnTimeout) await _store.delete(slot);
       return false;
     }
-    if (maximized) entry.handle.setMaximized(true);
-    return true;
   }
 
   /// לפני הפריים הראשון, כשהחלון עוד מוסתר. בלי מיקום — ברירת המחדל של המערכת.
@@ -339,7 +369,7 @@ class ViewWindowOpener implements WindowOpener {
     PhysicalBounds? bounds,
     Size? size,
   }) {
-    final hwnd = entry.handle.hwnd;
+    final hwnd = entry.handle.nativeHandle;
     if (hwnd == null) return;
     if (bounds != null && _isWindowSized(bounds)) {
       final target = Rect.fromLTWH(
@@ -411,9 +441,11 @@ class ViewWindowOpener implements WindowOpener {
   /// וה-runner משאיר את התהליך חי רק בזכות חלון Dart גלוי.
   Future<void> beforeMainWindowHides() async {
     _push(const _ClosedWindow.main());
-    final pending = [for (final w in registry.windows) w.firstFrame];
-    if (pending.isEmpty) return;
-    await Future.wait(pending).timeout(firstFrameTimeout, onTimeout: () => []);
+    Future<void> pending;
+    do {
+      pending = _queue;
+      await pending;
+    } while (!identical(pending, _queue));
   }
 
   /// יציאה מהתוכנה, אחרי השטיפה: הסשנים נשארים להפעלה הבאה והחלונות נהרסים.

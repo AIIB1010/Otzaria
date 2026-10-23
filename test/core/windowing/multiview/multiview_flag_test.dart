@@ -2,7 +2,11 @@ import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:otzaria/core/windowing/multiview/gtk_view_window_native.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
+import 'package:otzaria/core/windowing/multiview/view_window_native.dart';
+
+import '../../../test_helpers/fake_view_window.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -12,10 +16,11 @@ void main() {
     MultiViewMode.debugResetOwnerInstalled();
   });
 
-  test('רק Windows נתמך, ושם אין מנוע לכל חלון', () {
+  test('Windows ו-Linux נתמכות, ושם אין מנוע לכל חלון', () {
     MultiViewMode.debugOverride = null;
-    expect(MultiViewMode.supported, Platform.isWindows);
-    expect(MultiViewMode.usesEngineWindows, !Platform.isWindows);
+    final supported = Platform.isWindows || Platform.isLinux;
+    expect(MultiViewMode.supported, supported);
+    expect(MultiViewMode.usesEngineWindows, !supported);
   });
 
   test('binding של בדיקות: הבעלים לא מותקן וריבוי התצוגות כבוי', () {
@@ -25,8 +30,11 @@ void main() {
     expect(installWindowingOwner(), isFalse);
     expect(MultiViewMode.ownerInstalled, isFalse);
     expect(MultiViewMode.enabled, isFalse);
-    // גם בלי בעלים, Windows אינו חוזר למנוע לכל חלון.
-    expect(MultiViewMode.usesEngineWindows, !Platform.isWindows);
+    // גם בלי בעלים, Windows ו-Linux אינם חוזרים למנוע לכל חלון.
+    expect(
+      MultiViewMode.usesEngineWindows,
+      !(Platform.isWindows || Platform.isLinux),
+    );
   });
 
   test('בלי בעלים, יצירת חלון נכשלת בשגיאת Dart ולא בקריסה נייטיבית', () {
@@ -48,5 +56,21 @@ void main() {
     MultiViewMode.debugOverride = false;
     expect(MultiViewMode.enabled, isFalse);
     expect(MultiViewMode.usesEngineWindows, isTrue);
+  });
+
+  test('nativeHandle: בקר שאינו נייטיב או חלון שנהרס מחזירים null', () {
+    final view =
+        TestWidgetsFlutterBinding.instance.platformDispatcher.views.first;
+    final handle = ViewWindowHandle.forTesting(StubWindowController(view));
+    expect(handle.nativeHandle, isNull);
+    expect(handle.hwnd, isNull);
+    handle.markDestroyed();
+    expect(handle.nativeHandle, isNull);
+  });
+
+  test('ViewWindowNative.platform: win32 ב-Windows, GTK ב-Linux', () {
+    final native = ViewWindowNative.platform();
+    if (Platform.isWindows) expect(native, isA<Win32ViewWindowNative>());
+    if (Platform.isLinux) expect(native, isA<GtkViewWindowNative>());
   });
 }

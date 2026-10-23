@@ -4,16 +4,24 @@ import 'dart:io';
 import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:otzaria/core/windowing/multiview/gtk_view_window_native.dart';
 import 'package:win32/win32.dart';
 import 'package:window_manager/window_manager.dart' show ResizeEdge;
 
 /// מה שחלון Dart צריך מהמערכת ואין לו בבקר של המסגרת. הכול בפיקסלים פיזיים.
+/// `hwnd` הוא `ViewWindowHandle.nativeHandle`: HWND ב-Windows, `GtkWindow*` ב-Linux.
 abstract interface class ViewWindowNative {
+  /// המימוש של הפלטפורמה הנוכחית.
+  factory ViewWindowNative.platform() => Platform.isLinux
+      ? const GtkViewWindowNative()
+      : const Win32ViewWindowNative();
+
   /// מלבן החלון כולו (כולל המסגרת); null כשאינו זמין.
   Rect? windowRect(int hwnd);
   void setWindowRect(int hwnd, Rect rect);
   bool isVisible(int hwnd);
   void show(int hwnd);
+  void hide(int hwnd);
 
   /// מביא לחזית בלי לשנות את מצב ה-maximize.
   void focus(int hwnd);
@@ -39,6 +47,9 @@ abstract interface class ViewWindowNative {
 
   /// מסיר את כותרת המערכת, כמו `TitleBarStyle.hidden` בחלון הראשי.
   Future<void> makeFrameless(int hwnd);
+
+  /// אחרי הפריים הראשון: GTK מציג את החלון לפני שהראשי יכול להסתתר.
+  Future<void> reveal(int hwnd);
 }
 
 /// המימוש האמיתי: win32 ישירות, והערוץ של ה-runner להתקנת התיקונים.
@@ -85,6 +96,9 @@ class Win32ViewWindowNative implements ViewWindowNative {
 
   @override
   void show(int hwnd) => ShowWindow(_h(hwnd), SW_SHOW);
+
+  @override
+  void hide(int hwnd) => ShowWindow(_h(hwnd), SW_HIDE);
 
   @override
   void focus(int hwnd) => SetForegroundWindow(_h(hwnd));
@@ -217,4 +231,7 @@ class Win32ViewWindowNative implements ViewWindowNative {
       debugPrint('makeFrameless failed: $e');
     }
   }
+
+  @override
+  Future<void> reveal(int hwnd) async {}
 }
