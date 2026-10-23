@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/app_paths.dart';
 import 'package:otzaria/data/constants/database_constants.dart';
 import 'package:otzaria/data/data_providers/sqlite_data_provider.dart';
+import 'package:otzaria/library_update/services/library_access_gate.dart';
 import 'package:otzaria/migration/database/daos/database.dart';
 import 'package:otzaria/migration/database/repository/seforim_repository.dart';
 import 'package:otzaria/migration/models/category.dart' as migration_models;
@@ -140,6 +141,41 @@ void main() {
         .getRootCategories();
     expect(categories.where((c) => c.title == 'שורש'), isNotEmpty);
   });
+
+  test(
+    'קורא מחלון אחר בזמן החלפת המסד ממתין לסיומה ורואה את המסד החדש',
+    () async {
+      final dbPath = path.join(libraryPath, DatabaseConstants.databaseFileName);
+      final newPath = '$dbPath.new';
+      final newDb = MyDatabase.withPath(newPath);
+      await SeforimRepository(newDb).ensureInitialized();
+      await SeforimRepository(
+        newDb,
+      ).insertCategory(const migration_models.Category(title: 'חדש'));
+      newDb.close();
+
+      var readerDone = false;
+      late Future<void> reader;
+      await LibraryAccessGate(renameProbe: Platform.isWindows).runExclusive(
+        dbPath: dbPath,
+        body: (scope) async {
+          reader = SqliteDataProvider.instance.initialize().then(
+            (_) => readerDone = true,
+          );
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          expect(readerDone, isFalse, reason: 'המסד סגור עד סוף ההחלפה');
+          File(dbPath).deleteSync();
+          File(newPath).renameSync(dbPath);
+          scope.markDbReplaced();
+        },
+      );
+
+      await reader;
+      final categories = await SqliteDataProvider.instance.repository!
+          .getRootCategories();
+      expect(categories.map((c) => c.title), contains('חדש'));
+    },
+  );
 
   test('כתיבות חיצוניות חופפות — reopen מקונן אינו נכנס ל-deadlock, '
       'והקורא נפתח רק אחרי שהאחרון סיים', () async {

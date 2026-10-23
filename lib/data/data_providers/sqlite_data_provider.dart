@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
-import 'package:otzaria/core/windowing/library_suspension_marker.dart';
 import 'package:otzaria/data/data_providers/book_database_resolver.dart';
 import 'package:otzaria/data/data_providers/book_text_reader.dart';
 import 'package:otzaria/data/data_providers/db_read_worker.dart';
@@ -58,10 +57,6 @@ class SqliteDataProvider {
     if (_isInitialized) {
       return;
     }
-
-    // מחוץ ל-future של האתחול, כדי ש-suspend לא ימתין לשחרור של עצמו.
-    await LibrarySuspensionMarker.waitUntilReleased();
-    if (_isInitialized) return;
 
     // קוראים ממתינים לחיבור ה-RO, בלי לפתוח אותו במהלך כתיבה חיצונית.
     if (_activeWriteSessions > 0) {
