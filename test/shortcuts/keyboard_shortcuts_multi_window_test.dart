@@ -134,11 +134,7 @@ class _Window {
   final _StubNavigationBloc navigation = _StubNavigationBloc();
 
   Future<void> dispose() async {
-    final openTabs = List<OpenedTab>.from(tabs.state.tabs);
     await tabs.close();
-    for (final tab in openTabs) {
-      tab.dispose();
-    }
     await history.close();
     await navigation.close();
   }
