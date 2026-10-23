@@ -426,13 +426,14 @@ packages:
     source: hosted
     version: "13.1.0"
   file_picker_darwin:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: file_picker_darwin
-      sha256: a5a48960703e7faa880544ef188491f442a93959b6afb5cae57575e5dc836589
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.3.2"
+      path: "packages/file_picker_darwin"
+      ref: "0e2d40a01849e3a1ae52ae8f750f9e3fad1444de"
+      resolved-ref: "0e2d40a01849e3a1ae52ae8f750f9e3fad1444de"
+      url: "https://github.com/Y-PLONI/flutter_file_picker"
+    source: git
+    version: "2.3.4"
   file_picker_linux:
     dependency: transitive
     description:
@@ -1412,8 +1413,8 @@ packages:
     dependency: "direct main"
     description:
       path: printing
-      ref: "742a2a967fdbd09afff08c1f2153df6c79b8e200"
-      resolved-ref: "742a2a967fdbd09afff08c1f2153df6c79b8e200"
+      ref: "3cb90fb3025553f3e9f48638c79ccf93efb326af"
+      resolved-ref: "3cb90fb3025553f3e9f48638c79ccf93efb326af"
       url: "https://github.com/Otzaria/dart_pdf"
     source: git
     version: "5.15.1"

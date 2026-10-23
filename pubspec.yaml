@@ -175,13 +175,19 @@ dependency_overrides:
       url: https://github.com/Otzaria/sentry-dart
       ref: e31f9068de53d0dd826d217e4dc7c8ccd7dd5261
       path: packages/flutter
-  # TODO: לחזור ל-pub.dev אחרי שחרור DavBfr/dart_pdf#1984, #1985, #1986, #1987, #1988, #1993, #1995
+  # TODO: לחזור ל-pub.dev אחרי שחרור DavBfr/dart_pdf#1984, #1985, #1986, #1987, #1988, #1993, #1994, #1995
   # (הדפסה ב-Windows ב-thread נפרד, PDFium עצל ופרטי, השלמת עבודה שנכשלה ב-Linux, בעלי הדיאלוג בריבוי חלונות). קומיט שילוב.
   printing:
     git:
       url: https://github.com/Otzaria/dart_pdf
-      ref: 742a2a967fdbd09afff08c1f2153df6c79b8e200
+      ref: 3cb90fb3025553f3e9f48638c79ccf93efb326af
       path: printing
+  # TODO: לחזור ל-pub.dev אחרי שחרור vicajilau/flutter_file_picker#2277 (דיאלוג הקבצים במק על החלון הפעיל).
+  file_picker_darwin:
+    git:
+      url: https://github.com/Y-PLONI/flutter_file_picker
+      ref: 0e2d40a01849e3a1ae52ae8f750f9e3fad1444de
+      path: packages/file_picker_darwin
   # TODO: לחזור ל-pub.dev אחרי מיזוג ושחרור daohoangson/flutter_widget_from_html#1658, #1659,
   # #1660, #1661, #1662, #1663 (מטמון CSS, מיזוג margins, מחרוזות debug עצלות, Flattener,
   # FutureBuilder, צבע hex פגום).
