@@ -94,7 +94,7 @@ class _HiddenBooksPanelState extends State<HiddenBooksPanel> {
   @override
   void initState() {
     super.initState();
-    // שמירה מחלון אחר, מהדיאלוג או מהספרייה: כולם כותבים לאותה חנות.
+    // גם שמירה מפאנל פתוח בחלון אחר: כל החלונות כותבים לאותה חנות.
     _hiddenChanges = widget.store.changes.listen((selection) {
       if (mounted) setState(() => _hidden = selection);
     });
