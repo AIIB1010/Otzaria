@@ -218,34 +218,27 @@ window_sessions
 SQLite סינכרונית על ה-UI; סגירת חלון מריצה כתיבה ממתינה מיד
 (`TabsRepository.flushPendingWrites`).
 
-### מסד הספרייה: השעיה בכל החלונות
+### מסד הספרייה: השעיה לפני החלפה
 
-כל חלון פותח את `seforim.db` בעצמו — provider, DbReadWorker ו-FindRef
-משלו — ו-`closeForExternalWrite` סוגר רק את ה-isolate שקרא לו. החלפת קובץ
-המסד (הורדה מלאה, ייבוא או עדכון מתוך הגדרות הספרייה) דורשת שאף isolate
-בתהליך לא יחזיק אותו: ב-Windows המחיקה וה-rename נכשלים.
+כל החלונות הם תצוגות באותו isolate וחולקים provider, DbReadWorker ו-FindRef
+אחד. החלפת קובץ המסד (הורדה מלאה, ייבוא או עדכון מתוך הגדרות הספרייה)
+דורשת שהם ישחררו אותו: ב-Windows המחיקה וה-rename נכשלים על קובץ פתוח.
 
 `LibraryAccessGate` (`lib/library_update/services/library_access_gate.dart`):
 
-1. **`suspendAll()`** רושם את `LibrarySuspensionMarker` ושולח
-   `library.suspend` לכל משבצת. החלון מאשר רק אחרי ש-`closeForExternalWrite`
-   הסתיים, כלומר ה-handles נסגרו בפועל. חלון שנרשם באמצע מקבל suspend בסבב
-   נוסף (עד 3).
-2. חלון שלא אישר בתוך `ackTimeout` (20 שניות) או נכשל בשחרור →
-   `LibrarySuspendFailed`, וכל החלונות כבר קיבלו resume. חלון שנעלם
-   מהמשבצת באמצע אינו מכשיל; האימות בשלב 3 תופס handle שנשאר.
+1. **`suspendAll()`** מסמן החלפה פעילה. החלפה שנייה בזמן שהראשונה רצה
+   (גם מחלון אחר) נכשלת ב-`LibrarySuspendFailed`, לפני שהמסד נסגר.
+2. `closeForExternalWrite` סוגר את החיבורים. קורא שמבקש את המסד בינתיים
+   ממתין בשער הכתיבה החיצונית של `SqliteDataProvider.initialize`.
 3. **`verifyReleased(path)`** — ב-Windows: rename שמוחזר מיד. כשל →
    `LibraryStillOpenException` ורישום ל-`errors.txt`.
-4. **`resumeAll(s, dbReplaced:)`** מסיר קודם את הסימון ואז שולח
-   `library.resume`. עם `dbReplaced` החלון מריץ `refreshAfterDbUpdate`
-   ו-`RefreshLibrary`; בלעדיו רק `reopenAfterExternalWrite`.
+4. **`resumeAll(s, dbReplaced:)`** מסיים את ההחלפה. הרענון אחרי החלפה
+   (`refreshAfterDbUpdate`, `RefreshLibrary`) נעשה אצל הקורא, ושאר החלונות
+   בונים את העץ מחדש דרך ההודעה של `LibraryBloc` על קטלוג שהשתנה.
 
-חלון שנפתח בזמן ההשעיה ממתין לסימון ב-`SqliteDataProvider.initialize`.
-resume שאבד אינו משאיר חלון סגור: כשהסימון נעלם החלון מתחדש לבד (עם רענון).
-
-`runExclusive(dbPath:, body:)` עוטף את כל הרצף, כולל סגירת ה-isolate הנוכחי
+`runExclusive(dbPath:, body:)` עוטף את כל הרצף, כולל הסגירה והפתיחה-מחדש
 (ההורדה המלאה ב-`LibraryUpdateRepository`). `EmptyLibraryBloc` סוגר ופותח את
-ה-isolate שלו בעצמו, ולכן קורא ל-`suspendAll`/`verifyReleased`/`resumeAll` ישירות.
+המסד בעצמו, ולכן קורא ל-`suspendAll`/`verifyReleased`/`resumeAll` ישירות.
 
 ```dart
 await LibraryAccessGate.instance.runExclusive(

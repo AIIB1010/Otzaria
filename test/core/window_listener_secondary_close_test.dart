@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:otzaria/indexing/utils/indexing_crash_canary.dart';
 import 'dart:io';
-import 'dart:isolate';
 import 'dart:ui' as ui show IsolateNameServer;
 
 import 'package:flutter/material.dart';
@@ -85,9 +84,6 @@ void main() {
     database.close();
     runner.uninstall();
     MultiWindowService.debugSupportedOverride = null;
-    MultiWindowService.correctionQuitRequestTimeout = const Duration(
-      seconds: 6,
-    );
     WindowRole.isSecondary = false;
     WindowBus.instance.onRequest = null;
     WindowBus.instance.unregister();
@@ -98,6 +94,13 @@ void main() {
     WindowBus.namespace = 'otzaria.window';
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });
+
+  /// הכנת יציאה אחרת שעדיין פעילה מכשילה את אישור היציאה המלאה.
+  void holdQuitPreparation() {
+    final corrections = PluginCorrectionSessionService.instance;
+    expect(corrections.beginProcessQuitPreparation('held'), isTrue);
+    addTearDown(() => corrections.cancelProcessQuitPreparation('held'));
+  }
 
   test('סגירת חלון בלי כיבוי התהליך משמרת canary', () async {
     WindowBus.instance.register();
@@ -152,32 +155,6 @@ void main() {
     expect(runner.closeSelfCalls, 0);
   });
 
-  testWidgets('כיבוי macOS נכשל בבטחה כשחלון מוסתר לא עונה', (tester) async {
-    MultiWindowService.correctionQuitRequestTimeout = const Duration(
-      milliseconds: 10,
-    );
-    WindowBus.instance.register();
-    final peer = _FakeOwner(2, reply: false)..register();
-    addTearDown(peer.dispose);
-    final tab = ToolTab(toolId: 'p', title: 'תוסף', instanceId: 'i');
-    await tester.pumpWidget(
-      BlocProvider<TabsBloc>.value(
-        value: _GuardTabs(tab),
-        child: MaterialApp(
-          navigatorKey: navigatorKey,
-          home: const SizedBox(),
-        ),
-      ),
-    );
-
-    await tester.runAsync(
-      () => AppWindowListener().handleWindowClose(quit: true),
-    );
-
-    expect(runner.closeSelfCalls, 0);
-    expect(PluginCorrectionSessionService.instance.processQuitPending, isFalse);
-  });
-
   test('סגירת הראשי ממתינה למסלול סגירה של חלון Dart', () async {
     MultiViewMode.debugOverride = true;
     WindowOpener.debugOverride = _TwoWindowsOpener();
@@ -213,17 +190,13 @@ void main() {
     (tester) async {
       MultiViewMode.debugOverride = true;
       WindowOpener.debugOverride = _TwoWindowsOpener();
-      MultiWindowService.correctionQuitRequestTimeout = const Duration(
-        milliseconds: 10,
-      );
       addTearDown(() {
         MultiViewMode.debugOverride = false;
         WindowOpener.debugOverride = null;
         WindowTabsSession.current.resume();
       });
       WindowBus.instance.register();
-      final peer = _FakeOwner(2, reply: false)..register();
-      addTearDown(peer.dispose);
+      holdQuitPreparation();
       await tester.pumpWidget(
         BlocProvider<TabsBloc>.value(
           value: _GuardTabs(
@@ -304,9 +277,7 @@ void main() {
   ) async {
     MultiViewMode.debugOverride = true;
     WindowBus.instance.register();
-    final corrections = PluginCorrectionSessionService.instance;
-    expect(corrections.beginProcessQuitPreparation('held'), isTrue);
-    addTearDown(() => corrections.cancelProcessQuitPreparation('held'));
+    holdQuitPreparation();
     final tab = ToolTab(toolId: 'p', title: 'תוסף', instanceId: 'update');
     await tester.pumpWidget(
       BlocProvider<TabsBloc>.value(
@@ -322,7 +293,7 @@ void main() {
     expect(
       runner.closeSelfCalls,
       0,
-      reason: 'יציאה שלא אושרה מונעת כיבוי; הראשי נשאר גלוי',
+      reason: 'יציאה שלא אושרה מונעת את הכיבוי; הראשי נשאר גלוי',
     );
     expect(window.closes, 0, reason: 'סגירה רגילה רק מסתירה את הראשי');
     expect(WindowTabsSession.current.slot, isNotNull);
@@ -781,37 +752,6 @@ class _FakeRunner {
     WindowOpener.debugOverride = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(MultiWindowService.channel, null);
-  }
-}
-
-/// החלון הראשון של התהליך — תופס משבצת ואת כינוי המארח, ועונה לכל בקשה.
-class _FakeOwner {
-  _FakeOwner(this.slot, {this.reply = true});
-
-  final int slot;
-  final bool reply;
-  late final ReceivePort _port;
-
-  void register() {
-    _port = ReceivePort();
-    ui.IsolateNameServer.registerPortWithName(
-      _port.sendPort,
-      '$_namespace.$slot',
-    );
-    ui.IsolateNameServer.registerPortWithName(
-      _port.sendPort,
-      '$_namespace.owner',
-    );
-    _port.listen((message) {
-      final map = message as Map;
-      if (reply) (map['reply'] as SendPort).send({'ok': true, 'result': null});
-    });
-  }
-
-  void dispose() {
-    ui.IsolateNameServer.removePortNameMapping('$_namespace.$slot');
-    ui.IsolateNameServer.removePortNameMapping('$_namespace.owner');
-    _port.close();
   }
 }
 
