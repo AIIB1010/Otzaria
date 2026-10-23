@@ -416,7 +416,9 @@ Future<void> exportOfflineSendScript<T>(
     'בחר מיקום לשמירת סקריפט השליחה',
   );
   final downloadsDirectory = await getDownloadsDirectory();
+  if (!context.mounted) return;
   final path = await saveFileWithExtension(
+    context: context,
     dialogTitle: saveDialogTitle,
     fileName: script.fileName,
     initialDirectory: downloadsDirectory?.path,

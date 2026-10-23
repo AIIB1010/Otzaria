@@ -13,13 +13,14 @@ abstract final class DialogOwner {
   /// ה-HWND של החלון הראשי; נקבע בעלייה, אחרי window_manager.
   static set mainWindowHwnd(int? hwnd) => _mainWindowHwnd = hwnd;
 
-  /// החלון של [context], ובלעדיו — החלון הפעיל. `null` כשאין חלון גלוי
-  /// מוכר: הפלאגין נופל אז לחלון שבחזית, כמו קודם.
+  /// החלון של [context], ובלעדיו — החלון הפעיל. מקור שנסגר אינו
+  /// מוחלף בחלון אחר; `null` מציין שאין בעלים זמין.
   static int? hwnd({
     BuildContext? context,
     ViewWindowRegistry? registry,
     bool? isMainShown,
   }) {
+    if (context != null && !context.mounted) return null;
     final id = context != null
         ? AppWindowKeys.of(context).id
         : AppWindowKeys.current.id;
@@ -27,8 +28,10 @@ abstract final class DialogOwner {
       final entry = (registry ?? ViewWindowRegistry.instance).windows
           .where((w) => w.id == id)
           .firstOrNull;
+      if (context != null && (entry == null || entry.isClosing)) return null;
       final hwnd = entry?.handle.hwnd;
       if (hwnd != null) return hwnd;
+      if (context != null) return null;
     }
     // ראשי מוסתר אינו בעלים: דיאלוג שלו לא היה מופיע מעל חלון שרואים.
     final mainShown =

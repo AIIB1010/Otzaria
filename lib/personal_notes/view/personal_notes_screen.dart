@@ -540,7 +540,9 @@ class _PersonalNotesManagerScreenState
 
     final bytes = await buildBytes(selection);
     if (bytes == null) return;
+    if (!mounted) return;
     final path = await saveFileWithExtension(
+      context: context,
       dialogTitle: dialogTitle,
       fileName: fileName,
       extension: extension,

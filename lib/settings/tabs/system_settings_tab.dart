@@ -873,7 +873,9 @@ class _SystemSettingsTabState extends State<SystemSettingsTab> {
   Future<void> _exportBackupFile(File file) async {
     try {
       final bytes = await file.readAsBytes();
+      if (!mounted) return;
       final path = await saveFileWithExtension(
+        context: context,
         fileName: p.basename(file.path),
         extension: 'json',
         bytes: bytes,

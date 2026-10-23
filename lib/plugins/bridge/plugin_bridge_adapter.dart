@@ -4437,12 +4437,15 @@ class PluginBridgeAdapter {
 
   /// בורר התיקיות המוגדר כברירת מחדל — דיאלוג המערכת דרך [FilePicker].
   Future<String?> _defaultPickFolder({String? title}) async {
-    final context = navigatorKey.currentContext;
-    if (context != null && !await verifySaferModePassword(context)) {
+    final context = rpcWindowContext;
+    if (context == null || !context.mounted) return null;
+    final windowsOptions = modalWindowsOptions(context);
+    if (!await verifySaferModePassword(context)) {
       return null;
     }
+    if (!context.mounted) return null;
     return FilePicker.getDirectoryPath(
-      windowsOptions: modalWindowsOptions(),
+      windowsOptions: windowsOptions,
       linuxOptions: kModalLinuxOptions,
       dialogTitle: title,
     );
@@ -4693,6 +4696,7 @@ class PluginBridgeAdapter {
     _requireController(pluginId, instanceId),
     jobName: jobName,
     layout: layout,
+    context: rpcWindowContext,
   );
 
   Future<Uint8List> _defaultCapturePagePdf(
@@ -5084,15 +5088,18 @@ class PluginBridgeAdapter {
     List<String>? allowedExtensions,
     String? title,
   }) async {
-    final context = navigatorKey.currentContext;
-    if (context != null && !await verifySaferModePassword(context)) {
+    final context = rpcWindowContext;
+    if (context == null || !context.mounted) return null;
+    final windowsOptions = modalWindowsOptions(context);
+    if (!await verifySaferModePassword(context)) {
       return null;
     }
     final hasExtensions =
         allowedExtensions != null && allowedExtensions.isNotEmpty;
+    if (!context.mounted) return null;
     final result = await FilePicker.pickFile(
       dialogTitle: title,
-      windowsOptions: modalWindowsOptions(),
+      windowsOptions: windowsOptions,
       linuxOptions: kModalLinuxOptions,
       type: hasExtensions ? FileType.custom : FileType.any,
       allowedExtensions: hasExtensions ? allowedExtensions : null,
@@ -5325,19 +5332,22 @@ class PluginBridgeAdapter {
     List<String>? allowedExtensions,
     String? title,
   }) async {
-    final context = navigatorKey.currentContext;
-    if (context != null && !await verifySaferModePassword(context)) {
+    final context = rpcWindowContext;
+    if (context == null || !context.mounted) return null;
+    final windowsOptions = modalWindowsOptions(context);
+    if (!await verifySaferModePassword(context)) {
       return null;
     }
+    if (!context.mounted) return null;
     final folder = await FilePicker.getDirectoryPath(
       dialogTitle: pluginSaveFolderDialogTitle(title),
-      windowsOptions: modalWindowsOptions(),
+      windowsOptions: windowsOptions,
       linuxOptions: kModalLinuxOptions,
     );
     if (folder == null) return null;
 
-    final dialogContext = navigatorKey.currentContext;
-    if (dialogContext == null || !dialogContext.mounted) return null;
+    final dialogContext = context;
+    if (!dialogContext.mounted) return null;
     final typed = await showInputDialog(
       context: dialogContext,
       title: title ?? 'שמירת קובץ',
@@ -5345,7 +5355,7 @@ class PluginBridgeAdapter {
       initialValue: suggestedName,
       confirmText: 'שמור',
     );
-    if (typed == null) return null;
+    if (typed == null || !dialogContext.mounted) return null;
 
     final fileName = pluginSaveFileName(typed, allowedExtensions?.firstOrNull);
     final target = pluginSaveTargetPath(folder: folder, fileName: fileName);
@@ -5357,7 +5367,7 @@ class PluginBridgeAdapter {
         content: 'הקובץ „$fileName” כבר קיים בתיקייה שנבחרה.',
         subtitle: 'התוכן הקיים יוחלף.',
       );
-      if (!replace) return null;
+      if (!replace || !dialogContext.mounted) return null;
     }
     return target;
   }

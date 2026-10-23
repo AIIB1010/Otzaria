@@ -71,6 +71,29 @@ void main() {
     );
   });
 
+  testWidgets('מקור מפורש שסוגר או נהרס אינו נופל לראשי', (tester) async {
+    final windows = FakeViewWindows(tester);
+    final a = windows.registry.open(size: const Size(800, 600))!;
+    late BuildContext inA;
+    await tester.pumpWidget(
+      AppWindowScope(
+        controller: a.controller,
+        geometry: a.controller,
+        keys: a.keys,
+        child: Builder(
+          builder: (context) {
+            inA = context;
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
+    a.closing = true;
+    expect(DialogOwner.hwnd(context: inA, registry: windows.registry), isNull);
+    a.handle.destroy();
+    expect(DialogOwner.hwnd(context: inA, registry: windows.registry), isNull);
+  });
+
   testWidgets('חלון שנהרס — חוזר לראשי', (tester) async {
     final windows = FakeViewWindows(tester);
     final a = windows.registry.open(size: const Size(800, 600))!;

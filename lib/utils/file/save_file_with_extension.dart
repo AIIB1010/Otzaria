@@ -22,12 +22,14 @@ Future<String?> saveFileWithExtension({
   BuildContext? context,
 }) async {
   final effectiveContext = context ?? navigatorKey.currentContext;
+  if (effectiveContext != null && !effectiveContext.mounted) return null;
   // לפני ההמתנה: הבעלים הוא החלון שביקש, גם אם הפוקוס עבר בינתיים.
   final windowsOptions = modalWindowsOptions(effectiveContext);
   if (effectiveContext != null &&
       !await verifySaferModePassword(effectiveContext)) {
     return null;
   }
+  if (effectiveContext != null && !effectiveContext.mounted) return null;
   final uri = await FilePicker.saveFile(
     dialogTitle: dialogTitle,
     fileName: fileName,
