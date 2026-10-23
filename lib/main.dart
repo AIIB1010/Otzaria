@@ -370,7 +370,10 @@ void main(List<String> args) async {
   SentryWidgetsFlutterBinding.ensureInitialized();
   // macOS: המודל נקבע לפני כל קריאה ל-MultiViewMode. סבב ערוץ אחד, עם timeout.
   if (Platform.isMacOS) {
-    final reason = await awaitMacRunnerHandshake();
+    final reason = await StartupTimeline.instance.phase(
+      'macMultiViewHandshake',
+      awaitMacRunnerHandshake,
+    );
     if (reason != null) unawaited(_runDeferredMacMultiViewStatus(reason));
   }
   // בלי בעלים (בנייה עם false או binding של בדיקות) — מודל A.
