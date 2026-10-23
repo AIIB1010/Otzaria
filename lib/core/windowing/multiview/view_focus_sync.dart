@@ -33,6 +33,7 @@ abstract final class ViewFocusSync {
 
   /// החלון הראשי (התצוגה המרומזת) הופעל.
   static void mainWindowActivated() {
+    if (!_enabled) return;
     final view = WidgetsBinding.instance.platformDispatcher.implicitView;
     if (view != null) windowActivated(view.viewId);
   }
