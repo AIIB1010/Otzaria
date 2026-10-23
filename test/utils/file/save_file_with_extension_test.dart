@@ -1,8 +1,9 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:file_picker_darwin/file_picker_darwin.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/settings/dialogs/safer_mode_password_dialog.dart';
@@ -43,6 +44,33 @@ void main() {
     expect(invoked, isFalse);
     expect(result, isNull);
   });
+
+  testWidgets('בורר macOS מקבל את מזהה תצוגת המקור כולל אפס', (tester) async {
+    const channel = MethodChannel('miguelruivo.flutter.plugins.filepicker');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    Object? arguments;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      arguments = call.arguments;
+      return '/tmp/chosen';
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    late BuildContext origin;
+    await tester.pumpWidget(
+      Builder(
+        builder: (context) {
+          origin = context;
+          return const SizedBox.shrink();
+        },
+      ),
+    );
+    final path = await withFilePickerOwner(
+      origin,
+      () => FilePickerDarwin().getDirectoryPath(),
+    );
+    expect(path, '/tmp/chosen');
+    expect((arguments as Map)['viewId'], tester.view.viewId);
+  }, skip: !Platform.isMacOS);
 
   group('ensureFileExtension', () {
     test(

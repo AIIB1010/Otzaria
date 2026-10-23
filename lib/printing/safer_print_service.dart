@@ -32,6 +32,7 @@ Future<bool> printPdfWithSaferMode({
   bool usePrinterSettings = false,
   BuildContext? context,
   int? ownerWindowHandle,
+  int? ownerViewId,
   OnPrintSpooling? onSpooling,
 }) async {
   LayoutCallback reportSpooling(String? printerName) {
@@ -51,6 +52,11 @@ Future<bool> printPdfWithSaferMode({
 
   final effectiveContext = context ?? navigatorKey.currentContext;
   if (effectiveContext != null && !effectiveContext.mounted) return false;
+  final viewId =
+      ownerViewId ??
+      (effectiveContext == null
+          ? null
+          : View.maybeOf(effectiveContext)?.viewId);
   final owner =
       ownerWindowHandle ??
       DialogOwner.hwnd(context: effectiveContext) ??
@@ -60,6 +66,7 @@ Future<bool> printPdfWithSaferMode({
     return PrintWorkStatus.track(
       () => Printing.layoutPdf(
         windowHandle: owner,
+        viewId: viewId,
         onLayout: reportSpooling(null),
         name: name,
         format: format,
@@ -88,6 +95,7 @@ Future<bool> printPdfWithSaferMode({
     return PrintWorkStatus.track(
       () => Printing.layoutPdf(
         windowHandle: owner,
+        viewId: viewId,
         onLayout: reportSpooling(null),
         name: name,
         format: format,
@@ -118,6 +126,7 @@ Future<bool> printPdfWithSaferMode({
   final printed = await PrintWorkStatus.track(
     () => Printing.directPrintPdf(
       windowHandle: owner,
+      viewId: viewId,
       printer: selected,
       onLayout: reportSpooling(selected.name),
       name: name,

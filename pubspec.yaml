@@ -66,6 +66,7 @@ dependencies:
     git:
       url: https://github.com/Otzaria/otzaria_icons
       ref: 5225cd36c59097fe1f24a39fb60f9c2c0e15e47c
+  file_picker_darwin: any
   file_picker: ^13.1.0
   # FilePickerWindowsOptions: בעלים מפורש לדיאלוג (חלון Dart ולא החלון שבחזית).
   windows_file_picker: ^2.0.1
@@ -137,7 +138,7 @@ dependencies:
   flutter_inappwebview:
     git:
       url: https://github.com/Otzaria/flutter_inappwebview
-      ref: 5d2dbf28a9b2436cdebe1c424394d8a87a14ef8a
+      ref: ff92d4b71a15fdebfbbe64c4a4115d352dff16b0
       path: flutter_inappwebview
   # נדרש ישירות עבור WindowsFileDropManager (גרירת קבצים אל החלון).
   flutter_inappwebview_windows: any
@@ -203,33 +204,33 @@ dependency_overrides:
   flutter_inappwebview_windows:
     git:
       url: https://github.com/Otzaria/flutter_inappwebview
-      ref: 5d2dbf28a9b2436cdebe1c424394d8a87a14ef8a
+      ref: ff92d4b71a15fdebfbbe64c4a4115d352dff16b0
       path: flutter_inappwebview_windows
   flutter_inappwebview_platform_interface:
     git:
       url: https://github.com/Otzaria/flutter_inappwebview
-      ref: 5d2dbf28a9b2436cdebe1c424394d8a87a14ef8a
+      ref: ff92d4b71a15fdebfbbe64c4a4115d352dff16b0
       path: flutter_inappwebview_platform_interface
   flutter_inappwebview_ios:
     git:
       url: https://github.com/Otzaria/flutter_inappwebview
-      ref: 5d2dbf28a9b2436cdebe1c424394d8a87a14ef8a
+      ref: ff92d4b71a15fdebfbbe64c4a4115d352dff16b0
       path: flutter_inappwebview_ios
   flutter_inappwebview_macos:
     git:
       url: https://github.com/Otzaria/flutter_inappwebview
-      ref: 5d2dbf28a9b2436cdebe1c424394d8a87a14ef8a
+      ref: ff92d4b71a15fdebfbbe64c4a4115d352dff16b0
       path: flutter_inappwebview_macos
   flutter_inappwebview_linux:
     git:
       url: https://github.com/Otzaria/flutter_inappwebview
-      ref: 5d2dbf28a9b2436cdebe1c424394d8a87a14ef8a
+      ref: ff92d4b71a15fdebfbbe64c4a4115d352dff16b0
       path: flutter_inappwebview_linux
   # הגרסה שב-pub.dev קוראת ל-setStatusBarColor שהוצא משימוש ב-Android 15.
   flutter_inappwebview_android:
     git:
       url: https://github.com/Otzaria/flutter_inappwebview
-      ref: 5d2dbf28a9b2436cdebe1c424394d8a87a14ef8a
+      ref: ff92d4b71a15fdebfbbe64c4a4115d352dff16b0
       path: flutter_inappwebview_android
 
 flutter_launcher_icons:

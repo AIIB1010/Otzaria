@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:file_picker_darwin/file_picker_darwin.dart';
 import 'package:flutter/widgets.dart';
 import 'package:otzaria/core/windowing/dialog_owner.dart';
 import 'package:windows_file_picker/windows_file_picker.dart';
@@ -16,7 +17,7 @@ WindowsOptions modalWindowsOptions([BuildContext? context]) =>
 
 const kModalLinuxOptions = LinuxOptions(lockParentWindow: true);
 
-/// מקור שאינו זמין מבטל את הבורר, במקום לפתוח אותו מעל חלון אחר.
+/// שומר בעלות לכל בקשת בורר בנפרד, גם כשבדיקת הרשאות בנייטיב ממתינה.
 Future<T?> withFilePickerOwner<T>(
   BuildContext? context,
   Future<T?> Function() action,
@@ -27,5 +28,8 @@ Future<T?> withFilePickerOwner<T>(
       DialogOwner.hwnd(context: context) == null) {
     return Future.value();
   }
-  return action();
+  final viewId = context == null ? null : View.maybeOf(context)?.viewId;
+  return Platform.isMacOS
+      ? FilePickerDarwin.withWindow(viewId, action)
+      : action();
 }
