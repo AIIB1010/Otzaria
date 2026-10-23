@@ -149,6 +149,13 @@ class ViewWindowHandle {
     return null;
   }
 
+  /// Linux: ה-`FlView*` של התצוגה; null מחוץ ל-Linux או אחרי ההריסה.
+  int? get flutterViewHandle {
+    final controller = _controller;
+    if (_destroyed || controller is! WindowControllerLinux) return null;
+    return (controller as WindowControllerLinux).flutterViewHandle.address;
+  }
+
   /// ה-HWND של החלון העליון; null מחוץ ל-Windows או אחרי ההריסה.
   int? get hwnd {
     final controller = _controller;

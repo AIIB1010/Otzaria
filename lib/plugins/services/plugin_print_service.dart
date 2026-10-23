@@ -101,6 +101,7 @@ class PluginPrintService {
   }) async {
     final origin = context ?? navigatorKey.currentContext;
     if (origin != null && !origin.mounted) return false;
+    final viewId = origin == null ? null : View.maybeOf(origin)?.viewId;
     final owner =
         DialogOwner.hwnd(context: origin) ?? (origin != null ? 0 : null);
     final pdf = await createPdf(controller, layout: layout);
@@ -108,6 +109,7 @@ class PluginPrintService {
     return printPdfWithSaferMode(
       context: origin,
       ownerWindowHandle: owner,
+      ownerViewId: viewId,
       name: jobName,
       onLayout: (_) => pdf,
       // ה-PDF כבר מעומד ע"י מנוע ה-WebView; אין מה לפרוס מחדש לפי המדפסת.

@@ -77,6 +77,7 @@ import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/core/windowing/multiview/multi_view_host.dart';
 import 'package:otzaria/core/windowing/last_active_window.dart';
 import 'package:otzaria/core/windowing/multiview/cocoa_view_window_native.dart';
+import 'package:otzaria/core/windowing/multiview/linux_webview_host.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/app_quit.dart';
 import 'package:otzaria/core/windowing/dialog_owner.dart';
@@ -356,7 +357,9 @@ void main(List<String> args) async {
     if (reason != null) unawaited(_runDeferredMacMultiViewStatus(reason));
   }
   // בלי בעלים (binding של בדיקות, macOS בלי handshake) — חלון יחיד.
-  installWindowingOwner();
+  if (installWindowingOwner() && Platform.isLinux) {
+    installLinuxWebViewHostResolver();
+  }
 
   // אישור קבלה מוקדם לאתר החנות עבור קישורי התקנת תוסף שהגיעו כארגומנטים —
   // נורה כאן, לפני כל אתחול כבד ולפני עליית החלון, כדי שדף החנות יידע תוך
