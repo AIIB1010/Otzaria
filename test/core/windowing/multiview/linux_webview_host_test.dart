@@ -54,4 +54,22 @@ void main() {
 
     expect(LinuxWebViewHostWindow.resolver!(viewId), isNull);
   });
+
+  testWidgets('Linux: חלון בהריסה נדחית אינו מארח לפני שנהרס בפועל', (
+    tester,
+  ) async {
+    final windows = FakeViewWindows(tester)..defersDestroy = true;
+    final a = windows.registry.open(size: const Size(800, 600))!;
+    final viewId = a.handle.view.viewId;
+    installLinuxWebViewHostResolver(windows.registry);
+
+    a.handle.destroy();
+
+    expect(windows.stubOf(a).destroyed, isFalse);
+    expect(LinuxWebViewHostWindow.resolver!(viewId), isNull);
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+    expect(windows.stubOf(a).destroyed, isTrue);
+  });
 }
