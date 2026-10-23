@@ -184,7 +184,15 @@ class WindowScopeProviders extends StatelessWidget {
             create: (context) {
               final tabsBloc = context.read<TabsBloc>();
               final session = tabsSession;
+              final windowKeys = AppWindowKeys.of(context);
+              final windowId = windowKeys.id;
               return WorkspaceBloc(
+                windowKeys: windowKeys,
+                // ריבוי תצוגות: החלונות האחרים בתהליך ולא האפיק.
+                isOpenInOtherWindow: MultiViewMode.enabled
+                    ? (id) => InProcessTabDrops.current
+                          .isWorkspaceOpenElsewhere(windowId, id)
+                    : null,
                 repository: WorkspaceRepository(
                   slot: session == null ? null : () => session.slot,
                 ),

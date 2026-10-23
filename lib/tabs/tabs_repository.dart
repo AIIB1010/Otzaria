@@ -4,9 +4,9 @@ import 'package:path/path.dart' as p;
 import 'package:otzaria/app_scope/process_duties.dart';
 import 'package:otzaria/core/user_state/user_state_slot.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
-import 'package:otzaria/core/windowing/window_bus.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
+import 'package:otzaria/core/windowing/window_bus.dart';
 import 'package:otzaria/tabs/models/combined_tab.dart';
 import 'package:otzaria/tabs/models/tab.dart';
 import 'package:otzaria/utils/file/hive_utils.dart';
@@ -350,6 +350,11 @@ class TabsRepository {
     }
   }
 
+  /// המשבצת הגבוהה ביותר שחלון יכול לתפוס: התקרה של המודל הפעיל.
+  static int get maxWindowSlot => MultiViewMode.enabled
+      ? ViewWindowRegistry.maxWindows
+      : WindowBus.slotCount;
+
   /// החלופה ל-[adoptOrphanWindowSessions] כש"שחזר את כל החלונות" דלוק:
   /// הסשנים נשארים נפרדים, במשבצות רצופות אחרי המארח, כדי שכל חלון חדש —
   /// שתופס את המשבצת הפנויה הראשונה — ימצא במשבצת שלו את הסשן שנועד לו.
@@ -362,12 +367,7 @@ class TabsRepository {
     final host = WindowTabsSession.current.slot;
     if (host == null) return const [];
     try {
-      return await _staticStore.compactAround(
-        host,
-        MultiViewMode.enabled
-            ? ViewWindowRegistry.maxWindows
-            : WindowBus.slotCount,
-      );
+      return await _staticStore.compactAround(host, maxWindowSlot);
     } catch (e) {
       debugPrint('⚠️ compactWindowSessions failed: $e');
       return const [];

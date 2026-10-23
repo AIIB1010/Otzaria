@@ -7,9 +7,9 @@ import 'package:otzaria/app_scope/process_duties.dart';
 import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
-import 'package:otzaria/core/windowing/window_bus.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
+import 'package:otzaria/core/windowing/window_bus.dart';
 import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/tabs/models/tool_tab.dart';
 import 'package:otzaria/tabs/tabs_repository.dart';
@@ -213,6 +213,53 @@ void main() {
       expect(await TabsRepository.compactWindowSessions(), first);
       expect(await sessions.loadAll(), hasLength(WindowBus.slotCount));
       expect(first, isNot(contains(host)));
+    });
+
+    group('ריבוי תצוגות', () {
+      setUp(() => MultiViewMode.debugOverride = true);
+      tearDown(() => MultiViewMode.debugOverride = false);
+
+      test('התקרה היא של חלונות ה-Dart (8), לא של האפיק (4)', () async {
+        expect(TabsRepository.maxWindowSlot, ViewWindowRegistry.maxWindows);
+        MultiViewMode.debugOverride = false;
+        expect(TabsRepository.maxWindowSlot, WindowBus.slotCount);
+      });
+
+      test('סשן במשבצת 7 נשמר ונדחס, ולא נמחק כבמודל A', () async {
+        WindowBus.instance.register();
+        final host = WindowBus.instance.slot!;
+        expect(host, 1);
+        await TabsRepository().saveTabs([_tab('שלי')], 0);
+        for (final (slot, title) in [(3, 'ג'), (5, 'ה'), (6, 'ו'), (7, 'ז')]) {
+          await sessions.save(
+            slot,
+            tabsJson: '[${_encoded(title)}]',
+            currentIndex: 0,
+          );
+        }
+
+        expect(await TabsRepository.compactWindowSessions(), [2, 3, 4, 5]);
+        expect((await sessions.load(5))!.tabsJson, contains('ז'));
+        expect((await sessions.load(4))!.tabsJson, contains('ו'));
+        expect(await sessions.load(7), isNull);
+      });
+
+      test('כל 7 המשבצות של חלונות ה-Dart נשמרות', () async {
+        WindowBus.instance.register();
+        await TabsRepository().saveTabs([_tab('שלי')], 0);
+        for (var slot = 2; slot <= ViewWindowRegistry.maxWindows; slot++) {
+          await sessions.save(
+            slot,
+            tabsJson: '[${_encoded('חלון $slot')}]',
+            currentIndex: 0,
+          );
+        }
+
+        final slots = await TabsRepository.compactWindowSessions();
+        expect(slots, [for (var s = 2; s <= 8; s++) s]);
+        expect((await sessions.load(8))!.tabsJson, contains('חלון 8'));
+        expect(await sessions.loadAll(), hasLength(8));
+      });
     });
   });
 

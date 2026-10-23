@@ -5,7 +5,13 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:otzaria/core/messages/window_messages.dart';
+import 'package:otzaria/core/windowing/app_window_id.dart';
+import 'package:otzaria/core/windowing/app_window_scope.dart';
+import 'package:otzaria/core/windowing/external_tab_drag.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/multiview/in_process_tab_drop.dart';
+import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/window_bus.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/history/bloc/history_bloc.dart';
@@ -23,6 +29,8 @@ import 'package:otzaria/tabs/models/tool_tab.dart';
 import 'package:otzaria/widgets/misc/app_menu_exports.dart';
 import 'package:otzaria/workspaces/bloc/workspace_bloc.dart';
 import 'package:otzaria/workspaces/bloc/workspace_state.dart';
+
+import '../test_helpers/fake_view_window.dart';
 
 class _StubTab extends OpenedTab {
   _StubTab(super.title);
@@ -45,6 +53,7 @@ void main() {
     WidgetTester tester, {
     required OpenedTab tab,
     required TabsState state,
+    Widget Function(Widget child)? wrap,
   }) async {
     tabsBloc = _TestTabsBloc(state);
     settingsBloc = _TestSettingsBloc(SettingsState.initial());
@@ -58,8 +67,7 @@ void main() {
     });
 
     late List<AppContextMenuEntry> entries;
-    await tester.pumpWidget(
-      MultiBlocProvider(
+    final tree = MultiBlocProvider(
         providers: [
           BlocProvider<TabsBloc>.value(value: tabsBloc),
           BlocProvider<SettingsBloc>.value(value: settingsBloc),
@@ -83,8 +91,8 @@ void main() {
             ),
           ),
         ),
-      ),
-    );
+      );
+    await tester.pumpWidget(wrap == null ? tree : wrap(tree));
     return entries;
   }
 
@@ -238,6 +246,106 @@ void main() {
 
       expect(runner.openWindowCalls, 1);
       expect(tabsBloc.addedEvents.whereType<RemoveTab>().single.tab, same(tab));
+    });
+  });
+
+  /// ריבוי תצוגות: היעדים הם חלונות ה-Dart והראשי, וההעברה ישירה בלי אפיק.
+  group('"העבר לחלון קיים" בריבוי תצוגות', () {
+    late InProcessTabDrops drops;
+    late FakeViewWindows windows;
+    final received = <(int, OpenedTab)>[];
+
+    InProcessTabDropTarget target(int slot, String title) =>
+        InProcessTabDropTarget(
+          dragState: ExternalTabDragState(),
+          devicePixelRatio: () => 1,
+          receive: (tab, _) {
+            received.add((slot, tab));
+            return true;
+          },
+          describe: () =>
+              (title: title, tabCount: 2, activeWorkspaceId: null),
+        );
+
+    setUp(() {
+      MultiViewMode.debugOverride = true;
+      MultiWindowService.debugSupportedOverride = true;
+      received.clear();
+    });
+
+    tearDown(() {
+      InProcessTabDrops.debugOverride = null;
+      MultiViewMode.debugOverride = false;
+      MultiWindowService.debugSupportedOverride = null;
+    });
+
+    testWidgets('מהראשי: מפרט את חלונות ה-Dart ומעביר ישירות', (tester) async {
+      windows = FakeViewWindows(tester);
+      final a = windows.registry.open(size: const Size(800, 600))!;
+      final b = windows.registry.open(size: const Size(800, 600))!;
+      drops = InProcessTabDrops(registry: windows.registry);
+      InProcessTabDrops.debugOverride = drops;
+      drops.register(AppWindowId.primary, target(1, 'ראשי'));
+      drops.register(a.id, target(a.slot, 'חלון א'));
+      drops.register(b.id, target(b.slot, 'חלון ב'));
+      // מטמון האפיק אינו משפיע בריבוי תצוגות.
+      MultiWindowService.publishKnownPeers(const [
+        WindowPeer(slot: 4, title: 'אפיק', tabCount: 1),
+      ]);
+      addTearDown(() => MultiWindowService.publishKnownPeers(const []));
+
+      final tab = ToolTab(toolId: 'builtin.calendar', title: 'לוח שנה');
+      final entries = await buildEntries(
+        tester,
+        tab: tab,
+        state: TabsState(tabs: [tab], currentTabIndex: 0),
+      );
+      final submenu = entryOf(entries, 'העבר לחלון קיים').children!;
+      expect(submenu.map((e) => e.label), [
+        WindowMessages.peerWithTabs('חלון א', 2),
+        WindowMessages.peerWithTabs('חלון ב', 2),
+      ]);
+
+      submenu[1].onTap!();
+      await tester.pump();
+
+      expect(received.single.$1, b.slot);
+      expect(received.single.$2, isNot(same(tab)));
+      expect(tabsBloc.addedEvents.whereType<RemoveTab>().single.tab, same(tab));
+    });
+
+    testWidgets('מחלון Dart: הראשי ברשימה כל עוד הוא מוצג', (tester) async {
+      windows = FakeViewWindows(tester);
+      final a = windows.registry.open(size: const Size(800, 600))!;
+      drops = InProcessTabDrops(registry: windows.registry);
+      InProcessTabDrops.debugOverride = drops;
+      drops.register(AppWindowId.primary, target(1, 'ראשי'));
+      drops.register(a.id, target(a.slot, 'חלון א'));
+      final tab = ToolTab(toolId: 'builtin.calendar', title: 'לוח שנה');
+
+      Future<List<AppContextMenuEntry>> fromView() => buildEntries(
+        tester,
+        tab: tab,
+        state: TabsState(tabs: [tab], currentTabIndex: 0),
+        wrap: (child) => AppWindowScope(
+          controller: a.controller,
+          geometry: a.controller,
+          keys: a.keys,
+          child: child,
+        ),
+      );
+
+      final entries = await fromView();
+      expect(
+        entryOf(entries, 'העבר לחלון קיים').children!.map((e) => e.label),
+        [WindowMessages.peerWithTabs('ראשי', 2)],
+      );
+
+      // הראשי נסגר (מוסתר): אין יעד, ולכן אין תת-תפריט.
+      drops.setMainShown(false);
+      final hidden = await fromView();
+      expect(hidden.any((e) => e.label == 'העבר לחלון קיים'), isFalse);
+      await tester.pumpWidget(const SizedBox());
     });
   });
 

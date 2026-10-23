@@ -48,6 +48,7 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
   final TabsRepository _repository;
   final Duration _disposeDelay;
   Future<void>? _closeFuture;
+  int _pendingEvents = 0;
 
   /// Wraps a newly opened tab with its companion pane, when it has one.
   final Future<OpenedTab> Function(OpenedTab tab) _withCompanion;
@@ -305,14 +306,22 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
   @override
   void onEvent(TabsEvent event) {
     super.onEvent(event);
+    _pendingEvents++;
     // הרישום נעשה בשליחה: גם פתיחה שממתינה בתור חייבת להקדים את הסגירה.
     if (event is OpenOrFocusTab) _pendingOpenTabs.add(Completer<void>());
     if (event is AddTab) _pendingAddTabs.add(Completer<void>());
+
     if (event is RemoveTab) {
       _pendingRemovals.add(
         _pendingOpenTabs.isEmpty ? null : _pendingOpenTabs.last.future,
       );
     }
+  }
+
+  @override
+  void onDone(TabsEvent event, [Object? error, StackTrace? stackTrace]) {
+    _pendingEvents--;
+    super.onDone(event, error, stackTrace);
   }
 
   late final Future<void> Function() _preCloseCallback;
@@ -448,6 +457,23 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
   Future<void> _onAddTab(AddTab event, Emitter<TabsState> emit) async {
     debugPrint('DEBUG: הוספת טאב חדש - ${event.tab.title}');
     final tab = await _withCompanion(event.tab);
+    _insertTab(event, tab, emit.call);
+  }
+
+  /// קליטה אטומית של כרטיסיה שכבר נפתחה; לא פותחים מחדש חלונית מלווה שנסגרה.
+  bool receiveTransferredTab(OpenedTab tab, {int? index}) {
+    if (isClosed || _closeFuture != null || _pendingEvents > 0) return false;
+    // האישור למקור חייב לבוא אחרי ההכנסה, ללא תור שיכול לשרוד את החלון.
+    // ignore: invalid_use_of_visible_for_testing_member
+    _insertTab(AddTab(tab, index: index), tab, super.emit);
+    return true;
+  }
+
+  void _insertTab(
+    AddTab event,
+    OpenedTab tab,
+    void Function(TabsState) publish,
+  ) {
     _separateHistorySlots([tab]);
     final newTabs = List<OpenedTab>.from(state.tabs);
     final newIndex =
@@ -461,7 +487,7 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
     final currentIndex = keepCurrent
         ? state.currentTabIndex + (newIndex <= state.currentTabIndex ? 1 : 0)
         : newIndex;
-    emit(
+    publish(
       state.copyWith(
         tabs: newTabs,
         currentTabIndex: currentIndex,
