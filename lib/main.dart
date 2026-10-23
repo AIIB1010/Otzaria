@@ -82,6 +82,7 @@ import 'package:otzaria/core/user_state/window_bounds.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
 import 'package:otzaria/core/windowing/multiview/multi_view_host.dart';
 import 'package:otzaria/core/windowing/last_active_window.dart';
+import 'package:otzaria/core/windowing/multiview/cocoa_view_window_native.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/app_quit.dart';
 import 'package:otzaria/core/windowing/dialog_owner.dart';
@@ -149,6 +150,23 @@ void _markMainWindowRevealed() {
   if (ProcessDuties.current.isProcessOwner) {
     StartupTimeline.instance.finishAtReveal();
   }
+}
+
+/// macOS בלי ריבוי תצוגות (ה-runner לא הפך את המנוע): מודל A, והסיבה נרשמת ללוג.
+Future<void> _runDeferredMacMultiViewStatus(String reason) async {
+  if (WindowRole.isSecondary) return;
+  try {
+    await _mainWindowRevealedCompleter.future.timeout(
+      const Duration(seconds: 20),
+    );
+  } on TimeoutException {
+    // ממשיכים בכל זאת — אחרת הסיבה לא תירשם כלל.
+  }
+  _logNonFatalInitializationError(
+    'MacMultiView',
+    StateError('Dart windows unavailable, using engine windows: $reason'),
+    StackTrace.current,
+  );
 }
 
 /// Cosmetic: until it finishes, drag handles show the system hand cursor.
@@ -350,6 +368,11 @@ void main(List<String> args) async {
   Pdfrx.decodeLegacyHebrewText = true;
 
   SentryWidgetsFlutterBinding.ensureInitialized();
+  // macOS: המודל נקבע לפני כל קריאה ל-MultiViewMode. סבב ערוץ אחד, עם timeout.
+  if (Platform.isMacOS) {
+    final reason = await awaitMacRunnerHandshake();
+    if (reason != null) unawaited(_runDeferredMacMultiViewStatus(reason));
+  }
   // בלי בעלים (בנייה עם false או binding של בדיקות) — מודל A.
   installWindowingOwner();
 
@@ -1939,6 +1962,14 @@ Future<void> _installWindowCloseHandling() async {
   }
   await windowManager.setPreventClose(true);
   await AppWindowListener.enableMacOSCloseHandling();
+  if (Platform.isMacOS && MultiViewMode.enabled) {
+    // רק אחרי טיפול הסגירה: מכאן סגירת החלון האחרון משאירה את האפליקציה ב-Dock.
+    unawaited(
+      const CocoaViewWindowNative().handleDockReopen(
+        ViewWindowOpener.instance.reopenFromDock,
+      ),
+    );
+  }
 }
 
 /// תופס את משבצת החלון באפיק ההודעות, **לפני `runApp`**.

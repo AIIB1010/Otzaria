@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:otzaria/core/windowing/multiview/cocoa_view_window_native.dart';
 import 'package:otzaria/core/windowing/multiview/gtk_view_window_native.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_native.dart';
@@ -14,6 +15,7 @@ void main() {
   tearDown(() {
     MultiViewMode.debugOverride = false;
     MultiViewMode.debugResetOwnerInstalled();
+    MultiViewMode.debugResetMacRunner();
   });
 
   test('Windows ו-Linux נתמכות, ושם אין מנוע לכל חלון', () {
@@ -68,9 +70,63 @@ void main() {
     expect(handle.nativeHandle, isNull);
   });
 
-  test('ViewWindowNative.platform: win32 ב-Windows, GTK ב-Linux', () {
+  test('ViewWindowNative.platform: win32, GTK או Cocoa לפי הפלטפורמה', () {
     final native = ViewWindowNative.platform();
     if (Platform.isWindows) expect(native, isA<Win32ViewWindowNative>());
     if (Platform.isLinux) expect(native, isA<GtkViewWindowNative>());
+    if (Platform.isMacOS) expect(native, isA<CocoaViewWindowNative>());
+  });
+
+  group('macOS: handshake עם ה-runner', () {
+    const channel = CocoaViewWindowNative.defaultChannel;
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+
+    void runnerAnswers(bool ready) =>
+        messenger.setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'multiViewReady') return ready;
+          if (call.method == 'multiViewStatus') return 'flip not applied';
+          return null;
+        });
+
+    setUp(() {
+      MultiViewMode.debugOverride = null;
+      MultiViewMode.debugIsMacOS = true;
+    });
+
+    tearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    test('לפני ה-handshake: מודל A', () {
+      expect(MultiViewMode.supported, isFalse);
+      expect(MultiViewMode.usesEngineWindows, isTrue);
+      expect(installWindowingOwner(), isFalse);
+    });
+
+    test('מוכן: נתמך, בלי מנוע לכל חלון', () async {
+      runnerAnswers(true);
+      expect(await awaitMacRunnerHandshake(), isNull);
+      expect(MultiViewMode.supported, isTrue);
+      expect(MultiViewMode.usesEngineWindows, isFalse);
+    });
+
+    test('לא מוכן: נשארים במודל A, עם הסיבה', () async {
+      runnerAnswers(false);
+      expect(await awaitMacRunnerHandshake(), 'flip not applied');
+      expect(MultiViewMode.supported, isFalse);
+      expect(MultiViewMode.usesEngineWindows, isTrue);
+      expect(MultiViewMode.enabled, isFalse);
+    });
+
+    test('runner ישן בלי הערוץ: מודל A', () async {
+      expect(await awaitMacRunnerHandshake(), isNotNull);
+      expect(MultiViewMode.supported, isFalse);
+    });
+
+    test('ה-handshake אינו משפיע מחוץ ל-macOS', () async {
+      runnerAnswers(false);
+      await awaitMacRunnerHandshake();
+      MultiViewMode.debugIsMacOS = false;
+      expect(MultiViewMode.supported, Platform.isWindows || Platform.isLinux);
+    });
   });
 }

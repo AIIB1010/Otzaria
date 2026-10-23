@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' show ViewFocusDirection, ViewFocusEvent, ViewFocusState;
 
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:otzaria/plugins/services/plugin_runtime_dispatcher.dart';
@@ -26,6 +27,7 @@ import 'package:otzaria/core/windowing/app_window_scope.dart';
 import 'package:otzaria/core/windowing/last_active_window.dart';
 import 'package:otzaria/core/windowing/multiview/multi_view_host.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
+import 'package:otzaria/core/windowing/multiview/view_focus_sync.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_close_flow.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_opener.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
@@ -408,6 +410,43 @@ void main() {
       ..notify();
     expect(LastActiveWindow.id, AppWindowId.primary);
     expect(AppWindowKeys.current.id, AppWindowId.primary);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('macOS: אירוע הפוקוס של התצוגה מפעיל את החלון שלה', (
+    tester,
+  ) async {
+    addTearDown(ViewFocusSync.resetForTest);
+    final windows = FakeViewWindows(tester);
+    await pumpHost(tester, windows.registry);
+    final a = windows.registry.open(size: const Size(800, 600))!;
+    final b = windows.registry.open(size: const Size(800, 600))!;
+    await tester.pump();
+    void focusEvent(ViewWindowEntry entry, ViewFocusState state) =>
+        tester.binding.handleViewFocusChanged(
+          ViewFocusEvent(
+            viewId: entry.handle.view.viewId,
+            state: state,
+            direction: ViewFocusDirection.undefined,
+          ),
+        );
+
+    // Windows/Linux: ההפעלה לפי הבקר בלבד.
+    ViewFocusSync.debugMacOSOverride = false;
+    focusEvent(b, ViewFocusState.focused);
+    expect(AppWindowKeys.current.id, AppWindowId.primary);
+
+    ViewFocusSync.debugMacOSOverride = true;
+    focusEvent(b, ViewFocusState.focused);
+    expect(AppWindowKeys.current, same(b.keys));
+    expect(LastActiveWindow.id, b.id);
+
+    focusEvent(a, ViewFocusState.unfocused);
+    expect(AppWindowKeys.current, same(b.keys));
+    focusEvent(a, ViewFocusState.focused);
+    expect(AppWindowKeys.current, same(a.keys));
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 1));

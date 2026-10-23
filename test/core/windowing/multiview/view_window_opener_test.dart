@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:async';
+import 'dart:ui' show ViewFocusEvent, ViewFocusState;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +11,7 @@ import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
 import 'package:otzaria/core/windowing/multiview/multi_view_host.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
+import 'package:otzaria/core/windowing/multiview/view_focus_sync.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_close_flow.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_opener.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
@@ -135,6 +137,8 @@ void main() {
   late _MemorySessions sessions;
   late bool mainVisible;
   late int mainRestores;
+  late bool mainRestoreResult;
+  late int mainShows;
 
   ViewWindowOpener makeOpener(
     WidgetTester tester, {
@@ -143,11 +147,14 @@ void main() {
     _MemorySessions? store,
     int? mainHwnd,
     bool mainFullscreen = false,
+    bool keepsProcess = false,
   }) {
     windows = FakeViewWindows(tester);
     sessions = store ?? _MemorySessions();
     mainVisible = true;
     mainRestores = 0;
+    mainRestoreResult = true;
+    mainShows = 0;
     return ViewWindowOpener(
       registry: windows.registry,
       native: native ?? windows.native,
@@ -155,8 +162,10 @@ void main() {
       isMainWindowVisible: () async => mainVisible,
       restoreMainWindow: () async {
         mainRestores++;
-        return true;
+        return mainRestoreResult;
       },
+      showMainWindow: () async => mainShows++,
+      keepsProcessAfterLastWindow: keepsProcess,
       defaultSize: () => const Size(1000, 700),
       mainWindowHwnd: () async => mainHwnd,
       isMainWindowFullscreen: () async => mainFullscreen,
@@ -945,4 +954,87 @@ void main() {
     expect(opener.closedCountForTest, 0);
     expect(sessions.rows[2]!.tabsJson, '["draft"]');
   });
+
+  testWidgets('אחרי הפריים הראשון: reveal, ובמק אירוע פוקוס לתצוגה החדשה', (
+    tester,
+  ) async {
+    final focus = _FocusEvents();
+    tester.binding.addObserver(focus);
+    addTearDown(() {
+      tester.binding.removeObserver(focus);
+      ViewFocusSync.resetForTest();
+    });
+    final opener = makeOpener(tester);
+    await pumpHost(tester);
+
+    expect(await settle(tester, opener.openWindow()), isTrue);
+    final a = windows.registry.windows.single;
+    expect(windows.native.revealed, [windows.handleOf(a).fakeHwnd]);
+    expect(focus.events, isEmpty, reason: 'Windows/Linux: המנוע שולח בעצמו');
+
+    ViewFocusSync.debugMacOSOverride = true;
+    expect(await settle(tester, opener.openWindow()), isTrue);
+    final b = windows.registry.windows.last;
+    expect(windows.native.revealed.last, windows.handleOf(b).fakeHwnd);
+    expect(focus.events.single.viewId, b.handle.view.viewId);
+    expect(focus.events.single.state, ViewFocusState.focused);
+  });
+
+  testWidgets('macOS: החלון האחרון נסגר — נשארים ב-Dock והסשן נשמר', (
+    tester,
+  ) async {
+    final opener = makeOpener(tester, keepsProcess: true);
+    await pumpHost(tester);
+    var exits = 0;
+    opener.endProcess = () async => exits++;
+    expect(await settle(tester, opener.openWindow()), isTrue);
+    expect(await settle(tester, opener.openWindow()), isTrue);
+    final [a, b] = windows.registry.windows;
+    await sessions.save(a.slot, tabsJson: '["a"]', currentIndex: 0);
+    await sessions.save(b.slot, tabsJson: '["b"]', currentIndex: 0);
+    mainVisible = false;
+    ViewWindowCloseFlow flowOf(ViewWindowEntry entry) => ViewWindowCloseFlow(
+      entry: entry,
+      flush: () async {},
+      discardSession: sessions.delete,
+      opener: opener,
+    );
+
+    expect(await settle(tester, flowOf(a).run()), isTrue);
+    await tester.pump();
+    expect(sessions.rows[a.slot], isNull);
+
+    expect(await settle(tester, flowOf(b).run()), isTrue);
+    await tester.pump();
+    expect(exits, 0);
+    expect(windows.stubOf(b).destroyed, isTrue);
+    expect(sessions.rows[b.slot]!.tabsJson, '["b"]');
+
+    // ה-Dock מחזיר את האחרון למשבצת הפנויה, והשורה הישנה אינה נשארת כפולה.
+    expect(await settle(tester, opener.reopenFromDock()), isTrue);
+    final restored = windows.registry.windows.single;
+    expect(restored.slot, a.slot);
+    expect(sessions.rows[restored.slot]!.tabsJson, '["b"]');
+    expect(sessions.rows[b.slot], isNull);
+    expect(mainRestores, 0);
+  });
+
+  testWidgets('Dock בלי חלון סגור: הראשי, ואם לא שוחזר — הצגה', (tester) async {
+    final opener = makeOpener(tester);
+    await pumpHost(tester);
+
+    expect(await opener.reopenFromDock(), isTrue);
+    expect((mainRestores, mainShows), (1, 0));
+
+    mainRestoreResult = false;
+    expect(await opener.reopenFromDock(), isTrue);
+    expect((mainRestores, mainShows), (2, 1));
+  });
+}
+
+class _FocusEvents with WidgetsBindingObserver {
+  final List<ViewFocusEvent> events = [];
+
+  @override
+  void didChangeViewFocus(ViewFocusEvent event) => events.add(event);
 }
