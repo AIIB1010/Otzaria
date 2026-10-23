@@ -13,7 +13,6 @@ import 'package:otzaria/navigation/bloc/navigation_bloc.dart';
 import 'package:otzaria/navigation/bloc/navigation_event.dart';
 import 'package:otzaria/navigation/bloc/navigation_state.dart';
 import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
-import 'package:otzaria/tabs/bloc/tabs_event.dart';
 import 'package:otzaria/tabs/models/tab.dart';
 import 'package:otzaria/workspaces/bloc/workspace_bloc.dart';
 
@@ -259,9 +258,8 @@ class _InProcessTabDropReceiverState extends State<InProcessTabDropReceiver> {
     final tabsBloc = context.read<TabsBloc>();
     // bloc שנסגר זורק על add; false משאיר את הכרטיסיה במקור.
     if (tabsBloc.isClosed) return false;
-    // החיווי נעלם ברגע שהכרטיסיה התקבלה.
+    if (!tabsBloc.receiveTransferredTab(tab, index: index)) return false;
     _dragState.drag.value = null;
-    tabsBloc.add(AddTab(tab, index: index));
     context.read<NavigationBloc>().add(const NavigateToScreen(Screen.reading));
     unawaited(_raise());
     return true;

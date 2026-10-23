@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otzaria/core/messages/library_messages.dart';
 import 'package:otzaria/core/messages/notes_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
+import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/messages/window_messages.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
 import 'package:otzaria/workspaces/bloc/workspace_event.dart';
@@ -17,6 +18,7 @@ import 'package:otzaria/tabs/models/tab.dart';
 /// מנהל שולחנות עבודה; ה-UI מוסר את הכרטיסיות החיות ומחליף אותן בעת מעבר.
 class WorkspaceBloc extends Bloc<WorkspaceEvent, WorkspaceState> {
   final WorkspaceRepository _repository;
+  final AppWindowKeys _windowKeys;
 
   /// Callback function to notify when workspace tabs should be loaded.
   /// The UI should provide this to coordinate with TabsBloc.
@@ -47,7 +49,9 @@ class WorkspaceBloc extends Bloc<WorkspaceEvent, WorkspaceState> {
     required this._repository,
     this.onWorkspaceTabsChanged,
     this.isOpenInOtherWindow,
-  }) : super(WorkspaceState.initial()) {
+    AppWindowKeys? windowKeys,
+  }) : _windowKeys = windowKeys ?? AppWindowKeys.current,
+       super(WorkspaceState.initial()) {
     _remoteChanges = _repository.remoteChanges.listen((_) {
       if (!isClosed) add(LoadWorkspaces());
     });
@@ -74,7 +78,12 @@ class WorkspaceBloc extends Bloc<WorkspaceEvent, WorkspaceState> {
         : MultiWindowService.knownPeers.any(
             (peer) => peer.isVisible && peer.activeWorkspaceId == workspaceId,
           );
-    if (taken) UiSnack.show(WindowMessages.workspaceOpenInOtherWindow);
+    if (taken) {
+      UiSnack.show(
+        WindowMessages.workspaceOpenInOtherWindow,
+        window: _windowKeys,
+      );
+    }
   }
 
   @override
@@ -130,7 +139,10 @@ class WorkspaceBloc extends Bloc<WorkspaceEvent, WorkspaceState> {
         ),
       );
     } catch (e) {
-      UiSnack.showError(NotesMessages.workspacesLoadFailed);
+      UiSnack.showError(
+        NotesMessages.workspacesLoadFailed,
+        window: _windowKeys,
+      );
       emit(
         state.copyWith(
           isLoading: false,
@@ -158,7 +170,7 @@ class WorkspaceBloc extends Bloc<WorkspaceEvent, WorkspaceState> {
 
       emit(state.copyWith(workspaces: saved, clearError: true));
     } catch (e) {
-      UiSnack.showError(NotesMessages.workspaceSaveFailed);
+      UiSnack.showError(NotesMessages.workspaceSaveFailed, window: _windowKeys);
       emit(state.copyWith(error: 'Failed to add workspace: $e'));
     }
   }
@@ -170,7 +182,10 @@ class WorkspaceBloc extends Bloc<WorkspaceEvent, WorkspaceState> {
     try {
       // Can't remove the active workspace
       if (state.activeWorkspaceId == event.workspaceId) {
-        UiSnack.showError(NotesMessages.cannotDeleteActiveWorkspace);
+        UiSnack.showError(
+          NotesMessages.cannotDeleteActiveWorkspace,
+          window: _windowKeys,
+        );
         emit(
           state.copyWith(error: NotesMessages.cannotDeleteActiveWorkspace),
         );
@@ -183,7 +198,7 @@ class WorkspaceBloc extends Bloc<WorkspaceEvent, WorkspaceState> {
 
       emit(state.copyWith(workspaces: saved, clearError: true));
     } catch (e) {
-      UiSnack.showError(NotesMessages.workspaceSaveFailed);
+      UiSnack.showError(NotesMessages.workspaceSaveFailed, window: _windowKeys);
       emit(state.copyWith(error: 'Failed to remove workspace: $e'));
     }
   }
@@ -236,7 +251,10 @@ class WorkspaceBloc extends Bloc<WorkspaceEvent, WorkspaceState> {
         (w) => w.id == event.targetWorkspaceId,
       );
       if (targetWorkspace == null) {
-        UiSnack.showError(LibraryMessages.workspaceNoLongerExists);
+        UiSnack.showError(
+          LibraryMessages.workspaceNoLongerExists,
+          window: _windowKeys,
+        );
         emit(state.copyWith(workspaces: saved, clearError: true));
         return;
       }
@@ -272,7 +290,10 @@ class WorkspaceBloc extends Bloc<WorkspaceEvent, WorkspaceState> {
       _warnIfOpenElsewhere(event.targetWorkspaceId);
       hasTabs = targetWorkspace.tabs.isNotEmpty;
     } catch (e) {
-      UiSnack.showError(NotesMessages.workspaceSwitchFailed);
+      UiSnack.showError(
+        NotesMessages.workspaceSwitchFailed,
+        window: _windowKeys,
+      );
       emit(
         state.copyWith(
           workspaces: saved,
@@ -301,7 +322,7 @@ class WorkspaceBloc extends Bloc<WorkspaceEvent, WorkspaceState> {
 
       emit(state.copyWith(workspaces: saved, clearError: true));
     } catch (e) {
-      UiSnack.showError(NotesMessages.workspaceSaveFailed);
+      UiSnack.showError(NotesMessages.workspaceSaveFailed, window: _windowKeys);
       emit(state.copyWith(error: 'Failed to rename workspace: $e'));
     }
   }
@@ -328,7 +349,7 @@ class WorkspaceBloc extends Bloc<WorkspaceEvent, WorkspaceState> {
       );
       emit(state.copyWith(workspaces: saved, clearError: true));
     } catch (e) {
-      UiSnack.showError(NotesMessages.workspaceSaveFailed);
+      UiSnack.showError(NotesMessages.workspaceSaveFailed, window: _windowKeys);
       emit(state.copyWith(error: 'Failed to update workspace tabs: $e'));
     }
   }
@@ -354,7 +375,7 @@ class WorkspaceBloc extends Bloc<WorkspaceEvent, WorkspaceState> {
       );
       emit(state.copyWith(workspaces: saved, clearError: true));
     } catch (e) {
-      UiSnack.showError(NotesMessages.workspaceSaveFailed);
+      UiSnack.showError(NotesMessages.workspaceSaveFailed, window: _windowKeys);
       emit(state.copyWith(error: 'Failed to pin workspace: $e'));
     }
   }
@@ -389,7 +410,7 @@ class WorkspaceBloc extends Bloc<WorkspaceEvent, WorkspaceState> {
       );
       emit(state.copyWith(workspaces: saved, clearError: true));
     } catch (e) {
-      UiSnack.showError(NotesMessages.workspaceSaveFailed);
+      UiSnack.showError(NotesMessages.workspaceSaveFailed, window: _windowKeys);
       emit(state.copyWith(error: 'Failed to move tab to workspace: $e'));
     }
   }

@@ -33,6 +33,13 @@ class _RecordingTabsBloc extends Cubit<TabsState> implements TabsBloc {
   void add(TabsEvent event) => events.add(event);
 
   @override
+  bool receiveTransferredTab(OpenedTab tab, {int? index}) {
+    if (isClosed) return false;
+    events.add(AddTab(tab, index: index));
+    return true;
+  }
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
