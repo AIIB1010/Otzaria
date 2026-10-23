@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -47,7 +46,6 @@ class _AttachedLibrariesPanelState extends State<AttachedLibrariesPanel> {
     _links.tooLargeSlugs.addListener(_rebuild);
     _links.buildingSlugs.addListener(_rebuild);
     _links.incompleteSlugs.addListener(_rebuild);
-    unawaited(_links.refreshFromHost());
   }
 
   @override

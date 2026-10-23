@@ -4,7 +4,6 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
-import 'package:otzaria/core/windowing/window_bus.dart';
 import 'package:otzaria/plugins/adapters/plugin_calendar_adapter.dart';
 import 'package:otzaria/tools/calendar/models/calendar_event.dart';
 import 'package:otzaria/tools/calendar/models/zman_alert_preference.dart';
@@ -111,7 +110,6 @@ class CalendarAlertsOwner {
     Future<List<CustomEvent>> Function()? pluginEvents,
     DateTime Function()? now,
     ZmanAlertPlanner? zmanPlanner,
-    void Function(Map<String, Object?> message)? broadcast,
     bool? dedupeDuplicates,
     this.pluginEventsDelay = const Duration(milliseconds: 50),
   }) : _notificationsOverride = notifications,
@@ -121,7 +119,6 @@ class CalendarAlertsOwner {
            (() => const PluginCalendarAdapter().loadAllPluginEvents()),
        _now = now ?? DateTime.now,
        _zmanPlanner = zmanPlanner ?? CalendarAlertPlanner.planZmanAlerts,
-       _broadcast = broadcast ?? _broadcastToWindows,
        _dedupeDuplicates =
            dedupeDuplicates ?? defaultTargetPlatform == TargetPlatform.windows;
 
@@ -135,7 +132,7 @@ class CalendarAlertsOwner {
   static set instanceForTesting(CalendarAlertsOwner? owner) =>
       _instance = owner;
 
-  /// בקשת אפיק: פקודה מחלון משני. רק הבעלים עונה עליה.
+  /// בקשת אפיק ש-[handleBusRequest] משרת.
   static const String requestCommand = 'calendarAlerts.command';
 
   /// שידור: המצב השתנה.
@@ -150,7 +147,6 @@ class CalendarAlertsOwner {
   final Future<List<CustomEvent>> Function() _pluginEvents;
   final DateTime Function() _now;
   final ZmanAlertPlanner _zmanPlanner;
-  final void Function(Map<String, Object?> message) _broadcast;
   final bool _dedupeDuplicates;
 
   /// חלון האיחוד של שינויי אירועי תוספים לשידור אחד.
@@ -205,11 +201,6 @@ class CalendarAlertsOwner {
   static String _newEpoch() {
     final random = Random();
     return '${DateTime.now().microsecondsSinceEpoch}-${random.nextInt(1 << 32)}';
-  }
-
-  static void _broadcastToWindows(Map<String, Object?> message) {
-    if (WindowBus.instance.slot == null) return;
-    WindowBus.instance.broadcast(message);
   }
 
   /// טוען את הרישום לזיכרון, כדי שאיפוס הגדרות לא ימחק אותו לפני הביטול.
@@ -495,7 +486,6 @@ class CalendarAlertsOwner {
       pluginEventsChanged: pluginEventsChanged,
     );
     _updates.add(update);
-    _broadcast({'type': requestStateChanged, ...update.toJson()});
     return update;
   }
 
@@ -877,7 +867,6 @@ class CalendarAlertsOwner {
       failures: failures,
     );
     _statuses.add(status);
-    _broadcast({'type': requestScheduleStatus, ...status.toJson()});
   }
 
   @visibleForTesting

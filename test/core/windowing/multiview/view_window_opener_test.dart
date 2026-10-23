@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:async';
 import 'dart:ui' show ViewFocusEvent, ViewFocusState;
 
@@ -9,7 +8,6 @@ import 'package:otzaria/core/user_state/window_bounds.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
 import 'package:otzaria/core/window_persistence.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
-import 'package:otzaria/core/windowing/multi_window_service.dart';
 import 'package:otzaria/core/windowing/multiview/multi_view_host.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_focus_sync.dart';
@@ -186,18 +184,14 @@ void main() {
     return future;
   }
 
-  testWidgets('הדגל קובע את המימוש של WindowOpener.current', (tester) async {
+  testWidgets('בלי בעלים נשארים בחלון יחיד, ולעולם לא פותחים מנוע נוסף', (
+    tester,
+  ) async {
     expect(WindowOpener.current, same(ViewWindowOpener.instance));
     MultiViewMode.debugOverride = false;
-    expect(WindowOpener.current, isA<MultiWindowService>());
-    // בלי דריסה: ב-Windows וב-Linux תמיד חלונות Dart, גם בלי בעלים; אחרת מודל A.
+    expect(WindowOpener.current, same(ViewWindowOpener.instance));
     MultiViewMode.debugOverride = null;
-    expect(
-      WindowOpener.current,
-      Platform.isWindows || Platform.isLinux
-          ? same(ViewWindowOpener.instance)
-          : isA<MultiWindowService>(),
-    );
+    expect(WindowOpener.current, same(ViewWindowOpener.instance));
   });
 
   testWidgets('בלי בעלים לחלונות Dart לא נפתח שום חלון', (tester) async {

@@ -244,6 +244,7 @@ class ViewWindowOpener implements WindowOpener {
 
   @override
   Future<bool> openEmptyWindow() async {
+    if (!MultiViewMode.enabled) return false;
     if (!await canOpenAnotherWindow()) {
       await reportOpenWindowFailure();
       return false;

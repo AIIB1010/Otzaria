@@ -33,6 +33,11 @@ import 'package:otzaria/core/windowing/multi_window_service.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_opener.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
+import 'package:otzaria/core/windowing/app_quit.dart';
+import 'package:otzaria/core/windowing/app_window_controller.dart';
+import 'package:otzaria/core/windowing/multiview/view_window_close_flow.dart';
+import 'package:otzaria/core/windowing/multiview/in_process_tab_drop.dart';
+import '../test_helpers/fake_view_window.dart';
 import 'package:otzaria/core/windowing/window_bus.dart';
 import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/tabs/tabs_repository.dart';
@@ -56,6 +61,7 @@ void main() {
   setUp(() async {
     WindowBus.namespace = _namespace;
     WindowRole.isSecondary = false;
+    MultiViewMode.debugOverride = false;
     // ה-runner מדומה כדי לבדוק את מסלול ריבוי החלונות בכל פלטפורמה.
     MultiWindowService.debugSupportedOverride = true;
     runner = _FakeRunner()..install();
@@ -68,6 +74,10 @@ void main() {
   });
 
   tearDown(() async {
+    WindowTabsSession.current.resume();
+    InProcessTabDrops.instance.setMainShown(true);
+    MultiViewMode.debugOverride = null;
+    AppQuit.resetForTest();
     AppWindowListener.prepareUpdateForClose = null;
     AppPaths.debugProfileDataRootPath = null;
     TabsRepository.debugSessions = null;
@@ -293,18 +303,10 @@ void main() {
     tester,
   ) async {
     MultiViewMode.debugOverride = true;
-    WindowOpener.debugOverride = _TwoWindowsOpener();
-    MultiWindowService.correctionQuitRequestTimeout = const Duration(
-      milliseconds: 10,
-    );
-    addTearDown(() {
-      MultiViewMode.debugOverride = false;
-      WindowOpener.debugOverride = null;
-      WindowTabsSession.current.resume();
-    });
     WindowBus.instance.register();
-    final peer = _FakeOwner(2, reply: false)..register();
-    addTearDown(peer.dispose);
+    final corrections = PluginCorrectionSessionService.instance;
+    expect(corrections.beginProcessQuitPreparation('held'), isTrue);
+    addTearDown(() => corrections.cancelProcessQuitPreparation('held'));
     final tab = ToolTab(toolId: 'p', title: 'תוסף', instanceId: 'update');
     await tester.pumpWidget(
       BlocProvider<TabsBloc>.value(
@@ -312,13 +314,17 @@ void main() {
         child: MaterialApp(navigatorKey: navigatorKey, home: const SizedBox()),
       ),
     );
-    MultiWindowService.closePeers();
-    await tester.runAsync(() => AppWindowListener().handleWindowClose());
+    final window = _RecordingWindow();
+    AppQuit.install(AppWindowListener(window: window).quitFromLastViewWindow);
+    await tester.runAsync(
+      () => AppQuit.quitAll(AppQuitReason.update, window: window),
+    );
     expect(
       runner.closeSelfCalls,
       0,
-      reason: 'חלון שלא אישר יציאה מונע את הכיבוי; הראשי נשאר גלוי',
+      reason: 'יציאה שלא אושרה מונעת כיבוי; הראשי נשאר גלוי',
     );
+    expect(window.closes, 0, reason: 'סגירה רגילה רק מסתירה את הראשי');
     expect(WindowTabsSession.current.slot, isNotNull);
     expect(MultiWindowService.closingAll, isFalse);
   });
@@ -338,33 +344,52 @@ void main() {
     expect(runner.closeSelfCalls, 1);
   });
 
-  test('חלון משני שאינו האחרון: flush רץ, הסשן נמחק, ורק הוא נסגר', () async {
-    final owner = _FakeOwner(1)..register();
-    addTearDown(owner.dispose);
-
+  testWidgets('חלון Dart שאינו האחרון: flush רץ, הסשן נמחק, ורק הוא נסגר', (
+    tester,
+  ) async {
+    MultiViewMode.debugOverride = true;
+    final windows = FakeViewWindows(tester);
+    final entry = windows.registry.open(size: const Size(800, 600))!;
+    final peer = windows.registry.open(size: const Size(800, 600))!;
+    final opener = ViewWindowOpener(
+      registry: windows.registry,
+      native: windows.native,
+      sessions: sessions,
+    );
+    final repository = TabsRepository(
+      sessions: sessions,
+      window: entry.tabsSession,
+    );
+    await tester.runAsync(() => repository.saveTabs(const [], 0));
+    expect(await tester.runAsync(() => sessions.load(entry.slot)), isNotNull);
     var flushed = false;
     Future<void> flush() async => flushed = true;
     PreCloseRegistry.register(flush);
     addTearDown(() => PreCloseRegistry.unregister(flush));
 
-    WindowRole.isSecondary = true;
-    WindowBus.instance.register();
-    // כרטיסיות שמורות בסשן של החלון הזה.
-    await TabsRepository().saveTabs(const [], 0);
-    final slot = WindowBus.instance.slot!;
-    expect(await sessions.load(slot), isNotNull);
-
-    await AppWindowListener().handleWindowClose();
+    final flow = ViewWindowCloseFlow(
+      entry: entry,
+      opener: opener,
+      discardSession: sessions.delete,
+    );
+    expect(await tester.runAsync(flow.run), isTrue);
+    await tester.pump();
 
     expect(flushed, isTrue, reason: 'הכתיבות התלויות נשטפו');
-    expect(runner.closeSelfCalls, 1, reason: 'רק החלון הזה נסגר');
     expect(
-      await sessions.load(slot),
-      isNull,
-      reason:
-          'הסשן נמחק — בלעדיו `adoptOrphanWindowSessions` היה מחזיר '
-          'בהפעלה הבאה כרטיסיות שהמשתמש סגר במכוון',
+      windows.stubOf(entry).destroyed,
+      isTrue,
+      reason: 'רק החלון הזה נסגר',
     );
+    expect(windows.stubOf(peer).destroyed, isFalse);
+    expect(windows.registry.windows, [peer]);
+    expect(
+      await tester.runAsync(() => sessions.load(entry.slot)),
+      isNull,
+      reason: 'חלון שנסגר במכוון אינו חוזר באתחול הבא',
+    );
+    peer.handle.destroy();
+    await tester.pump();
   });
 
   test('החלון הראשון שאינו האחרון: הסשן שלו נמחק כמו של כל חלון', () async {
@@ -722,9 +747,12 @@ void main() {
 
 /// ה-runner המדומה. `windowCount` מחזיר שניים כברירת מחדל — "אינך האחרון".
 class _TwoWindowsOpener extends Fake implements WindowOpener {
+  _TwoWindowsOpener([this.count]);
+  final int Function()? count;
+
   @override
   Future<({int count, int max, int engines})?> windowCount() async =>
-      (count: 2, max: 8, engines: 1);
+      (count: count?.call() ?? 2, max: 8, engines: 1);
 }
 
 class _FakeRunner {
@@ -732,11 +760,10 @@ class _FakeRunner {
   int windowCount = 2;
 
   void install() {
+    WindowOpener.debugOverride = _TwoWindowsOpener(() => windowCount);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(MultiWindowService.channel, (call) async {
           switch (call.method) {
-            case 'windowCount':
-              return {'count': windowCount, 'max': 4, 'engines': 2};
             case 'closeSelf':
               closeSelfCalls++;
               return null;
@@ -751,6 +778,7 @@ class _FakeRunner {
   }
 
   void uninstall() {
+    WindowOpener.debugOverride = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(MultiWindowService.channel, null);
   }
@@ -796,4 +824,10 @@ class _GuardTabs extends Fake implements TabsBloc {
 
   @override
   TabsState get state => TabsState(tabs: [tab], currentTabIndex: 0);
+}
+
+class _RecordingWindow extends Fake implements AppWindowController {
+  int closes = 0;
+  @override
+  Future<void> close() async => closes++;
 }

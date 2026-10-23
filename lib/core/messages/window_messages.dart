@@ -36,15 +36,6 @@ abstract class WindowMessages {
   static const String workspaceOpenInOtherWindow =
       'שולחן העבודה הזה פתוח גם בחלון אחר. שינויים בו עלולים לדרוס זה את זה.';
 
-  /// ⚠️ Tantivy נועל את ה-writer בלעדית והחלון הראשון מחזיק את הנעילה,
-  /// ולכן חלון משני מבקש מהמארח לבצע במקומו וההתקדמות מוצגת שם.
-  static const String indexingRunsInMainWindow =
-      'האינדוקס רץ בחלון הראשי של אוצריא, וההתקדמות מוצגת שם.';
-
-  /// המארח לא נמצא או לא ענה — הבקשה לא בוצעה כלל.
-  static const String indexingRequestFailed =
-      'לא ניתן היה להעביר את בקשת האינדוקס לחלון הראשי של אוצריא.';
-
   /// חלון ראשי מוסתר אינו נבנה מחדש אחרי שחזור, והיה דורס את הנתונים ששוחזרו.
   static const String restoreNeedsOpenMainWindow =
       'כדי לשחזר גיבוי יש לפתוח שוב את החלון הראשי של אוצריא (Ctrl+Shift+T) '
@@ -53,11 +44,6 @@ abstract class WindowMessages {
   /// המארח לא נמצא או לא ענה על פעולה שחלון משני העביר אליו.
   static const String mainWindowRequestFailed =
       'לא ניתן היה להעביר את הבקשה לחלון הראשי של אוצריא. נסה שוב.';
-
-  /// איפוס ישיר של האינדקס, במסלול שאינו עובר דרך המארח.
-  static const String indexResetOnlyInMainWindow =
-      'איפוס אינדקס החיפוש אפשרי רק בחלון הראשי של אוצריא. עבור לחלון '
-      'הראשי ונסה שוב.';
 
   /// כרטיסיית חלון אחר בתת-התפריט "העבר לחלון קיים".
   static String peerWithTabs(String title, int tabCount) => switch (tabCount) {
