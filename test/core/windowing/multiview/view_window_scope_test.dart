@@ -719,11 +719,48 @@ void main() {
     await a.controller.close();
     await tester.pump();
     expect(windows.stubOf(a).destroyed, isTrue);
-    // הכרטיסיות של חלון שנסגר אינן משוחררות; בלי זה הספר נשאר "בעריכה".
+    // מסתיים מיד ובסיבה window_closed, לפני שחרור הכרטיסיות.
     expect(service.hasSessionForTab(tabId), isFalse);
     await tester.runAsync(() => Future<void>.delayed(Duration.zero));
     await tester.pump(const Duration(seconds: 4));
     expect(ended, ['window_closed']);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('סגירת חלון Dart משחררת את הכרטיסיות שלו', (tester) async {
+    final windows = FakeViewWindows(tester);
+    final (contexts, _) = await pumpHost(
+      tester,
+      windows.registry,
+      closeFlow: (entry) => ViewWindowCloseFlow(
+        entry: entry,
+        opener: ViewWindowOpener(
+          registry: windows.registry,
+          native: windows.native,
+        ),
+        confirm: (_, _) async => true,
+        flush: () async {},
+      ),
+    );
+    final tab = TextBookTab(book: TextBook(title: 'שבת'), index: 0);
+    // ה-bloc מאזין לזרם סטטי; בלי שחרור הוא והכרטיסיה נשארים חיים.
+    final bloc = tab.bloc;
+    final a = windows.registry.open(
+      size: const Size(800, 600),
+      initialTab: tab,
+    )!;
+    await tester.pump();
+    final tabsA = contexts[a.slot]!.read<TabsBloc>();
+    await tester.pump(const Duration(seconds: 1));
+    expect(tabsA.state.tabs, [same(tab)]);
+
+    await a.controller.close();
+    await tester.pump();
+    expect(windows.stubOf(a).destroyed, isTrue);
+    await tester.pump(const Duration(seconds: 1));
+    expect(bloc.isClosed, isTrue);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 1));
