@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:otzaria/indexing/utils/indexing_crash_canary.dart';
 import 'dart:io';
-import 'dart:isolate';
 import 'dart:ui' as ui show IsolateNameServer;
 
 import 'package:flutter/material.dart';
@@ -753,36 +752,6 @@ class _FakeRunner {
     WindowOpener.debugOverride = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(MultiWindowService.channel, null);
-  }
-}
-
-/// החלון הראשון של התהליך — תופס משבצת ואת כינוי המארח, ועונה לכל בקשה.
-class _FakeOwner {
-  _FakeOwner(this.slot);
-
-  final int slot;
-  late final ReceivePort _port;
-
-  void register() {
-    _port = ReceivePort();
-    ui.IsolateNameServer.registerPortWithName(
-      _port.sendPort,
-      '$_namespace.$slot',
-    );
-    ui.IsolateNameServer.registerPortWithName(
-      _port.sendPort,
-      '$_namespace.owner',
-    );
-    _port.listen((message) {
-      final map = message as Map;
-      (map['reply'] as SendPort).send({'ok': true, 'result': null});
-    });
-  }
-
-  void dispose() {
-    ui.IsolateNameServer.removePortNameMapping('$_namespace.$slot');
-    ui.IsolateNameServer.removePortNameMapping('$_namespace.owner');
-    _port.close();
   }
 }
 
