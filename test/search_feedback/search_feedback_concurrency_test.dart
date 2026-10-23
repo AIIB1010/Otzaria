@@ -8,7 +8,6 @@ import 'package:otzaria/search_feedback/search_feedback_identity.dart';
 import 'package:otzaria/search_feedback/search_feedback_service.dart';
 import 'package:otzaria/search_feedback/search_feedback_queue.dart';
 import 'package:otzaria/search_feedback/search_feedback_sender.dart';
-import 'package:otzaria/settings/engine/settings_repository.dart';
 import 'search_feedback_test_support.dart';
 
 class NoTimer implements Timer {
@@ -42,7 +41,6 @@ void main() {
         osVersion: () => '10.0',
         locale: () => 'he',
         timerFactory: (_, _) => NoTimer(),
-        settingsChangesFromOtherWindows: const Stream.empty(),
         client: MockClient((r) async {
           posts.add(r);
           if (r.url.path.endsWith('/register')) {
@@ -75,59 +73,6 @@ void main() {
       expect(posts.where((p) => p.url.path.endsWith('/events')), hasLength(1));
     },
   );
-  test('revoke in primary removes an in-flight secondary append', () async {
-    final dir = await Directory.systemTemp.createTemp('audit1758_revoke_');
-    addTearDown(() => dir.delete(recursive: true));
-    final consent = MemoryConsentPersistence()
-      ..state = 'granted'
-      ..version = 1;
-    final changes = StreamController<String>();
-    addTearDown(changes.close);
-    final appendPaused = Completer<void>();
-    final resumeAppend = Completer<void>();
-    var secondaryDirectoryCalls = 0;
-    final secondary = SearchFeedbackService(
-      storageDirectory: () async {
-        secondaryDirectoryCalls++;
-        if (secondaryDirectoryCalls == 2) {
-          appendPaused.complete();
-          await resumeAppend.future;
-        }
-        return dir;
-      },
-      consentPersistence: consent,
-      settingsChangesFromOtherWindows: changes.stream,
-      isSecondaryWindow: () => true,
-      buildAllowsSending: false,
-      timerFactory: (_, _) => NoTimer(),
-      clock: () => kStart,
-      appVersion: () => '1.2.3',
-      platform: () => 'windows',
-      osVersion: () => '10.0',
-      locale: () => 'he',
-    );
-    final primary = SearchFeedbackService(
-      storageDirectory: () async => dir,
-      consentPersistence: consent,
-      isSecondaryWindow: () => false,
-      buildAllowsSending: false,
-      settingsChangesFromOtherWindows: const Stream.empty(),
-      timerFactory: (_, _) => NoTimer(),
-    );
-    secondary.recordSearch(searchContext());
-    await appendPaused.future;
-    await primary.revoke();
-    changes.add(SettingsRepository.keySearchFeedbackConsent);
-    await pumpEventQueue();
-    expect(secondary.isCollecting, isFalse);
-    resumeAppend.complete();
-    await secondary.whenQueued();
-    expect(
-      dir.listSync().where((f) => f.path.endsWith('.jsonl')),
-      isEmpty,
-      reason: 'pending event must not reappear after revoke completes',
-    );
-  });
   test('shared queue caps apply globally across writers', () async {
     final dir = await Directory.systemTemp.createTemp('audit1758_caps_');
     addTearDown(() => dir.delete(recursive: true));
@@ -177,7 +122,6 @@ void main() {
           platform: () => platform,
           buildAllowsSending: true,
           sendingAllowed: () => true,
-          settingsChangesFromOtherWindows: const Stream.empty(),
           timerFactory: (_, _) => NoTimer(),
           client: MockClient((_) async {
             posts++;
@@ -227,7 +171,6 @@ void main() {
       platform: () => 'windows',
       isSecondaryWindow: () => secondary,
       buildAllowsSending: false,
-      settingsChangesFromOtherWindows: const Stream.empty(),
       timerFactory: (_, _) => NoTimer(),
       appVersion: () => '1.2.3',
       osVersion: () => '10.0',
@@ -251,8 +194,7 @@ void main() {
     expect(
       segments,
       isEmpty,
-      reason:
-          'revoke completed; secondary SettingsSync notification may still be pending',
+      reason: 'revoke completed; secondary consent may still be stale',
     );
   });
 }
