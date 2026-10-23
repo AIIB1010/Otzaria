@@ -1412,8 +1412,8 @@ packages:
     dependency: "direct main"
     description:
       path: printing
-      ref: "1afd33d5b4215a0a77b97801cb31b17b5b9d04ef"
-      resolved-ref: "1afd33d5b4215a0a77b97801cb31b17b5b9d04ef"
+      ref: "742a2a967fdbd09afff08c1f2153df6c79b8e200"
+      resolved-ref: "742a2a967fdbd09afff08c1f2153df6c79b8e200"
       url: "https://github.com/Otzaria/dart_pdf"
     source: git
     version: "5.15.1"
