@@ -1,10 +1,4 @@
-// ⚠️ רצה בכל פלטפורמה, ובמכוון.
-//
-// כל מסלול הגרירה מגודר ב-`MultiWindowService.canOpenWindows`, שהוא
-// `Platform.isWindows`, ולכן הקובץ היה מסומן `@TestOn('windows')` — וה-CI
-// רץ על ubuntu. כלומר כל הבדיקות כאן היו ירוקות על מכונת המפתח בלבד.
-// ההיגיון שנבדק אינו תלוי פלטפורמה: מה שמעבר לערוץ מדומה ב-[_FakeRunner],
-// ו-`debugSupportedOverride` פותח את השער.
+// החלטות הגרירה נבדקות בכל פלטפורמה, עם חלון וערוץ runner מדומים.
 library;
 
 import 'dart:async';
@@ -22,6 +16,7 @@ import 'package:otzaria/core/windowing/cross_window_tab_drag.dart';
 import 'package:otzaria/core/windowing/drag_preview_colors.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
 import 'package:otzaria/core/windowing/tab_drag_preview.dart';
+import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/core/windowing/window_bus.dart';
 import 'package:otzaria/data/sqlite/sqlite3_api.dart';
 import 'package:otzaria/models/books.dart';
@@ -1387,6 +1382,7 @@ class _FakeRunner {
   int endCalls = 0;
 
   void install() {
+    WindowOpener.debugOverride = _RunnerOpener(this);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(MultiWindowService.channel, (call) async {
           switch (call.method) {
@@ -1430,18 +1426,12 @@ class _FakeRunner {
                 'x': 100,
                 'y': 200,
               };
-            case 'openWindow':
-              openWindowCalls++;
-              lastOpenArgs = call.arguments as Map<Object?, Object?>?;
-              return openWindowResult;
             case 'freezeTabDrag':
               freezeCalls++;
               return null;
             case 'endTabDrag':
               endCalls++;
               return null;
-            case 'windowCount':
-              return {'count': 1, 'max': 4, 'engines': 1};
             default:
               return null;
           }
@@ -1449,9 +1439,55 @@ class _FakeRunner {
   }
 
   void uninstall() {
+    WindowOpener.debugOverride = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(MultiWindowService.channel, null);
   }
+}
+
+/// פתיחת חלון דרך [WindowOpener.current], מתועדת ב-[_FakeRunner].
+class _RunnerOpener implements WindowOpener {
+  _RunnerOpener(this.runner);
+
+  final _FakeRunner runner;
+
+  @override
+  Future<bool> openWindow({
+    OpenedTab? tab,
+    ({int x, int y})? origin,
+    ({int left, int top, int width, int height})? bounds,
+    bool inheritPlacement = true,
+  }) async {
+    runner.openWindowCalls++;
+    runner.lastOpenArgs = {
+      if (origin != null) 'originX': origin.x,
+      if (origin != null) 'originY': origin.y,
+      if (bounds != null)
+        'bounds': {
+          'left': bounds.left,
+          'top': bounds.top,
+          'width': bounds.width,
+          'height': bounds.height,
+        },
+    };
+    return runner.openWindowResult;
+  }
+
+  @override
+  Future<bool> openEmptyWindow() => openWindow();
+
+  @override
+  Future<bool> restoreLastClosedWindow() async => false;
+
+  @override
+  Future<bool> canOpenAnotherWindow() async => true;
+
+  @override
+  Future<({int count, int max, int engines})?> windowCount() async =>
+      (count: 1, max: 8, engines: 1);
+
+  @override
+  Future<void> reportOpenWindowFailure() async {}
 }
 
 /// חלון יעד מדומה על האפיק.
