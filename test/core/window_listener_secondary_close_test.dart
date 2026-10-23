@@ -26,12 +26,12 @@ import 'package:otzaria/core/pre_close_registry.dart';
 import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
 import 'package:otzaria/core/window_listener.dart';
+import 'package:otzaria/core/windowing/app_quit.dart';
+import 'package:otzaria/core/windowing/app_window_controller.dart';
 import 'package:otzaria/core/windowing/runner_window_channel.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_opener.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
-import 'package:otzaria/core/windowing/app_quit.dart';
-import 'package:otzaria/core/windowing/app_window_controller.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_close_flow.dart';
 import 'package:otzaria/core/windowing/multiview/in_process_tab_drop.dart';
 import '../test_helpers/fake_view_window.dart';
@@ -584,8 +584,6 @@ class _FakeRunner {
               return null;
             case 'restoreLastClosedWindow':
               return true;
-            case 'setBusSlot':
-              return null;
             default:
               return null;
           }
