@@ -4,14 +4,10 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:window_manager/window_manager.dart';
 import 'package:hive_ce/hive.dart';
-import 'package:otzaria/core/messages/window_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/windowing/drag_preview_colors.dart';
-import 'package:otzaria/core/windowing/new_window_placement.dart';
 import 'package:otzaria/core/windowing/window_bus.dart';
-import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/library/hidden/hidden_library_selection.dart';
 import 'package:otzaria/core/messages/settings_messages.dart';
@@ -58,48 +54,18 @@ typedef VisibilityChangeResult = ({
   bool uncertain,
 });
 
-/// פותח חלונות אוצריא נוספים.
-///
-/// כל חלון הוא `FlutterEngine` נפרד, ב-isolate נפרד, **באותו תהליך**
-/// (ראו `docs/multi-window.md`). ה-runner הוא שיוצר את החלון,
-/// כי יצירת חלון ולולאת הודעות אינן זמינות מ-Dart.
-///
-/// ## ⚠️ כל המנועים חולקים את ה-thread הראשי. זהו חוב פתוח.
-///
-/// ההכרעה במודל A נשענה על thread ייעודי לכל מנוע — נמדד 102ms השהיה מול
-/// 2,092ms ב-thread משותף, פי 20. **המימוש לא הצליח לספק אותו:** יצירת
-/// מנוע על thread ייעודי קורסת בעקביות ברגע שהחלון הראשון רץ
-/// (`Isolate main is already scheduled on mutator thread`), וזהו גם מה
-/// שעושה `desktop_multi_window`. ראו `docs/multi-window.md`.
-///
-/// המשמעות המעשית: **חלון עסוק יכול להקפיא את השני.** התוכנה רצה בתצורת
-/// הבקרה, זו של 2,092ms. גרסה קודמת של התיעוד כאן הצהירה על ה-thread
-/// הייעודי כעל עובדה ש"אינה פרט מימוש שאפשר לוותר עליו", וה-runner אמר את
-/// ההפך המדויק — כלומר קוד היצור ניתב את המתחזק אל טענה שגויה.
-///
-/// זו המשימה הראשונה בהמשך: למדוד p95 זמן פריים בחלון סרק בזמן שהשני עסוק
-/// (בדיקה 10 של P-2, שטרם הורצה מול המימוש). שתי דרכים לא-בדוקות אם
-/// ההרעה גדולה מפי 2: יצירה על ה-thread הראשי ואז העברת בעלות ל-thread
-/// ייעודי, או הדגל `RunOnSeparateThread` — שעובד אך המנוע מכריז שיוסר.
-class MultiWindowService implements WindowOpener {
+/// הערוץ מול ה-runner עבור החלון הראשי: הסתרה, הבאה לחזית, הצגה מחדש של
+/// ראשי מוסתר, ותצוגת הגרירה של כרטיסיה מחוץ לחלון (Windows).
+/// חלונות נוספים הם חלונות Dart באותו מנוע — ראו `ViewWindowOpener`.
+class MultiWindowService {
   const MultiWindowService();
 
-  /// הערוץ מול ה-runner.
-  ///
-  /// חשוף כי התקשורת דו-כיוונית: `adoptPayload` נשלחת מה-runner אל החלון
-  /// כשהוא מחזיר חלון מוסתר לשימוש עם כרטיסיה חדשה.
   static const MethodChannel channel = MethodChannel('otzaria/multiwindow');
 
-  /// האם אפשר לפתוח חלונות נוספים בפלטפורמה הזו.
-  ///
-  /// שולט בכל מה שאינו גרירה: פתיחת חלון, האפיק בין החלונות, סנכרון
-  /// ההגדרות והמשבצת של מצב המשתמש.
+  /// האם אפשר לפתוח חלונות נוספים: ריבוי תצוגות פעיל. בלעדיו (macOS בלי
+  /// handshake, בלי בעלים) התוכנה בחלון יחיד והאפשרויות מוסתרות.
   static bool get canOpenWindows =>
       debugSupportedOverride ?? (!kIsWeb && MultiViewMode.enabled);
-
-  static bool get _hasRunner =>
-      debugSupportedOverride ??
-      (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux));
 
   /// האם אפשר לגרור כרטיסיה החוצה לחלון חדש או לחלון קיים.
   ///
@@ -109,138 +75,15 @@ class MultiWindowService implements WindowOpener {
       debugSupportedOverride ??
       (!kIsWeb && Platform.isWindows && MultiViewMode.enabled);
 
-  /// הארגומנט שבו ה-runner של לינוקס מסמן חלון משני. ל-`FlDartProject` אין
-  /// נקודת כניסה שאינה `main`, ולכן `main` מפנה לפיו ל-`secondaryWindowMain`.
-  static const String secondaryWindowArg = '--otzaria-secondary-window';
+  /// לכל runner של דסקטופ יש את הערוץ, גם בחלון יחיד.
+  static bool get _hasRunner =>
+      debugSupportedOverride ??
+      (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux));
 
-  /// דורס את [canOpenWindows] ו-[canDragTabsOut] **בבדיקות בלבד**.
-  ///
-  /// ⚠️ קיים כדי שסוויטת ההחלטות של הגרירה תרוץ בכל פלטפורמה. היא הייתה
-  /// מגודרת ב-`@TestOn('windows')`, וה-CI רץ על ubuntu — כלומר כל הבדיקות
-  /// של "מה קורה לכרטיסיה" (הסרה רק אחרי אישור, כרטיסיה אחרונה, שורת
-  /// המשימות, הצמדה) היו ירוקות על מכונת המפתח בלבד. ההיגיון עצמו אינו
-  /// תלוי פלטפורמה — רק ה-runner שמעבר לערוץ, והוא מדומה בבדיקה.
+  /// דורס את [canOpenWindows], [canDragTabsOut] וזמינות הערוץ **בבדיקות בלבד**,
+  /// כדי שההחלטות שמעבר לערוץ (המדומה) ייבדקו בכל פלטפורמה.
   @visibleForTesting
   static bool? debugSupportedOverride;
-
-  /// פותח חלון חדש, ואם [tab] אינו null — עם אותו טאב פתוח בו.
-  ///
-  /// מחזיר true רק אחרי שהחלון **נוצר בפועל** (או שחלון מוסתר הוחזר
-  /// לשימוש). ה-runner עונה מלולאת ההודעות שלו, אחרי היצירה.
-  ///
-  /// ⚠️ קודם לכן הוא החזיר true מיד אחרי הכנסת הבקשה לתור, וערך ההחזרה של
-  /// היצירה עצמה נזרק. שני אתרי הקריאה מוחקים את הכרטיסיה על סמך התשובה
-  /// הזו — כלומר כרטיסיה נמחקה על סמך הצלחה שלא נבדקה.
-  /// [origin] היא **הפינה** שבה החלון ייפתח, בקואורדינטות מסך.
-  ///
-  /// ⚠️ פינה, ולא "נקודת השחרור" שסביבה מחשבים. הגרסה הקודמת קיבלה את
-  /// מיקום הסמן והזיזה את החלון `-width + 100` — היסט שנועד לתצוגה ברוחב
-  /// 300, ועם חלון ברוחב 1400 הוא 1,300 פיקסלים שמאלה. אחרי ההידוק לקצה
-  /// המסך התוצאה הייתה קבועה: חלון שנגרר ימינה נפתח בשמאל.
-  ///
-  /// בלעדיה החלון נפתח בהיסט מדורג מהפינה, בלי קשר למקום שאליו גררו.
-  ///
-  /// [bounds] היא מסגרת מדויקת שדוחה את [origin] — כך חלון שהמשתמש
-  /// **הצמיד** בגרירה נוצר בדיוק במסגרת שההצמדה נתנה. בלעדיה ההצמדה
-  /// שהמשתמש ראה נעלמת ברגע שהחלון האמיתי מופיע.
-  ///
-  /// בלי שתיהן, ועם [inheritPlacement], החלון יורש גודל ומיקסום מהחלון הזה
-  /// ונפתח מדורג ממנו (#2989). שחזור חלונות שמורים מעביר false.
-  @override
-  Future<bool> openWindow({
-    OpenedTab? tab,
-    ({int x, int y})? origin,
-    ({int left, int top, int width, int height})? bounds,
-    bool inheritPlacement = true,
-  }) async {
-    if (!canOpenWindows) return false;
-    try {
-      var maximized = false;
-      if (origin == null && bounds == null && inheritPlacement) {
-        final placement = await _inheritedPlacement();
-        if (placement != null) {
-          bounds = placement.bounds;
-          maximized = placement.maximized;
-        }
-      }
-      // המידות נשלחות ל-runner כדי שייצור את החלון בגודל הנכון מלכתחילה.
-      // שינוי גודל אחרי היצירה היה מאתחל את ה-swapchain של המנוע וגורם
-      // להבהוב, בדיוק כמו שקורה בחלון הראשון (ראו initSettingsAndWindow).
-      Size? inherited;
-      try {
-        inherited = await windowManager.getSize();
-      } catch (_) {
-        // בלי מידות ה-runner ייצור בגודל ברירת מחדל.
-      }
-      final opened = await channel
-          .invokeMethod<bool>('openWindow', {
-            'payload': _encodePayload(tab),
-            if (inherited != null) 'width': inherited.width.round(),
-            if (inherited != null) 'height': inherited.height.round(),
-            if (origin != null) 'originX': origin.x,
-            if (origin != null) 'originY': origin.y,
-            if (bounds != null)
-              'bounds': {
-                'left': bounds.left,
-                'top': bounds.top,
-                'width': bounds.width,
-                'height': bounds.height,
-              },
-            if (maximized) 'maximized': true,
-          })
-          // ⚠️ רשת ביטחון. התשובה מגיעה מלולאת ההודעות של ה-runner,
-          // ואם החלון הפותח נהרס לפני שההודעה טופלה — אין מי שיענה.
-          // בלי ה-timeout מסלול העברת הכרטיסיה נשאר תלוי לנצח.
-          .timeout(const Duration(seconds: 20), onTimeout: () => false);
-      // false פירושו שהתקרה הושגה, או שהיצירה נכשלה — ה-runner הוא מקור
-      // האמת לשניהם.
-      return opened ?? false;
-    } on PlatformException catch (e) {
-      debugPrint('openWindow failed: ${e.code} ${e.message}');
-      return false;
-    } on MissingPluginException {
-      // ה-runner בגרסה זו אינו מכיר את הערוץ — למשל בבדיקות widget.
-      return false;
-    }
-  }
-
-  /// המסגרת של חלון חדש לפי מיקום החלון הזה; null כשה-runner לא דיווח.
-  Future<({PhysicalRect bounds, bool maximized})?> _inheritedPlacement() async {
-    try {
-      final source = SourceWindowPlacement.fromMap(
-        await channel.invokeMapMethod<Object?, Object?>('windowPlacement'),
-      );
-      if (source == null) return null;
-      var fullScreen = false;
-      try {
-        fullScreen = await windowManager.isFullScreen();
-      } catch (_) {
-        // בלי התשובה נשען על דגל המיקסום בלבד.
-      }
-      return cascadeNewWindowPlacement(source, fullScreen: fullScreen);
-    } catch (e) {
-      debugPrint('windowPlacement failed: $e');
-      return null;
-    }
-  }
-
-  /// פותח חלון חדש **ריק**, בלי כרטיסיה.
-  ///
-  /// התקרה נבדקת מראש כדי שהמשתמש לא ימתין ל-`openWindow` ורק אז יקבל
-  /// "אפשר לפתוח עד N חלונות". מחזיר true רק אם החלון נוצר בפועל.
-  @override
-  Future<bool> openEmptyWindow() async {
-    if (!canOpenWindows) return false;
-    if (!await canOpenAnotherWindow()) {
-      await reportOpenWindowFailure();
-      return false;
-    }
-    final opened = await openWindow();
-    if (!opened) {
-      await reportOpenWindowFailure();
-    }
-    return opened;
-  }
 
   /// המשבצות של חלונות אוצריא **שמוצגים על המסך** כרגע.
   ///
@@ -256,61 +99,7 @@ class MultiWindowService implements WindowOpener {
         return slots?.toSet();
       });
 
-  /// המשבצת של החלון הגלוי שהופעל אחרון, או null כשאין כזה.
-  ///
-  /// ⚠️ הנייטיב הוא מקור האמת: `LastActiveWindow` הוא static פר-isolate,
-  /// ולכן כל חלון רואה בו את עצמו בלבד. נדרש כדי שקישור `otzaria://` לא
-  /// יצוף בחלון שרירותי — או גרוע מכך, בחלון שהמשתמש סגר.
-  Future<int?> lastActiveSlot() => _guarded(
-    canOpenWindows,
-    'lastActiveSlot',
-    null,
-    () => channel.invokeMethod<int>('lastActiveSlot'),
-  );
-
-  /// מספר החלונות הפתוחים, התקרה, ומספר המנועים החיים.
-  ///
-  /// ה-runner הוא מקור האמת: ה-isolate של כל חלון רואה רק את עצמו.
-  ///
-  /// ⚠️ [engines] **אינו** [count]. חלון שנסגר מוסתר ולא נהרס, והמנוע שלו
-  /// נשאר חי — כלומר "נסגר החלון האחרון" יכול לקרות בעוד שלושה מנועים
-  /// רצים. ההבדל קובע אם `exit()` בטוח: P-2 מדד ש-`exit()` בזמן שמנוע אחר
-  /// חי מפיל בדיקה של ה-Dart VM ב-~1% מהיציאות.
-  ///
-  /// ⚠️ מחזיר `null` כש**לא ידוע** (הערוץ זרק). "חלון יחיד" מוחזר רק כשזו
-  /// באמת התשובה — הנחת "אני האחרון" בכשל הרגה את שאר החלונות ב-`exit(0)`.
-  @override
-  Future<({int count, int max, int engines})?> windowCount() async {
-    if (!canOpenWindows) return _singleWindow;
-    try {
-      final info = await channel.invokeMapMethod<String, dynamic>(
-        'windowCount',
-      );
-      if (info == null) return null;
-      return (
-        count: (info['count'] as int?) ?? 1,
-        max: (info['max'] as int?) ?? 1,
-        engines: (info['engines'] as int?) ?? 1,
-      );
-    } on PlatformException catch (e) {
-      debugPrint('windowCount failed: ${e.code} ${e.message}');
-      return null;
-    } on MissingPluginException {
-      // הפלטפורמה אינה מכירה את הערוץ — כאן "חלון יחיד" הוא באמת התשובה.
-      return _singleWindow;
-    }
-  }
-
-  static const ({int count, int max, int engines}) _singleWindow = (
-    count: 1,
-    max: 1,
-    engines: 1,
-  );
-
-  /// מביא את החלון הנוכחי לחזית.
-  ///
-  /// ⚠️ חלון משני נוצר מוסתר כדי שלא ייראה מצטייר, ו-`show()` על חלון
-  /// מוסתר אינו מפעיל אותו — הוא נחשף **מאחורי** החלון שפתח אותו.
+  /// מביא את החלון הראשי לחזית, ומציג אותו אם הוסתר.
   Future<void> raiseSelf() => _send(_hasRunner, 'raiseSelf');
 
   /// מתחיל להציג את הכרטיסיה הנגררת **מחוץ** לחלון.
@@ -420,11 +209,7 @@ class MultiWindowService implements WindowOpener {
   /// מסתיר את תצוגת הגרירה מיד. לכל מסלול סיום שאינו פותח חלון.
   Future<void> endTabDrag() => _send(canDragTabsOut, 'endTabDrag');
 
-  /// משחזר את החלון האחרון שנסגר. מחזיר true אם היה כזה.
-  ///
-  /// ⚠️ אפשרי **רק** מפני שחלון סגור מוסתר ולא נהרס: המנוע שלו חי עם
-  /// הכרטיסיות שהיו בו, ולכן השחזור הוא הצגה בלבד ולא טעינה מחדש.
-  @override
+  /// מציג שוב את החלון הראשי אם Dart הסתיר אותו. true אם היה מוסתר.
   Future<bool> restoreLastClosedWindow() => _guarded(
     _hasRunner,
     'restoreLastClosedWindow',
@@ -456,13 +241,6 @@ class MultiWindowService implements WindowOpener {
     );
   });
 
-  /// מודיע ל-runner באיזו משבצת באפיק החלון הזה יושב.
-  ///
-  /// ⚠️ בלי זה אי אפשר לגרור כרטיסיה בין חלונות: Win32 יודע איזה **חלון**
-  /// נמצא תחת הסמן, ו-Dart מזהה חלונות לפי משבצת. זה המתרגם.
-  Future<void> setBusSlot(int slot) =>
-      _send(canOpenWindows, 'setBusSlot', slot);
-
   /// מה נמצא תחת סמן העכבר ברגע זה.
   ///
   /// [slot] הוא משבצת חלון אוצריא, או null כשהסמן מעל שולחן העבודה או מעל
@@ -482,7 +260,7 @@ class MultiWindowService implements WindowOpener {
   Future<CursorTarget?> windowAtCursor({
     int? selfHwnd,
     bool withHwnd = false,
-  }) => _guarded(canOpenWindows, 'windowAtCursor', null, () async {
+  }) => _guarded(canDragTabsOut, 'windowAtCursor', null, () async {
     final info = await channel.invokeMapMethod<String, dynamic>(
       'windowAtCursor',
       withHwnd ? {'selfHwnd': ?selfHwnd} : null,
@@ -503,7 +281,7 @@ class MultiWindowService implements WindowOpener {
     );
   });
 
-  /// סוגר את החלון הנוכחי בלי לסיים את התהליך.
+  /// מסתיר את החלון הראשי בלי לסיים את התהליך.
   ///
   /// ⚠️ ולא `AppWindowController.quitApplication`: ב-Windows הוא
   /// `PostQuitMessage(0)` בלבד — לולאת ההודעות של **התהליך** יוצאת, כל
@@ -584,21 +362,6 @@ class MultiWindowService implements WindowOpener {
       return snapshot;
     } catch (e) {
       debugPrint('_snapshotPreferences failed: $e');
-      return const {};
-    }
-  }
-
-  /// מפענח את צילום ההעדפות מתוך מטען.
-  static Map<String, dynamic> decodePreferences(String? payload) {
-    if (payload == null || payload.isEmpty) return const {};
-    try {
-      final decoded = jsonDecode(payload);
-      if (decoded is! Map) return const {};
-      final settings = decoded['settings'];
-      if (settings is! Map) return const {};
-      return Map<String, dynamic>.from(settings);
-    } catch (e) {
-      debugPrint('decodePreferences failed: $e');
       return const {};
     }
   }
@@ -880,35 +643,6 @@ class MultiWindowService implements WindowOpener {
   /// עדכון הרשימה. הקורא היחיד הוא `WindowBusHost`.
   static void publishKnownPeers(List<WindowPeer> peers) {
     _knownPeers.value = peers;
-  }
-
-  /// כשל בפתיחת חלון — מברר אם הסיבה היא התקרה ומדווח בהתאם.
-  ///
-  /// ⚠️ מקום אחד. הלוגיקה `windowCount → count >= max` והמחרוזות שלה
-  /// שוכפלו בשלושה אתרי קריאה, ובכל אחד מהם נוסחו מחדש.
-  @override
-  Future<void> reportOpenWindowFailure() async {
-    final info = await windowCount();
-    if (info != null && info.count >= info.max) {
-      UiSnack.show(WindowMessages.windowLimitReached(info.max));
-    } else {
-      UiSnack.showError(WindowMessages.openWindowFailed);
-    }
-  }
-
-  /// האם התקרה כבר הושגה — נבדק **לפני** שמציעים למשתמש לפתוח חלון.
-  ///
-  /// ⚠️ בלי הבדיקה המוקדמת המשתמש משלים גרירה שלמה (כולל בחירת אזור
-  /// ב-Snap Layouts) או ממתין ל-`openWindow` עד 20 שניות, ורק אז מקבל
-  /// "אפשר לפתוח עד N חלונות".
-  @override
-  Future<bool> canOpenAnotherWindow() async {
-    if (!canOpenWindows) return false;
-    final info = await windowCount();
-    // כשלא ידוע — לתת ל-runner להכריע. הוא אוכף את התקרה ממילא, וחסימה על
-    // סמך כשל ערוץ הייתה מונעת פתיחת חלון בלי סיבה.
-    if (info == null) return true;
-    return info.count < info.max;
   }
 
   /// החלונות שאפשר להעביר אליהם כרטיסיה — מוצגים על המסך בלבד.

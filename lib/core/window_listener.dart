@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
-import 'package:otzaria/app_scope/process_duties.dart';
 import 'package:otzaria/plugins/services/startup_crash_counter.dart';
 import 'package:otzaria/app_report/services/app_crash_session.dart';
 import 'package:otzaria/app_report/services/app_hang_report.dart';
@@ -23,7 +22,6 @@ import 'package:otzaria/core/windowing/multiview/view_focus_sync.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_opener.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/core/windowing/window_bus.dart';
-import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/data/data_providers/cache_database_holder.dart';
 import 'package:otzaria/data/data_providers/sqlite_data_provider.dart';
@@ -80,9 +78,7 @@ class AppWindowListener extends WindowListener {
         return null;
       case 'appHangRecovered':
         // ה-UI isolate חזר להגיב; הדיווח לא יעכב את המשך הטיפול בהודעות.
-        if (ProcessDuties.current.isProcessOwner) {
-          unawaited(AppHangReport.onRecovered(call.arguments));
-        }
+        unawaited(AppHangReport.onRecovered(call.arguments));
         return null;
       default:
         return null;
@@ -469,15 +465,6 @@ class AppWindowListener extends WindowListener {
     );
 
     IndexingCrashCanary.current?.finish();
-    final owner = WindowBus.instance.ownerPort;
-    if (WindowRole.isSecondary && owner != null) {
-      // האינדוקס ממשיך ב-isolate הראשי גם כשהחלון שלו מוסתר.
-      await WindowBus.instance.requestPort(
-        owner,
-        const {'type': IndexingCrashCanary.finishRequest},
-        timeout: const Duration(seconds: 1),
-      );
-    }
 
     // סוגרים את כל ה-HTTP clients המתמשכים לפני כל ניקוי אחר. כל socket
     // פתוח מחזיק handle של kernel + state של TLS; ב-Windows admin install

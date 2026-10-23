@@ -9,7 +9,6 @@ import 'package:http/http.dart' as http;
 import 'package:otzaria/core/app_paths.dart';
 import 'package:otzaria/core/error_log_file.dart';
 import 'package:otzaria/core/http_client_registry.dart';
-import 'package:otzaria/app_scope/process_duties.dart';
 import 'package:otzaria/search_feedback/search_feedback_api.dart';
 import 'package:otzaria/search_feedback/search_feedback_events.dart';
 import 'package:otzaria/search_feedback/search_feedback_identity.dart';
@@ -149,8 +148,7 @@ class SearchFeedbackService
        _locale = locale ?? _defaultLocale,
        _random = random ?? Random.secure(),
        _timerFactory = timerFactory ?? Timer.new,
-       _isSecondaryWindow =
-           isSecondaryWindow ?? (() => !ProcessDuties.current.isProcessOwner),
+       _isSecondaryWindow = isSecondaryWindow ?? (() => false),
        _baseUrl = baseUrl ?? resolveBaseUrl(_baseUrlOverride) {
     final directory = storageDirectory ?? _defaultStorageDirectory;
     _directory = directory;

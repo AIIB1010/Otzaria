@@ -105,7 +105,6 @@ class _Runner {
             ...systemDrag,
           };
         }
-        if (call.method == 'openWindow') return true;
         return null;
       });
 

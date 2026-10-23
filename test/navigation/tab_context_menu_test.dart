@@ -302,6 +302,29 @@ void main() {
   group('"חלון חדש"', () {
     tearDown(() => MultiWindowService.debugSupportedOverride = null);
 
+    testWidgets('macOS בלי handshake: אף פריט של חלון אחר אינו מופיע', (
+      tester,
+    ) async {
+      MultiWindowService.debugSupportedOverride = null;
+      MultiViewMode.debugOverride = null;
+      MultiViewMode.debugIsMacOS = true;
+      addTearDown(() {
+        MultiViewMode.debugOverride = false;
+        MultiViewMode.debugResetMacRunner();
+      });
+      final tab = _StubTab('ספר א');
+      final entries = await buildEntries(
+        tester,
+        tab: tab,
+        state: TabsState(tabs: [tab], currentTabIndex: 0),
+      );
+
+      final labels = entries.map((entry) => entry.label).toSet();
+      for (final label in ['חלון חדש', 'העבר לחלון חדש', 'העבר לחלון קיים']) {
+        expect(labels, isNot(contains(label)));
+      }
+    });
+
     testWidgets('אינו מופיע כשריבוי חלונות אינו נתמך', (tester) async {
       MultiWindowService.debugSupportedOverride = false;
       final tab = _StubTab('ספר א');

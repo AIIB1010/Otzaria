@@ -244,6 +244,7 @@ class ViewWindowOpener implements WindowOpener {
 
   @override
   Future<bool> openEmptyWindow() async {
+    // חלון יחיד (בלי בעלים): האפשרות מוסתרת, ואין על מה לדווח.
     if (!MultiViewMode.enabled) return false;
     if (!await canOpenAnotherWindow()) {
       await reportOpenWindowFailure();

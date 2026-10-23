@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
 import 'package:otzaria/core/windowing/window_bus.dart';
@@ -10,35 +9,6 @@ import 'package:otzaria/tabs/models/tool_tab.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
-  group('lastActiveSlot', () {
-    setUp(() => MultiWindowService.debugSupportedOverride = true);
-    tearDown(() {
-      MultiWindowService.debugSupportedOverride = null;
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(MultiWindowService.channel, null);
-    });
-
-    void mock(Future<Object?> Function(MethodCall call) handler) {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(MultiWindowService.channel, handler);
-    }
-
-    test('מחזיר את המשבצת שה-runner דיווח עליה', () async {
-      mock((call) async => call.method == 'lastActiveSlot' ? 3 : null);
-      expect(await const MultiWindowService().lastActiveSlot(), 3);
-    });
-
-    test('אין חלון גלוי — null', () async {
-      mock((call) async => null);
-      expect(await const MultiWindowService().lastActiveSlot(), isNull);
-    });
-
-    test('כשל בערוץ אינו זורק ומחזיר null', () async {
-      mock((call) async => throw PlatformException(code: 'boom'));
-      expect(await const MultiWindowService().lastActiveSlot(), isNull);
-    });
-  });
 
   group('payloadHasTab', () {
     test('מזהה מטען עם כרטיסיה בלי לפענח אותה', () {
@@ -98,24 +68,6 @@ void main() {
         ),
         isNull,
       );
-    });
-  });
-
-  group('decodePreferences', () {
-    test('מחזיר את ההגדרות שנזרעו', () {
-      final payload = jsonEncode({
-        'version': 1,
-        'settings': {'key-library-path': r'C:\books', 'key-dark-mode': true},
-      });
-      final prefs = MultiWindowService.decodePreferences(payload);
-      expect(prefs['key-library-path'], r'C:\books');
-      expect(prefs['key-dark-mode'], true);
-    });
-
-    test('מטען בלי הגדרות מחזיר מפה ריקה', () {
-      expect(MultiWindowService.decodePreferences(null), isEmpty);
-      expect(MultiWindowService.decodePreferences('{not json'), isEmpty);
-      expect(MultiWindowService.decodePreferences(jsonEncode({})), isEmpty);
     });
   });
 

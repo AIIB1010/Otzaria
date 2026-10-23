@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:path/path.dart' as p;
-import 'package:otzaria/app_scope/process_duties.dart';
 import 'package:otzaria/core/user_state/user_state_slot.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
@@ -332,10 +331,7 @@ class TabsRepository {
   /// ⚠️ רץ פעם אחת בהפעלה קרה, לפני שה-blocs נבנים: `TabsBloc`
   /// ו-`NavigationBloc` טוענים שניהם אחריו ורואים אותו דבר.
   static Future<int> adoptOrphanWindowSessions() async {
-    if (!ProcessDuties.current.isProcessOwner ||
-        WindowBus.instance.hasOtherWindows) {
-      return 0;
-    }
+    if (WindowBus.instance.hasOtherWindows) return 0;
     final host = WindowTabsSession.current.slot;
     if (host == null) return 0;
     try {
@@ -360,10 +356,7 @@ class TabsRepository {
   /// שתופס את המשבצת הפנויה הראשונה — ימצא במשבצת שלו את הסשן שנועד לו.
   /// מחזיר את המשבצות שיש לפתוח להן חלון, לפי הסדר.
   static Future<List<int>> compactWindowSessions() async {
-    if (!ProcessDuties.current.isProcessOwner ||
-        WindowBus.instance.hasOtherWindows) {
-      return const [];
-    }
+    if (WindowBus.instance.hasOtherWindows) return const [];
     final host = WindowTabsSession.current.slot;
     if (host == null) return const [];
     try {

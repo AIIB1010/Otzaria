@@ -38,7 +38,6 @@ import 'package:otzaria/core/windowing/multiview/view_window_close_flow.dart';
 import 'package:otzaria/core/windowing/multiview/in_process_tab_drop.dart';
 import '../test_helpers/fake_view_window.dart';
 import 'package:otzaria/core/windowing/window_bus.dart';
-import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/tabs/tabs_repository.dart';
 
 /// ⚠️ קידומת ייחודית לסוויטה — [ui.IsolateNameServer] גלובלי לתהליך.
@@ -59,7 +58,6 @@ void main() {
 
   setUp(() async {
     WindowBus.namespace = _namespace;
-    WindowRole.isSecondary = false;
     MultiViewMode.debugOverride = false;
     // ה-runner מדומה כדי לבדוק את מסלול ריבוי החלונות בכל פלטפורמה.
     MultiWindowService.debugSupportedOverride = true;
@@ -84,7 +82,6 @@ void main() {
     database.close();
     runner.uninstall();
     MultiWindowService.debugSupportedOverride = null;
-    WindowRole.isSecondary = false;
     WindowBus.instance.onRequest = null;
     WindowBus.instance.unregister();
     for (var i = 1; i <= WindowBus.slotCount; i++) {
@@ -716,7 +713,7 @@ void main() {
   });
 }
 
-/// ה-runner המדומה. `windowCount` מחזיר שניים כברירת מחדל — "אינך האחרון".
+/// `windowCount` מחזיר שניים כברירת מחדל — "אינך האחרון".
 class _TwoWindowsOpener extends Fake implements WindowOpener {
   _TwoWindowsOpener([this.count]);
   final int Function()? count;

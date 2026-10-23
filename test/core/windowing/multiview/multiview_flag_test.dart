@@ -25,7 +25,6 @@ void main() {
     MultiViewMode.debugOverride = null;
     final supported = Platform.isWindows || Platform.isLinux;
     expect(MultiViewMode.supported, supported);
-    expect(MultiViewMode.usesEngineWindows, isFalse);
   });
 
   test('binding של בדיקות: הבעלים לא מותקן וריבוי התצוגות כבוי', () {
@@ -35,11 +34,8 @@ void main() {
     expect(installWindowingOwner(), isFalse);
     expect(MultiViewMode.ownerInstalled, isFalse);
     expect(MultiViewMode.enabled, isFalse);
-    // גם בלי בעלים, Windows ו-Linux אינם חוזרים למנוע לכל חלון.
-    expect(
-      MultiViewMode.usesEngineWindows,
-      isFalse,
-    );
+    expect(MultiWindowService.canOpenWindows, isFalse);
+    expect(WindowOpener.current, same(ViewWindowOpener.instance));
   });
 
   test('בלי בעלים, יצירת חלון נכשלת בשגיאת Dart ולא בקריסה נייטיבית', () {
@@ -57,10 +53,8 @@ void main() {
   test('debugOverride גובר על מצב הבעלים', () {
     MultiViewMode.debugOverride = true;
     expect(MultiViewMode.enabled, isTrue);
-    expect(MultiViewMode.usesEngineWindows, isFalse);
     MultiViewMode.debugOverride = false;
     expect(MultiViewMode.enabled, isFalse);
-    expect(MultiViewMode.usesEngineWindows, isFalse);
   });
 
   test('nativeHandle: בקר שאינו נייטיב או חלון שנהרס מחזירים null', () {
@@ -101,7 +95,6 @@ void main() {
 
     test('לפני ה-handshake: חלון יחיד', () {
       expect(MultiViewMode.supported, isFalse);
-      expect(MultiViewMode.usesEngineWindows, isFalse);
       expect(installWindowingOwner(), isFalse);
     });
 
@@ -109,18 +102,17 @@ void main() {
       runnerAnswers(true);
       expect(await awaitMacRunnerHandshake(), isNull);
       expect(MultiViewMode.supported, isTrue);
-      expect(MultiViewMode.usesEngineWindows, isFalse);
     });
 
     test('לא מוכן: חלון יחיד, עם הסיבה', () async {
       runnerAnswers(false);
       expect(await awaitMacRunnerHandshake(), 'flip not applied');
       expect(MultiViewMode.supported, isFalse);
-      expect(MultiViewMode.usesEngineWindows, isFalse);
       expect(MultiViewMode.enabled, isFalse);
       expect(MultiWindowService.canOpenWindows, isFalse);
       expect(MultiWindowService.canDragTabsOut, isFalse);
       expect(WindowOpener.current, same(ViewWindowOpener.instance));
+      expect(await WindowOpener.current.canOpenAnotherWindow(), isFalse);
       expect(await WindowOpener.current.openEmptyWindow(), isFalse);
     });
 
@@ -141,7 +133,7 @@ void main() {
         ),
       );
       const runner = MultiWindowService();
-      expect(await runner.openWindow(), isFalse);
+      expect(await WindowOpener.current.openWindow(), isFalse);
       await runner.closeSelf();
       await runner.raiseSelf();
       expect(await runner.restoreLastClosedWindow(), isTrue);

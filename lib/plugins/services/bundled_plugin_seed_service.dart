@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:http/http.dart' as http;
 import 'package:otzaria/core/app_paths.dart';
-import 'package:otzaria/app_scope/process_duties.dart';
 import 'package:otzaria/plugins/models/installed_plugin.dart';
 import 'package:otzaria/plugins/models/plugin_permission_labels.dart';
 import 'package:otzaria/plugins/models/plugin_valid_permissions.dart';
@@ -65,9 +64,7 @@ class BundledPluginSeedService {
        _isSiteReachable = isSiteReachable ?? _otzariaSiteReturnsOk;
 
   static Future<bool> _otzariaSiteReturnsOk() async {
-    // הבדיקה שייכת לחלון הראשי — אחרת כל חלון נוסף שולח בקשה משלו.
-    if (!ProcessDuties.current.isProcessOwner ||
-        (Settings.getValue<bool>(SettingsRepository.keyOfflineMode) ?? false)) {
+    if (Settings.getValue<bool>(SettingsRepository.keyOfflineMode) ?? false) {
       return false;
     }
     try {

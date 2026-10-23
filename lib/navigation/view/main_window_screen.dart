@@ -1431,7 +1431,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
     if (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS) return;
     if (!mounted) return;
     // `raiseSelf` מעלה את חלון ה-runner, כלומר את הראשי ולא חלון Dart.
-    if (MultiWindowService.canOpenWindows && !_role.isViewWindow) {
+    if (!_role.isViewWindow) {
       await const MultiWindowService().raiseSelf();
       return;
     }

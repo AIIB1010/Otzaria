@@ -9,7 +9,6 @@ import 'package:otzaria/core/messages/window_messages.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
 import 'package:otzaria/core/windowing/window_bus.dart' show WindowPeer;
-import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/tabs/models/tab.dart';
 import 'package:otzaria/tabs/models/text_tab.dart';
@@ -407,13 +406,10 @@ void main() {
     });
   });
 
-  group('WorkspaceBloc בחלון משני', () {
+  group('WorkspaceBloc כשהרשימה מתמלאת בזמן הטעינה', () {
     setUp(() async {
       await Settings.init(cacheProvider: _MemoryCacheProvider());
-      WindowRole.isSecondary = true;
     });
-
-    tearDown(() => WindowRole.isSecondary = false);
 
     test('אינו ננעל על השולחן של הבעלים כשהרשימה חוזרת לא ריקה', () async {
       // המרוץ: `load` מחזיר רשימה ריקה כי הבעלים עוד טוען, אבל עד ה-`mutate`

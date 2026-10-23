@@ -14,7 +14,6 @@ import 'package:otzaria/attached_libraries/repository/attached_library_registry.
 import 'package:otzaria/core/app_paths.dart';
 import 'package:otzaria/core/user_state/pending_report_store.dart';
 import 'package:otzaria/core/messages/window_messages.dart';
-import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/core/user_state/user_state_slot.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
@@ -61,7 +60,6 @@ void main() {
     box = await Hive.openBox<dynamic>(HiveCache.keyName);
     // בלי אפיק חלונות, ולכן המשבצת היא של החלון היחיד.
     MultiWindowService.debugSupportedOverride = false;
-    WindowRole.isSecondary = false;
     UserStateDatabase.instance.overridePath(
       p.join(tempDir.path, 'user_state.db'),
     );
@@ -84,7 +82,6 @@ void main() {
     PluginSystemDatabase.instance.resetForTests();
     UserStateDatabase.instance.close();
     MultiWindowService.debugSupportedOverride = null;
-    WindowRole.isSecondary = false;
     AppPaths.debugOverrideDataRootPath(null);
     await tempDir.delete(recursive: true);
   });
@@ -403,17 +400,6 @@ void main() {
       });
     }
   }
-
-  test('חלון משני אינו מגדיר ואינו סוגר את מקור הספרים האישיים', () async {
-    final engine = FakeLineSourceEngine();
-    LibraryLineSource.debugReset(engine: engine);
-    addTearDown(LibraryLineSource.debugReset);
-    WindowRole.isSecondary = true;
-
-    await UserBooksDatabaseHolder.instance.repository;
-    await UserBooksDatabaseHolder.instance.close();
-    expect(engine.userBooksCalls, isEmpty);
-  });
 
   test('מפתחות ההסתרה מוצהרים ונכנסים גם במסלול הנסיגה (issue #1448)', () {
     // כש-Hive אינו פתוח הגיבוי אוסף את הרשימה המוצהרת בלבד. מפתח שאינו שם

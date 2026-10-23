@@ -6,7 +6,6 @@ import 'package:otzaria/core/app_paths.dart';
 import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
-import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/data/data_providers/hive_data_provider.dart';
 import 'package:otzaria/main.dart' as app;
 
@@ -21,7 +20,6 @@ void main() {
     AppPaths.debugOverrideDataRootPath(tmp.path);
     database.overridePath('${tmp.path}/user_state.db');
     MultiWindowService.debugSupportedOverride = false;
-    WindowRole.isSecondary = false;
     Hive.init(tmp.path);
   });
 

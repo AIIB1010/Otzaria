@@ -7,7 +7,6 @@ import 'package:otzaria/bookmarks/repository/bookmark_repository.dart';
 import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/core/user_state/user_state_list_store.dart';
 import 'package:otzaria/core/windowing/window_bus.dart';
-import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/history/history_repository.dart';
 import 'package:otzaria/models/books.dart';
 
@@ -36,7 +35,6 @@ void main() {
 
   setUp(() async {
     WindowBus.namespace = _namespace;
-    WindowRole.isSecondary = false;
     tmp = Directory.systemTemp.createTempSync('otzaria_single_window_');
     database = UserStateDatabase.openAt('${tmp.path}/user_state.db');
     await database.database;

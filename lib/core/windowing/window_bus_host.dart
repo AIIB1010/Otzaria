@@ -13,7 +13,6 @@ import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
 import 'package:otzaria/core/windowing/external_tab_drag.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
-import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/user_state/user_state_list_store.dart';
 import 'package:otzaria/core/windowing/settings_sync.dart';
 import 'package:otzaria/core/windowing/window_bus.dart';
@@ -83,17 +82,11 @@ class _WindowBusHostState extends State<WindowBusHost> {
     // ⚠️ החלון הראשון רושם גם את כינוי הבעלים. בלעדיו איתור מחזיק המאגרים
     // המשותפים היה סריקת `describe` עם timeout — והבעלים דווקא עסוק בזמן
     // שנפתח חלון שני, כלומר הסריקה פקעה בדיוק כשהיא נחוצה.
-    final slot = LibraryAccessGate.instance.registerWindow(
-      asOwner: ProcessDuties.current.isProcessOwner,
-    );
+    LibraryAccessGate.instance.registerWindow(asOwner: true);
     WindowBus.instance.onRequest = _handleRequest;
     LibraryAccessGate.instance.onLibraryReplaced = () {
       if (mounted) context.read<LibraryBloc>().add(const RefreshLibrary());
     };
-    // מודל A: ה-runner צריך את המיפוי כדי לתרגם "החלון שתחת הסמן" למשבצת.
-    if (slot != null && MultiViewMode.usesEngineWindows) {
-      unawaited(const MultiWindowService().setBusSlot(slot));
-    }
 
     // ⚠️ רענון ברקע ולא לפי דרישה: בניית תפריט ההקשר סינכרונית ואינה
     // יכולה להמתין לסריקה. בלי זה הלחיצה הימנית הראשונה אחרי פתיחת חלון
@@ -216,9 +209,6 @@ class _WindowBusHostState extends State<WindowBusHost> {
       case IndexingCrashCanary.finishRequest:
         IndexingCrashCanary.current?.finish();
         return true;
-      case PluginSafeMode.readyRequest:
-        await PluginSafeMode.ready;
-        return PluginSafeMode.isActive;
       case MultiWindowService.requestDescribe:
         return _describe();
       case MultiWindowService.requestReceiveTab:

@@ -17,6 +17,7 @@ import 'package:otzaria/core/windowing/app_window_id.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/history/bloc/history_bloc.dart';
 import 'package:otzaria/history/bloc/history_event.dart';
@@ -368,6 +369,30 @@ void main() {
     expect(opener.restoredWindows, 1);
 
     await tester.pump(const Duration(milliseconds: 400));
+  });
+
+  testWidgets('macOS בלי handshake: הקיצור אינו פותח חלון ועובר הלאה', (
+    tester,
+  ) async {
+    // ⚠️ בלי דריסה: כך נגזר חלון יחיד כשה-runner לא הפך את ריבוי התצוגות.
+    MultiWindowService.debugSupportedOverride = null;
+    MultiViewMode.debugOverride = null;
+    MultiViewMode.debugIsMacOS = true;
+    addTearDown(() {
+      MultiViewMode.debugOverride = false;
+      MultiViewMode.debugResetMacRunner();
+    });
+    createWindows();
+    AppWindowKeys.resetForTest();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Row(children: [a.build(settings, _FakeWindow(), scoped: false)]),
+      ),
+    );
+    await tester.pump();
+
+    await _press(tester, _ctrlAltN);
+    expect(opener.emptyWindows, 0);
   });
 
   testWidgets('חלון יחיד מטפל בקיצור גם בלי הפעלה מפורשת', (tester) async {
