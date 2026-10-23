@@ -89,8 +89,8 @@ class ViewWindowCloseFlow {
           debugPrint('view window close: flush failed: $e');
         }
         if (_abandoned.isCompleted) return false;
+        // מכאן הסגירה שאושרה מושלמת גם אם העץ נבנה מחדש.
         await opener.rememberClosed(entry.slot);
-        if (_abandoned.isCompleted) return false;
         // סגירה מכוונת מוחקת את הסשן; קודם endSession, ששמירה באמצע לא תחזיר אותו.
         entry.endSession();
         try {
@@ -99,7 +99,6 @@ class ViewWindowCloseFlow {
           // השורה תאומץ בהפעלה הבאה; החלון נסגר בכל מקרה.
           debugPrint('view window close: discard failed: $e');
         }
-        if (_abandoned.isCompleted) return false;
         entry.handle.destroy();
         destroyed = true;
         return true;

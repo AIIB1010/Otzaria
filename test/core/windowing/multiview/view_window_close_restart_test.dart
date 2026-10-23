@@ -200,7 +200,9 @@ void main() {
   });
 
   for (final phase in ['flush', 'remember', 'discard']) {
-    testWidgets('אתחול מחדש מבטל סגירה שממתינה ב-$phase', (tester) async {
+    testWidgets('אתחול מחדש בזמן $phase מכבד את גבול סגירת הסשן', (
+      tester,
+    ) async {
       final windows = FakeViewWindows(tester);
       final entered = Completer<void>();
       final release = Completer<void>();
@@ -237,9 +239,18 @@ void main() {
       release.complete();
       await tester.pump();
       await closing;
-      expect(windows.stubOf(entry).destroyed, isFalse);
-      expect(windows.registry.windows, [entry]);
-      expect(entry.closeHandler, isNotNull);
+      final committed = phase != 'flush';
+      if (phase == 'remember') expect(opener.closedCountForTest, 1);
+      if (phase == 'flush') expect(opener.closedCountForTest, 0);
+      expect(windows.stubOf(entry).destroyed, committed);
+      expect(windows.registry.windows, committed ? isEmpty : [entry]);
+      if (committed) {
+        expect(entry.tabsSession.slot, isNull);
+        expect(entry.closeHandler, isNull);
+      } else {
+        expect(entry.tabsSession.slot, entry.slot);
+        expect(entry.closeHandler, isNotNull);
+      }
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(seconds: 1));
     });
@@ -340,6 +351,6 @@ class _GateSessions extends WindowSessionStore {
   @override
   Future<WindowSession?> load(int slot) async {
     await wait();
-    return null;
+    return WindowSession(slot: slot, tabsJson: '[]', currentIndex: 0);
   }
 }
