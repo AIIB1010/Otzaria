@@ -578,6 +578,10 @@ class AppWindowListener extends WindowListener {
         await Sentry.close();
       }
 
+      // ⚠️ אחרי השטיפה, כך שהסשנים שלהם נשמרים; בלי Job Object היו נשארים
+      // על המסך עד `exit(0)`.
+      if (MultiViewMode.enabled) ViewWindowOpener.instance.destroyAllForQuit();
+
       if (!kIsWeb &&
           (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
         if (Platform.isWindows) {

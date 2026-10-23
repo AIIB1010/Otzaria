@@ -20,7 +20,7 @@ class _MemoryTabs extends TabsRepository {
   List<OpenedTab> tabs;
 
   @override
-  List<OpenedTab> loadTabs() => tabs;
+  List<OpenedTab> loadTabs({bool newRuntime = false}) => tabs;
   @override
   int loadCurrentTabIndex() => 0;
   @override

@@ -41,9 +41,12 @@ class WindowTabsSession {
 
   void resume() => _suspended = false;
 
-  /// דור הסשן של החלון הזה: עולה בכל [TabsRepository.importRaw].
+  /// דור הסשן של החלון: עולה בהחלפת עץ הטאבים או בייבוא מגיבוי.
   int get generation => _generation;
   int _generation = 0;
+
+  /// מקצה לעץ החדש דור שמירה; אירועי העץ הקודם אינם שומרים עוד.
+  int beginRuntime() => ++_generation;
 
   /// האינדקס הפעיל שממתין לכתיבה, והמשבצת שאליה.
   Timer? _indexTimer;
@@ -232,8 +235,9 @@ class TabsRepository {
   /// מבחינת המשתמש. סגירה יזומה מוחקת אותו ([discardWindowSession]),
   /// ולכן חלון חדש אינו יורש שרידים של חלון שנסגר.
   ///
+  /// [newRuntime] מנתק את זהות התוספים מעץ קודם שעשוי עדיין להתפרק.
   /// ⚠️ סינכרוני — נקרא מבנאי של bloc. מחייב שהמסד כבר נפתח באתחול.
-  List<OpenedTab> loadTabs() {
+  List<OpenedTab> loadTabs({bool newRuntime = false}) {
     _restoredCurrentIndex = null;
     final slot = _sessionSlot;
     if (slot == null) return const [];
@@ -245,7 +249,12 @@ class TabsRepository {
       final rawTabs = _decodeTabs(session.tabsJson);
       for (var i = 0; i < rawTabs.length; i++) {
         try {
-          tabs.add(OpenedTab.fromJson(castMap(rawTabs[i])));
+          final json = castMap(rawTabs[i]);
+          tabs.add(
+            OpenedTab.fromJson(
+              newRuntime ? OpenedTab.withNewRuntimeIdentity(json) : json,
+            ),
+          );
           indexByOriginal[i] = tabs.length - 1;
         } catch (tabError) {
           debugPrint('⚠️ Skipping tab that failed to restore: $tabError');

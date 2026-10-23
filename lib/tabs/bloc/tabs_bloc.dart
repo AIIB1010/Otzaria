@@ -47,6 +47,7 @@ class _ClosedTabEntry {
 class TabsBloc extends Bloc<TabsEvent, TabsState> {
   final TabsRepository _repository;
   final Duration _disposeDelay;
+  Future<void>? _closeFuture;
 
   /// Wraps a newly opened tab with its companion pane, when it has one.
   final Future<OpenedTab> Function(OpenedTab tab) _withCompanion;
@@ -68,14 +69,14 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
   int _pendingSaveIndex = 0;
   Future<void>? _saveDrain;
   final _pendingOpenTabs = Queue<Completer<void>>();
+  final _pendingAddTabs = Queue<Completer<void>>();
   final _pendingRemovals = Queue<Future<void>?>();
 
   /// מבקש שמירה של הטאבים, בלי להמתין לה.
   ///
   /// כל שמירה מקודדת את *כל* הטאבים, ולכן בקשות שמגיעות בזמן שכתיבה רצה
   /// מתמזגות לכתיבה אחת שאחריה.
-  /// הסשן שה-bloc הזה נבנה עליו. ייבוא מגיבוי מקדם את הדור, ומאותו רגע
-  /// ה-bloc הישן — שעומד להיזרק ב-`RestartWidget` — אינו שומר יותר.
+  /// סשן החלון ודור העץ; עץ חדש או ייבוא מונעים מהישן לשמור.
   final WindowTabsSession _session;
   final int _sessionGeneration;
 
@@ -121,7 +122,7 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
 
   Future<void> _drainSaves() async {
     try {
-      while (_pendingSaveTabs != null) {
+      while (_pendingSaveTabs != null && !_sessionReplaced) {
         final tabs = _pendingSaveTabs!;
         final index = _pendingSaveIndex;
         _pendingSaveTabs = null;
@@ -132,7 +133,9 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
         }
         // הכתיבה נשאה את האינדקס שהיה בתחילתה; אם המשתמש החליף טאב בזמנה,
         // היא דרסה את מה שכתב [_saveCurrentTabIndex].
-        if (_pendingSaveTabs == null && _pendingSaveIndex != index) {
+        if (!_sessionReplaced &&
+            _pendingSaveTabs == null &&
+            _pendingSaveIndex != index) {
           try {
             await _repository.saveCurrentTabIndex(tabs, _pendingSaveIndex);
           } catch (error, stackTrace) {
@@ -148,6 +151,7 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
   /// שומר את האינדקס הפעיל בלבד, ומעדכן גם את האינדקס של השמירה המלאה —
   /// זו שממתינה וזו שרצה — כדי שלא תחזיר לאחור את הטאב שנבחר.
   Future<void> _saveCurrentTabIndex(List<OpenedTab> tabs, int index) {
+    if (_sessionReplaced) return Future<void>.value();
     _pendingSaveIndex = index;
     return _repository.saveCurrentTabIndex(tabs, index);
   }
@@ -204,6 +208,17 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
     }
   }
 
+  /// העץ פורק והסשן נשטף: אין עוד UI שצריך להמתין לניתוקו.
+  void _releaseTabs() {
+    for (final tab in state.tabs) {
+      tab.dispose();
+    }
+    for (final entry in _recentlyClosedTabs) {
+      entry.tab.dispose();
+    }
+    _recentlyClosedTabs.clear();
+  }
+
   /// [disposeDelay] - השהיית השחרור של טאב שיצא מהרשימה; טסטים מעבירים אפס.
   /// [session] - סשן החלון שהדור שלו נבדק; חייב להיות זה של המאגר.
   TabsBloc({
@@ -212,12 +227,19 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
     this._withCompanion = withCompanionPane,
     WindowTabsSession? session,
   }) : _session = session ?? WindowTabsSession.current,
-       _sessionGeneration = (session ?? WindowTabsSession.current).generation,
+       _sessionGeneration = (session ?? WindowTabsSession.current)
+           .beginRuntime(),
        super(TabsState.initial()) {
     on<LoadTabs>(_onLoadTabs, transformer: sequential());
     on<RemapBookPaths>(_onRemapBookPaths, transformer: sequential());
     on<ReplaceAllTabs>(_onReplaceAllTabs, transformer: sequential());
-    on<AddTab>(_onAddTab, transformer: sequential());
+    on<AddTab>((event, emit) async {
+      try {
+        await _onAddTab(event, emit);
+      } finally {
+        _pendingAddTabs.removeFirst().complete();
+      }
+    }, transformer: sequential());
     on<OpenOrFocusTab>(
       (event, emit) async {
         try {
@@ -285,6 +307,7 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
     super.onEvent(event);
     // הרישום נעשה בשליחה: גם פתיחה שממתינה בתור חייבת להקדים את הסגירה.
     if (event is OpenOrFocusTab) _pendingOpenTabs.add(Completer<void>());
+    if (event is AddTab) _pendingAddTabs.add(Completer<void>());
     if (event is RemoveTab) {
       _pendingRemovals.add(
         _pendingOpenTabs.isEmpty ? null : _pendingOpenTabs.last.future,
@@ -295,16 +318,27 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
   late final Future<void> Function() _preCloseCallback;
 
   @override
-  Future<void> close() async {
+  Future<void> close() => _closeFuture ??= Future<void>.sync(() async {
     PreCloseRegistry.unregister(_preCloseCallback);
-    await _flushPendingSaves();
-    await super.close();
-  }
+    try {
+      do {
+        await Future.wait([
+          for (final pending in _pendingOpenTabs) pending.future,
+          for (final pending in _pendingAddTabs) pending.future,
+        ]);
+      } while (_pendingOpenTabs.isNotEmpty || _pendingAddTabs.isNotEmpty);
+      await _flushPendingSaves();
+    } finally {
+      final closing = super.close();
+      _releaseTabs();
+      await closing;
+    }
+  });
 
   void _onLoadTabs(LoadTabs event, Emitter<TabsState> emit) {
     // הטאבים והאינדקס מנורמלים יחד כדי לשמור על הטאב הפעיל.
     final restored = flattenRestoredSplits(
-      _repository.loadTabs(),
+      _repository.loadTabs(newRuntime: true),
       currentIndex: _repository.loadCurrentTabIndex(),
     );
     final tabs = restored.tabs;
@@ -526,7 +560,7 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
         existingTab: matchingTab,
         incomingTab: event.tab,
       );
-      event.tab.dispose();
+      if (!identical(event.tab, matchingTab)) event.tab.dispose();
       final tabsToSave = state.tabs;
       final readerTarget = event.tab is TextBookTab
           ? _resolveTextBookTab(

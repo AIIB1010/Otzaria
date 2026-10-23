@@ -83,6 +83,7 @@ import 'package:otzaria/core/user_state/window_session_store.dart';
 import 'package:otzaria/core/windowing/multiview/multi_view_host.dart';
 import 'package:otzaria/core/windowing/last_active_window.dart';
 import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
+import 'package:otzaria/core/windowing/app_quit.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_opener.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_scope.dart';
 import 'package:otzaria/core/windowing/dock_progress_listener.dart';
@@ -1603,6 +1604,8 @@ class _AppBootstrapState extends State<AppBootstrap> {
 
   @override
   Widget build(BuildContext context) {
+    // ⚠️ גם לחלונות ה-Dart: הפריים הזה מפריד בין פירוק העצים הישנים לבניית
+    // החדשים, ש-dispose ישן לא ימחק רישום חדש לפי viewId (forgetWindow).
     if (!_ready) return const SplashApp();
 
     if (_error != null) {
@@ -1992,6 +1995,8 @@ Future<void> _installWindowCloseHandling() async {
   if (MultiViewMode.enabled) {
     final listener = _appWindowListener!;
     ViewWindowOpener.instance.endProcess = listener.quitFromLastViewWindow;
+    // אותו מסלול: עדכון ויציאה מכל החלונות אינם עוברים דרך הסתרת הראשי.
+    AppQuit.install(listener.quitFromLastViewWindow);
   }
   await windowManager.setPreventClose(true);
   await AppWindowListener.enableMacOSCloseHandling();

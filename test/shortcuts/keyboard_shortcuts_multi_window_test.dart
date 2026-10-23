@@ -65,7 +65,7 @@ class _StubNavigationBloc extends Bloc<NavigationEvent, NavigationState>
 
 class _FakeTabsRepository extends TabsRepository {
   @override
-  List<OpenedTab> loadTabs() => const [];
+  List<OpenedTab> loadTabs({bool newRuntime = false}) => const [];
 
   @override
   int loadCurrentTabIndex() => 0;
@@ -134,11 +134,7 @@ class _Window {
   final _StubNavigationBloc navigation = _StubNavigationBloc();
 
   Future<void> dispose() async {
-    final openTabs = List<OpenedTab>.from(tabs.state.tabs);
     await tabs.close();
-    for (final tab in openTabs) {
-      tab.dispose();
-    }
     await history.close();
     await navigation.close();
   }
