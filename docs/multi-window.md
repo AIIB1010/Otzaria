@@ -10,8 +10,8 @@
 בכל הפלטפורמות: מנוע אחד ו-isolate אחד, וכל חלון נוסף הוא חלון Dart
 (`RegularWindowController`) עם `FlutterView` משלו באותו מנוע. הקוד
 ב-`lib/core/windowing/multiview/`; תקרה של 8 חלונות כולל הראשי
-(`ViewWindowRegistry.maxWindows`). אין מנוע לכל חלון, אין אפיק בין isolates
-ואין שורש נתונים פרטי לחלון.
+(`ViewWindowRegistry.maxWindows`). כל המצב (הגדרות, מסדים, שירותים) משותף
+באותו isolate; רק עץ הווידג'טים, הכרטיסיות והגבולות הם לכל חלון.
 
 הערוץ `otzaria/multiwindow` (`RunnerWindowChannel`) משרת את החלון הראשי
 בלבד: הסתרה (`closeSelf`), הבאה לחזית, הצגה מחדש של ראשי מוסתר, ותצוגת
@@ -27,12 +27,15 @@
 * `installWindowingOwner()` (ב-`main` מיד אחרי `ensureInitialized`) מתקין
   את בעלי החלונות של המסגרת **רק** כש-`supported` וה-binding משתמש
   ב-`PlatformDispatcher.instance` האמיתי.
-* `MultiViewMode.enabled` = `supported` ובעלים הותקן בפועל. בלעדיו — **חלון
-  יחיד**: `RunnerWindowChannel.canOpenWindows` ו-`canDragTabsOut` כבויים, ולכן
-  "חלון חדש", "העבר לחלון חדש/קיים", "פתח בחלון חדש" וקיצור החלון החדש
-  מוסתרים; `openEmptyWindow` (למשל מ-`otzaria://window/new`) חוזר בשקט;
-  סשנים של חלונות אחרים מאומצים לראשי (`adoptOrphanWindowSessions`) גם כש"שחזר
-  את כל החלונות" דלוק; ו-`createViewWindow` זורק `StateError` במקום לקרוס.
+* `MultiViewMode.enabled` = `supported` ובעלים הותקן בפועל, כלומר **אפשר לפתוח
+  חלונות נוספים**. אין שום מסלול אחר: בלעדיו התוכנה פשוט **בחלון יחיד** —
+  `RunnerWindowChannel.canOpenWindows` ו-`canDragTabsOut` כבויים, ולכן "חלון
+  חדש", "העבר לחלון חדש/קיים", "פתח בחלון חדש" וקיצור החלון החדש מוסתרים;
+  `otzaria://window/new` מציג ומעלה את הראשי (`externalActionRaisesWindow`)
+  ו-`openEmptyWindow` חוזר בשקט; סשנים של חלונות אחרים מאומצים לראשי
+  (`adoptOrphanWindowSessions`) גם כש"שחזר את כל החלונות" דלוק; ו-`createViewWindow`
+  זורק `StateError` במקום לקרוס. שאר הקוד (העברת כרטיסיות, שידור שינויים,
+  סגירה) זהה בשני המצבים — בחלון יחיד פשוט אין עוד חלונות.
 
 ⚠️ **למה השמירה על ה-binding:** ב-integration_test ה-binding הוא
 `IntegrationTestWidgetsFlutterBinding`, ו-`TestPlatformDispatcher.engineId`
@@ -41,11 +44,11 @@
 בחלון יחיד; כיסוי ריבוי תצוגות בהם הוא שלב נפרד.
 
 **בדיקות יחידה:** `test/flutter_test_config.dart` מצמיד
-`MultiViewMode.debugOverride = false` (חלון יחיד בכל פלטפורמה), ובדיקות
-ריבוי התצוגות מדליקות אותו בעצמן (`debugOverride = true`).
+`MultiViewMode.debugOverride = false` (חלון יחיד בכל פלטפורמה). רק בדיקות של
+פתיחת חלונות (ה-opener, `canOpenWindows`) מדליקות אותו (`debugOverride = true`).
 
-**Sentry:** בריבוי תצוגות כל החלונות מדווחים דרך ה-Sentry של ה-isolate
-היחיד; כל אירוע מתויג `window` = החלון הפעיל האחרון (`LastActiveWindow`).
+**Sentry:** כל החלונות מדווחים דרך ה-Sentry של ה-isolate היחיד; כל אירוע
+מתויג `window` = החלון הפעיל האחרון (`LastActiveWindow`).
 
 ### רשימת בדיקה בעדכון גרסת Flutter
 
@@ -59,10 +62,10 @@
 2. סמנטיקת `engineId`: `PlatformDispatcher.engineId` הוא עדיין מצביע המנוע
    ש-`GetEngineForId` מפרש, ו-`TestPlatformDispatcher.engineId` עדיין מזויף —
    השמירה ב-`hasRealPlatformDispatcher` חייבת להמשיך לתפוס אותו.
-3. הסרת view 0 ([flutter#193174](https://github.com/flutter/flutter/issues/193174)):
-   כל עוד אינה נתמכת, החלון הראשי **מוסתר** ולא נהרס, ותוספים הקשורים ל-view 0
-   (תוספי רקע, הדפסה) נשארים חיים. אם התיקון נכנס — לבדוק מחדש את
-   "שחזור החלון האחרון" (`view_window_opener.dart`) ואת יציאת התהליך.
+3. התצוגה המרומזת (view 0) **אינה ניתנת להריסה** ב-SDK הנוכחי (נכון גם ל-3.50
+   beta), ולכן החלון הראשי **מוסתר** ולא נהרס, ותוספים הקשורים ל-view 0
+   (תוספי רקע, הדפסה) נשארים חיים. אם זה ישתנה — לבדוק מחדש את "שחזור החלון
+   האחרון" (`view_window_opener.dart`) ואת יציאת התהליך.
 4. לעולם לא להשתמש בווידג'טים `RegularWindow`/`WindowScope`: הבנאים שלהם
    בודקים את הדגל וזורקים מחוץ ל-`withWindowing`. משתמשים ב-`View(view: ...)`.
 5. `flutter_internal_imports_test` עובר — `package:flutter/src/` מיובא רק
@@ -71,6 +74,11 @@
 7. macOS: `_multiViewEnabled` עדיין BOOL ב-`FlutterEngine.mm`, ו-`enableMultiView`
    עדיין מוגן ב-assert. RunnerTests `testFlutterEngineStillHasMultiViewEnabledBoolIvar`
    מכסה.
+8. **תוקן במעלה הזרם ב-3.50 (לא ב-3.47.x) — להסיר בשדרוג:**
+   * flutter#193268 מתקן את flutter#192873 — ההריסה הנדחית בלינוקס
+     (`ViewWindowHandle._defersDestroy`, `onRetire`).
+   * flutter#190029 — `windows/runner/phantom_mouse_button_filter.h` (ההערה שם
+     אומרת 3.48, אך התיקון נכנס ב-3.50).
 
 ---
 
@@ -88,9 +96,10 @@
 
 ### מסד מצב המשתמש
 
-`<databases>/user_state.db` — קובץ SQLite אחד ב-WAL שכל חלון פותח ישירות,
-בדיוק כמו הספרייה. **אין חלון בעלים ואין ניתוב**: הסדר בין כותבים מוכרע
-בנעילת SQLite (`busy_timeout` 5 שניות).
+`<databases>/user_state.db` — קובץ SQLite אחד ב-WAL, עם חיבור אחד ב-isolate
+לכל החלונות. **אין חלון בעלים ואין ניתוב.** הנעילה של SQLite חשובה רק מול
+תהליך אחר (גיבוי, checkpoint), ולכן `busy_timeout` קצר (שנייה): ההמתנה חוסמת
+את ה-thread של כל החלונות.
 
 ```
 lists            (box, key) → payload_json      היסטוריה, סימניות, שולחנות
@@ -100,21 +109,22 @@ pending_reports  id → kind, payload_json        תורי הדיווחים, ש�
 
 ⚠️ **לרשימות אין מזהה יציב לפריט**, ולכן היחידה היא הרשימה כולה, ו-
 `UserStateListStore.mutate` מריץ קריאה-שינוי-כתיבה בתוך `BEGIN IMMEDIATE`.
-ה-bloc **אינו** מחשב מהעותק שבזיכרונו וכותב אותו במלואו — זה מה שגרם לכל
-חלון למחוק ברציפות את מה שהאחר הוסיף, גם בלי מרוץ. אחרי כתיבה
-`UserStateListStore.changes` מודיע לשאר החלונות, והם טוענים מחדש.
+ה-bloc **אינו** מחשב מהעותק שבזיכרונו וכותב אותו במלואו — כך כל חלון היה
+מוחק את מה שהאחר הוסיף. אחרי כתיבה `UserStateListStore.changes` משדר את
+השינוי עם ה-`origin` של הכותב; שאר המאזינים (`remoteChanges`) טוענים מחדש,
+והכותב מסנן את עצמו. כתיבה בלי `origin` (למשל שחזור גיבוי) מגיעה לכולם.
 
 ה-Hive הישן מועבר פעם אחת ב-`HiveToUserStateMigration` (בהפעלה, בחלון
 הראשון, לפני ה-blocs), וקבצי ה-box מקבלים סיומת `.migrated` (`.failed` כשה-box
 אינו נפתח כלל; הכשל נרשם ל-`errors.txt`). המסד מנצח כשקיים כבר ערך.
 
-הכתיבה סינכרונית על ה-isolate של החלון (FFI), ולכן האינדקס הפעיל של
-הכרטיסיות — הפעולה השכיחה ביותר — נכתב בהשהיה של 300ms.
+הכתיבה סינכרונית על ה-UI isolate (FFI), ולכן האינדקס הפעיל של הכרטיסיות —
+הפעולה השכיחה ביותר — נכתב בהשהיה של 300ms.
 
 ### החוזה מול סשן החלון
 
 אין מפת חלונות אחת. יש **שורה לכל משבצת** בטבלת `window_sessions`
-שב-`user_state.db` — קובץ אחד שכל החלונות פותחים ישירות:
+שב-`user_state.db`:
 
 ```
 window_sessions
@@ -183,9 +193,10 @@ await LibraryAccessGate.instance.runExclusive(
 );
 ```
 
-⚠️ **החלת דלתא אינה משעה חלונות אחרים.** היא כותבת ב-WAL בתוך טרנזקציה
-אחת, והקוראים בחלונות האחרים ממשיכים על ה-snapshot הקודם, כמו החלון הראשי.
-אחריה החלונות האחרים אינם מרועננים — הקטלוג שלהם מתעדכן בפתיחה הבאה.
+⚠️ **החלת דלתא אינה משעה את הקוראים.** היא כותבת ב-WAL בתוך טרנזקציה אחת,
+והקוראים ממשיכים על ה-snapshot הקודם. אחריה רק החלון הראשי (בעל התהליך)
+מרענן ומאנדקס (`RefreshLibrary`), ושאר החלונות בונים את העץ מחדש דרך
+`LibraryChangedInOtherWindow`.
 
 ---
 
@@ -250,14 +261,9 @@ Flutter אינו יודע דבר מחוץ לחלון שלו. שלושה חלקי
                           └─ אחרת → החלון נפתח, וב-snapped במסגרת המדויקת
 ```
 
-**⚠️ שום מנוע Flutter אינו נוצר בזמן הגרירה.** גרסה ראשונה כן פתחה חלון
-אוצריא מלא באמצע הגרירה ומסרה **אותו** למערכת. זה עבד, אבל היה שגוי:
-פתיחת מנוע היא הפעולה הכבדה ביותר בתוכנה, וההחלטה "פותחים חלון" נפלה
-בתחילת הגרירה — לפני שהמשתמש בכלל בחר לאן. מה שנמסר עכשיו הוא חלון
-Win32 ריק שכבר קיים.
-
-זה גם מה שהחזיר את העברת הכרטיסיה מחלון לחלון: כשההחלטה נופלת **בשחרור**,
-הדרך אל חלון ב' יכולה לעבור מעל שולחן העבודה בלי לפתוח חלון שלישי.
+**⚠️ שום חלון אוצריא אינו נפתח בזמן הגרירה.** מה שנמסר למערכת הוא חלון
+התצוגה, שכבר קיים; ההחלטה "פותחים חלון" נופלת **בשחרור**. כך הדרך אל חלון
+ב' יכולה לעבור מעל שולחן העבודה בלי לפתוח חלון שלישי.
 
 ⚠️ **`snapped` נקבע לפי הפרש בין הגודל הצפוי לגודל בפועל, וההפרש נדגם
 לפני הלולאה המודאלית.** דגימה אחרי הלולאה השוותה גודל ישן מול ציפייה
@@ -433,24 +439,17 @@ Win32 ריק שכבר קיים.
 כחלון שנגרר — ובלי זה אין Snap Layouts. `drag_preview::WindowUnderCursor`
 מדליק אותו לרגע החישוב בלבד.
 
-⚠️ **הלולאה מודאלית וחוסמת את ה-platform thread**, וכל המנועים חולקים
-אותו — כלומר שאר החלונות קופאים למשך הגרירה. זה מקובל כי זו בדיוק
-ההתנהגות הקיימת: גרירת חלון אוצריא מהכותרת שלו עושה את אותו דבר גם היום.
+⚠️ **הלולאה מודאלית וחוסמת את ה-platform thread**, וה-UI isolate רץ עליו —
+כלומר כל החלונות קופאים למשך הגרירה. כך גם גרירת חלון מהכותרת שלו.
 
 ---
 
 ## פוקוס בין חלונות
 
-⚠️ **החלון שמחזיק פוקוס אוכף אותו בחזרה.** עם שני מנועים בתהליך אחד,
-לחיצה על חלון אחר הפעילה אותו לרגע ותוך ~30ms הפוקוס חזר. נמדד ב-stack
-(`WH_CBT` + `CaptureStackBackTrace`) שהקריאה מגיעה מ-`flutter_windows.dll`
-עם קוד Dart מתחתיה — כלומר המנוע אוכף את המיקוד שלו על ה-view הילידי,
-וזה מפעיל את החלון. ההתנהגות סימטרית ואינה תלויה במי "ראשי".
-
-נשללו במדידה: ה-`SetFocus` שלנו ב-`WM_ACTIVATE`, `WS_EX_NOACTIVATE`,
-סרגל כותרת מוסתר, מיקום חלון הבן, וכל שכבת הפוקוס בצד Dart.
-`primaryFocus.unfocus()` באירוע blur אינו עוזר — האירוע מגיע ל-Dart
-אסינכרונית, אחרי שהמנוע כבר אכף.
+⚠️ **מנוע Flutter אוכף את המיקוד שלו על ה-view הילידי, וזה מפעיל את החלון.**
+לחיצה על חלון אחר הפעילה אותו לרגע, ותוך ~30ms הפוקוס חזר (נמדד ב-`WH_CBT` +
+`CaptureStackBackTrace`: הקריאה מגיעה מ-`flutter_windows.dll`). `unfocus()`
+באירוע blur אינו עוזר — האירוע מגיע ל-Dart אחרי שהמנוע כבר אכף.
 
 **הפתרון:** שער הפעלה סינכרוני (`Win32Window::ShouldVetoActivation`).
 בחירה מפורשת של המשתמש (`WM_MOUSEACTIVATE`) מוגנת לחצי שנייה מפני הפעלה
@@ -467,11 +466,19 @@ Win32 ריק שכבר קיים.
 ### החלון הפעיל בצד Dart
 
 לכל חלון `AppWindowKeys` עם `AppWindowId` משלו, ורישום סטטי `id → keys`.
-`AppWindowListener.onWindowFocus` קורא ל-`AppWindowKeys.activateWindow(id)`:
-החלון מסומן ב-`LastActiveWindow`, ואם הוא רשום — הופך ל-`AppWindowKeys.current`.
-אחריו עוקבים כל ה-"current" שנגזרים ממנו: `navigatorKey`, יעדי הסיור
-(`AppWindowKeys.current.tour`) ו-`FocusRepository.current`. היום יש חלון אחד
-לכל isolate, ולכן אין בזה שינוי התנהגות.
+`AppWindowKeys.activateWindow(id)` מסמן את החלון ב-`LastActiveWindow` והופך
+אותו ל-`AppWindowKeys.current`; אחריו עוקבים `navigatorKey`, יעדי הסיור
+(`AppWindowKeys.current.tour`) ו-`FocusRepository.current`. מקורות ההפעלה:
+
+| חלון | מקור |
+|---|---|
+| הראשי | `AppWindowListener.onWindowFocus` (window_manager) |
+| חלון Dart | `isActivated` של הבקר (`ViewWindowScope._onWindowChanged`) |
+| חלון Dart ב-macOS | `didChangeViewFocus` (`ViewFocusSync.activationFollowsViewFocus`) |
+| לינוקס | המנוע אינו שולח `ViewFocusEvent`; `ViewFocusSync` מסנתז אותו מההפעלה |
+
+`ExternalActivationService` מנתב קישור שנוקז לחלון הגלוי שהיה פעיל אחרון
+(`LastActiveWindow.id`), וראשי מוסתר אינו יעד כל עוד חלון אחר גלוי.
 
 `FocusRepository` הוא מופע לכל `AppWindowKeys` (`forWindow`); `FocusRepository()`
 מחזיר את `current`, כך שה-provider והבדיקות לא השתנו.
@@ -480,12 +487,6 @@ Win32 ריק שכבר קיים.
 משתמשים ב-`of(context)` (`AppWindowKeys.of`, `FocusRepository.of`), כדי שבנייה
 בחלון ברקע לא תפנה לחלון שבפוקוס. מי שמשתמש בו ב-`dispose` שומר אותו ב-`initState`.
 
-**בשלב 1** (כמה views ב-isolate אחד) `window_manager` מכיר חלון אחד בלבד, ולכן
-מקור האירוע יהיה `WidgetsBindingObserver.didChangeViewFocus` עם מיפוי
-`viewId → AppWindowId` שה-scope של החלון ממלא (יחד עם `register`/`unregister`), ו-
-`ExternalActivationService` ינתב לפי `LastActiveWindow.id` ולא לפי
-`lastActiveSlot` הנייטיבי.
-
 ---
 
 ## מלכודות נייטיביות ידועות
@@ -493,10 +494,28 @@ Win32 ריק שכבר קיים.
 | | |
 |---|---|
 | **Job Object** | שייך ל**תהליך** ולא לחלון (`KILL_ON_JOB_CLOSE` על כל החברים). נוצר פעם אחת ואינו נסגר לעולם |
-| **`printing`** | ב-pub.dev מצביע הערוץ הוא גלובלי לתהליך (`printing_plugin.cpp:35`). עד המיזוג של DavBfr/dart_pdf#1969 `dependency_overrides` ב-`pubspec.yaml` מצביע לפורק `Otzaria/dart_pdf` (מסומן TODO) |
+| **`printing`** | ב-pub.dev מצביע הערוץ הוא גלובלי לתהליך. עד המיזוג במעלה הזרם `pubspec.yaml` מצביע לפורק (ה-TODO שם מונה את ה-PRs) |
 | **PDFium** | worker אחד לכל החלונות (isolate אחד); רינדור כבד בחלון אחד מאט את התור של כולם |
 | **Tantivy** | נועל את ה-writer בלעדית, והוא שייך ל-isolate היחיד. **חיפוש** עובד בכל חלון |
 | **סיום סשן** | `WM_QUERYENDSESSION` מטופל בחלון הראשי בלבד; שטיפה אחת ב-isolate מכסה את הסשנים של כל החלונות |
+
+---
+
+## יציאת התהליך (R1)
+
+החלון הראשי אינו נהרס, ולכן "החלון האחרון נסגר" אינו אירוע של ה-runner. השמירה
+(R1): **הסתרת הראשי מסיימת את התהליך רק כשאין חלון Dart גלוי.**
+
+| | |
+|---|---|
+| Windows | `FlutterWindow::OnWindowHidden` → `HasVisibleDartHostWindow()`; אחרת `TerminateProcess` (או `PostQuitMessage` בלי Job Object) |
+| לינוקס | `ShouldExitOnWindowHide` (`linux/runner/main_hide_policy.h`) ב-`multi_window.cc` → `exit(0)` |
+| macOS | סגירת החלון האחרון משאירה את האפליקציה ב-Dock; ⌘Q עובר דרך `applicationShouldTerminate` אל Dart, ולחיצה על ה-Dock משחזרת (`ViewWindowOpener.reopenFromDock`) |
+
+בצד Dart: סגירת הראשי כשחלון Dart פתוח משהה את סשן הכרטיסיות שלו
+(`WindowTabsSession.suspend`) ומסתירה אותו; יציאה מלאה (עדכון, ⌘Q, החלון
+האחרון) עוברת ב-`AppQuit` → `quitFromLastViewWindow`, שוטפת, ואז
+`destroyAllForQuit` הורס את חלונות ה-Dart והסשנים שלהם נשמרים.
 
 ---
 
@@ -521,5 +540,6 @@ Win32 ריק שכבר קיים.
 | | |
 |---|---|
 | **thread אחד** | כל החלונות חולקים את ה-isolate ואת ה-thread הראשי, ולכן חלון עסוק מקפיא את השני |
-| **שער ההפעלה** | עוקף התנהגות של מנוע Flutter ולא מתקן אותה. ראוי לדווח במעלה הזרם |
+| **שער ההפעלה** | עוקף התנהגות של מנוע Flutter ולא מתקן אותה. נמדד כשכל חלון היה מנוע נפרד; לא נבדק מחדש אם עדיין נדרש עם מנוע אחד. ראוי לדווח במעלה הזרם |
+| **integration_test** | רץ בחלון יחיד (ראו "למה השמירה על ה-binding"); כיסוי של חלונות Dart בו הוא שלב נפרד |
 | **macOS ולינוקס** | ה-runner (`linux/runner/multi_window.cc`, `OtzariaWindowManager` ב-`macos/Runner/MainFlutterWindow.swift`) מחזיק רק את החלון הראשי. הגרירה החוצה אינה ממומשת שם (`canDragTabsOut` — Windows בלבד; ב-Wayland אין מיקום חלון לפי הסמן). ב-macOS בלי handshake — חלון יחיד. הקוד הנייטיב נבנה ונבדק ב-CI בלבד |
