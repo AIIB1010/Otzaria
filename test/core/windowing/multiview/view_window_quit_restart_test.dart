@@ -22,6 +22,8 @@ import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
 import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
 import 'package:otzaria/tabs/models/tool_tab.dart';
+import 'package:otzaria/tabs/models/text_tab.dart';
+import 'package:otzaria/models/books.dart';
 import 'package:otzaria/widgets/misc/restart_widget.dart';
 
 import '../../../helpers/memory_settings_cache.dart';
@@ -193,6 +195,34 @@ void main() {
     expect(tabsA.state.tabs.map((t) => t.title), ['לוח שנה']);
     expect(windows.stubOf(a).destroyed, isFalse);
 
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('אתחול מחדש משחרר את קורא הטקסט של העץ הקודם', (tester) async {
+    final windows = FakeViewWindows(tester);
+    final contexts = await pumpApp(tester, windows.registry);
+    final tab = TextBookTab(book: TextBook(title: 'probe'), index: 0);
+    final entry = windows.registry.open(
+      size: const Size(800, 600),
+      initialTab: tab,
+    )!;
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    final oldTabs = contexts[entry.slot]!.read<TabsBloc>();
+    expect(oldTabs.state.tabs.single, same(tab));
+    final oldReader = tab.bloc;
+    expect(oldReader.isClosed, isFalse);
+    AppQuit.restartAll(contexts[entry.slot]!);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump(const Duration(seconds: 1));
+    expect(oldTabs.isClosed, isTrue);
+    expect(
+      contexts[entry.slot]!.read<TabsBloc>().state.tabs.single,
+      isNot(same(tab)),
+    );
+    expect(oldReader.isClosed, isTrue);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 1));
   });

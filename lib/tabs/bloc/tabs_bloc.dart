@@ -47,6 +47,7 @@ class _ClosedTabEntry {
 class TabsBloc extends Bloc<TabsEvent, TabsState> {
   final TabsRepository _repository;
   final Duration _disposeDelay;
+  Future<void>? _closeFuture;
 
   /// Wraps a newly opened tab with its companion pane, when it has one.
   final Future<OpenedTab> Function(OpenedTab tab) _withCompanion;
@@ -68,6 +69,7 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
   int _pendingSaveIndex = 0;
   Future<void>? _saveDrain;
   final _pendingOpenTabs = Queue<Completer<void>>();
+  final _pendingAddTabs = Queue<Completer<void>>();
   final _pendingRemovals = Queue<Future<void>?>();
 
   /// מבקש שמירה של הטאבים, בלי להמתין לה.
@@ -204,6 +206,17 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
     }
   }
 
+  /// העץ פורק והסשן נשטף: אין עוד UI שצריך להמתין לניתוקו.
+  void _releaseTabs() {
+    for (final tab in state.tabs) {
+      tab.dispose();
+    }
+    for (final entry in _recentlyClosedTabs) {
+      entry.tab.dispose();
+    }
+    _recentlyClosedTabs.clear();
+  }
+
   /// [disposeDelay] - השהיית השחרור של טאב שיצא מהרשימה; טסטים מעבירים אפס.
   /// [session] - סשן החלון שהדור שלו נבדק; חייב להיות זה של המאגר.
   TabsBloc({
@@ -217,7 +230,13 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
     on<LoadTabs>(_onLoadTabs, transformer: sequential());
     on<RemapBookPaths>(_onRemapBookPaths, transformer: sequential());
     on<ReplaceAllTabs>(_onReplaceAllTabs, transformer: sequential());
-    on<AddTab>(_onAddTab, transformer: sequential());
+    on<AddTab>((event, emit) async {
+      try {
+        await _onAddTab(event, emit);
+      } finally {
+        _pendingAddTabs.removeFirst().complete();
+      }
+    }, transformer: sequential());
     on<OpenOrFocusTab>(
       (event, emit) async {
         try {
@@ -281,10 +300,19 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
   }
 
   @override
+  void add(TabsEvent event) {
+    if (_closeFuture != null) {
+      throw StateError('Cannot add new events after calling close');
+    }
+    super.add(event);
+  }
+
+  @override
   void onEvent(TabsEvent event) {
     super.onEvent(event);
     // הרישום נעשה בשליחה: גם פתיחה שממתינה בתור חייבת להקדים את הסגירה.
     if (event is OpenOrFocusTab) _pendingOpenTabs.add(Completer<void>());
+    if (event is AddTab) _pendingAddTabs.add(Completer<void>());
     if (event is RemoveTab) {
       _pendingRemovals.add(
         _pendingOpenTabs.isEmpty ? null : _pendingOpenTabs.last.future,
@@ -295,11 +323,20 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
   late final Future<void> Function() _preCloseCallback;
 
   @override
-  Future<void> close() async {
+  Future<void> close() => _closeFuture ??= Future<void>.sync(() async {
     PreCloseRegistry.unregister(_preCloseCallback);
-    await _flushPendingSaves();
-    await super.close();
-  }
+    try {
+      await Future.wait([
+        for (final pending in _pendingOpenTabs) pending.future,
+        for (final pending in _pendingAddTabs) pending.future,
+      ]);
+      await _flushPendingSaves();
+    } finally {
+      final closing = super.close();
+      _releaseTabs();
+      await closing;
+    }
+  });
 
   void _onLoadTabs(LoadTabs event, Emitter<TabsState> emit) {
     // הטאבים והאינדקס מנורמלים יחד כדי לשמור על הטאב הפעיל.
