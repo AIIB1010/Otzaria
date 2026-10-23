@@ -76,8 +76,7 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
   ///
   /// כל שמירה מקודדת את *כל* הטאבים, ולכן בקשות שמגיעות בזמן שכתיבה רצה
   /// מתמזגות לכתיבה אחת שאחריה.
-  /// הסשן שה-bloc הזה נבנה עליו. ייבוא מגיבוי מקדם את הדור, ומאותו רגע
-  /// ה-bloc הישן — שעומד להיזרק ב-`RestartWidget` — אינו שומר יותר.
+  /// סשן החלון ודור העץ; עץ חדש או ייבוא מונעים מהישן לשמור.
   final WindowTabsSession _session;
   final int _sessionGeneration;
 
@@ -123,7 +122,7 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
 
   Future<void> _drainSaves() async {
     try {
-      while (_pendingSaveTabs != null) {
+      while (_pendingSaveTabs != null && !_sessionReplaced) {
         final tabs = _pendingSaveTabs!;
         final index = _pendingSaveIndex;
         _pendingSaveTabs = null;
@@ -134,7 +133,9 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
         }
         // הכתיבה נשאה את האינדקס שהיה בתחילתה; אם המשתמש החליף טאב בזמנה,
         // היא דרסה את מה שכתב [_saveCurrentTabIndex].
-        if (_pendingSaveTabs == null && _pendingSaveIndex != index) {
+        if (!_sessionReplaced &&
+            _pendingSaveTabs == null &&
+            _pendingSaveIndex != index) {
           try {
             await _repository.saveCurrentTabIndex(tabs, _pendingSaveIndex);
           } catch (error, stackTrace) {
@@ -150,6 +151,7 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
   /// שומר את האינדקס הפעיל בלבד, ומעדכן גם את האינדקס של השמירה המלאה —
   /// זו שממתינה וזו שרצה — כדי שלא תחזיר לאחור את הטאב שנבחר.
   Future<void> _saveCurrentTabIndex(List<OpenedTab> tabs, int index) {
+    if (_sessionReplaced) return Future<void>.value();
     _pendingSaveIndex = index;
     return _repository.saveCurrentTabIndex(tabs, index);
   }
@@ -225,7 +227,8 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
     this._withCompanion = withCompanionPane,
     WindowTabsSession? session,
   }) : _session = session ?? WindowTabsSession.current,
-       _sessionGeneration = (session ?? WindowTabsSession.current).generation,
+       _sessionGeneration = (session ?? WindowTabsSession.current)
+           .beginRuntime(),
        super(TabsState.initial()) {
     on<LoadTabs>(_onLoadTabs, transformer: sequential());
     on<RemapBookPaths>(_onRemapBookPaths, transformer: sequential());

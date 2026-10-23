@@ -41,9 +41,12 @@ class WindowTabsSession {
 
   void resume() => _suspended = false;
 
-  /// דור הסשן של החלון הזה: עולה בכל [TabsRepository.importRaw].
+  /// דור הסשן של החלון: עולה בהחלפת עץ הטאבים או בייבוא מגיבוי.
   int get generation => _generation;
   int _generation = 0;
+
+  /// מקצה לעץ החדש דור שמירה; אירועי העץ הקודם אינם שומרים עוד.
+  int beginRuntime() => ++_generation;
 
   /// האינדקס הפעיל שממתין לכתיבה, והמשבצת שאליה.
   Timer? _indexTimer;
