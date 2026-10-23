@@ -227,6 +227,81 @@ void main() {
     expect((await sessions.load(8))!.tabsJson, '["8"]');
   });
 
+  /// שדרוג ממודל A לריבוי תצוגות, והחזרה אליו: אותה טבלה ואותן משבצות.
+  group('מעבר בין מודל A לריבוי תצוגות', () {
+    const bounds = '{"left":10,"top":20,"width":800,"height":600}';
+
+    Future<void> modelASessions() async {
+      await TabsRepository().saveTabs([_tab('ראשי')], 0);
+      for (final slot in [2, 3, 4]) {
+        await sessions.save(
+          slot,
+          tabsJson: '[${_encoded('חלון $slot')}]',
+          currentIndex: 0,
+        );
+        await sessions.saveActiveWorkspace(slot, 'ws$slot');
+        await sessions.saveBounds(slot, bounds);
+      }
+    }
+
+    tearDown(() => MultiViewMode.debugOverride = false);
+
+    test('שחזור כל החלונות: סשני 2-4 נשארים במקומם לחלונות ה-Dart', () async {
+      MultiViewMode.debugOverride = true;
+      WindowBus.instance.register();
+      expect(WindowTabsSession.current.slot, 1);
+      await modelASessions();
+
+      final slots = await TabsRepository.compactWindowSessions();
+
+      expect(slots, [2, 3, 4]);
+      // חלון Dart חדש לא יתפוס משבצת ששמורה לשחזור.
+      expect(ViewWindowRegistry().freeSlot(excluding: slots.toSet()), 5);
+      for (final slot in slots) {
+        final session = (await sessions.load(slot))!;
+        expect(session.tabsJson, contains('חלון $slot'));
+        expect(session.activeWorkspaceId, 'ws$slot');
+        expect(session.boundsJson, bounds);
+      }
+      expect(TabsRepository().loadTabs().single.title, 'ראשי');
+    });
+
+    test('בלי שחזור כל החלונות: מאומצים לראשי', () async {
+      MultiViewMode.debugOverride = true;
+      WindowBus.instance.register();
+      await modelASessions();
+
+      expect(await TabsRepository.adoptOrphanWindowSessions(), 3);
+      expect(TabsRepository().loadTabs().map((t) => t.title), [
+        'ראשי',
+        'חלון 2',
+        'חלון 3',
+        'חלון 4',
+      ]);
+      expect(await sessions.loadAll(), hasLength(1));
+    });
+
+    test('חזרה למודל A: סשנים מעבר ל-4 מצורפים לראשי ולא נמחקים', () async {
+      WindowBus.instance.register();
+      await TabsRepository().saveTabs([_tab('ראשי')], 0);
+      for (var slot = 2; slot <= ViewWindowRegistry.maxWindows; slot++) {
+        await sessions.save(
+          slot,
+          tabsJson: '[${_encoded('חלון $slot')}]',
+          currentIndex: 0,
+        );
+      }
+
+      expect(await TabsRepository.compactWindowSessions(), [2, 3, 4]);
+      expect(TabsRepository().loadTabs().map((t) => t.title), [
+        'ראשי',
+        for (var slot = 5; slot <= 8; slot++) 'חלון $slot',
+      ]);
+      expect(await sessions.loadAll(), hasLength(WindowBus.slotCount));
+      expect((await sessions.load(4))!.tabsJson, contains('חלון 4'));
+    });
+  });
+
   group('אימוץ סשנים יתומים', () {
     test('מצרף למשבצת המארח ומוחק את האחרות', () async {
       WindowBus.instance.register();
