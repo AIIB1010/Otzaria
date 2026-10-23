@@ -74,11 +74,14 @@
 7. macOS: `_multiViewEnabled` עדיין BOOL ב-`FlutterEngine.mm`, ו-`enableMultiView`
    עדיין מוגן ב-assert. RunnerTests `testFlutterEngineStillHasMultiViewEnabledBoolIvar`
    מכסה.
-8. **תוקן במעלה הזרם ב-3.50 (לא ב-3.47.x) — להסיר בשדרוג:**
+8. **תוקן במעלה הזרם, ביציב רק מ-3.50 (לא ב-3.47.x) — להסיר בשדרוג:**
    * flutter#193268 מתקן את flutter#192873 — ההריסה הנדחית בלינוקס
-     (`ViewWindowHandle._defersDestroy`, `onRetire`).
-   * flutter#190029 — `windows/runner/phantom_mouse_button_filter.h` (ההערה שם
-     אומרת 3.48, אך התיקון נכנס ב-3.50).
+     (`ViewWindowHandle._defersDestroy`, `onRetire`). מ-3.50.0-0.1.pre.
+   * flutter#190029 — `windows/runner/phantom_mouse_button_filter.h`. נכנס כבר
+     ל-3.48.0-0.5.pre (ולכן ההערה שם אומרת 3.48), אבל 3.48 ו-3.49 לא יצאו
+     ליציב.
+   * flutter#193174 (3.50) מבטל את view 0 רק כשהחלון הראשון נוצר ב-API
+     החלונות; ה-`FlutterViewController` של ה-runner שומר אותו (סעיף 3).
 
 ---
 
@@ -113,10 +116,6 @@ pending_reports  id → kind, payload_json        תורי הדיווחים, ש�
 מוחק את מה שהאחר הוסיף. אחרי כתיבה `UserStateListStore.changes` משדר את
 השינוי עם ה-`origin` של הכותב; שאר המאזינים (`remoteChanges`) טוענים מחדש,
 והכותב מסנן את עצמו. כתיבה בלי `origin` (למשל שחזור גיבוי) מגיעה לכולם.
-
-ה-Hive הישן מועבר פעם אחת ב-`HiveToUserStateMigration` (בהפעלה, בחלון
-הראשון, לפני ה-blocs), וקבצי ה-box מקבלים סיומת `.migrated` (`.failed` כשה-box
-אינו נפתח כלל; הכשל נרשם ל-`errors.txt`). המסד מנצח כשקיים כבר ערך.
 
 הכתיבה סינכרונית על ה-UI isolate (FFI), ולכן האינדקס הפעיל של הכרטיסיות —
 הפעולה השכיחה ביותר — נכתב בהשהיה של 300ms.
@@ -455,8 +454,12 @@ Flutter אינו יודע דבר מחוץ לחלון שלו. שלושה חלקי
 בחירה מפורשת של המשתמש (`WM_MOUSEACTIVATE`) מוגנת לחצי שנייה מפני הפעלה
 תוכניתית של חלון אוצריא **אחר**. `WH_CBT` הוא המקום היחיד שמאפשר לסרב
 להפעלה, והיחיד שרואה גם הפעלה שמקורה בתוך המנוע. העלאות מכוונות שלנו —
-חשיפת חלון חדש, `ReviveWith`, `raiseSelf` — נרשמות ככוונה מפורשת ולכן
-אינן נחסמות.
+`raiseSelf` והצגה מחדש של ראשי מוסתר (`RestoreClosedWindow`) — נרשמות
+ככוונה מפורשת ולכן אינן נחסמות.
+
+⚠️ **היום השער אינו חוסם דבר.** `IsOtzariaWindow` מזהה רק את מחלקת חלון
+ה-runner (`FLUTTER_RUNNER_WIN32_WINDOW`), וחלונות Dart הם `FLUTTER_HOST_WINDOW`
+של המנוע; עם חלון runner אחד אין "חלון אוצריא אחר" (ראו "מה עדיין פתוח").
 
 ⚠️ **`SetFocus` על חלון הבן מפעיל את החלון העליון.** לכן `SetChildContent`
 ממקד רק כשהחלון כבר גלוי: חלון נוצר מוסתר ונחשף בפריים הראשון, והמיקוד
@@ -510,10 +513,11 @@ Flutter אינו יודע דבר מחוץ לחלון שלו. שלושה חלקי
 |---|---|
 | Windows | `FlutterWindow::OnWindowHidden` → `HasVisibleDartHostWindow()`; אחרת `TerminateProcess` (או `PostQuitMessage` בלי Job Object) |
 | לינוקס | `ShouldExitOnWindowHide` (`linux/runner/main_hide_policy.h`) ב-`multi_window.cc` → `exit(0)` |
-| macOS | סגירת החלון האחרון משאירה את האפליקציה ב-Dock; ⌘Q עובר דרך `applicationShouldTerminate` אל Dart, ולחיצה על ה-Dock משחזרת (`ViewWindowOpener.reopenFromDock`) |
+| macOS | סגירת החלון האחרון משאירה את האפליקציה ב-Dock; ⌘Q עובר דרך `applicationShouldTerminate` אל Dart, ולחיצה על ה-Dock משחזרת (`ViewWindowOpener.reopenFromDock`; בחלון יחיד ה-runner מציג את הראשי בעצמו) |
 
-בצד Dart: סגירת הראשי כשחלון Dart פתוח משהה את סשן הכרטיסיות שלו
-(`WindowTabsSession.suspend`) ומסתירה אותו; יציאה מלאה (עדכון, ⌘Q, החלון
+בצד Dart: סגירת הראשי שאינה יציאה (חלון Dart פתוח, או החלון האחרון ב-macOS)
+משהה את סשן הכרטיסיות שלו (`WindowTabsSession.suspend`) ומסתירה אותו; סשני
+תיקון של תוספים בכרטיסיות שלו נשארים, ו-`onWindowFocus` מסיר את ההשהיה. יציאה מלאה (עדכון, ⌘Q, החלון
 האחרון) עוברת ב-`AppQuit` → `quitFromLastViewWindow`, שוטפת, ואז
 `destroyAllForQuit` הורס את חלונות ה-Dart והסשנים שלהם נשמרים.
 
@@ -540,6 +544,6 @@ Flutter אינו יודע דבר מחוץ לחלון שלו. שלושה חלקי
 | | |
 |---|---|
 | **thread אחד** | כל החלונות חולקים את ה-isolate ואת ה-thread הראשי, ולכן חלון עסוק מקפיא את השני |
-| **שער ההפעלה** | עוקף התנהגות של מנוע Flutter ולא מתקן אותה. נמדד כשכל חלון היה מנוע נפרד; לא נבדק מחדש אם עדיין נדרש עם מנוע אחד. ראוי לדווח במעלה הזרם |
+| **שער ההפעלה** | נמדד כשכל חלון היה מנוע נפרד, ועכשיו אינו חל על חלונות Dart (מחלקה אחרת). לבדוק אם גניבת הפוקוס עדיין קורית עם מנוע אחד: אם לא — למחוק את השער ואת ה-`WH_CBT`; אם כן — להרחיב אותו ל-`FLUTTER_HOST_WINDOW` ולדווח במעלה הזרם |
 | **integration_test** | רץ בחלון יחיד (ראו "למה השמירה על ה-binding"); כיסוי של חלונות Dart בו הוא שלב נפרד |
 | **macOS ולינוקס** | ה-runner (`linux/runner/multi_window.cc`, `OtzariaWindowManager` ב-`macos/Runner/MainFlutterWindow.swift`) מחזיק רק את החלון הראשי. הגרירה החוצה אינה ממומשת שם (`canDragTabsOut` — Windows בלבד; ב-Wayland אין מיקום חלון לפי הסמן). ב-macOS בלי handshake — חלון יחיד. הקוד הנייטיב נבנה ונבדק ב-CI בלבד |
