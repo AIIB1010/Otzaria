@@ -95,6 +95,9 @@ class MultiWindowService implements WindowOpener {
   /// שולט בכל מה שאינו גרירה: פתיחת חלון, האפיק בין החלונות, סנכרון
   /// ההגדרות והמשבצת של מצב המשתמש.
   static bool get canOpenWindows =>
+      debugSupportedOverride ?? (!kIsWeb && MultiViewMode.enabled);
+
+  static bool get _hasRunner =>
       debugSupportedOverride ??
       (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux));
 
@@ -103,7 +106,8 @@ class MultiWindowService implements WindowOpener {
   /// Windows בלבד: ב-macOS ובלינוקס ה-runner אינו מממש את מסלול הגרירה
   /// (מיקום חלון לפי הסמן אינו אפשרי ב-Wayland).
   static bool get canDragTabsOut =>
-      debugSupportedOverride ?? (!kIsWeb && Platform.isWindows);
+      debugSupportedOverride ??
+      (!kIsWeb && Platform.isWindows && MultiViewMode.enabled);
 
   /// הארגומנט שבו ה-runner של לינוקס מסמן חלון משני. ל-`FlDartProject` אין
   /// נקודת כניסה שאינה `main`, ולכן `main` מפנה לפיו ל-`secondaryWindowMain`.
@@ -307,7 +311,7 @@ class MultiWindowService implements WindowOpener {
   ///
   /// ⚠️ חלון משני נוצר מוסתר כדי שלא ייראה מצטייר, ו-`show()` על חלון
   /// מוסתר אינו מפעיל אותו — הוא נחשף **מאחורי** החלון שפתח אותו.
-  Future<void> raiseSelf() => _send(canOpenWindows, 'raiseSelf');
+  Future<void> raiseSelf() => _send(_hasRunner, 'raiseSelf');
 
   /// מתחיל להציג את הכרטיסיה הנגררת **מחוץ** לחלון.
   ///
@@ -422,7 +426,7 @@ class MultiWindowService implements WindowOpener {
   /// הכרטיסיות שהיו בו, ולכן השחזור הוא הצגה בלבד ולא טעינה מחדש.
   @override
   Future<bool> restoreLastClosedWindow() => _guarded(
-    canOpenWindows,
+    _hasRunner,
     'restoreLastClosedWindow',
     false,
     () async =>
@@ -504,7 +508,7 @@ class MultiWindowService implements WindowOpener {
   /// ⚠️ ולא `AppWindowController.quitApplication`: ב-Windows הוא
   /// `PostQuitMessage(0)` בלבד — לולאת ההודעות של **התהליך** יוצאת, כל
   /// החלונות נסגרים, והמנוע נהרס בעוד Dart רץ עליו. ראו התיעוד שם.
-  Future<void> closeSelf() => _send(canOpenWindows, 'closeSelf');
+  Future<void> closeSelf() => _send(_hasRunner, 'closeSelf');
 
   /// מריץ [call] רק כש-[enabled]; כשל בערוץ מודפס ומחזיר את [fallback].
   Future<T> _guarded<T>(

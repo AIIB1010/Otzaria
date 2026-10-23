@@ -29,15 +29,15 @@ abstract final class MultiViewMode {
   static bool get _isMacOS => debugIsMacOS ?? Platform.isMacOS;
 
   /// ב-Windows וב-Linux תמיד ריבוי תצוגות. macOS רק אחרי אישור ה-runner
-  /// ([awaitMacRunnerHandshake]); בלעדיו מודל A (מנוע לכל חלון).
+  /// ([awaitMacRunnerHandshake]); בלעדיו חלון יחיד.
   static bool get supported =>
       _isMacOS ? _macRunnerReady : Platform.isWindows || Platform.isLinux;
 
   /// פעיל רק אחרי ש-[installWindowingOwner] התקין בעלים אמיתי.
   static bool get enabled => _override ?? (supported && _ownerInstalled);
 
-  /// חלון נוסף הוא מנוע נוסף (מודל A). ב-Windows לעולם לא, גם בלי בעלים.
-  static bool get usesEngineWindows => !(_override ?? supported);
+  /// מנועים נוספים אינם זמינים אחרי הסרת סנכרון המצב בין המנועים.
+  static bool get usesEngineWindows => false;
 
   /// האם הותקן בעלים אמיתי לחלונות ה-Dart.
   static bool get ownerInstalled => _ownerInstalled;
@@ -57,7 +57,7 @@ abstract final class MultiViewMode {
 
 /// macOS, לפני [installWindowingOwner]: ה-runner הפך את ריבוי התצוגות במנוע?
 /// בלי זה החלון הראשון של Dart היה קורס על ה-assert של `enableMultiView`.
-/// מחזיר null כשמוכן, ואחרת את הסיבה (מודל A).
+/// מחזיר null כשמוכן, ואחרת את הסיבה (חלון יחיד).
 Future<String?> awaitMacRunnerHandshake({
   CocoaViewWindowNative native = const CocoaViewWindowNative(),
 }) async {
