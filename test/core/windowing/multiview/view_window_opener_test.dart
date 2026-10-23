@@ -543,6 +543,33 @@ void main() {
     expect(opener.pendingRestoreForTest, isEmpty);
   });
 
+  testWidgets('מעבר ממודל A: סשני משבצות 2-4 נפתחים כחלונות Dart באותן משבצות', (
+    tester,
+  ) async {
+    final opener = makeOpener(tester);
+    await pumpHost(tester);
+    for (final slot in [2, 3, 4]) {
+      sessions.rows[slot] = WindowSession(
+        slot: slot,
+        tabsJson: '[]',
+        currentIndex: 0,
+        activeWorkspaceId: 'ws$slot',
+      );
+    }
+
+    await settle(tester, opener.restoreAllWindows([2, 3, 4]));
+
+    final entries = windows.registry.windows;
+    expect(entries.map((w) => w.slot), [2, 3, 4]);
+    for (final entry in entries) {
+      // הסשן, השולחן והגבולות של החלון נקראים ונכתבים לפי אותה משבצת.
+      expect(entry.tabsSession.slot, entry.slot);
+      expect(entry.id.value, 'window-view-${entry.slot}');
+      expect(sessions.rows[entry.slot]!.activeWorkspaceId, 'ws${entry.slot}');
+    }
+    expect(opener.pendingRestoreForTest, isEmpty);
+  });
+
   testWidgets('Ctrl+Shift+T: חלון שנסגר חוזר עם הסשן שלו; אחריו הראשי', (
     tester,
   ) async {

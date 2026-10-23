@@ -1652,8 +1652,8 @@ class _AppBootstrapState extends State<AppBootstrap> {
 }
 
 Future<void> initHive() async {
-  // שורשי חלונות ישנים נמחקים רק כשאין חלון משני חי שמשתמש בקבצים,
-  // גם באתחול מחדש דרך RestartWidget.
+  // שורשי חלונות ישנים (Hive ו-pdfium-window-N.dll של מודל A) נמחקים רק כשאין
+  // חלון משני חי שמשתמש בהם. בריבוי תצוגות זו ההגירה ממודל A.
   if (ProcessDuties.current.isProcessOwner &&
       !WindowBus.instance.hasOtherWindows) {
     await deleteStaleWindowRoots();
