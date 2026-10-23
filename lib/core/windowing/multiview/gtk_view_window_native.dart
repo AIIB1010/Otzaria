@@ -10,8 +10,29 @@ import 'package:window_manager/window_manager.dart' show ResizeEdge;
 class GtkViewWindowNative implements ViewWindowNative {
   const GtkViewWindowNative();
 
-  // ל-GTK3 אין מסגרת רגילה לחלון ממוקסם; נשמרת האחרונה שנקראה לפני המיקסום.
-  static final Map<int, Rect> _normalRects = {};
+  static final _normalRectKey = 'otzaria-normal-rect'.toNativeUtf8();
+
+  static Rect? _normalRect(int hwnd) {
+    final value = _Gtk.getData(_p(hwnd), _normalRectKey).cast<_GdkRectangle>();
+    if (value == nullptr) return null;
+    final rect = value.ref;
+    return Rect.fromLTWH(
+      rect.x.toDouble(),
+      rect.y.toDouble(),
+      rect.width.toDouble(),
+      rect.height.toDouble(),
+    );
+  }
+
+  static void _rememberNormalRect(int hwnd, Rect rect) {
+    final value = calloc<_GdkRectangle>();
+    value.ref
+      ..x = rect.left.round()
+      ..y = rect.top.round()
+      ..width = rect.width.round()
+      ..height = rect.height.round();
+    _Gtk.setData(_p(hwnd), _normalRectKey, value.cast(), _Gtk.free);
+  }
 
   static const int _maximizedState = 1 << 2; // GDK_WINDOW_STATE_MAXIMIZED
   static const int _unplacedStates = (1 << 1) | (1 << 2) | (1 << 4);
@@ -42,7 +63,7 @@ class GtkViewWindowNative implements ViewWindowNative {
         w.value * s,
         h.value * s,
       );
-      if (_state(hwnd) & _unplacedStates == 0) _normalRects[hwnd] = rect;
+      if (_state(hwnd) & _unplacedStates == 0) _rememberNormalRect(hwnd, rect);
       return rect;
     } finally {
       calloc
@@ -59,6 +80,7 @@ class GtkViewWindowNative implements ViewWindowNative {
     // ב-Wayland המיקום נדחה על ידי הקומפוזיטור; הגודל חל.
     _Gtk.move(_p(hwnd), rect.left ~/ s, rect.top ~/ s);
     _Gtk.resize(_p(hwnd), rect.width ~/ s, rect.height ~/ s);
+    if (_state(hwnd) & _unplacedStates == 0) _rememberNormalRect(hwnd, rect);
   }
 
   @override
@@ -158,21 +180,46 @@ class GtkViewWindowNative implements ViewWindowNative {
   ({Rect normal, bool maximized, int dpi})? placement(int hwnd) {
     final rect = windowRect(hwnd);
     if (rect == null) return null;
-    final maximized = _state(hwnd) & _maximizedState != 0;
+    final state = _state(hwnd);
+    Rect normal = rect;
+    if (state & _unplacedStates != 0) {
+      final w = calloc<Int>(), h = calloc<Int>();
+      try {
+        _Gtk.getDefaultSize(_p(hwnd), w, h);
+        final scale = _scale(hwnd);
+        normal =
+            _normalRect(hwnd) ??
+            Rect.fromLTWH(
+              rect.left,
+              rect.top,
+              (w.value > 0 ? w.value : 1280) * scale.toDouble(),
+              (h.value > 0 ? h.value : 800) * scale.toDouble(),
+            );
+      } finally {
+        calloc
+          ..free(w)
+          ..free(h);
+      }
+    }
     return (
-      normal: maximized ? _normalRects[hwnd] ?? rect : rect,
-      maximized: maximized,
+      normal: normal,
+      maximized: state & _maximizedState != 0,
       dpi: 96 * _scale(hwnd),
     );
   }
 
   /// התיקונים של #1441 ו-#1645 שייכים ל-runner של Windows.
   @override
-  Future<void> installViewHooks(int hwnd) async {}
+  Future<void> installViewHooks(int hwnd) async {
+    windowRect(hwnd);
+  }
 
   /// כמו `TitleBarStyle.hidden` בחלון הראשי: בלי כותרת ומסגרת של המערכת.
   @override
   Future<void> makeFrameless(int hwnd) async => _Gtk.setDecorated(_p(hwnd), 0);
+
+  @override
+  Future<void> reveal(int hwnd) async => show(hwnd);
 }
 
 final class _GList extends Struct {
@@ -206,6 +253,32 @@ typedef _DartTwoOut = void Function(Pointer<Void>, Pointer<Int>, Pointer<Int>);
 abstract final class _Gtk {
   static final DynamicLibrary _lib = DynamicLibrary.process();
 
+  static final getData = _lib
+      .lookupFunction<
+        Pointer<Void> Function(Pointer<Void>, Pointer<Utf8>),
+        Pointer<Void> Function(Pointer<Void>, Pointer<Utf8>)
+      >('g_object_get_data');
+  static final free = _lib.lookup<NativeFunction<Void Function(Pointer<Void>)>>(
+    'g_free',
+  );
+  static final setData = _lib
+      .lookupFunction<
+        Void Function(
+          Pointer<Void>,
+          Pointer<Utf8>,
+          Pointer<Void>,
+          Pointer<NativeFunction<Void Function(Pointer<Void>)>>,
+        ),
+        void Function(
+          Pointer<Void>,
+          Pointer<Utf8>,
+          Pointer<Void>,
+          Pointer<NativeFunction<Void Function(Pointer<Void>)>>,
+        )
+      >('g_object_set_data_full');
+  static final getDefaultSize = _lib.lookupFunction<_TwoOut, _DartTwoOut>(
+    'gtk_window_get_default_size',
+  );
   static final getPosition = _lib.lookupFunction<_TwoOut, _DartTwoOut>(
     'gtk_window_get_position',
   );

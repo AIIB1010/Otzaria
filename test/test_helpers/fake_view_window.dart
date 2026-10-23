@@ -103,6 +103,7 @@ class FakeViewWindowNative implements ViewWindowNative {
   final List<int> dragged = [];
   final List<int> frameless = [];
   final List<int> hidden = [];
+  final List<int> revealed = [];
   final List<(int, ResizeEdge)> resized = [];
   final List<int> maximizedVertically = [];
   int? foreground;
@@ -142,6 +143,8 @@ class FakeViewWindowNative implements ViewWindowNative {
   Future<void> installViewHooks(int hwnd) async => hooked.add(hwnd);
   @override
   Future<void> makeFrameless(int hwnd) async => frameless.add(hwnd);
+  @override
+  Future<void> reveal(int hwnd) async => revealed.add(hwnd);
   @override
   void startResizing(int hwnd, ResizeEdge edge) => resized.add((hwnd, edge));
   @override

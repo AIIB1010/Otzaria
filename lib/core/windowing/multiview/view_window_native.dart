@@ -47,6 +47,9 @@ abstract interface class ViewWindowNative {
 
   /// מסיר את כותרת המערכת, כמו `TitleBarStyle.hidden` בחלון הראשי.
   Future<void> makeFrameless(int hwnd);
+
+  /// אחרי הפריים הראשון: GTK מציג את החלון לפני שהראשי יכול להסתתר.
+  Future<void> reveal(int hwnd);
 }
 
 /// המימוש האמיתי: win32 ישירות, והערוץ של ה-runner להתקנת התיקונים.
@@ -228,4 +231,7 @@ class Win32ViewWindowNative implements ViewWindowNative {
       debugPrint('makeFrameless failed: $e');
     }
   }
+
+  @override
+  Future<void> reveal(int hwnd) async {}
 }
