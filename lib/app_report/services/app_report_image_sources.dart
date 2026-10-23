@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:otzaria/utils/file/file_picker_dialog_options.dart';
 import 'package:otzaria_report_contract/otzaria_report_contract.dart';
 import 'package:super_clipboard/super_clipboard.dart';
@@ -69,14 +70,14 @@ class AppReportImageSources {
   }
 
   /// פותח את בוחר הקבצים. מחזיר רשימה ריקה בביטול.
-  Future<List<AppReportImage>> pickFiles() async {
+  Future<List<AppReportImage>> pickFiles({BuildContext? context}) async {
     final files =
         (await withFilePickerOwner(
-          null,
+          context,
           () => FilePicker.pickFiles(
             type: FileType.custom,
             allowedExtensions: AppReportImage.supportedExtensions,
-            windowsOptions: modalWindowsOptions(),
+            windowsOptions: modalWindowsOptions(context),
             linuxOptions: kModalLinuxOptions,
           ),
         )) ??
