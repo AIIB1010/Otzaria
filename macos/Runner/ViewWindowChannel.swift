@@ -81,7 +81,7 @@ final class OtzariaViewWindows {
   private func cloakIfNew(_ window: NSWindow) -> Bool {
     guard !knownWindows.contains(window), isDartViewWindow(window) else { return false }
     knownWindows.add(window)
-    // שקוף ולא מוסתר: חלון שאינו על המסך אינו מקבל פריימים (כמו במודל A).
+    // שקוף ולא מוסתר: חלון שאינו על המסך אינו מקבל פריימים.
     window.alphaValue = 0
     window.ignoresMouseEvents = true
     DispatchQueue.main.asyncAfter(deadline: .now() + OtzariaViewWindows.revealTimeout) {
