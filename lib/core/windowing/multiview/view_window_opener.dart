@@ -9,14 +9,14 @@ import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/user_state/window_bounds.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
 import 'package:otzaria/core/window_persistence.dart';
-import 'package:otzaria/core/windowing/runner_window_channel.dart';
 import 'package:otzaria/core/windowing/multiview/cocoa_view_window_native.dart';
-import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/gtk_view_window_native.dart';
+import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_focus_sync.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_native.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
 import 'package:otzaria/core/windowing/new_window_placement.dart';
+import 'package:otzaria/core/windowing/runner_window_channel.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/tabs/models/tab.dart';
 import 'package:window_manager/window_manager.dart';
@@ -129,7 +129,7 @@ class ViewWindowOpener implements WindowOpener {
     await windowManager.focus();
   }
 
-  /// חלון המקור: חלון Dart שבחזית, ואחרת הראשי. מסגרת חיצונית, פיזית.
+  /// חלון המקור: חלון Dart שבחזית, ואחרת הראשי; באותן יחידות כמו המתאם.
   Future<SourceWindowPlacement?> _sourceWindow() async {
     final foreground = await _native.foregroundWindow();
     final view = registry.windows
