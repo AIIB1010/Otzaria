@@ -6830,13 +6830,7 @@ class PluginBridgeAdapter {
   ]) async {
     final ack = await _alerts.send(op, {...args, 'pluginId': plugin.pluginId});
     if (ack.ok) return ack.value;
-    throw Exception(
-      ack.error ??
-          switch (ack.failure) {
-            CalendarAlertsFailure.timeout => 'error.timeout: main window',
-            _ => 'error.unavailable: main window',
-          },
-    );
+    throw Exception(ack.error ?? 'error.unavailable: calendar alerts');
   }
 
   // flutter_local_notifications דוחה מזהה שאינו נכנס ב-32 ביט.

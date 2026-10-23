@@ -3,7 +3,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/windowing/app_window_id.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
-import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/plugins/services/plugin_correction_session_service.dart';
 import 'package:otzaria/plugins/services/plugin_unsaved_changes_registry.dart';
 import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
@@ -184,11 +183,9 @@ Future<bool> confirmAppCloseWithUnsavedChanges({
 /// "סגירת החלון" כשנשאר חלון Dart פתוח שאינו [closing].
 /// הראשי אינו נספר: כשחלון Dart נסגר אחרון, הראשי מוסתר.
 String _closeSubtitle(AppWindowKeys closing) {
-  final others =
-      MultiViewMode.enabled &&
-      AppWindowKeys.registered.any(
-        (keys) => keys.id != AppWindowId.primary && !identical(keys, closing),
-      );
+  final others = AppWindowKeys.registered.any(
+    (keys) => keys.id != AppWindowId.primary && !identical(keys, closing),
+  );
   return others
       ? unsavedChangesWindowCloseSubtitle
       : unsavedChangesAppCloseSubtitle;
@@ -213,11 +210,10 @@ Future<bool> _confirmAllWindowCorrections(
     ];
     final tabs = <OpenedTab>{
       ...context.read<TabsBloc>().state.tabs,
-      if (MultiViewMode.enabled)
-        for (final window in AppWindowKeys.registered)
-          if (window.navigator.currentContext case final other?
-              when other.mounted)
-            ...other.read<TabsBloc>().state.tabs,
+      for (final window in AppWindowKeys.registered)
+        if (window.navigator.currentContext case final other?
+            when other.mounted)
+          ...other.read<TabsBloc>().state.tabs,
     };
     final confirmed = await confirmCloseTabs(
       context,

@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/core/user_state/user_state_list_store.dart';
-import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/data/repository/user_state_list_repository.dart';
 
 void main() {
@@ -85,8 +84,6 @@ void main() {
   });
 
   group('חלונות Dart באותו isolate', () {
-    tearDown(() => MultiViewMode.debugOverride = false);
-
     UserStateListRepository<int> repo(UserStateListStore store) =>
         UserStateListRepository<int>(
           boxName: 'history',
@@ -97,7 +94,6 @@ void main() {
         );
 
     test('כתיבה בחלון אחד מגיעה לשני, ולא לכותב עצמו', () async {
-      MultiViewMode.debugOverride = true;
       final db = UserStateDatabase.openAt(dbPath);
       final store = UserStateListStore(database: db);
       final a = repo(store);
@@ -118,22 +114,6 @@ void main() {
 
       expect(seenByA, 1);
       expect(seenByB, 4);
-      db.close();
-    });
-
-    test('בלי הדגל כתיבה מקומית אינה משודרת לעצמה', () async {
-      final db = UserStateDatabase.openAt(dbPath);
-      final store = UserStateListStore(database: db);
-      final a = repo(store);
-      final b = repo(store);
-      var seen = 0;
-      final subB = b.remoteChanges.listen((_) => seen++);
-      addTearDown(subB.cancel);
-
-      await a.mutate((current) => [...current, 1]);
-      await Future<void>.delayed(Duration.zero);
-
-      expect(seen, 0);
       db.close();
     });
   });

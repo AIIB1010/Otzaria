@@ -623,7 +623,7 @@ class CrossWindowTabDrag {
       withHwnd: true,
     );
     if (target == null) return target;
-    final slot = drops.resolve(hwnd: target.hwnd, busSlot: target.slot);
+    final slot = drops.resolve(hwnd: target.hwnd, runnerSlot: target.slot);
     return (
       slot: slot,
       isSelf: target.isSelf || _isSourceSlot(drops, slot),
@@ -644,7 +644,7 @@ class CrossWindowTabDrag {
       withHwnd: true,
     );
     if (outcome == null) return outcome;
-    final slot = drops.resolve(hwnd: outcome.hwnd, busSlot: outcome.slot);
+    final slot = drops.resolve(hwnd: outcome.hwnd, runnerSlot: outcome.slot);
     return (
       ran: outcome.ran,
       snapped: outcome.snapped,

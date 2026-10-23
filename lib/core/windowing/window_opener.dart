@@ -28,7 +28,7 @@ abstract interface class WindowOpener {
   Future<bool> canOpenAnotherWindow();
 
   /// `null` כשלא ידוע.
-  Future<({int count, int max, int engines})?> windowCount();
+  Future<({int count, int max})?> windowCount();
 
   Future<void> reportOpenWindowFailure();
 }

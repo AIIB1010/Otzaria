@@ -163,13 +163,13 @@ class InProcessTabDrops {
 
   /// החלון שתחת הסמן: חלון Dart לפי ה-HWND שלו, הראשי לפי המשבצת שה-runner
   /// מדווח עליו בלבד; null — שולחן העבודה או תוכנה אחרת.
-  int? resolve({int? hwnd, int? busSlot}) {
+  int? resolve({int? hwnd, int? runnerSlot}) {
     if (hwnd != null) {
       for (final entry in _registry.windows) {
         if (entry.handle.hwnd == hwnd) return entry.slot;
       }
     }
-    return busSlot != null ? mainSlot : null;
+    return runnerSlot != null ? mainSlot : null;
   }
 
   InProcessTabDropTarget? _targetOf(int slot) {

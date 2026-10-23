@@ -29,7 +29,6 @@ import 'package:otzaria/core/window_listener.dart';
 import 'package:otzaria/core/windowing/app_quit.dart';
 import 'package:otzaria/core/windowing/app_window_controller.dart';
 import 'package:otzaria/core/windowing/runner_window_channel.dart';
-import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_opener.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_close_flow.dart';
@@ -52,9 +51,9 @@ void main() {
   });
 
   setUp(() async {
-    MultiViewMode.debugOverride = false;
     // ה-runner מדומה כדי לבדוק את מסלול ריבוי החלונות בכל פלטפורמה.
     RunnerWindowChannel.debugSupportedOverride = true;
+    ViewWindowOpener.instance.resetCloseQueueForTest();
     runner = _FakeRunner()..install();
     tmp = Directory.systemTemp.createTempSync('otzaria_secclose_');
     AppPaths.debugProfileDataRootPath = tmp.path;
@@ -67,7 +66,6 @@ void main() {
   tearDown(() async {
     WindowTabsSession.current.resume();
     InProcessTabDrops.instance.setMainShown(true);
-    MultiViewMode.debugOverride = null;
     AppQuit.resetForTest();
     AppWindowListener.prepareUpdateForClose = null;
     AppPaths.debugProfileDataRootPath = null;
@@ -137,10 +135,8 @@ void main() {
   });
 
   test('סגירת הראשי ממתינה למסלול סגירה של חלון Dart', () async {
-    MultiViewMode.debugOverride = true;
     WindowOpener.debugOverride = _TwoWindowsOpener();
     addTearDown(() {
-      MultiViewMode.debugOverride = false;
       WindowOpener.debugOverride = null;
       WindowTabsSession.current.resume();
     });
@@ -168,10 +164,8 @@ void main() {
   testWidgets(
     'יציאה מה-Dart האחרון מחליפה סגירת ראשי ממתינה גם כשהיציאה בוטלה',
     (tester) async {
-      MultiViewMode.debugOverride = true;
       WindowOpener.debugOverride = _TwoWindowsOpener();
       addTearDown(() {
-        MultiViewMode.debugOverride = false;
         WindowOpener.debugOverride = null;
         WindowTabsSession.current.resume();
       });
@@ -218,10 +212,8 @@ void main() {
   );
 
   test('יציאה מפורשת בזמן סגירה פעילה ממתינה ונבדקת אחריה', () async {
-    MultiViewMode.debugOverride = true;
     WindowOpener.debugOverride = _TwoWindowsOpener();
     addTearDown(() {
-      MultiViewMode.debugOverride = false;
       WindowOpener.debugOverride = null;
       WindowTabsSession.current.resume();
     });
@@ -253,7 +245,6 @@ void main() {
   testWidgets('עדכון בריבוי תצוגות מבקש יציאה מלאה ולא מסתיר רק את הראשי', (
     tester,
   ) async {
-    MultiViewMode.debugOverride = true;
     holdQuitPreparation();
     final tab = ToolTab(toolId: 'p', title: 'תוסף', instanceId: 'update');
     await tester.pumpWidget(
@@ -293,7 +284,6 @@ void main() {
   testWidgets('חלון Dart שאינו האחרון: flush רץ, הסשן נמחק, ורק הוא נסגר', (
     tester,
   ) async {
-    MultiViewMode.debugOverride = true;
     final windows = FakeViewWindows(tester);
     final entry = windows.registry.open(size: const Size(800, 600))!;
     final peer = windows.registry.open(size: const Size(800, 600))!;
@@ -353,10 +343,8 @@ void main() {
   test(
     'ריבוי תצוגות: הראשי מוסתר כשחלונות Dart פתוחים, והסשן שלו מושהה',
     () async {
-      MultiViewMode.debugOverride = true;
       WindowOpener.debugOverride = _TwoWindowsOpener();
       addTearDown(() {
-        MultiViewMode.debugOverride = false;
         WindowOpener.debugOverride = null;
         WindowTabsSession.current.resume();
       });
@@ -414,6 +402,8 @@ void main() {
     });
 
     Future<void> openWindow(WidgetTester tester, {bool failing = false}) async {
+      // הסגירה עוברת בתור של התהליך; הוא חייב להיווצר ב-FakeAsync של הבדיקה.
+      ViewWindowOpener.instance.resetCloseQueueForTest();
       await tester.runAsync(
         () => service.begin(
           owner: 'p',
@@ -461,7 +451,7 @@ void main() {
         .runAsync(() => drafts.get('p', correctionDraftId('p', 'id:1')))
         .then((draft) => draft);
 
-    testWidgets('טיוטה שנשמרה: בלי אזהרה, הסשן מסתיים ב-window_closed', (
+    testWidgets('טיוטה שנשמרה: בלי אזהרה, והסתרת הראשי אינה מסיימת את הסשן', (
       tester,
     ) async {
       await openWindow(tester);
@@ -474,8 +464,9 @@ void main() {
         }
       });
       expect(runner.closeSelfCalls, 1);
-      expect(service.hasSessionForTab(tabId), isFalse);
-      expect(ended, ['window_closed']);
+      // הטיוטות שייכות לכל החלונות, והחלון המוסתר חוזר עם הכרטיסיות שלו.
+      expect(service.hasSessionForTab(tabId), isTrue);
+      expect(ended, isEmpty);
       expect(
         ((await stored(tester))!['changes'] as List).single['proposedText'],
         'תיקון',
@@ -503,7 +494,7 @@ void main() {
         await tester.pumpAndSettle();
         await tester.runAsync(() => closing);
         expect(runner.closeSelfCalls, 1);
-        expect(service.hasSessionForTab(tabId), isFalse);
+        expect(service.hasSessionForTab(tabId), isTrue);
         expect(
           await tester.runAsync(() => service.unsavedStates()),
           hasLength(1),
@@ -521,7 +512,7 @@ void main() {
           ((await stored(tester))!['changes'] as List).single['proposedText'],
           'תיקון',
         );
-        expect(ended, ['window_closed']);
+        expect(ended, isEmpty);
         // שחרור ה-lease שאחרי ההתאוששות רץ בשעון המדומה.
         await tester.pump(const Duration(milliseconds: 50));
       },
@@ -566,8 +557,8 @@ class _TwoWindowsOpener extends Fake implements WindowOpener {
   final int Function()? count;
 
   @override
-  Future<({int count, int max, int engines})?> windowCount() async =>
-      (count: count?.call() ?? 2, max: 8, engines: 1);
+  Future<({int count, int max})?> windowCount() async =>
+      (count: count?.call() ?? 2, max: 8);
 }
 
 class _FakeRunner {

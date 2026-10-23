@@ -5,12 +5,6 @@ import 'package:otzaria/tools/calendar/services/calendar_alerts_owner.dart';
 
 /// למה פקודה לא אושרה.
 enum CalendarAlertsFailure {
-  /// אין בעלים זמין. דבר לא נכתב.
-  noOwner,
-
-  /// הבעלים לא ענה בזמן. ייתכן שהפקודה הוחלה; המצב יתיישר בעדכון הבא.
-  timeout,
-
   /// הבעלים דחה את הפקודה או נכשל בה.
   rejected,
 }

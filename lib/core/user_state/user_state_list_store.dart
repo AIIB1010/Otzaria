@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:otzaria/core/user_state/user_state_database.dart';
-import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/data/sqlite/sqlite3_api.dart';
 
 /// שינוי ברשימה של [UserStateListStore]: שם המאגר ההיסטורי ומפתח בתוכו.
@@ -13,8 +12,8 @@ typedef UserStateListChange = ({String box, String key, Object? origin});
 /// רשימות מצב המשתמש (היסטוריה, סימניות, שולחנות) — רשימה שלמה לכל מפתח.
 ///
 /// הפריטים אין להם מזהה יציב, ולכן היחידה היא הרשימה, ו-[mutate] מבטיח
-/// read-modify-write אטומי בטרנזקציה `BEGIN IMMEDIATE`: שני חלונות שכותבים
-/// באותו רגע מסתדרים בנעילה, ואף עדכון אינו נדרס.
+/// read-modify-write אטומי בטרנזקציה `BEGIN IMMEDIATE`: הכתיבה מחושבת מהמסד
+/// ולא מהעותק שבזיכרון של חלון, ואף עדכון אינו נדרס.
 class UserStateListStore {
   UserStateListStore({UserStateDatabase? database})
     : _database = database ?? UserStateDatabase.instance;
@@ -110,11 +109,8 @@ class UserStateListStore {
     }
   }
 
-  void _notifyPeers(String box, String key, Object? origin) {
-    if (MultiViewMode.enabled) {
+  void _notifyPeers(String box, String key, Object? origin) =>
       _changes.add((box: box, key: key, origin: origin));
-    }
-  }
 
   @visibleForTesting
   void dispose() => _changes.close();
