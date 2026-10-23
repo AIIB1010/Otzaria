@@ -27,7 +27,7 @@ void main() {
 
   tearDown(() {
     AppQuit.resetForTest();
-    MultiViewMode.debugOverride = null;
+    MultiViewMode.debugOverride = false;
     MultiWindowService.closingAll = false;
   });
 

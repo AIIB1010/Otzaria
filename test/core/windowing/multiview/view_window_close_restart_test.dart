@@ -44,7 +44,7 @@ void main() {
   });
 
   tearDown(() {
-    MultiViewMode.debugOverride = null;
+    MultiViewMode.debugOverride = false;
     AppPaths.debugProfileDataRootPath = null;
     AppWindowKeys.resetForTest();
     LastActiveWindow.resetForTest();

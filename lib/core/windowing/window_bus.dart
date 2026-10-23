@@ -20,7 +20,7 @@ class WindowBus {
 
   static final WindowBus instance = WindowBus._();
 
-  /// מספר המשבצות. חייב להתאים ל-`kMaxWindows` ב-`windows/runner`.
+  /// מספר המשבצות. חייב להתאים ל-`kMaxWindows` ב-`linux/runner/multi_window.cc`.
   static const int slotCount = 4;
 
   /// קידומת שמות המשבצות. ניתנת להחלפה **בבדיקות בלבד**.

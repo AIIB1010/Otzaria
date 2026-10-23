@@ -22,7 +22,7 @@ void main() {
   });
 
   tearDown(() {
-    MultiViewMode.debugOverride = null;
+    MultiViewMode.debugOverride = false;
     DialogOwner.resetForTest();
     AppWindowKeys.resetForTest();
     LastActiveWindow.resetForTest();

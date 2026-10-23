@@ -13,6 +13,7 @@ import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
 import 'package:otzaria/core/windowing/external_tab_drag.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/user_state/user_state_list_store.dart';
 import 'package:otzaria/core/windowing/settings_sync.dart';
 import 'package:otzaria/core/windowing/window_bus.dart';
@@ -89,8 +90,8 @@ class _WindowBusHostState extends State<WindowBusHost> {
     LibraryAccessGate.instance.onLibraryReplaced = () {
       if (mounted) context.read<LibraryBloc>().add(const RefreshLibrary());
     };
-    // ה-runner צריך את המיפוי כדי לתרגם "החלון שתחת הסמן" למשבצת בגרירה.
-    if (slot != null) {
+    // מודל A: ה-runner צריך את המיפוי כדי לתרגם "החלון שתחת הסמן" למשבצת.
+    if (slot != null && MultiViewMode.usesEngineWindows) {
       unawaited(const MultiWindowService().setBusSlot(slot));
     }
 

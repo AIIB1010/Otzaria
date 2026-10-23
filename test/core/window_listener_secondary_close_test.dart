@@ -172,7 +172,7 @@ void main() {
     MultiViewMode.debugOverride = true;
     WindowOpener.debugOverride = _TwoWindowsOpener();
     addTearDown(() {
-      MultiViewMode.debugOverride = null;
+      MultiViewMode.debugOverride = false;
       WindowOpener.debugOverride = null;
       WindowTabsSession.current.resume();
     });
@@ -207,7 +207,7 @@ void main() {
         milliseconds: 10,
       );
       addTearDown(() {
-        MultiViewMode.debugOverride = null;
+        MultiViewMode.debugOverride = false;
         WindowOpener.debugOverride = null;
         WindowTabsSession.current.resume();
       });
@@ -259,7 +259,7 @@ void main() {
     MultiViewMode.debugOverride = true;
     WindowOpener.debugOverride = _TwoWindowsOpener();
     addTearDown(() {
-      MultiViewMode.debugOverride = null;
+      MultiViewMode.debugOverride = false;
       WindowOpener.debugOverride = null;
       WindowTabsSession.current.resume();
     });
@@ -298,7 +298,7 @@ void main() {
       milliseconds: 10,
     );
     addTearDown(() {
-      MultiViewMode.debugOverride = null;
+      MultiViewMode.debugOverride = false;
       WindowOpener.debugOverride = null;
       WindowTabsSession.current.resume();
     });
@@ -386,7 +386,7 @@ void main() {
       MultiViewMode.debugOverride = true;
       WindowOpener.debugOverride = _TwoWindowsOpener();
       addTearDown(() {
-        MultiViewMode.debugOverride = null;
+        MultiViewMode.debugOverride = false;
         WindowOpener.debugOverride = null;
         WindowTabsSession.current.resume();
       });

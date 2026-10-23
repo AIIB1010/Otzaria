@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/user_state/window_bounds.dart';
@@ -111,7 +113,7 @@ void main() {
   setUp(() => MultiViewMode.debugOverride = true);
 
   tearDown(() {
-    MultiViewMode.debugOverride = null;
+    MultiViewMode.debugOverride = false;
     WindowOpener.debugOverride = null;
     AppWindowKeys.resetForTest();
   });
@@ -165,9 +167,25 @@ void main() {
     expect(WindowOpener.current, same(ViewWindowOpener.instance));
     MultiViewMode.debugOverride = false;
     expect(WindowOpener.current, isA<MultiWindowService>());
-    // בלי דריסה הכול תלוי בבעלים, ותחת binding של בדיקות הוא לא מותקן.
+    // בלי דריסה: ב-Windows תמיד חלונות Dart, גם בלי בעלים; אחרת מודל A.
     MultiViewMode.debugOverride = null;
-    expect(WindowOpener.current, isA<MultiWindowService>());
+    expect(
+      WindowOpener.current,
+      Platform.isWindows
+          ? same(ViewWindowOpener.instance)
+          : isA<MultiWindowService>(),
+    );
+  });
+
+  testWidgets('בלי בעלים לחלונות Dart לא נפתח שום חלון', (tester) async {
+    final opener = makeOpener(tester);
+    await pumpHost(tester);
+    // תחת binding של בדיקות הבעלים אינו מותקן, כמו ב-integration_test.
+    MultiViewMode.debugOverride = null;
+
+    expect(await opener.canOpenAnotherWindow(), isFalse);
+    expect(await opener.openWindow(), isFalse);
+    expect(windows.registry.windows, isEmpty);
   });
 
   testWidgets('openWindow: חלון עם כרטיסיה, שארית במשבצת נמחקת', (
@@ -543,32 +561,35 @@ void main() {
     expect(opener.pendingRestoreForTest, isEmpty);
   });
 
-  testWidgets('מעבר ממודל A: סשני משבצות 2-4 נפתחים כחלונות Dart באותן משבצות', (
-    tester,
-  ) async {
-    final opener = makeOpener(tester);
-    await pumpHost(tester);
-    for (final slot in [2, 3, 4]) {
-      sessions.rows[slot] = WindowSession(
-        slot: slot,
-        tabsJson: '[]',
-        currentIndex: 0,
-        activeWorkspaceId: 'ws$slot',
-      );
-    }
+  testWidgets(
+    'מעבר ממודל A: סשני משבצות 2-4 נפתחים כחלונות Dart באותן משבצות',
+    (
+      tester,
+    ) async {
+      final opener = makeOpener(tester);
+      await pumpHost(tester);
+      for (final slot in [2, 3, 4]) {
+        sessions.rows[slot] = WindowSession(
+          slot: slot,
+          tabsJson: '[]',
+          currentIndex: 0,
+          activeWorkspaceId: 'ws$slot',
+        );
+      }
 
-    await settle(tester, opener.restoreAllWindows([2, 3, 4]));
+      await settle(tester, opener.restoreAllWindows([2, 3, 4]));
 
-    final entries = windows.registry.windows;
-    expect(entries.map((w) => w.slot), [2, 3, 4]);
-    for (final entry in entries) {
-      // הסשן, השולחן והגבולות של החלון נקראים ונכתבים לפי אותה משבצת.
-      expect(entry.tabsSession.slot, entry.slot);
-      expect(entry.id.value, 'window-view-${entry.slot}');
-      expect(sessions.rows[entry.slot]!.activeWorkspaceId, 'ws${entry.slot}');
-    }
-    expect(opener.pendingRestoreForTest, isEmpty);
-  });
+      final entries = windows.registry.windows;
+      expect(entries.map((w) => w.slot), [2, 3, 4]);
+      for (final entry in entries) {
+        // הסשן, השולחן והגבולות של החלון נקראים ונכתבים לפי אותה משבצת.
+        expect(entry.tabsSession.slot, entry.slot);
+        expect(entry.id.value, 'window-view-${entry.slot}');
+        expect(sessions.rows[entry.slot]!.activeWorkspaceId, 'ws${entry.slot}');
+      }
+      expect(opener.pendingRestoreForTest, isEmpty);
+    },
+  );
 
   testWidgets('Ctrl+Shift+T: חלון שנסגר חוזר עם הסשן שלו; אחריו הראשי', (
     tester,

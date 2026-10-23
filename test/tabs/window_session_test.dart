@@ -41,7 +41,7 @@ void main() {
   });
 
   tearDown(() async {
-    MultiViewMode.debugOverride = null;
+    MultiViewMode.debugOverride = false;
     TabsRepository.debugSessions = null;
     MultiWindowService.debugSupportedOverride = null;
     database.close();

@@ -93,7 +93,7 @@ void main() {
   });
 
   tearDown(() {
-    MultiViewMode.debugOverride = null;
+    MultiViewMode.debugOverride = false;
     AppWindowKeys.resetForTest();
     LastActiveWindow.resetForTest();
     UserStateDatabase.instance.close();

@@ -43,7 +43,7 @@ class ExternalActivationService {
        _ownSlot = ownSlot ?? (() => WindowBus.instance.slot),
        _forward = forward ?? _forwardOverBus,
        _watchDirectory = watchDirectory ?? ((dir) => dir.watch()),
-       _multiView = multiView ?? (() => MultiViewMode.enabled),
+       _multiView = multiView ?? (() => !MultiViewMode.usesEngineWindows),
        _lastActiveWindow = lastActiveWindow ?? (() => LastActiveWindow.id);
 
   final ExternalActivationQueue _queue;

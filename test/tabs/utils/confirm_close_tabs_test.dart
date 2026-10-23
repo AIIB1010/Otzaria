@@ -239,7 +239,7 @@ void main() {
       AppWindowKeys.register(view);
     });
     tearDown(() async {
-      MultiViewMode.debugOverride = null;
+      MultiViewMode.debugOverride = false;
       AppWindowKeys.resetForTest();
       PluginUnsavedChangesRegistry.instance.removeInstance(key);
       await mainTabs.close();

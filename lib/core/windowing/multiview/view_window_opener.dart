@@ -8,6 +8,7 @@ import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/user_state/window_bounds.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
 import 'package:otzaria/core/windowing/multi_window_service.dart';
+import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_native.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_registry.dart';
 import 'package:otzaria/core/windowing/new_window_placement.dart';
@@ -157,7 +158,7 @@ class ViewWindowOpener implements WindowOpener {
     PhysicalBounds? bounds,
     bool inheritPlacement = true,
   }) => _serialized(() async {
-    if (!registry.canOpenAnotherWindow) return false;
+    if (!_canOpen) return false;
     final slot = registry.freeSlot(excluding: _pendingRestore);
     // שארית מקריסה במשבצת הזו אינה שייכת לחלון החדש.
     await _store.delete(slot);
@@ -217,7 +218,7 @@ class ViewWindowOpener implements WindowOpener {
   }
 
   Future<bool> _openSession(int slot) async {
-    if (registry.isSlotOpen(slot) || !registry.canOpenAnotherWindow) {
+    if (registry.isSlotOpen(slot) || !_canOpen) {
       return false;
     }
     final session = await _store.load(slot);
@@ -243,7 +244,7 @@ class ViewWindowOpener implements WindowOpener {
         continue;
       }
       final session = closed.session!;
-      if (!registry.canOpenAnotherWindow) {
+      if (!_canOpen) {
         await reportOpenWindowFailure();
         return false;
       }
@@ -272,7 +273,10 @@ class ViewWindowOpener implements WindowOpener {
   });
 
   @override
-  Future<bool> canOpenAnotherWindow() async => registry.canOpenAnotherWindow;
+  Future<bool> canOpenAnotherWindow() async => _canOpen;
+
+  /// בלי בעלים לחלונות Dart (integration_test) אין חלונות נוספים כלל.
+  bool get _canOpen => MultiViewMode.enabled && registry.canOpenAnotherWindow;
 
   /// החלון הראשי נספר תמיד, גם מוסתר: הוא חי ותופס מקום בתקרה.
   @override
@@ -368,7 +372,7 @@ class ViewWindowOpener implements WindowOpener {
     _native.setWindowRect(hwnd, clampToArea(moved, area));
   }
 
-  /// כמו `OriginForDrop` ב-runner: מזיז לתוך אזור העבודה, ומקטין כשאינו נכנס.
+  /// מזיז את המסגרת לתוך אזור העבודה, ומקטין אותה כשאינה נכנסת.
   @visibleForTesting
   static Rect clampToArea(Rect rect, Rect area) {
     final width = rect.width.clamp(0.0, area.width);

@@ -640,7 +640,7 @@ Future<void> presentMainWindow() async {
     }
     // ⚠️ **החשיפה של חלון משני שייכת לנייטיב בלבד.**
     //
-    // `RevealOnFirstFrame` כבר הציג אותו והביא אותו לחזית ברגע הפריים
+    // ה-runner כבר הציג אותו והביא אותו לחזית ברגע הפריים
     // הראשון — כלומר שניות לפני שהאתחול כאן מסתיים. חזרה על
     // `show`/`focus`/`raiseSelf` בנקודה הזו חוטפת את הפוקוס מהמשתמש
     // שבינתיים כבר חזר לעבוד בחלון הראשי, וזו הייתה מחצית "מריבת
@@ -1648,7 +1648,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
       settingsRepository: settingsRepository,
       // הדוק שייך לתהליך: מאזין אחד מעל היקף החלון.
       child: DockProgressListener(
-        // בבנייה עם OTZARIA_MULTIVIEW=false, או כשהבעלים לא הותקן, תמיד מודל A.
+        // בלי בעלים (Linux/macOS, integration_test) אין חלונות Dart במנוע הזה.
         child: MultiViewMode.enabled
             ? MultiViewHost(
                 contentBuilder: (context, entry) =>
@@ -1752,7 +1752,8 @@ Future<void> _loadCerts() async {
   trustCertificates(await loadNetfreeCaBytes());
 }
 
-/// נקודת הכניסה של חלון אוצריא נוסף.
+/// נקודת הכניסה של חלון אוצריא נוסף במודל A (Linux/macOS). ה-runner של
+/// Windows אינו מפעיל אותה: שם כל חלון הוא חלון Dart באותו מנוע.
 ///
 /// רץ ב-isolate נפרד משלו, באותו תהליך ועל **ה-thread הראשי כמו כל
 /// המנועים** (ראו [MultiWindowService]). זו **אינה** `main()`: אין בדיקת
@@ -1814,10 +1815,6 @@ void secondaryWindowMain(List<String> args) async {
     // הנתונים כולו רוקנה את `<dataRoot>/plugins` — תפריט הכלים בחלון
     // משני היה ריק, וכרטיסיית תוסף נעלמה מהמקור במקום להיפתח ביעד.
     configureHiveRootForWindow(windowRoot);
-
-    // ⚠️ **חובה לפני כל שימוש ב-PDF בחלון הזה.** ראו
-    // [_isolatePdfiumForThisWindow].
-    await _isolatePdfiumForThisWindow(windowRoot);
 
     // זריעת ההעדפות של החלון שפתח אותנו.
     //
@@ -1922,74 +1919,6 @@ void _maybeScheduleDebugSecondWindow() {
       '[debug] openWindow -> $opened, ${stopwatch.elapsedMilliseconds}ms',
     );
   });
-}
-
-/// נותן לחלון הזה **עותק פרטי של `pdfium.dll`**, ומכוון אליו את pdfrx.
-///
-/// ## למה זה נדרש: PDFium גלובלי לתהליך, והקולבקים שלו שייכים ל-isolate
-///
-/// `FPDF_InitLibrary` ו-`FPDF_SetSystemFontInfo` הם מצב של **התהליך** (C
-/// globals במודול), בעוד ש-pdfrx מחזיק את כל מצבו במשתנים ברמת הקובץ —
-/// כלומר **פר isolate group**, וכל חלון הוא group משלו. התוצאה:
-///
-/// 1. החלון הראשון מתקין font mapper ו-`FPDF_SetSystemFontInfo(A)`.
-/// 2. החלון השני אינו רואה את `_fontMapper` של הראשון (משתנה פר-group),
-///    מתקין mapper משלו, ו-`FPDF_SetSystemFontInfo(B)` **דורס** את המצביע.
-/// 3. הקולבקים של ה-mapper הם `NativeCallable.isolateLocal`, כלומר קשורים
-///    ל-`PdfrxEngineWorker` של אותו group. ה-`FPDF_LoadPage` הבא בחלון
-///    הראשון קורא ל-`MapFont` של B מתוך worker A, וה-VM נופל בשגיאה
-///    `Cannot invoke native callback from a different isolate` — קריסה
-///    קטלנית שאי אפשר לתפוס.
-///
-/// ה-pre-warm של תוכני העניינים ב-`ReferenceBooksCache` פותח עשרות קובצי
-/// PDF בכל חלון, ולכן די היה בפתיחת חלון שני כדי לחמש את הקריסה.
-///
-/// ## הפתרון: מודול נפרד לכל חלון
-///
-/// `DynamicLibrary.open('pdfium.dll')` בשם בלבד מחזיר את המודול **שכבר
-/// טעון** בתהליך. עותק בנתיב אחר ובשם אחר נטען כמודול נפרד עם סגמנט
-/// נתונים משלו, ולכן לכל חלון יש PDFium משלו — כולל font mapper משלו.
-/// המחיר: עותק DLL בתיקיית החלון (נמחקת בהפעלה קרה) ומודול נוסף בזיכרון.
-///
-/// כשל כאן עוצר את החלון המשני לפני הפעלת Flutter, כדי שלא ישתף PDFium
-/// עם החלון הראשי ויפיל את ה-VM בעת פתיחת PDF.
-Future<void> _isolatePdfiumForThisWindow(String windowRoot) async {
-  if (kIsWeb || !Platform.isWindows) return;
-  try {
-    final source = File(
-      p.join(p.dirname(Platform.resolvedExecutable), 'pdfium.dll'),
-    );
-    if (!await source.exists()) {
-      throw FileSystemException('pdfium.dll not found', source.path);
-    }
-    // ⚠️ גם **שם** שונה ולא רק נתיב שונה: הלוודר של Windows מזהה מודולים
-    // לפי שם הבסיס במקרים מסוימים, ושם ייחודי מסיר כל ספק.
-    final slot = WindowBus.instance.slot ?? 0;
-    final target = File(p.join(windowRoot, 'pdfium-window-$slot.dll'));
-    if (!await target.exists() ||
-        await target.length() != await source.length()) {
-      await source.copy(target.path);
-    }
-    Pdfrx.pdfiumModulePath = target.path;
-    debugPrint('[pdf] מודול PDFium פרטי לחלון: ${target.path}');
-  } catch (e, st) {
-    debugPrint('⚠️ _isolatePdfiumForThisWindow failed: $e\n$st');
-    try {
-      ErrorLogFile.append(
-        title: 'Private PDFium module for secondary window failed',
-        error: e,
-        stackTrace: st,
-        details: const {
-          'impact':
-              'PDF rendering in this window shares the process-global PDFium '
-              'with the main window and can abort the VM',
-        },
-      );
-    } catch (_) {
-      // רישום ללוג הוא best-effort.
-    }
-    rethrow;
-  }
 }
 
 /// מעביר את סגירת החלון הזה דרך Dart.
