@@ -49,7 +49,6 @@ void main() {
       pluginIds: MemoryPluginIds(),
       pluginEvents: () async => const [],
       now: () => DateTime(2026, 10, 20, 9),
-      broadcast: (_) {},
       dedupeDuplicates: false,
     );
     CalendarAlertsOwner.instanceForTesting = owner;

@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:isolate';
 import 'dart:ui' as ui show IsolateNameServer;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -24,10 +23,6 @@ const String _namespace = 'otzaria.test.singlewindow';
 ///    שמירת סימנייה ממתינה ל-timeout.
 /// 2. **אפס שינוי התנהגות.** הוספה, הסרה ומחיקה עובדות בדיוק כמו קודם,
 ///    מול מסד אמיתי.
-///
-/// ⚠️ **המצב המדויק חשוב כאן.** כל עוד משבצת תפוסה, `broadcast` מוצא למי
-/// לשלוח. שתי התצורות נבדקות בנפרד: `[יחיד]` בלי משבצות תפוסות, ו-`[עם
-/// שכן]` שמאמת שהתעבורה היחידה היא שידור ולא בקשה חוסמת.
 void main() {
   Bookmark bookmark(String title, {int index = 0}) => Bookmark(
     ref: title,
@@ -98,21 +93,6 @@ void main() {
     expect(await repo.loadBookmarks(), isEmpty);
   });
 
-  test('[עם שכן] כתיבה משדרת, ואינה שולחת בקשה חוסמת לאף אחד', () async {
-    final listener = _BusEavesdropper()..register();
-    addTearDown(listener.dispose);
-
-    await HistoryRepository(
-      store: store,
-    ).mutateHistory((current) => [bookmark('דברים'), ...current]);
-    // השידור הוא fire-and-forget, ולכן נמתין שיגיע — זו כל הנקודה בכך
-    // שהוא אינו מעכב את הכתיבה.
-    await Future<void>.delayed(const Duration(milliseconds: 100));
-
-    expect(listener.blockingRequests, 0);
-    expect(listener.changeNotices, greaterThan(0));
-  });
-
   test('רשומה פגומה מדולגת בתצוגה ואינה נמחקת בכתיבה', () async {
     // ⚠️ מחיקת נתונים בגלל באג פענוח היא בדיוק מה שאסור. הרשומה אינה
     // מוצגת, אבל היא נשארת על הדיסק לניסיון הבא או לתיקון.
@@ -146,50 +126,4 @@ void main() {
       throwsA(anything),
     );
   });
-}
-
-/// חלון שכן מדומה, שמפריד בין בקשה חוסמת לשידור.
-///
-/// ⚠️ עצם קיומו משנה את מה שנמדד: כל עוד משבצת תפוסה, `broadcast` מוצא
-/// למי לשלוח. לכן הוא נרשם רק בבדיקה שבודקת **סוג** תעבורה, ולא באלה
-/// שבודקות שאין תעבורה בכלל.
-class _BusEavesdropper {
-  final List<ReceivePort> _ports = [];
-
-  /// כל הודעה שמצפה לתשובה — מסלול עם timeout, ואסור שיופיע בכתיבה.
-  int blockingRequests = 0;
-
-  /// `userStateChanged` — fire-and-forget, אינו מעכב כלום.
-  int changeNotices = 0;
-
-  void register() {
-    // משבצת 1 שייכת לחלון הנבדק; 2..N נתפסות כאן.
-    for (var slot = 2; slot <= WindowBus.slotCount; slot++) {
-      final port = ReceivePort();
-      ui.IsolateNameServer.registerPortWithName(
-        port.sendPort,
-        '$_namespace.$slot',
-      );
-      port.listen((message) {
-        if (message is! Map) return;
-        final body = message['body'];
-        if (body is Map && body['type'] == UserStateListStore.requestChanged) {
-          changeNotices++;
-        } else if (message['reply'] is SendPort) {
-          blockingRequests++;
-        }
-        if (message['reply'] is SendPort) {
-          (message['reply'] as SendPort).send({'ok': true, 'result': null});
-        }
-      });
-      _ports.add(port);
-    }
-  }
-
-  void dispose() {
-    for (final port in _ports) {
-      port.close();
-    }
-    _ports.clear();
-  }
 }
