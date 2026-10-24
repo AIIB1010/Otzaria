@@ -12,9 +12,13 @@ import 'package:otzaria/tools/shamor_zachor/models/error_model.dart';
 import 'package:otzaria/tools/shamor_zachor/models/progress_model.dart';
 import 'package:otzaria/tools/shamor_zachor/providers/shamor_zachor_data_provider.dart';
 import 'package:otzaria/tools/shamor_zachor/providers/shamor_zachor_progress_provider.dart';
+import 'package:otzaria/tools/shamor_zachor/screens/book_detail_screen.dart';
 import 'package:otzaria/tools/shamor_zachor/screens/shamor_zachor_main_screen.dart';
 import 'package:otzaria/tools/shamor_zachor/shamor_zachor_widget.dart';
 import 'package:otzaria/tools/shamor_zachor/widgets/book_card_widget.dart';
+import 'package:otzaria/widgets/lists/nav_tree_tile.dart';
+import 'package:otzaria/widgets/misc/expanding_chevron.dart';
+import 'package:otzaria/widgets/navigation/nav_side_panel.dart';
 import '../test_helpers/memory_cache_provider.dart';
 
 void main() {
@@ -193,6 +197,119 @@ void main() {
       expect(find.byType(BookCardWidget), findsNWidgets(2));
       expect(find.text('קטגוריה א'), findsWidgets);
       expect(find.text('קטגוריה ב'), findsWidgets);
+    });
+
+    Future<void> pumpMainScreen(
+      WidgetTester tester,
+      ShamorZachorDataProvider dataProvider, {
+      required double width,
+    }) async {
+      tester.view.physicalSize = Size(width, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      // סגירת החלונית נשמרת בהגדרות — מחזירים לברירת המחדל לבדיקות הבאות.
+      addTearDown(() => Settings.setValue<bool>('sz:sidebar_visible', true));
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ShamorZachorDataProvider>.value(
+              value: dataProvider,
+            ),
+            ChangeNotifierProvider<ShamorZachorProgressProvider>(
+              create: (_) => _FakeShamorZachorProgressProvider(),
+            ),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: BlocProvider.value(
+                value: settingsBloc,
+                child: const ShamorZachorMainScreen(),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    for (final width in [500.0, 1200.0]) {
+      testWidgets(
+        'יציאה מספר שנפתח בלי לבחור קטגוריה חוזרת ל"כל הספרים" (רוחב $width)',
+        (tester) async {
+          await pumpMainScreen(
+            tester,
+            _FakeShamorZachorDataProvider(),
+            width: width,
+          );
+          if (width < 900) {
+            // בחלון צר החלונית מכסה את התוכן — סוגרים אותה כמו המשתמש.
+            await tester.tap(find.byType(NavPanelToggleButton));
+            await tester.pumpAndSettle();
+          }
+          Future<void> openActiveBook() async {
+            await tester.tap(find.text('ספר פעיל'));
+            await tester.pumpAndSettle();
+            expect(find.byType(BookDetailScreen), findsOneWidget);
+          }
+
+          Future<void> expectAllBooksList() async {
+            await tester.pumpAndSettle();
+            expect(find.byType(BookDetailScreen), findsNothing);
+            expect(find.text('בחר קטגוריה כדי לצפות בספרים'), findsNothing);
+            expect(find.text('ספר פעיל'), findsOneWidget);
+          }
+
+          await openActiveBook();
+          await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+          await expectAllBooksList();
+
+          await openActiveBook();
+          await tester.tap(find.byTooltip('חזרה'));
+          await expectAllBooksList();
+
+          // מתוצאות חיפוש: חזרה מהספר ואז ניקוי החיפוש
+          await tester.enterText(find.byType(EditableText).first, 'פעיל');
+          await tester.pumpAndSettle();
+          await openActiveBook();
+          await tester.tap(find.byTooltip('חזרה'));
+          await tester.pumpAndSettle();
+          await tester.enterText(find.byType(EditableText).first, '');
+          await expectAllBooksList();
+
+          // שינוי הסינון בזמן שספר פתוח סוגר אותו וחוזר לרשימה
+          await openActiveBook();
+          await tester.tap(find.text('הכל'));
+          await expectAllBooksList();
+        },
+      );
+    }
+
+    testWidgets('יציאה מספר שנפתח מתת-קטגוריה חוזרת לאותה תת-קטגוריה', (
+      tester,
+    ) async {
+      await pumpMainScreen(tester, _TopLevelPathDataProvider(), width: 1200);
+      await tester.tap(find.text('הכל'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(ExpandingChevron));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('סדר נשים'));
+      await tester.pumpAndSettle();
+      expect(find.text('בבא קמא'), findsNothing);
+      bool sidebarSelected(String title) => tester
+          .widget<NavTreeTile>(find.widgetWithText(NavTreeTile, title))
+          .isSelected;
+
+      await tester.tap(find.text('כתובות'));
+      await tester.pumpAndSettle();
+      expect(find.byType(BookDetailScreen), findsOneWidget);
+      expect(sidebarSelected('סדר נשים'), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BookDetailScreen), findsNothing);
+      expect(find.text('כתובות'), findsOneWidget);
+      expect(find.text('בבא קמא'), findsNothing);
+      expect(sidebarSelected('סדר נשים'), isTrue);
     });
 
     testWidgets('space key is not swallowed while typing in search field', (
@@ -574,4 +691,41 @@ class _RetryableShamorZachorProgressProvider
     _currentError = null;
     notifyListeners();
   }
+}
+
+/// כמו בנתונים האמיתיים: נתיב הקטגוריה של ספר הוא הקטגוריה העליונה בלבד.
+class _TopLevelPathDataProvider extends _FakeShamorZachorDataProvider {
+  static BookCategory _seder(String name, String book, int id) => BookCategory(
+    name: name,
+    contentType: 'text',
+    books: {
+      book: BookDetails(
+        id: id,
+        contentType: 'text',
+        parts: const [BookPart(name: 'ראשי', startPage: 1, endPage: 1)],
+        categoryPath: 'תלמוד בבלי',
+      ),
+    },
+    defaultStartPage: 1,
+    isCustom: false,
+    sourceFile: 'test',
+    schemaVersion: 1,
+  );
+
+  @override
+  final Map<String, BookCategory> allBookData = {
+    'תלמוד בבלי': BookCategory(
+      name: 'תלמוד בבלי',
+      contentType: 'text',
+      books: const {},
+      subcategories: [
+        _seder('סדר נשים', 'כתובות', 10),
+        _seder('סדר נזיקין', 'בבא קמא', 11),
+      ],
+      defaultStartPage: 1,
+      isCustom: false,
+      sourceFile: 'test',
+      schemaVersion: 1,
+    ),
+  };
 }
