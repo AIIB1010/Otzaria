@@ -403,7 +403,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   // חובה להיות זהה ל-AppUserModelID שבקיצורי המתקין, אחרת קיצור עם פרמטר
   // (למשל לוח שנה) מקבל כפתור נפרד בשורת המשימות במקום להתאחד עם הסמל המוצמד.
-  ::SetCurrentProcessExplicitAppUserModelID(L"Otzaria.Otzaria");
+  // לנייד מזהה משלו, זהה לקיצור של launcher/launcher.cpp: הצמדה תפעיל את המפעיל.
+  ::SetCurrentProcessExplicitAppUserModelID(
+      IsPortable(ExeDir()) ? L"Otzaria.Otzaria.Portable" : L"Otzaria.Otzaria");
 
   // משימות ה-Jump List נרשמות פעם אחת לתהליך, ורק אחרי ה-AppUserModelID —
   // אחרת הרשימה נקשרת למזהה אחר ולא מופיעה תחת הסמל המוצמד.

@@ -105,6 +105,9 @@ english.CalendarIconTask=Create a shortcut directly to the calendar
 english.LaunchApp=Open Otzaria
 english.TaskDesktopTitle=Desktop shortcut
 english.TaskDesktopDesc=Opens Otzaria with a double-click.
+english.TaskPortableShortcutTitle=Shortcut on this computer
+english.TaskPortableShortcutDesc=Opens Otzaria from the drive with a double-click, even when the computer gives the drive a different letter.
+english.ShortcutPortable=Otzaria (portable), on the desktop and in the Start menu
 english.TaskCalendarTitle=Calendar shortcut
 english.TaskCalendarDesc=Opens the Otzaria calendar directly.
 english.TaskResetTitle=Reset user settings
@@ -168,6 +171,9 @@ hebrew.CalendarIconTask=צור קיצור דרך ישירות ללוח שנה
 hebrew.LaunchApp=הפעל את אוצריא
 hebrew.TaskDesktopTitle=קיצור דרך בשולחן העבודה
 hebrew.TaskDesktopDesc=פותח את אוצריא בלחיצה כפולה.
+hebrew.TaskPortableShortcutTitle=קיצור דרך במחשב הזה
+hebrew.TaskPortableShortcutDesc=פותח את אוצריא מהדיסק בלחיצה כפולה, גם כשהמחשב נותן לדיסק אות אחרת.
+hebrew.ShortcutPortable=אוצריא (נייד), בשולחן העבודה ובתפריט התחל
 hebrew.TaskCalendarTitle=קיצור דרך ללוח השנה
 hebrew.TaskCalendarDesc=פותח ישירות את לוח השנה של אוצריא.
 hebrew.TaskResetTitle=איפוס הגדרות משתמש
@@ -369,6 +375,8 @@ var
   InstIsUpdate: Boolean;
   UiFailBody, UiFailLink: TNewStaticText;
   UiFailTech: TRichEditViewer;
+  { בנייד הקיצור מסומן מראש בפעם הראשונה; אחר כך נשמרת בחירת המשתמש. }
+  UiPortableShortcutDefaulted: Boolean;
 
 { מוגדרות בהמשך הסקריפט הראשי. }
 function ShouldSkipPage(PageID: Integer): Boolean; forward;
@@ -455,6 +463,22 @@ begin
     InstFailText := Text;
     InstFailTech := Output;
   end;
+end;
+
+{ קיצור במחשב שפותח את העותק הנייד גם כשאות הכונן משתנה (windows/launcher/launcher.cpp).
+  נקרא אחרי כתיבת portable.marker: בלעדיו המפעיל לא מזהה את התיקייה כעותק נייד.
+  כשל לא מכשיל את ההתקנה — אפשר ליצור את הקיצור גם מההגדרות של אוצריא. }
+procedure InstallPortableShortcut();
+var
+  ResultCode: Integer;
+begin
+  if not WizardIsTaskSelected('desktopicon') then
+    exit;
+  { מתקין מורם: שולחן העבודה ו-LOCALAPPDATA צריכים להיות של המשתמש עצמו. }
+  if not ExecAsOriginalUser(ExpandConstant('{app}\otzaria_launcher.exe'),
+    '--install-shortcut', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or
+    (ResultCode <> 0) then
+    Log(Format('Portable shortcut was not created (exit code %d)', [ResultCode]));
 end;
 
 #ifdef LibraryParts
@@ -650,6 +674,16 @@ begin
       CustomMessage('TaskDesktopDesc'), '', True, Y);
     Y := UiInstCard(UiCardCalendar, 'calendar_shortcut', CustomMessage('TaskCalendarTitle'),
       CustomMessage('TaskCalendarDesc'), '', True, Y);
+  end
+  else
+  begin
+    { בנייד אותה משימה יוצרת את קיצור המפעיל (InstallPortableShortcut). }
+    if not UiPortableShortcutDefaulted then
+      WizardSelectTasks('desktopicon');
+    UiPortableShortcutDefaulted := True;
+    Y := UiInstCard(UiCardDesktop, 'desktop_shortcut',
+      CustomMessage('TaskPortableShortcutTitle'), CustomMessage('TaskPortableShortcutDesc'),
+      '', True, Y);
   end;
 #ifdef InstallerFull
   Side := '';
@@ -663,9 +697,7 @@ begin
     Y := UiInstCard(UiCardReset, 'reset_settings', CustomMessage('TaskResetTitle'),
       CustomMessage('TaskResetDesc'), CustomMessage('TaskResetSide'), True, Y);
   UiEndCards(Y);
-  { בנייד אין כרטיסי משימות: Space לא יסמן משימה שאינה על המסך. }
-  WizardForm.TasksList.TabStop := not PortableMode;
-  if not PortableMode and (WizardForm.TasksList.ItemIndex < 0) then
+  if WizardForm.TasksList.ItemIndex < 0 then
     WizardForm.TasksList.ItemIndex := UiTaskIndex('desktopicon');
 end;
 
@@ -740,7 +772,10 @@ begin
     UiAddRow('start_menu', CustomMessage('RowShortcuts'), UiShortcutsText(), False);
     if WizardIsTaskSelected('resetsettings') then
       UiAddRow('reset_settings', CustomMessage('RowReset'), CustomMessage('ResetValue'), False);
-  end;
+  end
+  else if WizardIsTaskSelected('desktopicon') then
+    UiAddRow('desktop_shortcut', CustomMessage('RowShortcuts'),
+      CustomMessage('ShortcutPortable'), False);
   UiSetContentHeight(UiPlaceSummary(0));
 end;
 

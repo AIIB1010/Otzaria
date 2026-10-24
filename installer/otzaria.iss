@@ -366,10 +366,6 @@ begin
   Result :=
     (CmdLineParamExists('/ALLUSERS') or CmdLineParamExists('/CURRENTUSER')) and
     (PageID = wpWelcome);
-  if Result then
-    exit;
-  // במצב נייד אין קיצורי דרך ואיפוס הגדרות — עמוד המשימות מיותר.
-  Result := PortableMode and (PageID = wpSelectTasks);
 end;
 
 procedure CurPageChanged(CurPageID: Integer);
@@ -1950,7 +1946,10 @@ begin
     // קובץ ה-marker מפעיל את המצב הנייד באפליקציה: כל הנתונים נשמרים
     // ב-otzaria_data ליד ה-EXE (ראה lib/core/app_paths.dart → isPortable).
     if PortableMode then
+    begin
       SaveStringToFile(ExpandConstant('{app}\portable.marker'), '', False);
+      InstallPortableShortcut();
+    end;
     RemoveOtherScopeInstalls();
 #ifdef LibraryParts
     InstallPreparedLibrary();

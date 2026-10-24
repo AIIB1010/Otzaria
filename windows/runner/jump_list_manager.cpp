@@ -2,12 +2,14 @@
 
 #include <windows.h>
 
+#include <knownfolders.h>
 #include <objbase.h>
 #include <propvarutil.h>
 #include <shlobj.h>
 #include <shobjidl.h>
 #include <wrl/client.h>
 
+#include <cstring>
 #include <string>
 #include <thread>
 
@@ -33,6 +35,44 @@ const PROPERTYKEY kPropertyKeyTitle = {
      {0xAB, 0x91, 0x08, 0x00, 0x2B, 0x27, 0xB3, 0xD9}},
     2};
 
+// בנייד שהקיצור במחשב שייך לו, המשימה עוברת דרך המפעיל (launcher/launcher.cpp):
+// עד הלחיצה ברשימה המוצמדת אות הכונן עשויה להשתנות.
+std::wstring TaskTargetPath(const std::wstring& exe_path) {
+  const std::wstring dir = exe_path.substr(0, exe_path.find_last_of(L"\\/"));
+  if (::GetFileAttributesW((dir + L"\\portable.marker").c_str()) ==
+      INVALID_FILE_ATTRIBUTES) {
+    return exe_path;
+  }
+  wchar_t* local_raw = nullptr;
+  if (FAILED(::SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_DEFAULT,
+                                    nullptr, &local_raw))) {
+    return exe_path;
+  }
+  const std::wstring host = std::wstring(local_raw) + L"\\OtzariaPortable";
+  ::CoTaskMemFree(local_raw);
+
+  wchar_t host_id[64] = {0};
+  ::GetPrivateProfileStringW(L"Otzaria", L"Id", L"", host_id, 64,
+                             (host + L"\\launcher.ini").c_str());
+  char own_id[64] = {0};
+  DWORD read = 0;
+  const HANDLE file = ::CreateFileW(
+      (dir + L"\\otzaria_data\\portable_id").c_str(), GENERIC_READ,
+      FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+  if (file != INVALID_HANDLE_VALUE) {
+    ::ReadFile(file, own_id, sizeof(own_id) - 1, &read, nullptr);
+    ::CloseHandle(file);
+  }
+  // המזהה הוא GUID ב-ASCII; קיצור של עותק אחר היה פותח את העותק ההוא.
+  const std::wstring own(own_id, own_id + strcspn(own_id, " \t\r\n"));
+  if (own.empty() || _wcsicmp(host_id, own.c_str()) != 0) return exe_path;
+
+  const std::wstring launcher = host + L"\\otzaria_launcher.exe";
+  return ::GetFileAttributesW(launcher.c_str()) != INVALID_FILE_ATTRIBUTES
+             ? launcher
+             : exe_path;
+}
+
 // יוצר IShellLink למשימה: מריץ את ה-exe הנוכחי עם ה-URI הנתון, וכותרתו
 // להצגה נקבעת דרך PKEY_Title.
 HRESULT CreateTaskShellLink(const std::wstring& arguments,
@@ -50,8 +90,9 @@ HRESULT CreateTaskShellLink(const std::wstring& arguments,
   if (::GetModuleFileNameW(nullptr, exe_path, MAX_PATH) == 0) {
     return HRESULT_FROM_WIN32(::GetLastError());
   }
-  link->SetPath(exe_path);
-  link->SetIconLocation(exe_path, 0);
+  const std::wstring target = TaskTargetPath(exe_path);
+  link->SetPath(target.c_str());
+  link->SetIconLocation(target.c_str(), 0);
   link->SetArguments(arguments.c_str());
 
   // הכותרת הנראית ב-Jump List נקבעת דרך PKEY_Title על ה-IPropertyStore של

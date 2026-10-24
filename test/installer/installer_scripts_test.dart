@@ -5484,6 +5484,36 @@ void main() {
       expect(script, contains('-TimeoutSec'));
     });
   });
+  group('קיצור דרך לגרסה ניידת', () {
+    for (final name in _scripts) {
+      test('$name: הקיצור נוצר רק אחרי portable.marker, ומסומן כברירת מחדל', () {
+        final script = _script(name);
+        // בלי ה-marker המפעיל אינו מזהה את התיקייה כעותק נייד ומסרב.
+        final marker = script.indexOf(
+          r"SaveStringToFile(ExpandConstant('{app}\portable.marker'), '', False);",
+        );
+        final shortcut = script.indexOf(
+          RegExp(r'\n\s+InstallPortableShortcut\(\);'),
+          marker,
+        );
+        expect(marker, greaterThanOrEqualTo(0));
+        expect(shortcut, greaterThan(marker));
+
+        final install = _routine(script, 'procedure InstallPortableShortcut()');
+        expect(install, contains("WizardIsTaskSelected('desktopicon')"));
+        expect(install, contains("'--install-shortcut'"));
+        expect(
+          _routine(script, 'function ShouldSkipPage('),
+          isNot(contains('wpSelectTasks')),
+          reason: 'בנייד עמוד האפשרויות מציג את כרטיס הקיצור',
+        );
+        expect(
+          _routine(script, 'procedure UiBuildTasksPage()'),
+          contains("WizardSelectTasks('desktopicon')"),
+        );
+      });
+    }
+  });
 }
 
 /// גוף שלב [name] ב-workflow הראשי, עד השלב הבא.

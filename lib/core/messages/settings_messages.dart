@@ -240,4 +240,20 @@ abstract class SettingsMessages {
 
   static String importFileExported(String path) => 'הקובץ יוצא אל $path';
   static const String importFileMissing = 'הקובץ כבר אינו בספריית הייבוא';
+
+  // ── גרסה ניידת: קיצור דרך במחשב (portable_shortcut_panel) ─────────────
+
+  static const String portableShortcutCreated =
+      'נוצר קיצור דרך "אוצריא (נייד)" בשולחן העבודה ובתפריט התחל';
+  static const String portableShortcutFailed =
+      'לא ניתן היה ליצור את קיצור הדרך במחשב הזה';
+  static const String portableShortcutRemoved = 'קיצור הדרך הוסר מהמחשב הזה';
+  static const String portableShortcutRemoveFailed =
+      'לא ניתן היה להסיר את קיצור הדרך';
+  static const String driveRootLauncherAdded =
+      'הקובץ "אוצריא" נוסף לתיקייה הראשית של הדיסק';
+  static const String driveRootLauncherFailed =
+      'לא ניתן היה לכתוב לתיקייה הראשית של הדיסק';
+  static const String driveRootLauncherRemoved =
+      'הקובץ "אוצריא" הוסר מהתיקייה הראשית של הדיסק';
 }

@@ -340,8 +340,8 @@ void main() {
         if (full) expect(focused, contains('WV2Check.Focused'));
         expect(
           routine(installer, 'procedure UiBuildTasksPage()'),
-          contains('WizardForm.TasksList.TabStop := not PortableMode;'),
-          reason: 'בנייד אין כרטיסי משימות: Space אינו מסמן משימה נסתרת',
+          contains("CustomMessage('TaskPortableShortcutTitle')"),
+          reason: 'בנייד המשימה desktopicon מוצגת ככרטיס הקיצור של המפעיל',
         );
         expect(
           routine(installer, 'function UiAdapterPageHint('),
