@@ -147,8 +147,8 @@ dependencies:
   wakelock_plus: ^1.8.1
 
 dependency_overrides:
-  # TODO: לחזור ל-pub.dev לאחר שחרור תעדוף הרינדור והמטמונים, עם תאימות OCR ל-dev.
-  # מנרמל העברית הקיים נשמר, כולל מגבלותיו בטקסט מעורב ובפיסוק מספרים.
+  # TODO: לחזור ל-pub.dev אחרי שחרור espresso3389/pdfrx#759–#772 (תעדוף הרינדור והמטמונים), עם תאימות OCR ל-dev.
+  # 8a7cefa שומר את מנרמל העברית הישן (כולל מגבלותיו בטקסט מעורב ובפיסוק מספרים) ואינו מיועד לאפסטרים.
   pdfrx:
     git:
       url: https://github.com/Y-PLONI/pdfrx
@@ -176,14 +176,14 @@ dependency_overrides:
       url: https://github.com/Otzaria/sentry-dart
       ref: e31f9068de53d0dd826d217e4dc7c8ccd7dd5261
       path: packages/flutter
-  # TODO: לחזור ל-pub.dev אחרי שחרור DavBfr/dart_pdf#1984, #1985, #1986, #1987, #1988, #1993, #1994, #1995
-  # (הדפסה ב-Windows ב-thread נפרד, PDFium עצל ופרטי, השלמת עבודה שנכשלה ב-Linux, בעלי הדיאלוג בריבוי חלונות). קומיט שילוב.
+  # TODO: לחזור ל-pub.dev אחרי שחרור DavBfr/dart_pdf#1984, #1985, #1986, #1987, #1988, #1993, #1994, #1995, #1996
+  # (הדפסה ב-Windows ב-thread נפרד, PDFium עצל ופרטי, השלמת עבודה שנכשלה ב-Linux, בעלי הדיאלוג בריבוי חלונות, בעלים מפורש לכל עבודה). קומיט שילוב.
   printing:
     git:
       url: https://github.com/Otzaria/dart_pdf
       ref: 3cb90fb3025553f3e9f48638c79ccf93efb326af
       path: printing
-  # TODO: לחזור ל-pub.dev אחרי שחרור vicajilau/flutter_file_picker#2277 (דיאלוג הקבצים במק על החלון הפעיל).
+  # TODO: לחזור ל-pub.dev אחרי שחרור vicajilau/flutter_file_picker#2281 (דיאלוג הקבצים במק על חלון מפורש).
   file_picker_darwin:
     git:
       url: https://github.com/Y-PLONI/flutter_file_picker
