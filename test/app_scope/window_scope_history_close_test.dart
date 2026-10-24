@@ -44,7 +44,6 @@ Future<void> main() async {
     (tester) async {
       final repository = _MemoryHistoryRepository();
       final tab = SearchingTab('הכרטיסיה הפעילה', 'הכרטיסיה הפעילה');
-      addTearDown(tab.dispose);
       late BuildContext context;
       await tester.pumpWidget(
         AppScopeProviders(
