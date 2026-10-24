@@ -62,9 +62,6 @@ class TabsRepository {
   TabsRepository({this.sessions, WindowTabsSession? window})
     : window = window ?? WindowTabsSession.current;
 
-  /// שם ה-box ההיסטורי. נשאר ככינוי שהגיבוי משתמש בו בשמות הסעיפים.
-  static const String boxName = 'tabs';
-
   /// השהיית הכתיבה של האינדקס הפעיל. זו הפעולה השכיחה ביותר, וכתיבת
   /// SQLite סינכרונית על ה-UI — מעבר מהיר בין כרטיסיות מתמזג לכתיבה אחת.
   static const Duration _indexDebounce = Duration(milliseconds: 300);
@@ -86,9 +83,6 @@ class TabsRepository {
       debugSessions ?? WindowSessionStore.instance;
 
   int? get _sessionSlot => window.slot;
-
-  /// המשבצת של החלון הראשון בתהליך — הסשן שנטען בהפעלה קרה.
-  static const int _hostSlot = UserStateSlot.main;
 
   /// דור הסשן של החלון הזה: עולה בכל [importRaw]. `TabsBloc` שנבנה לפני
   /// הייבוא אינו שומר יותר — אחרת סגירתו בעת ההפעלה מחדש הייתה כותבת את
@@ -153,31 +147,11 @@ class TabsRepository {
     return 0;
   }
 
-  /// ממפה נתיבי קבצים שמורים של טאבים מתיקיית הספרייה הישנה [fromDir] לחדשה
-  /// [toDir], כדי שספרי PDF/DOCX פתוחים ייטענו מהמיקום החדש לאחר רענון התוכנה.
-  /// משכתב את שדות 'path' ו-'filePath' בכל עומק (כולל ה-book המקונן).
-  Future<void> remapBookPaths(String fromDir, String toDir) async {
-    // ⚠️ הסשן של החלון הראשון, גם כשההעברה מופעלת מחלון משני: העברת
-    // הספרייה היא פעולה של התוכנה, וזה הסשן שנטען בהפעלה קרה.
-    final session = await _store.load(_hostSlot);
-    if (session == null) return;
-    var changed = false;
-    final remapped = _decodeTabs(
-      session.tabsJson,
-    ).map((e) => _remapNode(e, fromDir, toDir, () => changed = true)).toList();
-    if (!changed) return;
-    await _store.save(
-      _hostSlot,
-      tabsJson: jsonEncode(remapped),
-      currentIndex: session.currentIndex,
-    );
-  }
-
   /// ממפה נתיבי קבצים של טאבים פתוחים *בזיכרון* מ-[fromDir] ל-[toDir].
   /// טאב שהנתיב שלו לא משתנה מוחזר כאובייקט המקורי (ללא בנייה מחדש);
   /// טאב ששונה נבנה מחדש דרך toJson→fromJson עם הנתיב החדש.
-  /// נדרש בנוסף ל-[remapBookPaths]: שמירה למסד בלבד נדרסת ע"י שמירת
-  /// הטאבים שבזיכרון בעת dispose, ולכן ספר PDF היה נטען מהנתיב הישן.
+  /// ⚠️ מיפוי במסד בלבד אינו מספיק: שמירת הטאבים שבזיכרון בעת dispose
+  /// דורסת אותו, ולכן ספר PDF היה נטען מהנתיב הישן.
   List<OpenedTab> remapTabsInMemory(
     List<OpenedTab> tabs,
     String fromDir,
