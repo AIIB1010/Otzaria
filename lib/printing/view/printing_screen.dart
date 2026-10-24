@@ -1990,7 +1990,7 @@ class _PrintingScreenState extends State<PrintingScreen> {
     );
   }
 
-  /// מעדכן את נקודת הקצה שנבחרה, ומיישר את הקצה השני אם הטווח התהפך.
+  /// מעדכן את נקודת הקצה שנבחרה, ומיישר את הקצה השני אם הטווח התהפך או התרוקן.
   void _onAnchorSelected({
     required bool isStart,
     required _RangeAnchor anchor,
@@ -2000,12 +2000,16 @@ class _PrintingScreenState extends State<PrintingScreen> {
       _startAnchor = anchor;
       final s = _anchorStartLine(anchor, totalLines);
       final e = _anchorEndLine(_endAnchor, totalLines);
-      if (s != null && e != null && s > e) _endAnchor = anchor;
+      if (s != null && e != null && isEmptyLineRange(s, e)) {
+        _endAnchor = anchor;
+      }
     } else {
       _endAnchor = anchor;
       final s = _anchorStartLine(_startAnchor, totalLines);
       final e = _anchorEndLine(anchor, totalLines);
-      if (s != null && e != null && e < s) _startAnchor = anchor;
+      if (s != null && e != null && isEmptyLineRange(s, e)) {
+        _startAnchor = anchor;
+      }
     }
     _updateRangeFromAnchors();
   }

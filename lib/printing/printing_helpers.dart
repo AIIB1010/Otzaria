@@ -160,6 +160,13 @@ int headerSectionEndLine(List<TocEntry> headers, int index, int totalLines) {
   return totalLines;
 }
 
+/// האם הטווח [start, endExclusive) ריק או הפוך.
+///
+/// סוף הטווח בלעדי, ולכן `endExclusive == start` הוא טווח ריק: למשל כשבוחרים
+/// "טו." כסוף כשההתחלה היא "טו:" — הסעיף של "טו." מסתיים בדיוק איפה ש"טו:"
+/// מתחיל. בלי לתפוס את שוויון הגבולות ההתחלה נשארת על "טו:" והטווח ריק.
+bool isEmptyLineRange(int start, int endExclusive) => endExclusive <= start;
+
 /// התאמת טווח שורות שנמסר מבחוץ (למשל מתוסף) לכותרות, כדי שמסך ההדפסה יציג
 /// אותו כ"מכותרת X עד כותרת Y" ולא כמספרי שורות.
 ///
