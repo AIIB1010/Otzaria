@@ -111,6 +111,8 @@ class _AltTocSidebarViewState extends State<AltTocSidebarView>
   // Active entry and scroll state are scoped to a structure: a line may belong
   // to several alternative structures at once.
   final Map<int, int> _activeEntryIds = {};
+  final Map<int, int> _selectedEntryLineIndices = {};
+  int _navigationRequest = 0;
   final Map<int, int> _lastScrolledEntryIds = {};
 
   // מעבר כותרת בגלילה מחליף רק את הסימון; מאזין לכל ערך בונה מחדש שתי שורות ולא את כל העץ.
@@ -469,7 +471,13 @@ class _AltTocSidebarViewState extends State<AltTocSidebarView>
 
     final changed = matches
         .where((match) => _activeEntryIds[match.structureId] != match.entryId)
-        .where((match) => !_sharesLineWithActive(match.structureId, match.entryId))
+        .where(
+          (match) => !_sharesLineWithActive(
+            match.structureId,
+            match.entryId,
+            lineIndex,
+          ),
+        )
         .toList();
     if (changed.isEmpty) return;
 
@@ -517,7 +525,8 @@ class _AltTocSidebarViewState extends State<AltTocSidebarView>
 
   /// אחים שנפתחים באותה שורה (דפים בפסקה אחת) ממופים במסד לאחרון שבהם,
   /// ולכן האח שנבחר בלחיצה נשאר מסומן כל עוד השורה לא התחלפה.
-  bool _sharesLineWithActive(int structureId, int entryId) {
+  bool _sharesLineWithActive(int structureId, int entryId, int lineIndex) {
+    if (_selectedEntryLineIndices[structureId] != lineIndex) return false;
     final activeId = _activeEntryIds[structureId];
     if (activeId == null || structureId == kDibburimStructureId) return false;
     AltTocEntry? find(int id) =>
@@ -531,7 +540,8 @@ class _AltTocSidebarViewState extends State<AltTocSidebarView>
         active.parentId == resolved.parentId;
   }
 
-  void _selectEntry(int structureId, int entryId) {
+  void _selectEntry(int structureId, int entryId, int lineIndex) {
+    _selectedEntryLineIndices[structureId] = lineIndex;
     final previous = _activeEntryIds[structureId];
     if (previous == entryId) return;
     _selectionTicks[previous]?.value++;
@@ -621,14 +631,30 @@ class _AltTocSidebarViewState extends State<AltTocSidebarView>
   }
 
   /// גלילת הספר הפתוח לשורה [lineIndex], ולסמן `[markerTitle…]` כשהוא בתוכה.
-  void _scrollToLine(int lineIndex, {String? markerTitle}) {
-    final state = context.read<TextBookBloc>().state;
+  Future<void> _scrollToLine(int lineIndex, {String? markerTitle}) async {
+    final request = ++_navigationRequest;
+    final bloc = context.read<TextBookBloc>();
+    final state = bloc.state;
     if (state is! TextBookLoaded) {
       return;
     }
-    final line = lineIndex >= 0 && lineIndex < state.content.length
+    var line = lineIndex >= 0 && lineIndex < state.content.length
         ? state.content[lineIndex]
         : null;
+    if (markerTitle != null && !state.isContentLineLoaded(lineIndex)) {
+      final epoch = widget.lines.navigationEpoch.value;
+      final range = await bloc.repository.getBookContentRange(
+        state.book,
+        startLine: lineIndex,
+        endLine: lineIndex,
+      );
+      if (!mounted ||
+          request != _navigationRequest ||
+          epoch != widget.lines.navigationEpoch.value) {
+        return;
+      }
+      line = range?.lines.firstOrNull;
+    }
     final navigation = widget.lines.scrollToLine(
       lineIndex,
       intraLineFraction: line == null || markerTitle == null
@@ -652,10 +678,10 @@ class _AltTocSidebarViewState extends State<AltTocSidebarView>
     }
   }
 
-  void _openLink(Link link, {String? markerTitle}) {
+  Future<void> _openLink(Link link, {String? markerTitle}) async {
     if (link.path2 == widget.book.title) {
       // Ensure index is at least 0 to prevent RangeError
-      _scrollToLine(
+      await _scrollToLine(
         (link.index2 - 1).clamp(0, double.maxFinite).toInt(),
         markerTitle: markerTitle,
       );
@@ -696,7 +722,7 @@ class _AltTocSidebarViewState extends State<AltTocSidebarView>
     bool toggleIfLinkless = false,
   }) async {
     if (structureId == kDibburimStructureId) {
-      _scrollToLine(dibburimLineIndex(entry.id));
+      await _scrollToLine(dibburimLineIndex(entry.id));
       return;
     }
     try {
@@ -750,14 +776,14 @@ class _AltTocSidebarViewState extends State<AltTocSidebarView>
           final line = link.index2 - 1;
           final content = state.content;
           String? at(int i) => i >= 0 && i < content.length ? content[i] : null;
-          _scrollToLine(
+          await _scrollToLine(
             line - sectionHeadingLinesAbove([at(line - 1), at(line - 2)]),
           );
         } else {
           if (link.path2 == widget.book.title) {
-            _selectEntry(structureId, linkEntry.id);
+            _selectEntry(structureId, linkEntry.id, link.index2 - 1);
           }
-          _openLink(link, markerTitle: linkEntry.text);
+          await _openLink(link, markerTitle: linkEntry.text);
         }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
