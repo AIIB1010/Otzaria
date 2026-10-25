@@ -514,15 +514,13 @@ class _TextSectionEditorDialogState extends State<TextSectionEditorDialog>
     }
 
     if (foundIndex != -1) {
-      // ================== התחלת התיקון ==================
-
       // הערכה של מיקום הגלילה.
       // 1. חשב את מספר השורות עד לתוצאה.
       final linesUpToFound = '\n'
           .allMatches(currentText.substring(0, foundIndex))
           .length;
 
-      // 2. הערך את הגובה הממוצע של שורה (למשל, 20 פיקסלים. אפשר לשפר את זה בעתיד).
+      // 2. הערך את הגובה הממוצע של שורה.
       const averageLineHeight = 20.0;
       final estimatedScrollOffset = linesUpToFound * averageLineHeight;
 
@@ -532,12 +530,10 @@ class _TextSectionEditorDialogState extends State<TextSectionEditorDialog>
 
       // גלול למיקום המוערך
       _editorScrollController.animateTo(
-        targetOffset, // <-- שימוש במיקום המחושב
+        targetOffset,
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
       );
-
-      // =================== סוף התיקון ===================
 
       // Select the found text
       _textController.selection = TextSelection(
@@ -583,7 +579,6 @@ class _TextSectionEditorDialogState extends State<TextSectionEditorDialog>
             ),
           ],
         ),
-        // ================== התחלת מבנה חדש ==================
         body: Column(
           children: [
             // שורת הכותרות העליונה
@@ -700,7 +695,6 @@ class _TextSectionEditorDialogState extends State<TextSectionEditorDialog>
             ),
           ],
         ),
-        // =================== סוף המבנה החדש ===================
       ),
     );
   }

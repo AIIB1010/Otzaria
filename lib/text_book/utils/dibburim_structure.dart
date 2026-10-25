@@ -21,7 +21,7 @@ const int kDibburMaxWords = 4;
 
 /// מקצר [text] ל-[maxWords] מילים ראשונות, עם "…" כשנחתך.
 String truncateDibbur(String text, {int maxWords = kDibburMaxWords}) {
-  // כמו take() הקודם: 0 מילים → "…", שלילי → RangeError.
+  // 0 מילים → "…", שלילי → RangeError.
   if (RangeError.checkNotNegative(maxWords) == 0) return '…';
   final trimmed = text.trim();
   final words = <String>[];

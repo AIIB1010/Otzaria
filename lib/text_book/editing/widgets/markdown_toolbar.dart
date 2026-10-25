@@ -218,7 +218,6 @@ class _ToolbarButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    // ================== התחלת הקוד החדש ==================
     Widget content;
     if (text != null) {
       // אם יש טקסט (כמו H1), הצג רק אותו
@@ -242,7 +241,6 @@ class _ToolbarButton extends StatelessWidget {
         child: Icon(icon, size: 18),
       );
     }
-    // =================== סוף הקוד החדש ===================
 
     return Tooltip(
       message: tooltip,

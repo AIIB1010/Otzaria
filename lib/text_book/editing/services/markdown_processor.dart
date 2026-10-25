@@ -12,7 +12,6 @@ class MarkdownProcessor {
 
   /// Processes HTML input from the editor for the preview pane.
   /// It converts newlines to <br> tags and then sanitizes the HTML.
-  /// This function is named markdownToHtml for consistency with your existing code.
   /// Uses caching for better performance.
   String markdownToHtml(String rawInput) {
     if (rawInput.isEmpty) return '';
@@ -27,7 +26,6 @@ class MarkdownProcessor {
 
     try {
       // Step 1: Convert all newline characters from the text editor into <br> tags.
-      // This is the correct way to handle line breaks in an HTML context.
       String htmlWithBreaks = rawInput.replaceAll('\n', '<br>');
 
       // Step 2: Sanitize the HTML to remove any potentially unsafe tags or attributes.
@@ -70,8 +68,8 @@ class MarkdownProcessor {
       final body = document.body;
       if (body == null) return '';
 
-      // The key fix is here: we iterate over the body's children
-      // and sanitize them, instead of trying to sanitize the body tag itself.
+      // Only the children: body itself is not on the allow-list and would be
+      // replaced by its plain text.
       body.nodes.toList().forEach(_sanitizeNode);
 
       return body.innerHtml;
