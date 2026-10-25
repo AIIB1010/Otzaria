@@ -749,6 +749,9 @@ void main() {
     /// די לכמה פעימות של 60ms, בזמן אמת.
     const settle = Duration(milliseconds: 200);
 
+    Future<void> settleUntil(bool Function() done) =>
+        _waitAtLeastUntil(settle, done);
+
     const colors = DragPreviewColors(
       tab: Color(0xFF202020),
       border: Color(0xFF404040),
@@ -804,7 +807,7 @@ void main() {
       expect(runner.systemDragCalls, 0, reason: 'ברצועה — אין מסירה');
 
       moveToTop(20);
-      await Future<void>.delayed(settle);
+      await settleUntil(() => runner.systemDragCalls > 0 && cancelled());
 
       expect(
         runner.systemDragCalls,
@@ -821,7 +824,7 @@ void main() {
       // ב-`y=0` — מה שהיה קורה קודם — אינה משאירה כלום.
       await startDragAt(firstTab(), 200, leftStrip: true);
       moveToTop(20);
-      await Future<void>.delayed(settle);
+      await settleUntil(() => runner.systemDragCalls > 0);
 
       expect(runner.systemDragCalls, 1);
       expect(
@@ -845,7 +848,11 @@ void main() {
 
       await startDragAt(firstTab(), 200, leftStrip: true);
       moveToTop(20);
-      await Future<void>.delayed(settle);
+      await settleUntil(
+        () =>
+            runner.openWindowCalls > 0 &&
+            tabsBloc.events.whereType<RemoveTab>().isNotEmpty,
+      );
 
       expect(runner.openWindowCalls, 1);
       final bounds = runner.lastOpenArgs?['bounds'] as Map<Object?, Object?>?;
@@ -870,7 +877,7 @@ void main() {
 
       await startDragAt(firstTab(), 200, leftStrip: true);
       moveToTop(20);
-      await Future<void>.delayed(settle);
+      await settleUntil(() => runner.systemDragCalls > 0);
 
       expect(runner.systemDragCalls, 1, reason: 'המסירה כן קרתה');
       expect(runner.openWindowCalls, 0);
@@ -996,7 +1003,7 @@ void main() {
 
       // ברגע שהמוק בידי הנייטיב, הפעימה הבאה מוסרת.
       await applyMock(drag);
-      await Future<void>.delayed(settle);
+      await settleUntil(() => runner.systemDragCalls > 0);
 
       expect(runner.systemDragCalls, 1);
       expect(
@@ -1015,7 +1022,7 @@ void main() {
       expect(runner.systemDragCalls, 0, reason: 'למטה — אין מסירה');
 
       moveToTop(20);
-      await Future<void>.delayed(settle);
+      await settleUntil(() => runner.systemDragCalls > 0);
 
       expect(runner.systemDragCalls, 1);
     });
