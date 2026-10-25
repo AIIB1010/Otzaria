@@ -1567,6 +1567,15 @@ class CommentaryListBaseState extends State<CommentaryListBase>
     }
     if (targetLink == null) return;
     final linkKey = _getLinkKey(targetLink);
+    final blocState = context.read<TextBookBloc>().state;
+    final matchTarget = blocState is! TextBookLoaded
+        ? null
+        : commentarySearchMatchTarget(
+            content: targetLink.loadedContent,
+            query: _activeSearchQuery,
+            displayProfile: blocState.commentaryDisplayProfile,
+            matchIndex: _currentSearchIndexNotifier.value - cumulativeIndex,
+          );
     final groupTitle = utils.getTitleFromPath(targetLink.path2);
     if (!(_expansionStates[groupTitle] ?? _allExpanded)) {
       setState(() => _expansionStates[groupTitle] = true);
@@ -1577,7 +1586,11 @@ class CommentaryListBaseState extends State<CommentaryListBase>
     while (mounted && generation == _searchScrollGeneration) {
       final index = _linkFlatIndex[linkKey];
       if (index == null || !_itemScrollController.isAttached) return;
-      await _itemScrollController.jumpToAsync(index: index, alignment: 0.1);
+      await _itemScrollController.jumpToAsync(
+        index: index,
+        alignment: 0.1,
+        targetRectResolver: matchTarget,
+      );
       if (_linkFlatIndex[linkKey] == index) return;
     }
   }
@@ -1593,15 +1606,20 @@ class CommentaryListBaseState extends State<CommentaryListBase>
   );
   StreamSubscription<CommentarySearchState>? _searchSubscription;
 
-  void _scheduleSearchCompute() {
+  /// שדה החיפוש הפנימי, וכשהוא ריק — הדגשת החיפוש החיצוני.
+  String get _activeSearchQuery {
     final internalQuery = widget.showSearch ? _searchQueryNotifier.value : '';
+    return internalQuery.isNotEmpty
+        ? internalQuery
+        : widget.highlightQueryListenable?.value ?? '';
+  }
+
+  void _scheduleSearchCompute() {
     final blocState = context.read<TextBookBloc>().state;
     _searchBloc.add(
       CommentarySearchRequested(
         links: _orderedLinks,
-        query: internalQuery.isNotEmpty
-            ? internalQuery
-            : widget.highlightQueryListenable?.value ?? '',
+        query: _activeSearchQuery,
         displayProfile: blocState is TextBookLoaded
             ? blocState.commentaryDisplayProfile
             : TextDisplayProfile.defaults,

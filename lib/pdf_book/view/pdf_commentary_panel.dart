@@ -1785,6 +1785,12 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
         )
         .firstOrNull;
     if (group == null) return;
+    final matchTarget = commentarySearchMatchTarget(
+      content: targetLink.loadedContent,
+      query: _searchQuery,
+      displayProfile: widget.displayProfile,
+      matchIndex: _currentSearchIndex - cumulativeIndex,
+    );
     if (!(_expansionStates[group.bookTitle] ?? _allExpanded)) {
       setState(() => _expansionStates[group.bookTitle] = true);
     }
@@ -1793,7 +1799,11 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
     while (mounted && generation == _searchScrollGeneration) {
       final index = _linkFlatIndex[linkKey];
       if (index == null || !_itemScrollController.isAttached) return;
-      await _itemScrollController.jumpToAsync(index: index, alignment: 0.1);
+      await _itemScrollController.jumpToAsync(
+        index: index,
+        alignment: 0.1,
+        targetRectResolver: matchTarget,
+      );
       if (_linkFlatIndex[linkKey] == index) return;
     }
   }
