@@ -100,9 +100,8 @@ class SearchNavigationTree extends StatelessWidget {
     if (filterQuery.length >= 2) {
       return _buildFilteredBookList(context);
     }
-    // שיטוח לרשימת שורות + ListView.builder (בנייה עצלה) — כמו במסך הספרייה.
-    // בנייה מוקדמת של כל העץ (ExpandableCard לכל קטגוריה) הקפיאה את הגלילה
-    // ואת הרינדור-מחדש בכל שינוי סינון.
+    // שיטוח לשורות + ListView.builder, כמו במסך הספרייה: בניית כל העץ מראש
+    // מקפיאה את הגלילה ואת הרינדור-מחדש בכל שינוי סינון.
     final rows = _flattenRows();
     return NavTreeFocusGroup(
       child: ListView.builder(

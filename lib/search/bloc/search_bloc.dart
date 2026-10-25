@@ -222,10 +222,8 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
 
     Map<String, Book>? bookByIndexedFilePath;
 
-    // עץ ה-facets נבנה על טווח הסריקה המקורי. כשהחיפוש רץ על אותו טווח
-    // (המקרה הרגיל), הספירות של ה-stream המשולב משרתות גם את העץ וגם את
-    // הספירה הכוללת — ריצה אחת של השאילתה במקום שלוש. רק כשהמשתמש צמצם
-    // לתת-בחירה מהעץ נדרשת ספירת-ספרים נפרדת על הטווח המלא.
+    // עץ ה-facets נבנה על טווח הסריקה המקורי: כשהחיפוש רץ על אותו טווח, ספירות
+    // ה-stream המשולב משרתות גם את העץ — ריצה אחת של השאילתה במקום שלוש.
     final scopeEqualsSearch = setEquals(
       requestedFacets.toSet(),
       state.searchScopeFacets.toSet(),
@@ -343,11 +341,8 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
       }
       if (recountAfterStream) refreshFacetCounts();
 
-      // יישוב הספירה: כשהעמוד הראשון ביקש את כל התוצאות (total <= limit)
-      // אך המנוע החזיר פחות ממה שספר (מסמך שנספר אבל נכשל בשליפה מה-store,
-      // נרשם ביומן המנוע), המונה הגולמי היה מצייר "3/4 תוצאות" עם כפתור
-      // "טען עוד" שלעולם לא מספק. מיישרים את הספירה למה שבאמת ניתן להצגה.
-      // במצב איחוד הרשימה נמדדת בקבוצות — היישוב חל על מונה הקבוצות.
+      // מסמך שנספר אך נכשל בשליפה מה-store משאיר "טען עוד" שלעולם לא מספק, ולכן
+      // הספירה מיושרת למה שהוחזר בפועל (במצב איחוד — מונה הקבוצות).
       final effectiveTotal = state.displayTotal;
       final reconciledTotal =
           (effectiveTotal <= state.numResults &&
@@ -536,11 +531,8 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
         cancelRequestId: engineRequestId,
       );
     } catch (e, stackTrace) {
-      // עדכון ה-facets רץ ב-fire-and-forget (unawaited). המנוע דוחה שאילתה
-      // רחבה מדי בשגיאת max expansions — כולל מילה בודדת רחבה — ובלי ה-catch
-      // הזה השגיאה הייתה בורחת כחריגה אסינכרונית לא מטופלת. מסלול החיפוש
-      // הראשי כבר תופס את אותה שגיאה ומציג toast, לכן כאן רק נרשם ללוג ונשמרות
-      // ספירות ה-facets החלקיות שכבר חושבו מהתוצאות.
+      // העדכון רץ ב-unawaited: בלי ה-catch שגיאת max expansions של המנוע בורחת
+      // כחריגה אסינכרונית. החיפוש הראשי כבר מציג עליה toast, ולכן כאן רק לוג.
       debugPrint('❌ Facet count refresh failed: $e\n$stackTrace');
       return;
     }
@@ -908,14 +900,8 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
     UpdateSearchQuery searchEvent,
     Emitter<SearchState> emit,
   ) async {
-    // הסט שבידינו שלם רק כשהמנוע החזיר פחות מהמכסה — אחרת התוצאות חתוכות
-    // וסינון מקומי היה מאבד התאמות שמעבר להן.
-    //
-    // איחוד תוצאות פוסל את המסלול המקומי משתי סיבות: (1) הנציג של קבוצה
-    // (במיוחד ב-identicalText) עשוי להיות מספר אחד בעוד חברות הקבוצה
-    // (merged) מספרים אחרים — סינון לפי ספר-הנציג בלבד היה מפיל/משאיר
-    // קבוצות שלא כדין; (2) totalGroups לא היה מתעדכן כאן והדפדוף היה
-    // נשבר. במקום זה החיפוש חוזר למנוע, שמקבץ מחדש בתוך הסינון.
+    // רק על סט שלם (פחות מהמכסה) ובלי איחוד: נציג קבוצה עשוי להיות מספר אחר
+    // מחברותיה, ו-totalGroups אינו מתעדכן כאן — אז חוזרים למנוע.
     if (state.searchQuery.isEmpty ||
         state.isLoading ||
         state.errorMessage != null ||
@@ -1193,10 +1179,8 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
       emit(
         state.copyWith(
           results: combined,
-          // עמוד ריק למרות שהמונה מבטיח עוד: ההיטים הנותרים נספרו אך
-          // אינם ניתנים לשליפה (ראה יומן המנוע). בלי היישור הזה הכפתור היה
-          // מציג "טען תוצאות נוספות (N)" לנצח ומסתובב בלי להביא כלום.
-          // היישור חל על המונה שהרשימה נמדדת בו: קבוצות במצב איחוד.
+          // עמוד ריק: ההיטים הנותרים נספרו אך אינם ניתנים לשליפה, ובלי היישור
+          // "טען תוצאות נוספות" מסתובב לנצח. במצב איחוד היישור חל על הקבוצות.
           totalResults: exhausted && state.totalGroups == null
               ? combined.length
               : null,
