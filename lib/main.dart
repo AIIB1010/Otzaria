@@ -67,6 +67,7 @@ import 'package:otzaria/core/info/app_info_cli.dart';
 import 'package:otzaria/core/info/app_install_timeline.dart';
 import 'package:otzaria/core/external_activation_queue.dart';
 import 'package:otzaria/core/portable_paths.dart';
+import 'package:otzaria/core/portable_host_shortcut.dart';
 import 'package:otzaria/core/startup_timeline.dart';
 import 'package:otzaria/core/diagnostics/developer_diagnostics.dart';
 import 'package:otzaria/core/window_listener.dart';
@@ -870,6 +871,7 @@ Future<void> _initializeRestartableRuntime() async {
   unawaited(_runDeferredSwapRecovery());
   unawaited(_logJobObjectContainmentFailure());
   unawaited(_runDeferredDataRootWritabilityWarning());
+  unawaited(_runDeferredPortableShortcut());
   unawaited(_runDeferredCrashCheck());
   unawaited(_runDeferredAnrCheck());
   unawaited(_runDeferredAttachedLibraries());
@@ -1002,6 +1004,25 @@ Future<void> _runDeferredDataRootWritabilityWarning() async {
     await PersonalDataMissingWarning.showIfNeeded();
   } catch (error, stackTrace) {
     _logNonFatalInitializationError('Personal data warning', error, stackTrace);
+  }
+}
+
+/// עותק נייד שקיצור הדרך של המחשב הזה שייך לו: אחרי העברת התיקייה או עדכון
+/// התוכנה, הקיצור מתעדכן כאן.
+Future<void> _runDeferredPortableShortcut() async {
+  final shortcut = PortableHostShortcut.forCurrentProcess();
+  if (shortcut == null) return;
+  try {
+    await _mainWindowRevealedCompleter.future.timeout(
+      const Duration(seconds: 20),
+    );
+  } on TimeoutException {
+    // ממשיכים בכל זאת — אחרת הקיצור לא יתעדכן.
+  }
+  try {
+    if (await shortcut.isAvailable()) await shortcut.refreshIfNeeded();
+  } catch (error, stackTrace) {
+    _logNonFatalInitializationError('Portable shortcut', error, stackTrace);
   }
 }
 

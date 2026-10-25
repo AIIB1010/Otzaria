@@ -1063,10 +1063,8 @@ begin
     (PageID = wpWelcome);
   if Result or (not PortableMode) then
     exit;
-  // במצב נייד: אין קיצורי דרך/איפוס (בעמוד האפשרויות נשאר רק WebView2, כשהוא
-  // חסר), והספרייה תמיד בתוך התיקייה הניידת (עמוד תיקיית הספרים).
-  Result := ((PageID = wpSelectTasks) and not WebView2Missing) or
-    ((BooksPage <> nil) and (PageID = BooksPage.ID));
+  // במצב נייד הספרייה תמיד בתוך התיקייה הניידת (עמוד תיקיית הספרים).
+  Result := (BooksPage <> nil) and (PageID = BooksPage.ID);
 end;
 
 procedure CurPageChanged(CurPageID: Integer);
@@ -1767,6 +1765,7 @@ begin
   if PortableMode and PortableSkipLibrary then
   begin
     SaveStringToFile(ExpandConstant('{app}\portable.marker'), '', False);
+    InstallPortableShortcut();
     exit;
   end;
 
@@ -1800,6 +1799,7 @@ begin
     // במצב נייד האפליקציה גוזרת אותו בעצמה (otzaria_data\books ליד ה-EXE).
     ForceDirectories(SelectedBooksPath);
     SaveStringToFile(ExpandConstant('{app}\portable.marker'), '', False);
+    InstallPortableShortcut();
   end
   else if SelectedBooksPath <> '' then
   begin
