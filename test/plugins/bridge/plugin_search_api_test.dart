@@ -521,6 +521,77 @@ Future<void> main() async {
       expect(facets.single, startsWith('/תנך/תורה/'));
     });
 
+    test('bookUid לבדו מזהה ספר, גם עם רווחים בקצוות', () {
+      final book = TextBook(id: 7, title: 'בראשית', topics: 'תנך, תורה');
+      for (final uid in ['id:7', ' id:7 ']) {
+        expect(
+          PluginSearchApi.resolveFacets({
+            'books': [
+              {'bookUid': uid},
+            ],
+          }, findBook: (identity) => identity['bookUid'] == uid ? book : null),
+          [FacetHelper.buildBookFacet('/תנך/תורה', book)],
+        );
+      }
+    });
+
+    test('bookUid מטיפוס שגוי נדחה גם כשיש id תקין', () {
+      for (final uid in [7, false, <String>[], <String, String>{}]) {
+        expect(
+          () => PluginSearchApi.resolveFacets({
+            'books': [
+              {'bookUid': uid, 'id': 7},
+            ],
+          }, findBook: (_) => fail('invalid identity reached the resolver')),
+          throwsA(
+            isA<Exception>().having(
+              (error) => error.toString(),
+              'message',
+              contains('book bookUid must be a string'),
+            ),
+          ),
+        );
+      }
+    });
+
+    test('bookUid ריק מחייב זהות ישנה ומשמר את האימות שלה', () {
+      final book = TextBook(id: 7, title: 'בראשית');
+      for (final uid in [null, '', ' \t ']) {
+        expect(
+          () => PluginSearchApi.resolveFacets({
+            'books': [
+              {'bookUid': uid},
+            ],
+          }, findBook: noBook),
+          throwsA(isA<Exception>()),
+        );
+        expect(
+          PluginSearchApi.resolveFacets({
+            'books': [
+              {'bookUid': uid, 'id': 7},
+            ],
+          }, findBook: (_) => book),
+          hasLength(1),
+        );
+      }
+      for (final legacy in [
+        {'id': 1.5},
+        {'bookId': 7},
+        {'title': 7},
+        {'type': 7},
+        {'source': 7},
+      ]) {
+        expect(
+          () => PluginSearchApi.resolveFacets({
+            'books': [
+              {'bookUid': 'id:7', ...legacy},
+            ],
+          }, findBook: (_) => fail('invalid identity reached the resolver')),
+          throwsA(isA<Exception>()),
+        );
+      }
+    });
+
     test('ספר שלא נמצא מחזיר not_found', () {
       expect(
         () => PluginSearchApi.resolveFacets({
@@ -569,6 +640,107 @@ Future<void> main() async {
         throwsA(isA<Exception>()),
       );
     });
+  });
+
+  group('PluginOpenSearchTabSettings.parse', () {
+    test('בלי היקף הטאב נפתח על כל הספרייה', () {
+      expect(PluginOpenSearchTabSettings.parse(null, query: 'א').facets, [
+        '/',
+      ]);
+      expect(
+        PluginOpenSearchTabSettings.parse({'mode': 'exact'}, query: 'א').facets,
+        ['/'],
+      );
+    });
+
+    test('היקף עובר באותו תרגום של search.query', () {
+      final book = TextBook(id: 7, title: 'בראשית', topics: 'תנך, תורה');
+      final settings = PluginOpenSearchTabSettings.parse(
+        {
+          'categories': ['/הלכה'],
+          'books': [
+            {'id': 7},
+          ],
+          'eras': ['ראשונים'],
+        },
+        query: 'שבת',
+        findBook: (_) => book,
+      );
+
+      expect(settings.facets, hasLength(3));
+      expect(settings.facets[0], '/הלכה');
+      expect(settings.facets[1], startsWith('/תנך/תורה/'));
+      expect(settings.facets[2], FacetHelper.buildEraFacet('ראשונים'));
+    });
+
+    test('ספר בלי קטלוג לאיתור נדחה ב-not_found', () {
+      expect(
+        () => PluginOpenSearchTabSettings.parse(
+          {
+            'books': [
+              {'id': 7},
+            ],
+          },
+          query: 'שבת',
+        ),
+        throwsA(
+          isA<Exception>().having(
+            (e) => e.toString(),
+            'message',
+            contains('error.not_found'),
+          ),
+        ),
+      );
+    });
+
+    test('השאילתה השלילית נשמרת, ומחייבת מצב מתקדם', () {
+      expect(
+        PluginOpenSearchTabSettings.parse({
+          'negativeQuery': ' גוי ',
+        }, query: 'שבת').negativeQuery,
+        'גוי',
+      );
+      expect(
+        () => PluginOpenSearchTabSettings.parse({
+          'mode': 'exact',
+          'negativeQuery': 'גוי',
+        }, query: 'שבת'),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('פרמטרים של search.query שאין להם מקום בטאב נדחים', () {
+      for (final key in ['limit', 'offset', 'order', 'grouping']) {
+        expect(
+          () => PluginOpenSearchTabSettings.parse({key: 1}, query: 'שבת'),
+          throwsA(
+            isA<Exception>().having(
+              (e) => e.toString(),
+              'message',
+              contains('unknown settings parameter "$key"'),
+            ),
+          ),
+        );
+      }
+    });
+
+    test(
+      'מילים חלופיות ומרווחים נשמרים לפי מילות השאילתה',
+      () {
+        final settings = PluginOpenSearchTabSettings.parse({
+          'alternativeWords': {
+            '0': ['שבתות'],
+          },
+          'customSpacing': {'0-1': '3'},
+        }, query: 'שבת קודש');
+
+        expect(settings.alternativeWords, {
+          0: ['שבתות'],
+        });
+        expect(settings.customSpacing, {'0-1': '3'});
+      },
+      skip: engineReady ? false : searchEngineSkipReason,
+    );
   });
 
   group('PluginSearchApi.resultToJson', () {
