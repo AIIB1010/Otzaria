@@ -1,5 +1,3 @@
-// core/src/commonMain/dart/io/github/kdroidfilter/seforimlibrary/core/models/link.dart
-
 /// Types of connections between texts
 enum ConnectionType {
   commentary,

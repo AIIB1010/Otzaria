@@ -1,5 +1,4 @@
 // Adapters to convert between otzaria models and migration models
-// This allows seamless integration between the existing codebase and the new database layer
 
 import 'package:otzaria/models/books.dart' as otzaria_models;
 import 'line.dart' as migration_models;

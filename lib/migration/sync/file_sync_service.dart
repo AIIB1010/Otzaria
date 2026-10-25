@@ -105,7 +105,7 @@ class FileSyncService {
   }
 
   /// Recursively delete a category and all its contents from the
-  /// custom-folders DB (`user_books.db` or fallback to `_repository`).
+  /// custom-folders DB (`user_books.db`).
   Future<void> _deleteCategoryRecursive(int categoryId) async {
     final repo = _customFoldersRepo;
     // First, delete all books in this category
@@ -180,7 +180,7 @@ class FileSyncService {
     }
   }
 
-  /// Delete a folder from the database (without restoring files)
+  /// Delete a folder from the database.
   /// Used when removing a folder from the app completely.
   /// פועל על ה-DB של תיקיות מותאמות אישית.
   ///
@@ -432,12 +432,8 @@ class FileSyncService {
       final categoryId = entry.key;
       for (final book in entry.value) {
         final sourceName = snap.sourceNamesById[book.sourceId];
-        // שיוך לתיקייה לפי שם ה-source. נפילה-חזרה לפי נתיב הקובץ מוגבלת
-        // *אך ורק* למקור ה-legacy המדויק שמסלול ההוספה הישן ייצר
-        // ('external'), כדי לזהות נתונים ישנים בלי לגעת בספרים ממקור אחר
-        // (תיקייה אחרת, ייבוא) שקובצם במקרה יושב בתוך התיקייה.
-        // ספר legacy משויך רק לתיקייה המוגדרת *העמוקה ביותר* שמכילה אותו —
-        // אחרת מחיקת תיקיית-אב הייתה גוררת גם ספרי תיקיית-בן מקוננת.
+        // שיוך לפי שם ה-source; לפי נתיב רק למקור ה-legacy ('external'), שלא
+        // ייגע בספרי מקור אחר, ורק לתיקייה העמוקה ביותר (מחיקת אב לא תגרור בן).
         final bookPath = book.filePath;
         final belongsToFolder =
             sourceName == folderSourceName ||
@@ -452,10 +448,8 @@ class FileSyncService {
                 ));
         if (!belongsToFolder) continue;
         if (keepKeys != null) {
-          // זרימת prune (רענון): ספר "עותק עצמאי" (התוכן נשמר בתוכנה,
-          // filePath=null) נועד לשרוד גם אם הקובץ נמחק מהדיסק — זה כל
-          // הרעיון של ההכנסה לתוכנה. לכן מוחקים רק ספרי "קריאה מהקבצים"
-          // (file-backed) שקובצם נעלם; עותק עצמאי נמחק רק דרך הספרייה.
+          // עותק עצמאי (filePath=null) שורד מחיקת הקובץ ונמחק רק דרך הספרייה;
+          // ה-prune מוחק רק ספר file-backed שקובצו נעלם.
           if (!book.isFileBacked) continue;
           final key =
               '${book.categoryId}|${book.title}|'
@@ -463,10 +457,8 @@ class FileSyncService {
           if (keepKeys.contains(key)) continue;
         }
 
-        // ה-snapshot נבנה לפני הסריקה. בתיקיות בעלות basename זהה גם מפתח
-        // הספר יכול להתנגש, וסריקה מוקדמת עשויה לשנות בינתיים source/אחסון של
-        // אותה רשומה. מאמתים מחדש רק מועמד למחיקה (מסלול נדיר), כדי לא למחוק
-        // ספר לפי שיוך מיושן בלי להחזיר שאילתות פר-ספר למסלול הרגיל.
+        // ה-snapshot קודם לסריקה, שעשויה לשנות source/אחסון של הרשומה. מאמתים
+        // מחדש רק מועמד למחיקה, כדי לא למחוק לפי שיוך מיושן.
         final currentBook = await repo.getBook(book.id);
         if (currentBook == null) continue;
         final currentSourceName = (await repo.getSourceById(
@@ -519,9 +511,6 @@ class FileSyncService {
   Future<void> refreshSourcesAndPruneRemovedCustomFolders(
     List<CustomFolder> customFolders,
   ) async {
-    // הערה: בעבר היה כאן rebuildCategoryClosure בלתי-מותנה שגרם להמון כתיבות
-    // לדיסק בכל עלייה. כיום insertCategory מתחזק את category_closure
-    // אינקרמנטלית, כך שה-rebuild המלא הזה כבר לא נחוץ כאן.
     await pruneRemovedCustomFoldersFromDatabase(customFolders);
     await _compactCustomFoldersDb();
   }
@@ -591,9 +580,6 @@ class FileSyncService {
         } else {
           skippedFiles++;
         }
-
-        // NOTE: Original files are never deleted. The DB is the single source
-        // of truth but original files are always preserved on disk.
       } catch (e, stackTrace) {
         final errorMsg = 'Error processing file $filePath: $e';
         _log.warning(errorMsg, e, stackTrace);
@@ -791,8 +777,7 @@ class FileSyncService {
           _log.info('Found ${customFolders.length} custom folders to sync');
 
           // קריאה רזה אחת של כל ספרי user_books.db (ללא טעינת יחסים) מזינה
-          // גם את קאש הסריקה וגם את תמונת עץ ה-prune — במקום getAllBooks
-          // (עם יחסים) + מעבר getBooksByCategory נפרד.
+          // גם את קאש הסריקה וגם את תמונת עץ ה-prune.
           final leanBooks = await _customFoldersRepo.getAllBooksLean();
           // תמונת-מצב לכל התיקיות — נבנית פעם אחת, מתעדכנת נקודתית אחרי כל
           // כתיבה, ונבנית מחדש רק אם prune מחק ספרים.
@@ -839,9 +824,6 @@ class FileSyncService {
             errors.addAll(result.errors);
             updatedBookIds.addAll(result.updatedBookIds);
 
-            // הסרת ספרים מה-DB שקובצם נמחק מהתיקייה. רץ רק אם הסריקה
-            // הושלמה (לא בוטלה) — אחרת folderValidKeys חלקי והיינו עלולים
-            // למחוק ספרים שקבציהם עדיין קיימים.
             // קובצי הכותרות והגרסאות של התיקייה — אחרי שספריה כבר ב-DB.
             errors.addAll(
               await UserSidecarSync.applyForFolder(
@@ -851,6 +833,8 @@ class FileSyncService {
               ),
             );
 
+            // הסרת ספרים שקובצם נמחק רק אם הסריקה הושלמה (לא בוטלה) — אחרת
+            // folderValidKeys חלקי ונמחקים ספרים שקבציהם עדיין קיימים.
             if (_isSyncing) {
               final removed = await _pruneDeletedBooksInFolder(
                 folder,
