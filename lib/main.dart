@@ -133,6 +133,15 @@ const ExternalActivationQueue _externalActivationQueue =
 // כדי שלא יתחרו בטעינת תוכן הספר הפעיל על ה-main isolate ועל seforim.db.
 final _mainWindowRevealedCompleter = Completer<void>();
 
+// מושלם כשבדיקת הקריסה סיימה לקרוא את תיקיית sentry-native. ה-SDK מעבד ושולח
+// את ה-envelopes של ההפעלה הקודמת בעלייתו ומוחק אותם, ובעיבוד של breakpad
+// (Windows ARM64) ה-minidump נמצא רק שם — לכן [_initializeSentry] ממתין לזה.
+final _crashScanCompleter = Completer<void>();
+
+void _markCrashScanDone() {
+  if (!_crashScanCompleter.isCompleted) _crashScanCompleter.complete();
+}
+
 void _markMainWindowRevealed() {
   if (!_mainWindowRevealedCompleter.isCompleted) {
     _mainWindowRevealedCompleter.complete();
@@ -477,6 +486,11 @@ Future<void> _initializeSentry() async {
   if (Settings.getValue<bool>(SettingsRepository.keyOfflineMode) ?? false) {
     return;
   }
+  // תקרה: בדיקת קריסה שנתקעה לא תשבית את הדיווח לצמיתות.
+  await _crashScanCompleter.future.timeout(
+    const Duration(seconds: 30),
+    onTimeout: () {},
+  );
   try {
     final info = await PackageInfo.fromPlatform();
     StartupTimeline.instance.mark('sentry:init');
@@ -1032,7 +1046,10 @@ Future<void> _runDeferredPortableShortcut() async {
 /// רק אחרי החשיפה, ולכן קריסה לפני החשיפה אינה מזוהה — במחיר הזה לא מוסיפים
 /// קריאת לוג ופענוח למסלול העלייה.
 Future<void> _runDeferredCrashCheck() async {
-  if (!AppCrashSession.isSupported) return;
+  if (!AppCrashSession.isSupported) {
+    _markCrashScanDone();
+    return;
+  }
   try {
     await _mainWindowRevealedCompleter.future.timeout(
       const Duration(seconds: 20),
@@ -1043,7 +1060,7 @@ Future<void> _runDeferredCrashCheck() async {
   try {
     final candidate = await AppCrashSession.detectAndStartSession(
       version: ErrorLogFile.appVersion,
-    );
+    ).whenComplete(_markCrashScanDone);
     if (candidate == null) return;
     await CrashReportFlow(
       showPrompt: showCrashPromptOnNavigator,
@@ -1326,7 +1343,12 @@ Future<void>? _processInitializationFuture;
 Future<void> _ensureBootstrapInitialized() {
   return (_processInitializationFuture ??= _initializeProcessSingletons())
       .then((_) => _initializeRestartableRuntime())
-      .then((_) => StartupTimeline.instance.mark('bootstrapDone'));
+      .then((_) => StartupTimeline.instance.mark('bootstrapDone'))
+      .catchError((Object error, StackTrace stackTrace) {
+        // אתחול שנכשל לא מגיע לבדיקת הקריסה, ו-Sentry לא יחכה לה סתם.
+        _markCrashScanDone();
+        Error.throwWithStackTrace(error, stackTrace);
+      });
 }
 
 @visibleForTesting

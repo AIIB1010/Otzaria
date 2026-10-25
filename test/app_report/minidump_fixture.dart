@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 /// minidump מינימלי: כותרת, זרם חריגה, רשימת מודולים ומפת זיכרון — במבנה של
@@ -102,3 +103,41 @@ Uint8List buildMinidump({
   }
   return data.buffer.asUint8List();
 }
+
+/// envelope של sentry-native כפי שהוא נכתב ל-`*.run` ב-breakpad: כותרת, ואז לכל
+/// פריט שורת כותרת ו-`length` בתים (ראו sentry__envelope_serialize_into_stringbuilder).
+Uint8List buildEnvelope(
+  List<({Map<String, Object?> header, List<int> payload})> items, {
+  bool withLength = true,
+}) {
+  final out = BytesBuilder()..add(utf8.encode(jsonEncode({'event_id': 'abc'})));
+  for (final item in items) {
+    final header = {
+      ...item.header,
+      if (withLength) 'length': item.payload.length,
+    };
+    out
+      ..add(const [0x0a])
+      ..add(utf8.encode(jsonEncode(header)))
+      ..add(const [0x0a])
+      ..add(item.payload);
+  }
+  return out.toBytes();
+}
+
+/// envelope של קריסה: אירוע, session ו-minidump, בסדר שבו breakpad מרכיב אותם.
+Uint8List buildCrashEnvelope({
+  Uint8List? minidump,
+  int exceptionCode = 0xc0000005,
+}) => buildEnvelope([
+  (header: {'type': 'event'}, payload: utf8.encode('{"level":"fatal"}')),
+  (header: {'type': 'session'}, payload: utf8.encode('{"status":"crashed"}')),
+  (
+    header: {
+      'type': 'attachment',
+      'attachment_type': 'event.minidump',
+      'filename': 'dump.dmp',
+    },
+    payload: minidump ?? buildMinidump(exceptionCode: exceptionCode),
+  ),
+]);
