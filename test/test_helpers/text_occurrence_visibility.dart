@@ -11,21 +11,32 @@ double textOccurrenceViewportFraction(
   String query,
   int occurrence,
 ) {
-  final paragraph = tester
-      .renderObjectList<RenderParagraph>(
-        find.descendant(
-          of: within,
-          matching: find.byWidgetPredicate((widget) => widget is RichText),
-        ),
-      )
-      .firstWhere((p) => p.text.toPlainText().contains(query));
-  final text = paragraph.text.toPlainText();
+  final paragraphs = tester.renderObjectList<RenderParagraph>(
+    find.descendant(
+      of: within,
+      matching: find.byWidgetPredicate((widget) => widget is RichText),
+    ),
+  );
+  RenderParagraph? paragraph;
   var start = -1;
-  for (var i = 0; i <= occurrence; i++) {
-    start = text.indexOf(query, start + 1);
+  var remaining = occurrence;
+  for (final candidate in paragraphs) {
+    final text = candidate.text.toPlainText();
+    for (
+      var at = text.indexOf(query);
+      at >= 0;
+      at = text.indexOf(query, at + query.length)
+    ) {
+      if (remaining-- == 0) {
+        paragraph = candidate;
+        start = at;
+        break;
+      }
+    }
+    if (paragraph != null) break;
   }
-  expect(start, isNonNegative, reason: 'אין הופעה מספר $occurrence');
-  final match = paragraph
+  expect(paragraph, isNotNull, reason: 'אין הופעה מספר $occurrence');
+  final match = paragraph!
       .getBoxesForSelection(
         TextSelection(baseOffset: start, extentOffset: start + query.length),
       )

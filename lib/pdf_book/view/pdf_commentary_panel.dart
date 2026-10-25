@@ -1,3 +1,4 @@
+import 'package:otzaria/widgets/smart_text/long_line_chunks.dart';
 import 'package:otzaria/book_common/bloc/commentary_search_bloc.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
@@ -1779,6 +1780,7 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
     }
     if (targetLink == null) return;
     final linkKey = _getLinkKey(targetLink);
+    final contentKey = _itemKeys[linkKey]!;
     final group = _orderedGroups
         .where(
           (group) => group.links.any((link) => _getLinkKey(link) == linkKey),
@@ -1786,6 +1788,7 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
         .firstOrNull;
     if (group == null) return;
     final matchTarget = commentarySearchMatchTarget(
+      renderedBody: () => CommentarySelectionTracker.renderedBodyIn(contentKey),
       content: targetLink.loadedContent,
       query: _searchQuery,
       displayProfile: widget.displayProfile,
@@ -1804,7 +1807,17 @@ class PdfCommentaryPanelState extends State<PdfCommentaryPanel>
         alignment: 0.1,
         targetRectResolver: matchTarget,
       );
-      if (_linkFlatIndex[linkKey] == index) return;
+      if (_linkFlatIndex[linkKey] != index) continue;
+      final pixels = _itemScrollController.scrollController;
+      if (pixels != null &&
+          await longLinesBuilt(
+            scrollController: pixels,
+            isCurrent: () => mounted && generation == _searchScrollGeneration,
+          )) {
+        if (!mounted || generation != _searchScrollGeneration) return;
+        continue;
+      }
+      return;
     }
   }
 

@@ -1478,8 +1478,28 @@ int countMatches(
   String text,
   String searchQuery, {
   bool partialWordMatch = false,
+}) => _queryMatches(text, searchQuery, partialWordMatch).length;
+
+/// טווח ההתאמה ה-[index], באותה ספירה כמו [countMatches].
+({int start, int end, int totalCount})? searchMatchRangeAt(
+  String text,
+  String query,
+  int index, {
+  bool partialWordMatch = false,
 }) {
-  if (searchQuery.isEmpty) return 0;
+  if (index < 0) return null;
+  final matches = _queryMatches(text, query, partialWordMatch);
+  if (index >= matches.length) return null;
+  final match = matches[index];
+  return (start: match.start, end: match.end, totalCount: matches.length);
+}
+
+List<_HighlightMatch> _queryMatches(
+  String text,
+  String searchQuery,
+  bool partialWordMatch,
+) {
+  if (searchQuery.isEmpty) return const [];
   final compiled = _resolveHighlightPattern(
     searchQuery,
     const {},
@@ -1488,12 +1508,12 @@ int countMatches(
     0,
     false,
   );
-  if (compiled == null) return 0;
+  if (compiled == null) return const [];
   final requireTokenBoundaries = [
     for (final eligible in compiled.boundaryEligible)
       eligible && !partialWordMatch,
   ];
-  return _findHighlightMatches(text, compiled, requireTokenBoundaries).length;
+  return _findHighlightMatches(text, compiled, requireTokenBoundaries);
 }
 
 Future<bool> hasTopic(

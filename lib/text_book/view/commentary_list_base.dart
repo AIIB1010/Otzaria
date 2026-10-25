@@ -1,3 +1,4 @@
+import 'package:otzaria/widgets/smart_text/long_line_chunks.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/data/book_identity.dart';
 import 'package:otzaria/book_common/bloc/commentary_search_bloc.dart';
@@ -1567,10 +1568,13 @@ class CommentaryListBaseState extends State<CommentaryListBase>
     }
     if (targetLink == null) return;
     final linkKey = _getLinkKey(targetLink);
+    final contentKey = _itemKeys[linkKey]!;
     final blocState = context.read<TextBookBloc>().state;
     final matchTarget = blocState is! TextBookLoaded
         ? null
         : commentarySearchMatchTarget(
+            renderedBody: () =>
+                CommentarySelectionTracker.renderedBodyIn(contentKey),
             content: targetLink.loadedContent,
             query: _activeSearchQuery,
             displayProfile: blocState.commentaryDisplayProfile,
@@ -1591,7 +1595,17 @@ class CommentaryListBaseState extends State<CommentaryListBase>
         alignment: 0.1,
         targetRectResolver: matchTarget,
       );
-      if (_linkFlatIndex[linkKey] == index) return;
+      if (_linkFlatIndex[linkKey] != index) continue;
+      final pixels = _itemScrollController.scrollController;
+      if (pixels != null &&
+          await longLinesBuilt(
+            scrollController: pixels,
+            isCurrent: () => mounted && generation == _searchScrollGeneration,
+          )) {
+        if (!mounted || generation != _searchScrollGeneration) return;
+        continue;
+      }
+      return;
     }
   }
 

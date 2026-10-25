@@ -3,6 +3,7 @@ import 'package:otzaria/search/utils/snippet_builder.dart';
 import 'package:otzaria/text_display/models/text_display_profile.dart';
 import 'package:otzaria/utils/text/text_manipulation.dart' as utils;
 import 'package:otzaria/widgets/smart_text/text_renderer_service.dart';
+import 'package:otzaria/widgets/smart_text/long_line_chunks.dart';
 import 'package:positioned_sliver_list/positioned_list.dart'
     show TargetRectResolver;
 
@@ -24,27 +25,25 @@ int countCommentarySearchMatches({
   );
 }
 
-/// מכוון את הקפיצה לתוצאת חיפוש אל ההתאמה ה-[matchIndex] (בספירה של
-/// [countCommentarySearchMatches]) בתוך פריט המפרש, ולא אל ראשו: במפרש ארוך
-/// ההתאמה נשארה מחוץ למסך (issue #2534).
+/// מכוון לתוצאה בגוף המפרש המרונדר; בלי מיפוי אמין נשארים בראש הפריט.
 TargetRectResolver? commentarySearchMatchTarget({
   required String? content,
   required String query,
   required TextDisplayProfile displayProfile,
   required int matchIndex,
+  RenderObject? Function()? renderedBody,
 }) {
-  if (content == null) return null;
-  final text = _searchableText(content, displayProfile);
-  final end = _matchEnd(text, query, matchIndex);
-  final visibleLength = utils.stripHtmlIfNeeded(text).length;
-  if (end == null || visibleLength == 0) return null;
-  // התו האחרון של ההתאמה, ולא הסוף שלה: בסוף שורה הסוף כבר בשורה הבאה.
-  final fraction =
-      utils.stripHtmlIfNeeded(text.substring(0, end - 1)).length /
-      visibleLength;
+  if (content == null || matchIndex < 0) return null;
+  final count = countCommentarySearchMatches(
+    content: content,
+    query: query,
+    displayProfile: displayProfile,
+    partialWordMatch: true,
+  );
+  if (matchIndex >= count) return null;
   return (_, box) {
-    // התו המקביל בטקסט המרונדר, ולא אותו חלק מגובה הפריט: הגובה כולל כותרת
-    // וריפוד, ושבירת השורות מזיזה את ההתאמה בשורות שלמות.
+    final root = renderedBody == null ? box : renderedBody();
+    if (root == null) return null;
     final paragraphs = <RenderParagraph>[];
     void collect(RenderObject child) {
       if (child is RenderParagraph) {
@@ -54,51 +53,45 @@ TargetRectResolver? commentarySearchMatchTarget({
       }
     }
 
-    box.visitChildren(collect);
-    final lengths = [
-      for (final paragraph in paragraphs)
-        paragraph.text.toPlainText(includeSemanticsLabels: false).length,
-    ];
-    var offset = (fraction * lengths.fold(0, (sum, length) => sum + length))
-        .floor();
-    for (var i = 0; i < paragraphs.length; i++) {
-      if (offset < lengths[i]) {
-        final caret = paragraphs[i].getOffsetForCaret(
-          TextPosition(offset: offset),
-          Rect.zero,
-        );
-        final top = MatrixUtils.transformPoint(
-          paragraphs[i].getTransformTo(box),
-          caret,
-        ).dy;
-        return Rect.fromLTWH(0, top, 0, 0);
+    collect(root);
+    final text = StringBuffer();
+    final starts = <int>[];
+    final lengths = <int>[];
+    for (final paragraph in paragraphs) {
+      // מקטעי שורה רצופים כבר מכילים את הרווח המקורי; בלוקים נפרדים דורשים גבול.
+      if (text.isNotEmpty && (longLineChunkOf(paragraph)?.start ?? 0) == 0) {
+        text.writeln();
       }
-      offset -= lengths[i];
+      starts.add(text.length);
+      final plain = paragraph.text.toPlainText(includeSemanticsLabels: false);
+      lengths.add(plain.length);
+      text.write(plain);
     }
-    return Rect.fromLTWH(0, fraction * box.size.height, 0, 0);
+    final rendered = text.toString();
+    final match = utils.searchMatchRangeAt(
+      rendered,
+      query,
+      matchIndex,
+      partialWordMatch: true,
+    );
+    // תוכן מוסתר או WidgetSpan עשויים לשנות את הספירה; אין לנחש אז מיקום.
+    if (match == null || match.totalCount != count) return null;
+    for (var i = 0; i < paragraphs.length; i++) {
+      final localStart = (match.start - starts[i]).clamp(0, lengths[i]);
+      final localEnd = (match.end - starts[i]).clamp(0, lengths[i]);
+      if (localStart >= localEnd) continue;
+      final boxes = paragraphs[i].getBoxesForSelection(
+        TextSelection(baseOffset: localStart, extentOffset: localEnd),
+      );
+      if (boxes.isEmpty) continue;
+      final top = MatrixUtils.transformPoint(
+        paragraphs[i].getTransformTo(box),
+        boxes.first.toRect().topLeft,
+      ).dy;
+      return Rect.fromLTWH(0, top, 0, 0);
+    }
+    return null;
   };
-}
-
-/// סוף ההתאמה ה-[matchIndex]: הקידומת הקצרה ביותר שבה [utils.countMatches]
-/// מוצא matchIndex+1 התאמות — כך המיקום תמיד באותה ספירה של המונה.
-int? _matchEnd(String text, String query, int matchIndex) {
-  int countIn(int length) => utils.countMatches(
-    text.substring(0, length),
-    query,
-    partialWordMatch: true,
-  );
-  if (matchIndex < 0 || countIn(text.length) <= matchIndex) return null;
-  var low = 1;
-  var high = text.length;
-  while (low < high) {
-    final middle = (low + high) ~/ 2;
-    if (countIn(middle) > matchIndex) {
-      high = middle;
-    } else {
-      low = middle + 1;
-    }
-  }
-  return low;
 }
 
 String _searchableText(String content, TextDisplayProfile displayProfile) {
