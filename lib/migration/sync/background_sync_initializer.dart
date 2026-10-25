@@ -109,9 +109,6 @@ class BackgroundSyncInitializer {
         SettingsRepository.keyCustomFolders,
       );
       final customFolders = CustomFoldersManager.loadFolders(customFoldersJson);
-      final folderName =
-          Settings.getValue<String>(SettingsRepository.keyLibraryFolderName) ??
-          '';
 
       final userBooksDbPath = await UserBooksDatabaseHolder.resolveDbPath();
 
@@ -122,7 +119,6 @@ class BackgroundSyncInitializer {
         userBooksDbPath: userBooksDbPath,
         libraryPath: libraryPath,
         customFolders: customFolders,
-        folderName: folderName,
       );
 
       _log.info('Background sync completed: $result');
