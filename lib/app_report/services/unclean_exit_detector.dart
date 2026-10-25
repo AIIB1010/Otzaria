@@ -6,6 +6,7 @@ import 'dart:isolate';
 import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 import 'package:otzaria/app_report/repository/error_log_blocks.dart';
+import 'package:otzaria/app_report/services/breakpad_envelope.dart';
 import 'package:otzaria/app_report/services/minidump_signature.dart';
 import 'package:otzaria/core/error_log_file.dart';
 import 'package:otzaria_report_contract/otzaria_report_contract.dart';
@@ -172,6 +173,9 @@ class UncleanExitDetector {
   /// מחזיר מועמד לקריסה רק כשנשארה נעילה של תהליך שאינו חי, ויש ראיה לקריסה:
   /// רשומת שגיאה מאז תחילתו, `Startup stall`, או minidump של Sentry.
   Future<CrashCandidate?> detectPreviousCrash() async {
+    for (final dir in _sentryDirs ?? defaultSentryDatabaseDirs()) {
+      await pruneRecoveredMinidumps(dir);
+    }
     final SessionLock lock;
     try {
       final file = File(lockPath);
@@ -302,21 +306,25 @@ class UncleanExitDetector {
     DateTime? newestModified;
     for (final dir in _sentryDirs ?? defaultSentryDatabaseDirs()) {
       try {
+        // ב-ARM64 (breakpad) ה-dump נמצא רק בתוך envelope; שולפים אותו לתיקייה משלו.
+        await recoverBreakpadMinidumps(dir, since);
         final lastCrash = File(p.join(dir, 'last_crash'));
         if (await lastCrash.exists() &&
             !(await lastCrash.stat()).modified.isBefore(since)) {
           found = true;
         }
-        final reports = Directory(p.join(dir, 'reports'));
-        if (!await reports.exists()) continue;
-        await for (final entity in reports.list()) {
-          if (entity is! File || !entity.path.endsWith('.dmp')) continue;
-          final modified = (await entity.stat()).modified;
-          if (modified.isBefore(since)) continue;
-          found = true;
-          if (newestModified == null || modified.isAfter(newestModified)) {
-            newest = entity;
-            newestModified = modified;
+        for (final name in ['reports', recoveredMinidumpsDirName]) {
+          final reports = Directory(p.join(dir, name));
+          if (!await reports.exists()) continue;
+          await for (final entity in reports.list()) {
+            if (entity is! File || !entity.path.endsWith('.dmp')) continue;
+            final modified = (await entity.stat()).modified;
+            if (modified.isBefore(since)) continue;
+            found = true;
+            if (newestModified == null || modified.isAfter(newestModified)) {
+              newest = entity;
+              newestModified = modified;
+            }
           }
         }
       } catch (_) {

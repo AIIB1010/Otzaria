@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/app_report/services/app_crash_session.dart';
+import 'package:otzaria/app_report/services/breakpad_envelope.dart';
 import 'package:otzaria/app_report/services/crash_report_decision.dart';
 import 'package:otzaria/app_report/services/unclean_exit_detector.dart';
 import 'package:otzaria/core/error_log_file.dart';
@@ -74,6 +75,45 @@ void main() {
       entry('Unhandled Error', previousStart.add(const Duration(hours: 1))),
     );
     expect(await detector().detectPreviousCrash(), isNull);
+  });
+
+  test('הפעלה אחרי יציאה נקייה מוחקת dumps ישנים ושומרת חדשים', () async {
+    final now = DateTime.now();
+    File recovered(String name, DateTime modified) =>
+        File(p.join(sentry.path, recoveredMinidumpsDirName, name))
+          ..createSync(recursive: true)
+          ..writeAsBytesSync(buildMinidump())
+          ..setLastModifiedSync(modified);
+    final stale = recovered(
+      'stale.dmp',
+      now.subtract(const Duration(days: 20)),
+    );
+    final fresh = recovered('fresh.dmp', now.subtract(const Duration(days: 1)));
+    final oldEnvelope = File(p.join(sentry.path, 'old.run', 'old.envelope'))
+      ..createSync(recursive: true)
+      ..writeAsBytesSync(buildCrashEnvelope());
+
+    final d = detector();
+    await d.startSession(version: 'test');
+    d.markCleanExitSync();
+    expect(
+      await AppCrashSession.detectAndStartSession(
+        version: 'test',
+        detector: d,
+      ),
+      isNull,
+    );
+
+    expect(stale.existsSync(), isFalse);
+    expect(fresh.existsSync(), isTrue);
+    expect(oldEnvelope.existsSync(), isTrue);
+    expect(
+      File(
+        p.join(sentry.path, recoveredMinidumpsDirName, 'old.dmp'),
+      ).existsSync(),
+      isFalse,
+    );
+    expect(File(d.lockPath).existsSync(), isTrue);
   });
 
   test('נעילה בלי ראיה לקריסה אינה מועמד', () async {
@@ -293,6 +333,44 @@ void main() {
       final candidate = await freshDetector().detectPreviousCrash();
       expect(candidate!.hasMinidump, isTrue);
       expect(candidate.signature!.exceptionType, 'StateError');
+    });
+
+    test(
+      'ARM64 (breakpad): ה-dump רק בתוך envelope ב-*.run — חתימה וקובץ (#3206)',
+      () async {
+        final now = DateTime.now();
+        writeLock(startedAt: now.subtract(const Duration(minutes: 5)));
+        // breakpad מוחק את ה-dmp; נשאר רק last_crash ו-envelope עם ה-dump.
+        File(p.join(sentry.path, 'last_crash')).writeAsStringSync('1');
+        final envelope = File(p.join(sentry.path, 'abc.run', 'ev1.envelope'))
+          ..createSync(recursive: true)
+          ..writeAsBytesSync(buildCrashEnvelope());
+        envelope.setLastModifiedSync(now.subtract(const Duration(minutes: 1)));
+
+        final candidate = await freshDetector().detectPreviousCrash();
+        expect(candidate!.hasMinidump, isTrue);
+        expect(
+          candidate.signature!.exceptionType,
+          '0xc0000005 flutter_windows.dll+0x1e220',
+        );
+        expect(p.basename(candidate.minidump!.path), 'ev1.dmp');
+        expect(
+          p.basename(p.dirname(candidate.minidump!.path)),
+          recoveredMinidumpsDirName,
+        );
+        expect(candidate.minidump!.existsSync(), isTrue);
+      },
+    );
+
+    test('ARM64: last_crash בלי envelope נשאר ראיה בלי חתימה', () async {
+      final now = DateTime.now();
+      writeLock(startedAt: now.subtract(const Duration(minutes: 5)));
+      File(p.join(sentry.path, 'last_crash')).writeAsStringSync('1');
+
+      final candidate = await freshDetector().detectPreviousCrash();
+      expect(candidate!.hasMinidump, isTrue);
+      expect(candidate.signature, isNull);
+      expect(candidate.minidump, isNull);
     });
   });
 
