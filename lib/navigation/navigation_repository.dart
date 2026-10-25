@@ -66,7 +66,7 @@ class NavigationRepository {
       if (!canOpen) return true;
     }
 
-    return false;
+    return await SqliteDataProvider.instance.checkUnsupportedDbSchema();
   }
 
   static bool _canOpenSqlite(String path) {

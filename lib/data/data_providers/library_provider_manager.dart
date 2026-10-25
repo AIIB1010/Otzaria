@@ -3,6 +3,7 @@ import 'package:otzaria/data/data_providers/book_composite_key.dart';
 import 'package:otzaria/data/data_providers/database_library_provider.dart';
 import 'package:otzaria/data/data_providers/file_system_library_provider.dart';
 import 'package:otzaria/data/data_providers/library_provider.dart';
+import 'package:otzaria/data/data_providers/sqlite_data_provider.dart';
 import 'package:otzaria/library/models/library.dart';
 import 'package:otzaria/models/book_source.dart';
 import 'package:otzaria/models/books.dart';
@@ -561,6 +562,13 @@ class LibraryProviderManager {
     String rootPath,
   ) async {
     if (!_isInitialized) await initialize();
+
+    // קטלוג הקבצים אינו כולל את כל הספרים האישיים ואינו תחליף למסד חסום.
+    final schemaCheck = SqliteDataProvider.instance.checkUnsupportedDbSchema();
+    if (schemaCheck is bool ? schemaCheck : await schemaCheck) {
+      _clearBookMapping();
+      return Library(categories: []);
+    }
 
     // Use the highest priority provider that is initialized
     for (final provider in _providers) {

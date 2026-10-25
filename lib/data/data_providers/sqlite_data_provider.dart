@@ -32,6 +32,7 @@ class SqliteDataProvider {
   String _dbPath = '';
   bool _isInitialized = false;
   Future<void>? _initializationFuture;
+  int? _unsupportedDbSchemaVersion;
 
   /// Singleton instance
   static SqliteDataProvider? _instance;
@@ -103,6 +104,7 @@ class SqliteDataProvider {
   Future<void> _initializeInternal() async {
     // Use centralized database path
     _dbPath = DatabaseConstants.getDatabasePath();
+    _unsupportedDbSchemaVersion = null;
 
     // Check if database file exists
     final dbFile = File(_dbPath);
@@ -123,6 +125,14 @@ class SqliteDataProvider {
         readOnly: true,
         official: true,
       );
+      // מסד בסכמה חדשה משגרסה זו קוראת נחסם כולו, ולא נכשל ספר אחר ספר.
+      final schema = await database.readDbSchemaVersion();
+      if (schema != null &&
+          schema > DatabaseConstants.readableDbSchemaVersion) {
+        database.close();
+        _unsupportedDbSchemaVersion = schema;
+        return;
+      }
       _repository = SeforimRepository(database);
       await _repository.ensureInitialized();
       _isInitialized = true;
@@ -168,6 +178,8 @@ class SqliteDataProvider {
   }
 
   Future<void> _dispose({required bool waitForWorker}) async {
+    // אחרי החלפת ספרייה החסימה נבדקת מחדש רק בפתיחה הבאה.
+    _unsupportedDbSchemaVersion = null;
     if (_isInitialized) {
       _repository.database.close();
       _isInitialized = false;
@@ -537,6 +549,37 @@ class SqliteDataProvider {
 
   /// Gets the repository instance (for advanced operations)
   SeforimRepository? get repository => _isInitialized ? _repository : null;
+
+  /// סכמת המסד כשהוא חדש מ-[DatabaseConstants.readableDbSchemaVersion] ולכן
+  /// לא נפתח; null כשהמסד נפתח או שלא נבדק.
+  int? get unsupportedDbSchemaVersion => _unsupportedDbSchemaVersion;
+
+  /// ממתין להכרעת הסכמה כשהמסד טרם נפתח. כשל פתיחה אחר משאיר
+  /// את מסלול הקבצים החלופי זמין.
+  FutureOr<bool> checkUnsupportedDbSchema() {
+    if (_isInitialized || _unsupportedDbSchemaVersion != null) {
+      return _unsupportedDbSchemaVersion != null;
+    }
+    if (_initializationFuture == null &&
+        (!Settings.isInitialized ||
+            ((Settings.getValue<String>(SettingsRepository.keyLibraryPath) ??
+                        '')
+                    .isEmpty &&
+                (Settings.getValue<String>(
+                          SettingsRepository.keyDbEffectivePath,
+                        ) ??
+                        '')
+                    .isEmpty))) {
+      return false;
+    }
+    return initialize().then(
+      (_) => _unsupportedDbSchemaVersion != null,
+      onError: (Object error) {
+        debugPrint('⚠️ אתחול מסד הספרייה נכשל: $error');
+        return false;
+      },
+    );
+  }
 
   /// Gets the database path
   String get dbPath => _dbPath;

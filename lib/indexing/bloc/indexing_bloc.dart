@@ -12,6 +12,7 @@ import 'package:otzaria/indexing/repository/indexing_repository.dart';
 import 'package:otzaria/indexing/services/indexing_failure_reporter.dart';
 import 'package:otzaria/indexing/services/indexing_wakelock.dart';
 import 'package:otzaria/data/data_providers/tantivy_data_provider.dart';
+import 'package:otzaria/data/data_providers/sqlite_data_provider.dart';
 import 'package:otzaria/library/hidden/hidden_library_store.dart';
 
 class IndexingBloc extends Bloc<IndexingEvent, IndexingState> {
@@ -91,18 +92,26 @@ class IndexingBloc extends Bloc<IndexingEvent, IndexingState> {
     IndexingWorkEvent event,
     Emitter<IndexingState> emit,
   ) async {
+    // בלי קטלוג תקין אין לאנדקס או לסמן שחזור הסתרות כהצלחה.
+    final schemaCheck = SqliteDataProvider.instance.checkUnsupportedDbSchema();
+    final schemaBlocked = schemaCheck is bool ? schemaCheck : await schemaCheck;
     if (event is RunIndexing &&
-        (_enqueuedAtCancelCount[event] ?? _cancelCount) != _cancelCount) {
+        (schemaBlocked ||
+            (_enqueuedAtCancelCount[event] ?? _cancelCount) != _cancelCount)) {
       // הריצה הבאה תחליף ותבדוק את מה שזו הייתה מטפלת בו; ספרים שנשלחו
       // לבדיקה מוחלפים — החלפה מיותרת עדיפה על תוכן ישן.
       try {
         await _repository.rememberChangedBooks(
           [...event.changedBooks, ...event.check.books],
-          checkLibrary: event.check.wholeLibrary,
+          checkLibrary: schemaBlocked || event.check.wholeLibrary,
         );
       } catch (e) {
         debugPrint('⚠️ שמירת ספרים שהשתנו מריצה שבוטלה נכשלה: $e');
       }
+      return;
+    }
+    if (schemaBlocked) {
+      if (event is ApplyHiddenIndexDelta) event.onCompleted?.call(false);
       return;
     }
 

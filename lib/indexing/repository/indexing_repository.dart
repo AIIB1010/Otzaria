@@ -2247,6 +2247,10 @@ class IndexingRepository {
 
   /// Clears the index and resets the list of indexed books.
   Future<bool> clearIndex() async {
+    final schemaCheck = SqliteDataProvider.instance.checkUnsupportedDbSchema();
+    if (schemaCheck is bool ? schemaCheck : await schemaCheck) {
+      return false;
+    }
     await _tantivyDataProvider.clear();
     return true;
   }
