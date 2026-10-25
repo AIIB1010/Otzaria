@@ -146,6 +146,50 @@ void main() {
     });
   }
 
+  test('חלונית צפה פתוחה נשמרת סגורה, ונעוצה נשמרת פתוחה (issue #3212)', () {
+    for (final pinned in [false, true]) {
+      final state = (_state('loaded', null) as TextBookLoaded).copyWith(
+        pinLeftPane: pinned,
+      );
+      final tab = TextBookTab(
+        book: TextBook(title: 'בראשית'),
+        index: 0,
+        blocOverride: _StateBloc(state),
+      );
+      addTearDown(tab.dispose);
+      final restored = TextBookTab.fromJson(tab.toJson());
+      addTearDown(restored.dispose);
+
+      expect(restored.blocState.showLeftPane, pinned, reason: '$pinned');
+    }
+  });
+
+  test('PDF: חלונית צפה פתוחה נשמרת סגורה (issue #3212)', () {
+    for (final pinned in [false, true]) {
+      final tab = PdfBookTab(
+        book: PdfBook(title: 'ספר', path: '/a.pdf'),
+        pageNumber: 1,
+        openLeftPane: true,
+      )..pinLeftPane.value = pinned;
+      addTearDown(tab.dispose);
+      final restored = PdfBookTab.fromJson(tab.toJson());
+      addTearDown(restored.dispose);
+
+      expect(restored.showLeftPane.value, pinned, reason: '$pinned');
+    }
+  });
+
+  test('PDF: חלונית נעוצה נשמרת שוב גם בטאב שלא הוצג', () {
+    final restored = PdfBookTab.fromJson({
+      'path': '/a.pdf',
+      'book': PdfBook(title: 'ספר', path: '/a.pdf').toJson(),
+      'showLeftPane': true,
+    });
+    addTearDown(restored.dispose);
+
+    expect(restored.toJson()['showLeftPane'], isTrue);
+  });
+
   test('מצב טעון שנוקה אינו מחזיר חיפוש או הדגשות משדות הטאב', () {
     final cleared = (_state('loaded', {}) as TextBookLoaded).copyWith(
       searchText: '',
@@ -344,7 +388,7 @@ TextBookState _state(String phase, Set<int>? results) {
       removeNikud: false,
       visibleIndices: const [12],
       selectedIndex: 12,
-      pinLeftPane: false,
+      pinLeftPane: true,
       searchText: 'מעודכן',
       searchOptions: const {
         'מעודכן_0': {'ראשי תיבות': true},

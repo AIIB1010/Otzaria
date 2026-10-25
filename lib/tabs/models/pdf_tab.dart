@@ -136,7 +136,9 @@ class PdfBookTab extends OpenedTab {
     );
     showLeftPane = ValueNotifier<bool>(openLeftPane);
     searchController.text = searchText;
-    pinLeftPane.value = Settings.getValue<bool>('key-pin-sidebar') ?? false;
+    // כמו בטקסט: חלונית שנפתחת עם הספר נעוצה, גם לפני שהמסך נבנה.
+    pinLeftPane.value =
+        (Settings.getValue<bool>('key-pin-sidebar') ?? false) || openLeftPane;
   }
 
   @override
@@ -232,7 +234,8 @@ class PdfReadingSnapshot {
     : _book = tab.book,
       _pageNumber = tab.pageNumber,
       _persistedPageNumber = tab.pageNumber,
-      _showLeftPane = tab.showLeftPane.value,
+      // חלונית צפה אינה נשמרת: חלונית שנפתחת עם הספר נעוצה (issue #3212).
+      _showLeftPane = tab.showLeftPane.value && tab.pinLeftPane.value,
       _isPinned = tab.isPinned,
       _dedupeKey = tab.dedupeKey,
       _historySlot = tab.historySlot,
