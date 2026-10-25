@@ -470,11 +470,13 @@ class _AttachedLibraryTile extends StatelessWidget {
                 ),
             ],
           ),
-          if (library.isOk && linksIncomplete && !linksBuilding)
+          if (library.isOk && linksIncomplete && !linksBuilding) ...[
+            const SizedBox(height: 4),
             ActionButton.neutral(
               onPressed: enabled ? onRebuildLinks : null,
               text: context.settingsText('בנה אינדקס מחדש'),
             ),
+          ],
           if (library.isOk &&
               library.updateSource != null &&
               !library.updateSourceMismatch) ...[
