@@ -41,7 +41,6 @@ Future<FileSyncResult> runCustomFoldersDbSyncInIsolate({
   required String userBooksDbPath,
   required String libraryPath,
   required List<CustomFolder> customFolders,
-  String folderName = '',
   String? onlyFolderPath,
 }) async {
   Map<String, Object?> buildPayload({required bool syncFolders}) =>
@@ -50,7 +49,6 @@ Future<FileSyncResult> runCustomFoldersDbSyncInIsolate({
         'dbPath': dbPath,
         'userBooksDbPath': userBooksDbPath,
         'libraryPath': libraryPath,
-        'folderName': folderName,
         'customFolders': customFolders.map((f) => f.toJson()).toList(),
         'syncFolders': syncFolders,
         'onlyFolderPath': onlyFolderPath,
@@ -231,7 +229,6 @@ Future<Map<String, Object?>> _syncWorkerEntryPoint(
   void Function()? onProgress,
 }) async {
   final libraryPath = payload['libraryPath'] as String;
-  final folderName = (payload['folderName'] as String?) ?? '';
   final syncFolders = (payload['syncFolders'] as bool?) ?? true;
   final onlyFolderPath = payload['onlyFolderPath'] as String?;
   final rawFolders = (payload['customFolders'] as List)
@@ -242,7 +239,6 @@ Future<Map<String, Object?>> _syncWorkerEntryPoint(
     final result = await service.syncCustomFoldersWithInputs(
       libraryPath: libraryPath,
       customFolders: customFolders,
-      folderName: folderName,
       syncFolders: syncFolders,
       onlyFolderPath: onlyFolderPath,
       onProgress: onProgress == null ? null : (_, _) => onProgress(),

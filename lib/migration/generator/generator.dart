@@ -36,30 +36,13 @@ class DatabaseGenerator {
   /// Callback for progress updates
   final void Function(double progress, String message)? onProgress;
 
-  /// Library root path for relative path computations
-  late String _libraryRoot;
-
   /// Cache of source name -> id from DB
   final Map<String, int> _sourceNameToId = {};
 
-  /// Tracks books processed from priority list to avoid double insertion
-  final Set<String> _processedPriorityBookKeys = {};
-
   /// Overall progress across books
-  final int _totalBooksToProcess = 0;
   int _processedBooksCount = 0;
 
-  /// Book contents cache: maps library-relative key -> list of lines
-  final Map<String, List<String>> _bookContentCache = {};
-
-  DatabaseGenerator(this.sourceDirectory, this.repository, {this.onProgress})
-    : _libraryRoot = sourceDirectory;
-
-  /// Initializes the generator for sync operations.
-  /// [libraryRoot] Optional root path for library-relative calculations.
-  void initializeForSync({String? libraryRoot}) {
-    _libraryRoot = libraryRoot ?? sourceDirectory;
-  }
+  DatabaseGenerator(this.sourceDirectory, this.repository, {this.onProgress});
 
   /// Processes a directory recursively, creating categories and books.
   ///
@@ -86,12 +69,6 @@ class DatabaseGenerator {
         await processDirectory(entity.path, categoryId, level + 1);
       } else if (entity is File &&
           await isSupportedBookFileByContent(entity.path)) {
-        // Skip if already processed from priority list
-        final key = _toLibraryRelativeKey(entity.path);
-        if (_processedPriorityBookKeys.contains(key)) {
-          continue;
-        }
-
         if (parentCategoryId == null) {
           continue;
         }
@@ -159,11 +136,9 @@ class DatabaseGenerator {
   ///
   /// [bookPath] The path to the book file
   /// [categoryId] The ID of the category the book belongs to
-  /// [isPersonal] Whether the book is personal (default: false)
   Future<void> createAndProcessBook(
     String bookPath,
     int categoryId, {
-    bool isPersonal = false,
     bool insertContent = true,
     String? sourceName,
   }) async {
@@ -249,13 +224,9 @@ class DatabaseGenerator {
         }
 
         _processedBooksCount++;
-        final pct = _totalBooksToProcess > 0
-            ? (_processedBooksCount * 100 ~/ _totalBooksToProcess)
-            : 0;
         onProgress?.call(
-          _processedBooksCount /
-              (_totalBooksToProcess > 0 ? _totalBooksToProcess : 1),
-          'עודכן ספר: $title ($pct%)',
+          _processedBooksCount.toDouble(),
+          'עודכן ספר: $title',
         );
         return;
       }
@@ -307,13 +278,9 @@ class DatabaseGenerator {
 
       // Book-level progress
       _processedBooksCount++;
-      final pct = _totalBooksToProcess > 0
-          ? (_processedBooksCount * 100 ~/ _totalBooksToProcess)
-          : 0;
       onProgress?.call(
-        _processedBooksCount /
-            (_totalBooksToProcess > 0 ? _totalBooksToProcess : 1),
-        'מעבד ספר: $title ($pct%)',
+        _processedBooksCount.toDouble(),
+        'מעבד ספר: $title',
       );
     } catch (e, stackTrace) {
       final title = path.basenameWithoutExtension(bookPath);
@@ -362,8 +329,7 @@ class DatabaseGenerator {
               embedImages: false,
             ),
           )).split('\n')
-        : _bookContentCache[_toLibraryRelativeKey(bookPath)] ??
-              await readBookLines(bookPath);
+        : await readBookLines(bookPath);
 
     if (!storeLines) {
       final roots = TocParser.parseEntriesFromContent(lines.join('\n'));
@@ -649,18 +615,6 @@ class DatabaseGenerator {
       }
     } catch (e) {
       // Ignore deletion mistakes (e.g. permissions)
-    }
-  }
-
-  /// Compute a normalized key for a book file relative to the library root
-  String _toLibraryRelativeKey(String filePath) {
-    try {
-      final rel = path
-          .relative(filePath, from: _libraryRoot)
-          .replaceAll('\\', '/');
-      return rel;
-    } catch (e) {
-      return path.basename(filePath);
     }
   }
 

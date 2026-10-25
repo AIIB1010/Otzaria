@@ -737,7 +737,6 @@ class FileSyncService {
   Future<FileSyncResult> syncCustomFoldersWithInputs({
     required String libraryPath,
     required List<CustomFolder> customFolders,
-    String folderName = '',
     void Function(double progress, String message)? onProgress,
     bool syncFolders = true,
     String? onlyFolderPath,
@@ -766,10 +765,6 @@ class FileSyncService {
           _customFoldersRepo,
           onProgress: onProgress,
         );
-        final libraryRoot = folderName.isNotEmpty
-            ? path.join(libraryPath, folderName)
-            : libraryPath;
-        customFoldersGenerator.initializeForSync(libraryRoot: libraryRoot);
 
         _reportProgress(0.4, 'סורק תיקיות מותאמות אישית...');
 

@@ -584,9 +584,6 @@ class CustomFoldersBloc extends Bloc<CustomFoldersEvent, CustomFoldersState> {
       throw Exception('נתיב הספרייה לא מוגדר');
     }
 
-    final folderName =
-        Settings.getValue<String>(SettingsRepository.keyLibraryFolderName) ??
-        '';
     final userBooksDbPath = await UserBooksDatabaseHolder.resolveDbPath();
 
     // הסנכרון כותב אך ורק ל-user_books.db ופותח את seforim.db read-only,
@@ -596,7 +593,6 @@ class CustomFoldersBloc extends Bloc<CustomFoldersEvent, CustomFoldersState> {
       userBooksDbPath: userBooksDbPath,
       libraryPath: libraryPath,
       customFolders: folders,
-      folderName: folderName,
       onlyFolderPath: onlyFolderPath,
     );
   }
