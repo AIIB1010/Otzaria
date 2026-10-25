@@ -10,6 +10,7 @@ import 'package:otzaria/data/data_providers/file_system_data_provider.dart';
 import 'package:otzaria/data/data_providers/file_system_library_provider.dart';
 import 'package:otzaria/data/data_providers/library_provider.dart';
 import 'package:otzaria/data/data_providers/library_provider_manager.dart';
+import 'package:otzaria/data/data_providers/sqlite_data_provider.dart';
 import 'package:otzaria/data/repository/data_repository.dart';
 import 'package:otzaria/library/models/library.dart';
 import 'package:otzaria/models/book_source.dart';
@@ -203,7 +204,8 @@ void main() {
       );
     });
 
-    tearDown(() {
+    tearDown(() async {
+      await SqliteDataProvider.instance.dispose();
       NavigationRepository.debugIsAndroidOverride = null;
       NavigationRepository.debugCanOpenSqliteOverride = null;
     });

@@ -554,6 +554,33 @@ class SqliteDataProvider {
   /// לא נפתח; null כשהמסד נפתח או שלא נבדק.
   int? get unsupportedDbSchemaVersion => _unsupportedDbSchemaVersion;
 
+  /// ממתין להכרעת הסכמה כשהמסד טרם נפתח. כשל פתיחה אחר משאיר
+  /// את מסלול הקבצים החלופי זמין.
+  FutureOr<bool> checkUnsupportedDbSchema() {
+    if (_isInitialized || _unsupportedDbSchemaVersion != null) {
+      return _unsupportedDbSchemaVersion != null;
+    }
+    if (_initializationFuture == null &&
+        (!Settings.isInitialized ||
+            ((Settings.getValue<String>(SettingsRepository.keyLibraryPath) ??
+                        '')
+                    .isEmpty &&
+                (Settings.getValue<String>(
+                          SettingsRepository.keyDbEffectivePath,
+                        ) ??
+                        '')
+                    .isEmpty))) {
+      return false;
+    }
+    return initialize().then(
+      (_) => _unsupportedDbSchemaVersion != null,
+      onError: (Object error) {
+        debugPrint('⚠️ אתחול מסד הספרייה נכשל: $error');
+        return false;
+      },
+    );
+  }
+
   /// Gets the database path
   String get dbPath => _dbPath;
 
