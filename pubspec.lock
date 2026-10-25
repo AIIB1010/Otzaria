@@ -1331,8 +1331,8 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/pdfrx"
-      ref: "11e8f7132d59fa765c778e57b1a2e4ead45899be"
-      resolved-ref: "11e8f7132d59fa765c778e57b1a2e4ead45899be"
+      ref: d71554ac810d6a7ea1638ec2715276aa0a8ba988
+      resolved-ref: d71554ac810d6a7ea1638ec2715276aa0a8ba988
       url: "https://github.com/Otzaria/pdfrx"
     source: git
     version: "2.9.0"
@@ -1340,8 +1340,8 @@ packages:
     dependency: "direct overridden"
     description:
       path: "packages/pdfrx_engine"
-      ref: "11e8f7132d59fa765c778e57b1a2e4ead45899be"
-      resolved-ref: "11e8f7132d59fa765c778e57b1a2e4ead45899be"
+      ref: d71554ac810d6a7ea1638ec2715276aa0a8ba988
+      resolved-ref: d71554ac810d6a7ea1638ec2715276aa0a8ba988
       url: "https://github.com/Otzaria/pdfrx"
     source: git
     version: "0.7.4"
