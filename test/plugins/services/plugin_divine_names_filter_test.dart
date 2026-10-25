@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:otzaria/book_common/utils/link_anchor_markers.dart';
+import 'package:otzaria/divine_names/models/divine_name_forms.dart';
 import 'package:otzaria/divine_names/models/divine_name_spans.dart';
 import 'package:otzaria/divine_names/repository/divine_names_repository.dart';
 import 'package:otzaria/models/books.dart';
@@ -9,6 +11,8 @@ import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_display/text_display_exports.dart';
+import 'package:otzaria/widgets/smart_text/render_settings.dart';
+import 'package:otzaria/widgets/smart_text/text_renderer_service.dart';
 
 import '../../helpers/memory_settings_cache.dart';
 
@@ -157,6 +161,93 @@ void main() {
       displayProfile: const TextDisplayProfile(nikud: MarkVisibility.hide),
     ));
     expect(result, 'אמר אלקים\nשוב ידוד');
+  });
+
+  test('תוכן ספר תואם לקורא גם כשהפיסוק והניקוד מוסתרים', () {
+    const raw = '<b>שַׁדַּי</b>, אֲדֹנָי; אֱלוֹהַ: אֶהְיֶה יהוה ויהוה';
+    final visible = TextRendererService.stripHtml(raw);
+    final builder = DivineNameSpansBuilder();
+    for (final (text, kind) in [
+      ('שַׁדַּי', DivineNameKind.shaddai),
+      ('אֲדֹנָי', DivineNameKind.adnut),
+      ('אֱלוֹהַ', DivineNameKind.eloah),
+      ('אֶהְיֶה', DivineNameKind.ehyeh),
+      ('יהוה', DivineNameKind.hvyh),
+    ]) {
+      final start = visible.indexOf(text);
+      builder.add(0, start, start + text.length, kind);
+    }
+    final spans = builder.build();
+    final marked = injectDivineNameMarkers(raw, spans, 0);
+    expect(marked, contains('divine-name'));
+    for (final punctuation in MarkVisibility.values) {
+      for (final nikud in MarkVisibility.values) {
+        for (final holyName in HolyNameDisplay.values) {
+          final profile = TextDisplayProfile(
+            punctuation: punctuation,
+            nikud: nikud,
+            holyName: holyName,
+            divineNames: DivineNamesDisplay.substitute,
+          );
+          final result = filterPluginBookContent((
+            rawText: raw,
+            spans: spans,
+            names: PluginDivineNamesDisplay.of(profile),
+            displayProfile: profile,
+          ));
+          final reader = TextRendererService.processText(
+            marked,
+            RenderSettings.fromProfile(profile),
+          );
+          expect(
+            TextRendererService.stripHtml(result),
+            withoutDivineNameJoiners(TextRendererService.stripHtml(reader)),
+            reason: '$punctuation / $nikud / $holyName',
+          );
+          expect(result, isNot(contains('divine-name')));
+          expect(result, isNot(contains(kDivineNameWordJoiner)));
+        }
+      }
+    }
+  });
+
+  test('סינון עם פרופיל משמר HTML, raw ומיקום כותרת אחרי שם מוחלף', () {
+    const raw = '<b>שַׁדַּי</b>, כותרת יהוה';
+    final spans =
+        (DivineNameSpansBuilder()
+              ..add(0, 0, 'שַׁדַּי'.length, DivineNameKind.shaddai))
+            .build();
+    const profile = TextDisplayProfile(
+      nikud: MarkVisibility.hide,
+      punctuation: MarkVisibility.hide,
+      holyName: HolyNameDisplay.hehApostrophe,
+      divineNames: DivineNamesDisplay.substitute,
+    );
+    final request = (
+      rawText: raw,
+      spans: spans,
+      names: PluginDivineNamesDisplay.of(profile),
+      displayProfile: profile,
+    );
+    final filtered = filterPluginBookContent(request);
+    expect(filtered, "<b>ש-די</b> כותרת ה'");
+    expect(
+      locatePluginBookSection((
+        request: request,
+        filtered: filtered,
+        section: 'כותרת',
+      )),
+      filtered.indexOf('כותרת'),
+    );
+    expect(
+      filterPluginBookContent((
+        rawText: raw,
+        spans: spans,
+        names: PluginDivineNamesDisplay.raw,
+        displayProfile: profile,
+      )),
+      '<b>שדי</b> כותרת יהוה',
+    );
   });
 
   group('הגדרת המשתמש נקראת ברגע הקריאה', () {

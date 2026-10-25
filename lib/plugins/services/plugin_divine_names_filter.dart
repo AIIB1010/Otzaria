@@ -318,28 +318,32 @@ TextDisplayProfile? _contentProfile(PluginBookContentFilterRequest request) =>
     : request.names.applyTo(request.displayProfile!);
 
 String _filterBookContentLine(
-  String line,
+  String rawLine,
   int lineIndex,
   PluginBookContentFilterRequest request,
   TextDisplayProfile? profile,
 ) {
   final names = request.names;
   if (profile == null) {
-    return filterPluginDivineNamesLine(line, lineIndex, request.spans, names);
+    return filterPluginDivineNamesLine(
+      rawLine,
+      lineIndex,
+      request.spans,
+      names,
+    );
   }
-  if (names.filters) {
-    final marked = injectDivineNameMarkers(line, request.spans, lineIndex);
-    if (!identical(marked, line)) {
-      line = resolveDivineNameMarkers(
-        marked,
-        substituteOtherNames: names.substituteOtherNames,
-        holyNameStyle: names.holyNameStyle,
-      );
-    }
+  final marked = names.filters
+      ? injectDivineNameMarkers(rawLine, request.spans, lineIndex)
+      : rawLine;
+  var line = applyTextDisplayProfile(marked, profile);
+  if (!identical(marked, rawLine)) {
+    line = resolveDivineNameMarkers(
+      line,
+      substituteOtherNames: names.substituteOtherNames,
+      holyNameStyle: names.holyNameStyle,
+    );
   }
-  return withoutDivineNameJoiners(
-    applyTextDisplayProfile(line, profile).replaceAll('\n', '<br>'),
-  );
+  return withoutDivineNameJoiners(line.replaceAll('\n', '<br>'));
 }
 
 /// אופסט [section] בתוכן המסונן [filtered], או -1. מחרוזת שמורה, או כותרת
