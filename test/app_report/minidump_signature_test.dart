@@ -34,6 +34,102 @@ void main() {
       expect(signature.frames, isEmpty);
     });
 
+    // מפת זיכרון של app.so אינה כוללת ראיה לזהות התמונה.
+    const dartText = (
+      base: 0x20840b7c000,
+      allocationBase: 0x2083fb90000,
+      size: 0x133e000,
+      protect: 0x20, // PAGE_EXECUTE_READ
+      type: 0x20000, // MEM_PRIVATE
+    );
+
+    test('קוד פרטי ללא זיהוי תמונה אינו app.so, למשל FFI trampoline', () async {
+      final signature = await readMinidumpSignature(
+        write(
+          buildMinidump(
+            exceptionAddress: 0x10001030,
+            modules: const [],
+            memoryRegions: const [
+              (
+                base: 0x10001000,
+                allocationBase: 0x10000000,
+                size: 0x1000,
+                protect: 0x20,
+                type: 0x20000,
+              ),
+            ],
+          ),
+        ),
+      );
+      expect(signature!.exceptionType, '0xc0000005');
+      expect(signature.frames, isEmpty);
+    });
+
+    test('מפת זיכרון ללא זהות תמונה אינה מספיקה לחתימת app.so', () async {
+      final signature = await readMinidumpSignature(
+        write(
+          buildMinidump(
+            exceptionAddress: 0x20840d6b25a,
+            memoryRegions: const [dartText],
+          ),
+        ),
+      );
+      expect(signature!.exceptionType, '0xc0000005');
+      expect(signature.frames, isEmpty);
+    });
+
+    test(
+      'זיכרון פרטי שאינו קוד, או image בלי מודול — קוד החריגה בלבד',
+      () async {
+        for (final region in [
+          (
+            base: dartText.base,
+            allocationBase: dartText.allocationBase,
+            size: dartText.size,
+            protect: 0x04, // PAGE_READWRITE
+            type: 0x20000,
+          ),
+          (
+            base: dartText.base,
+            allocationBase: dartText.allocationBase,
+            size: dartText.size,
+            protect: 0x20,
+            type: 0x1000000, // MEM_IMAGE
+          ),
+        ]) {
+          final signature = await readMinidumpSignature(
+            write(
+              buildMinidump(
+                exceptionAddress: 0x20840d6b25a,
+                memoryRegions: [region],
+              ),
+            ),
+          );
+          expect(signature!.exceptionType, '0xc0000005');
+          expect(signature.frames, isEmpty);
+        }
+      },
+    );
+
+    test('מודול קודם למפת הזיכרון', () async {
+      final signature = await readMinidumpSignature(
+        write(
+          buildMinidump(
+            memoryRegions: const [
+              (
+                base: 0x7ffa10000000,
+                allocationBase: 0x7ffa10000000,
+                size: 0x2000000,
+                protect: 0x20,
+                type: 0x20000,
+              ),
+            ],
+          ),
+        ),
+      );
+      expect(signature!.frames, ['flutter_windows.dll+0x1e220']);
+    });
+
     test('רשימת מודולים קטועה — קוד החריגה נשמר (issue #1978)', () async {
       final full = buildMinidump();
       final signature = await readMinidumpSignature(
