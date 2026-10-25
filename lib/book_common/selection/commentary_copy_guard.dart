@@ -20,13 +20,19 @@ class CommentarySelectionTracker extends StatefulWidget {
   const CommentarySelectionTracker({super.key, required this.child});
   final Widget child;
 
-  static CommentarySourceSelection? selectionIn(GlobalKey key) {
-    CommentarySourceSelection? selection;
+  static CommentarySourceSelection? selectionIn(GlobalKey key) =>
+      _trackerIn(key)?.snapshot;
+
+  /// גוף המפרש בלבד, בלי הכותרת ובלי בלוק הלעז הנוסף.
+  static RenderObject? renderedBodyIn(GlobalKey key) =>
+      _trackerIn(key)?.context.findRenderObject();
+
+  static _CommentarySelectionTrackerState? _trackerIn(GlobalKey key) {
+    _CommentarySelectionTrackerState? tracker;
     void visit(Element element) {
       if (element is StatefulElement &&
           element.state is _CommentarySelectionTrackerState) {
-        selection =
-            (element.state as _CommentarySelectionTrackerState).snapshot;
+        tracker = element.state as _CommentarySelectionTrackerState;
       } else {
         element.visitChildren(visit);
       }
@@ -34,7 +40,7 @@ class CommentarySelectionTracker extends StatefulWidget {
 
     final context = key.currentContext;
     if (context is Element) visit(context);
-    return selection;
+    return tracker;
   }
 
   @override

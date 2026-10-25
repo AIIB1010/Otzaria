@@ -22,16 +22,49 @@ import 'package:otzaria/settings/engine/settings_bloc.dart';
 import 'package:otzaria/settings/engine/settings_event.dart';
 import 'package:otzaria/settings/engine/settings_state.dart';
 import 'package:otzaria/tabs/models/pdf_tab.dart';
+import 'package:otzaria/widgets/commentary/commentary_content.dart';
 
 import '../helpers/memory_settings_cache.dart';
 import '../support/search_engine_test_init.dart';
+import '../test_helpers/text_occurrence_visibility.dart';
 
 // כותרות ייחודיות: מטמון התוכן של Link סטטי ומשותף לכל הבדיקות.
-const _commentatorPrefix = 'מפרש חיפוש PDF 1505';
+const _commentatorPrefix = 'מטמון בכותרת מפרש חיפוש PDF 1505';
 const _groupCount = 40;
 
 // ריפוד באפסים: מיון הקישורים לפי כותרת שווה למיון המספרי.
 String _title(int i) => '$_commentatorPrefix ${i.toString().padLeft(2, "0")}';
+
+/// שורת המפרש הראשון שתוכנה ארוך: התאמה בתחילתו ואחת באמצעו.
+const _longIndex2 = 2534;
+const _longQuery = 'מטמון';
+final _plainLongContent = [
+  _longQuery,
+  for (var i = 0; i < 400; i++) 'מילה',
+  _longQuery,
+  for (var i = 0; i < 400; i++) 'סוף',
+].join(' ');
+
+String _longContent = _plainLongContent;
+final _longContentCases = <String, String>{
+  'רגיל': _plainLongContent,
+  'מנוקד': [
+    _longQuery,
+    for (var i = 0; i < 800; i++) 'מִילָה',
+    _longQuery,
+    for (var i = 0; i < 800; i++) 'סוף',
+  ].join(' '),
+  'HTML':
+      '<span title="מטמון" style="color:red">$_longQuery</span> '
+      '${List.filled(800, 'מִילָה &amp;').join(' ')} '
+      '<b><i>$_longQuery</i></b> ${List.filled(800, 'סוף').join(' ')}',
+  'מקטעים': [
+    _longQuery,
+    for (var i = 0; i < 8000; i++) 'מילה',
+    _longQuery,
+    for (var i = 0; i < 4000; i++) 'סוף',
+  ].join(' '),
+};
 
 Future<void> main() async {
   final engineReady = await tryInitSearchEngine();
@@ -444,6 +477,66 @@ Future<void> main() async {
         isTrue,
       );
     }, skip: !engineReady);
+
+    for (final entry in _longContentCases.entries) {
+      testWidgets(
+        '${entry.key}: מעבר לתוצאה שבאמצע מפרש ארוך מציג אותה ולא את תחילת המפרש (issue #2534)',
+        (tester) async {
+          _longContent = entry.value;
+          Link.clearContentCache();
+          tester.view.physicalSize = const Size(500, 600);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final tab = _tab(index2: _longIndex2);
+          addTearDown(tab.dispose);
+
+          await tester.pumpWidget(
+            _wrap(
+              PdfCommentaryPanel(
+                tab: tab,
+                linksCount: tab.links.length,
+                openBookCallback: (_) {},
+                fontSize: 16,
+                commentaryGroupsLoader: (links) async => [
+                  for (final link in links)
+                    LinkGroup(
+                      bookTitle: link.path2.replaceAll('.txt', ''),
+                      links: [link],
+                    ),
+                ],
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byIcon(FluentIcons.search_24_regular).first);
+          await tester.pumpAndSettle();
+          await tester.enterText(find.byType(TextField), _longQuery);
+          await tester.pump(const Duration(milliseconds: 600));
+          await tester.pumpAndSettle();
+
+          double matchPosition(int occurrence) =>
+              textOccurrenceViewportFraction(
+                tester,
+                find.byType(CommentaryContent),
+                _longQuery,
+                occurrence,
+              );
+
+          await tester.testTextInput.receiveAction(TextInputAction.search);
+          await tester.pumpAndSettle();
+          expect(find.textContaining('1/2'), findsOneWidget);
+          expect(matchPosition(0), isInViewport);
+
+          await tester.testTextInput.receiveAction(TextInputAction.search);
+          await tester.pumpAndSettle();
+          expect(find.textContaining('2/2'), findsOneWidget);
+          // ההתאמה עצמה סמוך לקו היישור של הקפיצה (10% מראש הרשימה).
+          expect(matchPosition(1), inInclusiveRange(0.05, 0.2));
+        },
+        skip: !engineReady,
+      );
+    }
   });
 }
 
@@ -475,6 +568,8 @@ PdfBookTab _tab({int index2 = 1}) {
 }
 
 Widget _wrap(Widget child) => MaterialApp(
+  builder: (context, child) =>
+      Directionality(textDirection: TextDirection.rtl, child: child!),
   home: MultiBlocProvider(
     providers: [
       BlocProvider<SettingsBloc>.value(value: _FakeSettingsBloc()),
@@ -568,7 +663,9 @@ class _FakeLibraryProvider implements LibraryProvider {
 
   @override
   Future<String> getLinkContent(Link link) async =>
-      'דְּבֵין עָמֹק בֵּין דֵּהֶה טָהוֹר.';
+      link.index2 == _longIndex2 && link.path2 == '${_title(1)}.txt'
+      ? _longContent
+      : 'דְּבֵין עָמֹק בֵּין דֵּהֶה טָהוֹר.';
 
   @override
   Future<bool> hasBook(String title, int categoryId, String fileType) async =>
