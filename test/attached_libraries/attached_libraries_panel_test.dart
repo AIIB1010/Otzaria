@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
@@ -9,6 +11,7 @@ import 'package:otzaria/attached_libraries/models/attached_library.dart';
 import 'package:otzaria/attached_libraries/repository/attached_libraries_repository.dart';
 import 'package:otzaria/attached_libraries/repository/external_link_repository.dart';
 import 'package:otzaria/attached_libraries/view/attached_libraries_panel.dart';
+import 'package:otzaria/attached_libraries/view/attached_library_update_view.dart';
 import 'package:otzaria/library/bloc/library_event.dart';
 
 import '../helpers/memory_settings_cache.dart';
@@ -221,6 +224,51 @@ void main() {
       );
       expect(find.text('בנה אינדקס מחדש'), findsNothing);
     });
+
+    // בשולחן העבודה לכפתור אין שוליים שקופים, והרקע שלו נצמד לשורת התגיות.
+    for (final textScale in [1.0, 1.5]) {
+      testWidgets(
+        'כפתור "בנה אינדקס מחדש" מרוחק מהתגיות (issue #2976, הגדלה $textScale)',
+        (tester) async {
+          debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+          try {
+            tester.platformDispatcher.textScaleFactorTestValue = textScale;
+            addTearDown(
+              tester.platformDispatcher.clearTextScaleFactorTestValue,
+            );
+            final repository = _FakeRepository([_library('dbA')]);
+            AttachedLibrariesRepository.instance = repository;
+            await pumpPanel(tester, repository);
+            final links = ExternalLinkRepository.instance;
+            addTearDown(() => links.incompleteSlugs.value = const {});
+            links.incompleteSlugs.value = {'dbA'};
+            await tester.pump();
+
+            final button = tester.getRect(
+              find
+                  .descendant(
+                    of: find.ancestor(
+                      of: find.text('בנה אינדקס מחדש'),
+                      matching: find.byType(FilledButton),
+                    ),
+                    matching: find.byType(Material),
+                  )
+                  .first,
+            );
+            final tagsBottom = find
+                .byType(AttachedInfoChip)
+                .evaluate()
+                .map(
+                  (chip) => tester.getRect(find.byWidget(chip.widget)).bottom,
+                )
+                .reduce(max);
+            expect(button.top - tagsBottom, greaterThanOrEqualTo(4));
+          } finally {
+            debugDefaultTargetPlatformOverride = null;
+          }
+        },
+      );
+    }
   });
 
   testWidgets('בלי קישור (מובייל) — אין הוספת תיקייה', (tester) async {
