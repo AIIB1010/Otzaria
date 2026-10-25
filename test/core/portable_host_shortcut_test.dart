@@ -184,11 +184,7 @@ void main() {
   test('רענון אינו משנה קובץ הפעלה קיים מחוץ לעותק הנייד', () async {
     final unrelated = File(p.join(root.path, 'drive', 'אוצריא.exe'));
     unrelated.writeAsStringSync('unrelated app');
-    final isolatedShortcut = _IsolatedDriveShortcut(
-      appDir: appDir,
-      hostDir: hostDir,
-      rootLauncherPath: unrelated.path,
-    );
+    final isolatedShortcut = shortcut();
 
     await isolatedShortcut.refreshIfNeeded();
 
@@ -196,17 +192,4 @@ void main() {
     expect(await isolatedShortcut.state(), PortableShortcutState.none);
     expect(File(p.join(hostDir, 'launcher.ini')).existsSync(), isFalse);
   });
-}
-
-class _IsolatedDriveShortcut extends PortableHostShortcut {
-  _IsolatedDriveShortcut({
-    required super.appDir,
-    required super.hostDir,
-    required this.rootLauncherPath,
-  });
-
-  final String rootLauncherPath;
-
-  // מבודד את קובץ הכונן כדי שהבדיקה לא תכתוב מחוץ לתיקייה הזמנית.
-  String get driveRootLauncherPath => rootLauncherPath;
 }
