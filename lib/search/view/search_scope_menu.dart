@@ -34,14 +34,6 @@ class SearchScopeMenuButton extends StatefulWidget {
   final Set<String> selected;
   final ValueChanged<Set<String>> onChanged;
 
-  /// רוחב השדה (העוגן). ברירת המחדל מתאימה לדיאלוג; בסרגל התוצאות מועבר
-  /// [double.infinity] כדי להתרחב לרוחב הסרגל הניתן-לשינוי.
-  final double width;
-
-  /// האם להציג chips של הבחירה מתחת לשדה. בדיאלוג — כן; בסרגל התוצאות
-  /// מועבר `false` (ה-chips היו מזיזים את העץ), ובמקומם מונה קומפקטי בשדה.
-  final bool showChips;
-
   /// מציג רק ספרים מהספרייה הרשמית (בחיפוש החכם — רק להם יש וקטורים).
   final bool officialBooksOnly;
 
@@ -52,8 +44,6 @@ class SearchScopeMenuButton extends StatefulWidget {
     super.key,
     required this.selected,
     required this.onChanged,
-    this.width = 300,
-    this.showChips = true,
     this.officialBooksOnly = false,
     this.excludeUserBooks = false,
   });
@@ -309,24 +299,19 @@ class _SearchScopeMenuButtonState extends State<SearchScopeMenuButton> {
           controller: _portal,
           overlayChildBuilder: _buildOverlay,
           child: SizedBox(
-            width: widget.width,
-            child: widget.showChips
-                ? Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // העוגן הוא השדה בלבד — כך התפריט לא זז כשה-chips משתנים.
-                      KeyedSubtree(
-                        key: _anchorKey,
-                        child: _buildField(context, enabled: enabled),
-                      ),
-                      _buildActiveChips(context),
-                    ],
-                  )
-                : KeyedSubtree(
-                    key: _anchorKey,
-                    child: _buildField(context, enabled: enabled),
-                  ),
+            width: 300,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // העוגן הוא השדה בלבד — כך התפריט לא זז כשה-chips משתנים.
+                KeyedSubtree(
+                  key: _anchorKey,
+                  child: _buildField(context, enabled: enabled),
+                ),
+                _buildActiveChips(context),
+              ],
+            ),
           ),
         );
       },
@@ -335,9 +320,6 @@ class _SearchScopeMenuButtonState extends State<SearchScopeMenuButton> {
 
   Widget _buildField(BuildContext context, {required bool enabled}) {
     final colorScheme = Theme.of(context).colorScheme;
-    // המונה בשדה מחליף את ה-chips רק כשהם מוסתרים (בסרגל התוצאות).
-    final filters = _activeFilters();
-    final showBadge = !widget.showChips && filters.isNotEmpty;
 
     return TapRegion(
       groupId: _tapGroup,
@@ -358,24 +340,11 @@ class _SearchScopeMenuButtonState extends State<SearchScopeMenuButton> {
               fontSize: 14,
               color: colorScheme.onSurfaceVariant,
             ),
-            prefixIcon: !showBadge
-                ? Icon(
-                    FluentIcons.filter_24_regular,
-                    size: 20,
-                    color: colorScheme.onSurfaceVariant,
-                  )
-                : Tooltip(
-                    message: filters.map((f) => f.label).join(', '),
-                    child: Badge(
-                      label: Text('${filters.length}'),
-                      offset: const Offset(-2, 2),
-                      child: Icon(
-                        FluentIcons.filter_24_regular,
-                        size: 20,
-                        color: colorScheme.primary,
-                      ),
-                    ),
-                  ),
+            prefixIcon: Icon(
+              FluentIcons.filter_24_regular,
+              size: 20,
+              color: colorScheme.onSurfaceVariant,
+            ),
             suffixIcon: _searchController.text.isNotEmpty
                 ? IconButton(
                     icon: const Icon(FluentIcons.dismiss_24_regular, size: 18),
@@ -451,7 +420,7 @@ class _SearchScopeMenuButtonState extends State<SearchScopeMenuButton> {
     return segment;
   }
 
-  /// הסינונים הפעילים ל-chips / למונה שבשדה. בחירת קטגוריות/ספרים ספציפיים
+  /// הסינונים הפעילים ל-chips. בחירת קטגוריות/ספרים ספציפיים
   /// מיוצגת בפריט *אחד*: שם הפריט כשהוא יחיד, אחרת מונה. בחירת "ספרי יסוד"
   /// ככלל אינה מגיעה לכאן — היא facet ממדי (`/base`) ומתויגת בלופ שמתחת.
   List<({String label, bool partial, VoidCallback onRemove})> _activeFilters() {
