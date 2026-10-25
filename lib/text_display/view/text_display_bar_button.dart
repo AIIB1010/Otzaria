@@ -128,8 +128,8 @@ class TextDisplayPopupPanel extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const Spacer(),
-                  Flexible(
+                  const SizedBox(width: AppTokens.spaceSM),
+                  Expanded(
                     child: Text(
                       viewLabel,
                       style: theme.textTheme.bodySmall,
@@ -137,7 +137,7 @@ class TextDisplayPopupPanel extends StatelessWidget {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(FluentIcons.dismiss_24_regular),
+                    icon: const Icon(FluentIcons.dismiss_24_regular, size: 20),
                     tooltip: 'סגור',
                     visualDensity: VisualDensity.compact,
                     onPressed: () => Navigator.of(context).pop(),
