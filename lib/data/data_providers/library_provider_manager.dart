@@ -583,21 +583,13 @@ class LibraryProviderManager {
   }
 
   /// Updates the book to provider mapping from a library catalog.
-  /// Maps books to the appropriate provider based on their type:
-  /// - TextBooks that are in the database -> DatabaseLibraryProvider
-  /// - PdfBooks and other file-based books -> FileSystemLibraryProvider
   Future<void> _updateBookToProviderMapping(Library library) async {
     _clearBookMapping();
     await _mapBooksRecursive(library);
   }
 
   /// Recursively maps all books in a category to their provider.
-  /// PdfBooks are always mapped to FileSystemLibraryProvider since they're file-based.
-  /// TextBooks are mapped based on whether they exist in the database or file system.
-  ///
-  /// **שים לב:** פונקציה זו קוראת ל-`getAvailableBookTitles()` שמבצעת שאילתה ל-DB.
-  /// היא נקראת פעם אחת בלבד מ-`_updateBookToProviderMapping` בזמן בניית הקטלוג.
-  /// אין לקרוא לה ממקומות נוספים כדי לא ליצור שאילתות מיותרות.
+  /// **שים לב:** שאילתת DB בכל קריאה; לקרוא רק מ-[_updateBookToProviderMapping].
   Future<void> _mapBooksRecursive(Category category) async {
     final dbRawKeys = await databaseProvider.getAvailableBookTitles();
     final dbKeys = dbRawKeys
