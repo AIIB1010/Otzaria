@@ -76,10 +76,8 @@ class LibraryBloc extends Bloc<LibraryEvent, LibraryState> {
     DataRepository? repository,
   }) : _repository = repository ?? DataRepository.instance,
        super(LibraryState.initial()) {
-    // droppable: בעלייה נשלחים שני LoadLibrary סמוכים (reveal + LibraryBrowser.
-    // initState). droppable זורק את השני בזמן שהראשון מעובד; ה-guard ב-
-    // _onLoadLibrary זורק כפילויות שמגיעות אחרי שכבר נטען (למשל ניווט חוזר
-    // למסך הספרייה). כך הטעינה הראשונית + תחזוקת הרקע (prune) רצות פעם אחת.
+    // בעלייה נשלחים שני LoadLibrary סמוכים (reveal + LibraryBrowser.initState):
+    // droppable זורק את השני בזמן הטעינה, וה-guard ב-_onLoadLibrary את הבאים.
     on<LoadLibrary>(_onLoadLibrary, transformer: droppable());
     on<RefreshLibrary>(_onRefreshLibrary);
     on<HiddenBooksChanged>(_onHiddenBooksChanged);
@@ -125,28 +123,19 @@ class LibraryBloc extends Bloc<LibraryEvent, LibraryState> {
     LoadLibrary event,
     Emitter<LibraryState> emit,
   ) async {
-    // טעינה ראשונית בלבד: אם הספרייה כבר נטענה, מתעלמים מ-LoadLibrary כפול
-    // (reveal + LibraryBrowser.initState, או ניווט חוזר). רענון מפורש נעשה
-    // דרך RefreshLibrary.
+    // טעינה ראשונית בלבד; רענון מפורש נעשה דרך RefreshLibrary.
     if (state.library != null && !state.isLoading) {
       return;
     }
     emit(state.copyWith(isLoading: true));
     try {
-      // אין כאן `set library = getLibrary()`: בטעינה הראשונית אין ערך קודם
-      // לרענן, וקריאת ה-getter הממוטמן ממזגת את הבנייה עם זו ש-
-      // _dispatchInitialLibraryLoad (החלטת האינדוקס) כבר התחיל. דריסת ה-Future
-      // כאן הייתה גורמת לבניית הקטלוג (~7030 ספרים) פעמיים בעלייה. הרענון
-      // המאולץ נשאר נכון ב-RefreshLibrary/UpdateLibraryPath, שם הנתונים השתנו.
+      // אין כאן `set library = getLibrary()`: ה-getter הממוטמן משתף בנייה שכבר
+      // התחילה, ודריסתו הייתה בונה את הקטלוג פעמיים בעלייה.
       DataRepository.instance.invalidateExternalBooksCache();
       await _emitLibraryRoot(emit);
 
-      // prune של תיקיות מותאמות שנמחקו מהדיסק הוא משימת תחזוקה — לא חיוני
-      // להצגת הספרייה הראשונית. הוא כולל I/O סינכרוני כבד (File.exists,
-      // פתיחת user_books DB, יצירת FileSyncService) שיכול לחסום את ה-UI thread
-      // במשך 1500ms+. מעבירים אותו לרקע אחרי שה-state כבר עודכן ל-UI.
-      // אם prune ימצא תיקיות שהוסרו, המשתמש יראה את השינוי בהפעלה הבאה או
-      // ב-RefreshLibrary הבא (שעדיין מבצע prune סינכרוני בכוונה).
+      // ה-prune כולל I/O סינכרוני כבד (1500ms+ על ה-UI thread) ולכן רץ ברקע;
+      // תוצאתו תיראה ברענון הבא של הספרייה או בהפעלה הבאה.
       launchBackgroundLibraryMaintenance(
         _pruneRemovedCustomFoldersIfNeeded,
         onError: (Object e) {
@@ -429,7 +418,7 @@ class LibraryBloc extends Bloc<LibraryEvent, LibraryState> {
     final customFolders = CustomFoldersManager.loadFolders(customFoldersJson);
 
     // התיקיות המותאמות אישית חיות ב-user_books.db. ה-FileSyncService
-    // צריך גישה לשני ה-DBs (seforim ל-links, user_books ל-prune).
+    // צריך גישה לשני ה-DBs (seforim לקריאה בלבד, user_books ל-prune).
     final userBooksDbPath = await UserBooksDatabaseHolder.resolveDbPath();
     if (!await File(userBooksDbPath).exists()) {
       return;
