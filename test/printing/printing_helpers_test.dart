@@ -251,6 +251,37 @@ void main() {
     });
   });
 
+  group('isEmptyLineRange — גבול סוף בלעדי (#3183)', () {
+    // שני עמודי דף גמרא שכנים: "טו." בשורות [10, 20), "טו:" מ-20.
+    final amudim = [
+      TocEntry(text: 'טו.', index: 10, level: 2),
+      TocEntry(text: 'טו:', index: 20, level: 2),
+    ];
+
+    test('סוף "טו." עם התחלה "טו:" — טווח ריק, והעוגן צריך להתיישר', () {
+      final start = amudim[1].index;
+      final end = headerSectionEndLine(amudim, 0, 40);
+      expect(end, start);
+      expect(isEmptyLineRange(start, end), isTrue);
+    });
+
+    test('עמוד בודד ושני עמודים אינם ריקים', () {
+      expect(
+        isEmptyLineRange(10, headerSectionEndLine(amudim, 0, 40)),
+        isFalse,
+      );
+      expect(
+        isEmptyLineRange(10, headerSectionEndLine(amudim, 1, 40)),
+        isFalse,
+      );
+    });
+
+    test('טווח הפוך נחשב ריק; עוגן שורה בודד אינו ריק', () {
+      expect(isEmptyLineRange(30, 20), isTrue);
+      expect(isEmptyLineRange(5, 5 + 1), isFalse);
+    });
+  });
+
   group('headerSectionEndLine — כותרות משנה מקוננות', () {
     // "הלכות" ברמה 1 וסימניהן ברמה 2; ההורה והסימן הראשון פותחים באותה שורה.
     final alt = [
