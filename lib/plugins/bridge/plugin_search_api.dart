@@ -226,15 +226,16 @@ class PluginSearchApi {
     if (rawId != null && PluginBookIdentity.parseId(rawId) == null) {
       _invalid('book id must be a whole number');
     }
-    for (final key in ['bookId', 'title', 'type', 'source']) {
+    for (final key in ['bookUid', 'bookId', 'title', 'type', 'source']) {
       if (identity[key] != null && identity[key] is! String) {
         _invalid('book $key must be a string');
       }
     }
     if (rawId == null &&
         identity['bookId'] == null &&
-        identity['title'] == null) {
-      _invalid('book identity requires id or bookId');
+        identity['title'] == null &&
+        (identity['bookUid'] as String?)?.trim().isNotEmpty != true) {
+      _invalid('book identity requires id, bookUid or bookId');
     }
   }
 

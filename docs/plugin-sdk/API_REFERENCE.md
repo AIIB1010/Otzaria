@@ -2121,7 +2121,15 @@ window.addEventListener('search.external.requested', async (event) => {
 `search.getOptions` לערכים החוקיים), ומפתחות פר-מילה נבדקים מול פיצול מילות
 השאילתה. ההיקף מוצג בתפריט "היקף החיפוש" של הכרטיסייה, והחיפוש רץ בתוכו.
 כך תוסף שקיבל `search.requested` יכול להחזיר את אותו חיפוש למסך החיפוש עם
-ה-`request` שקיבל, אחרי שהסיר ממנו את `order`, `limit` ו-`grouping`.
+ה-`request` שקיבל: `query` עובר לשדה הראשי, ו-`order`, `limit` ו-`grouping`
+אינם נכללים ב-`settings`. יתר ההגדרות, כולל השלילה וההיקף, נשמרות:
+
+```javascript
+Otzaria.on('search.requested', async ({ request }) => {
+  const { query, order, limit, grouping, ...settings } = request;
+  await Otzaria.call('reader.openSearchTab', { query, settings });
+});
+```
 
 ```javascript
 await Otzaria.call('reader.openSearchTab', {

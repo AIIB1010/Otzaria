@@ -521,6 +521,77 @@ Future<void> main() async {
       expect(facets.single, startsWith('/תנך/תורה/'));
     });
 
+    test('bookUid לבדו מזהה ספר, גם עם רווחים בקצוות', () {
+      final book = TextBook(id: 7, title: 'בראשית', topics: 'תנך, תורה');
+      for (final uid in ['id:7', ' id:7 ']) {
+        expect(
+          PluginSearchApi.resolveFacets({
+            'books': [
+              {'bookUid': uid},
+            ],
+          }, findBook: (identity) => identity['bookUid'] == uid ? book : null),
+          [FacetHelper.buildBookFacet('/תנך/תורה', book)],
+        );
+      }
+    });
+
+    test('bookUid מטיפוס שגוי נדחה גם כשיש id תקין', () {
+      for (final uid in [7, false, <String>[], <String, String>{}]) {
+        expect(
+          () => PluginSearchApi.resolveFacets({
+            'books': [
+              {'bookUid': uid, 'id': 7},
+            ],
+          }, findBook: (_) => fail('invalid identity reached the resolver')),
+          throwsA(
+            isA<Exception>().having(
+              (error) => error.toString(),
+              'message',
+              contains('book bookUid must be a string'),
+            ),
+          ),
+        );
+      }
+    });
+
+    test('bookUid ריק מחייב זהות ישנה ומשמר את האימות שלה', () {
+      final book = TextBook(id: 7, title: 'בראשית');
+      for (final uid in [null, '', ' \t ']) {
+        expect(
+          () => PluginSearchApi.resolveFacets({
+            'books': [
+              {'bookUid': uid},
+            ],
+          }, findBook: noBook),
+          throwsA(isA<Exception>()),
+        );
+        expect(
+          PluginSearchApi.resolveFacets({
+            'books': [
+              {'bookUid': uid, 'id': 7},
+            ],
+          }, findBook: (_) => book),
+          hasLength(1),
+        );
+      }
+      for (final legacy in [
+        {'id': 1.5},
+        {'bookId': 7},
+        {'title': 7},
+        {'type': 7},
+        {'source': 7},
+      ]) {
+        expect(
+          () => PluginSearchApi.resolveFacets({
+            'books': [
+              {'bookUid': 'id:7', ...legacy},
+            ],
+          }, findBook: (_) => fail('invalid identity reached the resolver')),
+          throwsA(isA<Exception>()),
+        );
+      }
+    });
+
     test('ספר שלא נמצא מחזיר not_found', () {
       expect(
         () => PluginSearchApi.resolveFacets({

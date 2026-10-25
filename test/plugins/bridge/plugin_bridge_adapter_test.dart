@@ -4754,31 +4754,46 @@ Future<void> main() async {
       skip: engineReady ? false : searchEngineSkipReason,
     );
 
-    test(
-      'search.query מצמצם את ההיקף לספר שנשלח',
-      () async {
-        final stub = _StubSearchRepository()
-          ..updates = [const SearchStreamUpdate(results: [], truncated: false)];
-        final adapter = buildAdapter(
-          books: [TextBook(id: 10, title: 'בראשית', topics: 'תנך, תורה')],
-          searchRepository: stub,
-        );
-
-        await adapter.execute('search', 'query', {
-          'query': 'בראשית',
-          '__streamId': 'test_search_3',
-          'books': [
-            {'id': 10},
-          ],
-        }, eventSink: (topic, payload) async {});
-
-        expect(
-          (stub.captured!['facets'] as List).single,
-          startsWith('/תנך/תורה/'),
-        );
+    for (final identity in [
+      {'id': 10},
+      {'bookUid': 'id:10'},
+      {
+        'bookUid': ' id:10 ',
+        'id': 99,
+        'bookId': 'שמות',
+        'title': 'שמות',
+        'type': 'pdf',
+        'source': 'user',
       },
-      skip: engineReady ? false : searchEngineSkipReason,
-    );
+    ]) {
+      test(
+        'search.query מצמצם את ההיקף לספר שנשלח: $identity',
+        () async {
+          final stub = _StubSearchRepository()
+            ..updates = [
+              const SearchStreamUpdate(results: [], truncated: false),
+            ];
+          final adapter = buildAdapter(
+            books: [TextBook(id: 10, title: 'בראשית', topics: 'תנך, תורה')],
+            searchRepository: stub,
+          );
+
+          await adapter.execute('search', 'query', {
+            'query': 'בראשית',
+            '__streamId': 'test_search_3',
+            'books': [
+              identity,
+            ],
+          }, eventSink: (topic, payload) async {});
+
+          expect(
+            (stub.captured!['facets'] as List).single,
+            startsWith('/תנך/תורה/'),
+          );
+        },
+        skip: engineReady ? false : searchEngineSkipReason,
+      );
+    }
 
     test('search.query דורש תעבורת stream פנימית', () async {
       final adapter = buildAdapter(books: [TextBook(id: 10, title: 'בראשית')]);
@@ -5825,54 +5840,145 @@ Future<void> main() async {
       expect(tab.negativeQueryController.text, 'גוי');
     });
 
-    test('settings.books מאתר את הספר בספרייה', () async {
-      final book = TextBook(id: 10, title: 'בראשית', topics: 'תנך, תורה');
-      final category = Category(
-        title: 'בדיקה',
-        description: '',
-        shortDescription: '',
-        order: 0,
-        subCategories: const [],
-        books: [book],
-        parent: null,
-      );
-      final library = Library(categories: [category]);
-      category.parent = library;
-      DataRepository.instance.library = Future.value(library);
-
-      await adapter.execute('reader', 'openSearchTab', {
-        'query': 'בראשית',
-        'autoSearch': false,
-        'settings': {
-          'books': [
-            {'id': 10},
-          ],
+    for (final autoSearch in [false, true]) {
+      for (final identity in [
+        {'id': 10},
+        {'bookUid': 'id:10'},
+        {
+          'bookUid': ' id:10 ',
+          'id': 99,
+          'bookId': 'שמות',
+          'title': 'שמות',
+          'type': 'pdf',
+          'source': 'user',
         },
-      });
-      expect(
-        capturedSearchTab().searchBloc.state.searchScopeFacets.single,
-        startsWith('/תנך/תורה/'),
-      );
+      ]) {
+        test(
+          'settings.books מאתר $identity עם autoSearch=$autoSearch',
+          () async {
+            final book = TextBook(id: 10, title: 'בראשית', topics: 'תנך, תורה');
+            final category = Category(
+              title: 'בדיקה',
+              description: '',
+              shortDescription: '',
+              order: 0,
+              subCategories: const [],
+              books: [book],
+              parent: null,
+            );
+            final library = Library(categories: [category]);
+            category.parent = library;
+            DataRepository.instance.library = Future.value(library);
 
-      await expectLater(
-        adapter.execute('reader', 'openSearchTab', {
-          'query': 'בראשית',
-          'settings': {
-            'books': [
-              {'id': 99},
-            ],
+            await adapter.execute('reader', 'openSearchTab', {
+              'query': 'בראשית',
+              'autoSearch': autoSearch,
+              'settings': {
+                'books': [
+                  identity,
+                ],
+              },
+            });
+            expect(
+              capturedSearchTab().searchBloc.state.searchScopeFacets.single,
+              startsWith('/תנך/תורה/'),
+            );
+
+            final tab = capturedSearchTab();
+            addTearDown(() async {
+              await tab.searchBloc.close();
+              tab.dispose();
+            });
+            await pumpEventQueue();
+            expect(tab.autoRunInitialSearch, autoSearch);
+            expect(
+              tab.searchBloc.state.searchQuery,
+              autoSearch ? 'בראשית' : '',
+            );
+
+            await expectLater(
+              adapter.execute('reader', 'openSearchTab', {
+                'query': 'בראשית',
+                'settings': {
+                  'books': [
+                    {'id': 99},
+                  ],
+                },
+              }),
+              throwsA(
+                isA<Exception>().having(
+                  (e) => e.toString(),
+                  'message',
+                  contains('error.not_found'),
+                ),
+              ),
+            );
+            expect(tabsBloc.captured.whereType<AddTab>(), hasLength(1));
           },
-        }),
-        throwsA(
-          isA<Exception>().having(
-            (e) => e.toString(),
-            'message',
-            contains('error.not_found'),
-          ),
-        ),
-      );
-      expect(tabsBloc.captured.whereType<AddTab>(), hasLength(1));
-    });
+          skip: autoSearch && !engineReady ? searchEngineSkipReason : false,
+        );
+      }
+    }
+
+    for (final autoSearch in [false, true]) {
+      test('search.requested חוזר לטאב עם היקף ושלילה: $autoSearch', () async {
+        final request = <String, dynamic>{
+          'query': 'שבת קודש',
+          'mode': 'advanced',
+          'order': 'catalogue',
+          'limit': 100,
+          'distance': 2,
+          'facets': ['/הלכה'],
+          'negativeQuery': 'גוי זר',
+          'proximityScope': 'wordDistance',
+          'wordMatchMode': 'all',
+          'grouping': 'none',
+          'wordOptions': {
+            'שבת_0': {'קידומות': true},
+          },
+          'negativeWordOptions': {
+            'גוי_0': {'סיומות': true},
+          },
+          'alternativeWords': {
+            '0': ['שבתות'],
+          },
+          'negativeAlternativeWords': {
+            '0': ['נכרי'],
+          },
+          'customSpacing': {'0-1': '3'},
+          'negativeCustomSpacing': {'0-1': '2'},
+        };
+        final settings = Map<String, dynamic>.of(request);
+        final query = settings.remove('query');
+        for (final key in ['order', 'limit', 'grouping']) {
+          settings.remove(key);
+        }
+        await adapter.execute('reader', 'openSearchTab', {
+          'query': query,
+          'autoSearch': autoSearch,
+          'settings': settings,
+        });
+        final tab = capturedSearchTab();
+        addTearDown(() async {
+          await tab.searchBloc.close();
+          tab.dispose();
+        });
+        await pumpEventQueue();
+        final state = tab.searchBloc.state;
+        expect(tab.queryController.text, 'שבת קודש');
+        expect(tab.negativeQueryController.text, 'גוי זר');
+        expect(state.currentFacets, ['/הלכה']);
+        expect(state.searchScopeFacets, ['/הלכה']);
+        expect(tab.searchOptions['שבת_0'], {'קידומות': true});
+        expect(tab.negativeSearchOptions['גוי_0'], {'סיומות': true});
+        expect(tab.alternativeWords[0], ['שבתות']);
+        expect(tab.negativeAlternativeWords[0], ['נכרי']);
+        expect(tab.spacingValues, {'0-1': '3'});
+        expect(tab.negativeSpacingValues, {'0-1': '2'});
+        expect(state.searchQuery, autoSearch ? 'שבת קודש' : '');
+        expect(state.negativeQuery, autoSearch ? 'גוי זר' : '');
+      }, skip: engineReady ? false : searchEngineSkipReason);
+    }
 
     test(
       'החיפוש האוטומטי רץ בהיקף ועם השלילה',
