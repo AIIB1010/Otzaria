@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:isolate';
 
 import 'package:flutter/foundation.dart'
-    show debugPrint, kDebugMode, visibleForTesting;
+    show ValueNotifier, debugPrint, kDebugMode, visibleForTesting;
 import 'package:otzaria/core/error_log_file.dart';
 import 'package:otzaria/data/data_providers/book_database_resolver.dart';
 import 'package:otzaria/data/data_providers/book_text_reader.dart';
@@ -379,6 +379,12 @@ class DbReadWorker {
   @visibleForTesting
   static void resetLoggedFailuresForTesting() => _loggedFailures.clear();
 
+  /// נדלק כשקריאה נכשלה כי seforim.db עצמו פגום, ונכבה רק אחרי
+  /// התקנת מסד חדש בהצלחה; קריאה פגומה אחריה מדליקה אותו שוב.
+  static final ValueNotifier<bool> corruptDatabaseDetected = ValueNotifier(
+    false,
+  );
+
   /// הקוראים מציגים הודעה כללית או רשימה ריקה, ולכן השגיאה עצמה נרשמת כאן.
   static void _logReadFailure(
     String method,
@@ -386,6 +392,9 @@ class DbReadWorker {
     String connection,
     _WorkerReadError error,
   ) {
+    if (_isCorruptDatabaseError(error.message)) {
+      corruptDatabaseDetected.value = true;
+    }
     if (kDebugMode && !logFailuresInDebug) return;
     final kind = '$method|${error.message.split('\n').first}';
     if (_loggedFailures.length >= _maxLoggedFailures ||
@@ -728,6 +737,14 @@ class _WorkerReadError extends StateError {
       );
 
   final StackTrace? stack;
+}
+
+/// SQLITE_CORRUPT או SQLITE_NOTADB. השגיאה חוצה את ה-isolate כטקסט, ולכן
+/// הקוד נקרא מתוך "SqliteException(N)".
+bool _isCorruptDatabaseError(String message) {
+  final match = RegExp(r'SqliteException\((\d+)\)').firstMatch(message);
+  final code = match == null ? null : int.parse(match.group(1)!);
+  return code != null && const {11, 26}.contains(code & 0xFF);
 }
 
 class _WorkerSlot {

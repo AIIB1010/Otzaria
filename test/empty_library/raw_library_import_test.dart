@@ -9,6 +9,7 @@ import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/data/constants/database_constants.dart';
+import 'package:otzaria/data/data_providers/db_read_worker.dart';
 import 'package:otzaria/empty_library/bloc/empty_library_bloc.dart';
 import 'package:otzaria/empty_library/bloc/empty_library_event.dart';
 import 'package:otzaria/empty_library/bloc/empty_library_state.dart';
@@ -219,6 +220,8 @@ void main() {
   });
 
   test('ייבוא חבילת אנדרואיד המלאה: כל הרכיבים מגיעים ליעד', () async {
+    DbReadWorker.corruptDatabaseDetected.value = true;
+    addTearDown(() => DbReadWorker.corruptDatabaseDetected.value = false);
     if (lib == null) return markTestSkipped('libzstd אינו זמין');
     final bloc = build();
     addTearDown(bloc.close);
@@ -226,6 +229,7 @@ void main() {
     final state = await import(bloc, fullBundle(lib));
 
     expect(state, isA<EmptyLibraryDirectorySelected>());
+    expect(DbReadWorker.corruptDatabaseDetected.value, isFalse);
     expect(File(p.join(books, dbName)).readAsStringSync(), 'new-db');
     expect(
       File(
@@ -563,6 +567,8 @@ void main() {
   });
 
   test('כשל באמצע הפריסה אינו נוגע ב-DB שביעד ומוחק את ה-staging', () async {
+    DbReadWorker.corruptDatabaseDetected.value = true;
+    addTearDown(() => DbReadWorker.corruptDatabaseDetected.value = false);
     await Directory(books).create(recursive: true);
     await File(p.join(books, dbName)).writeAsString('existing-db');
     final bloc = build(
@@ -579,6 +585,7 @@ void main() {
     );
 
     expect(state, isA<EmptyLibraryError>());
+    expect(DbReadWorker.corruptDatabaseDetected.value, isTrue);
     expect(File(p.join(books, dbName)).readAsStringSync(), 'existing-db');
     expectNoLeftovers();
   });
@@ -613,6 +620,24 @@ void main() {
     expect(state.errorMessage, 'הייבוא בוטל. הספרייה לא שונתה.');
     expect(File(p.join(books, dbName)).existsSync(), isFalse);
     expectNoLeftovers();
+  });
+
+  test('ייבוא נלווים בלבד אינו מסיר סימון של מסד פגום', () async {
+    await Directory(books).create(recursive: true);
+    await File(p.join(books, dbName)).writeAsString('existing-db');
+    DbReadWorker.corruptDatabaseDetected.value = true;
+    addTearDown(() => DbReadWorker.corruptDatabaseDetected.value = false);
+    final bloc = build();
+    addTearDown(bloc.close);
+
+    final state = await import(
+      bloc,
+      _MemoryFolder('x', files: {'lexical.db': utf8.encode('lexical')}),
+    );
+
+    expect(state, isA<EmptyLibraryDirectorySelected>());
+    expect(DbReadWorker.corruptDatabaseDetected.value, isTrue);
+    expect(File(p.join(books, dbName)).readAsStringSync(), 'existing-db');
   });
 
   test('בלי DB בתיקייה ובלי ספרייה ביעד: שגיאה ברורה ולא "הושלם"', () async {

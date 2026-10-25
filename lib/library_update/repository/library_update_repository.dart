@@ -275,7 +275,14 @@ class LibraryUpdateRepository implements LibraryUpdateService {
     required bool allowPrerelease,
   }) async {
     final dbPath = dbPathProvider();
-    final local = await _readLocalVersion(versionReader, dbPath);
+    // ממסד פגום אין גרסה אמינה; בלי גרסה המתכנן בוחר הורדה מלאה.
+    final local = DbReadWorker.corruptDatabaseDetected.value
+        ? const LocalDbVersion(
+            dbVersion: 0,
+            schemaVersion: null,
+            hasVersionMeta: false,
+          )
+        : await _readLocalVersion(versionReader, dbPath);
     final result = await discovery.discover(allowPrerelease: allowPrerelease);
     return planner.plan(
       localDbSizeBytes: _fileSizeOrNull(dbPath),
@@ -956,6 +963,7 @@ class LibraryUpdateRepository implements LibraryUpdateService {
             _deleteQuietly('$newDbPath-wal');
             _deleteQuietly('$newDbPath-shm');
             recovery.finishSuccess(dbPath);
+            DbReadWorker.corruptDatabaseDetected.value = false;
             // מסמנים את נקודת האל-חזור לפני ה-await של reopen. כך ה-BLoC חוסם
             // Cancel/Reset גם אם הפתיחה מחדש או ריענון ה-runtime נמשכים/נכשלים.
             try {

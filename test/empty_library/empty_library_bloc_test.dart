@@ -9,6 +9,7 @@ import 'package:http/testing.dart';
 import 'package:otzaria/core/foreground_work.dart';
 import 'package:otzaria/core/messages/library_messages.dart';
 import 'package:otzaria/data/constants/database_constants.dart';
+import 'package:otzaria/data/data_providers/db_read_worker.dart';
 import 'package:otzaria/empty_library/bloc/empty_library_bloc.dart';
 import 'package:otzaria/empty_library/bloc/empty_library_event.dart';
 import 'package:otzaria/empty_library/bloc/empty_library_state.dart';
@@ -41,6 +42,8 @@ void main() {
 
   group('EmptyLibraryBloc', () {
     test('UseLibraryInPlaceRequested שומר את הנתיב בלי להעתיק דבר', () async {
+      DbReadWorker.corruptDatabaseDetected.value = true;
+      addTearDown(() => DbReadWorker.corruptDatabaseDetected.value = false);
       final libDir = await Directory.systemTemp.createTemp('otzaria-inplace-');
       addTearDown(() async {
         if (await libDir.exists()) await libDir.delete(recursive: true);
@@ -64,6 +67,7 @@ void main() {
       final selected = await selectedFuture.timeout(const Duration(seconds: 5));
 
       expect(selected.selectedPath, libDir.path);
+      expect(DbReadWorker.corruptDatabaseDetected.value, isTrue);
       expect(
         Settings.getValue<String>(SettingsRepository.keyLibraryPath),
         libDir.path,
@@ -1969,6 +1973,8 @@ void main() {
     test(
       'UpdateLibraryRequested מוריד DB חדש ומוחק את הגיבוי בהצלחה',
       () async {
+        DbReadWorker.corruptDatabaseDetected.value = true;
+        addTearDown(() => DbReadWorker.corruptDatabaseDetected.value = false);
         final libDir = await Directory.systemTemp.createTemp(
           'otzaria-update-lib-',
         );
@@ -2010,6 +2016,7 @@ void main() {
         await _eventually(
           () => !Directory(EmptyLibraryBloc.dbBackupDirPath).existsSync(),
         );
+        expect(DbReadWorker.corruptDatabaseDetected.value, isFalse);
       },
     );
 
@@ -2425,6 +2432,8 @@ void main() {
     test(
       'UpdateLibraryRequested משחזר את הגיבוי כשההורדה נכשלת',
       () async {
+        DbReadWorker.corruptDatabaseDetected.value = true;
+        addTearDown(() => DbReadWorker.corruptDatabaseDetected.value = false);
         final libDir = await Directory.systemTemp.createTemp(
           'otzaria-update-lib2-',
         );
@@ -2458,6 +2467,7 @@ void main() {
 
         await errorFuture.timeout(const Duration(seconds: 5));
 
+        expect(DbReadWorker.corruptDatabaseDetected.value, isTrue);
         // הקובץ הישן שוחזר, והגיבוי נוקה.
         expect(
           await File(path.join(libDir.path, dbName)).readAsString(),

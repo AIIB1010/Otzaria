@@ -10,6 +10,7 @@ import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/app_paths.dart';
 import 'package:otzaria/data/constants/database_constants.dart';
+import 'package:otzaria/data/data_providers/db_read_worker.dart';
 import 'package:otzaria/empty_library/bloc/empty_library_bloc.dart';
 import 'package:otzaria/empty_library/bloc/empty_library_event.dart';
 import 'package:otzaria/empty_library/bloc/empty_library_state.dart';
@@ -249,6 +250,8 @@ void main() {
   blocTest<EmptyLibraryBloc, EmptyLibraryState>(
     'הגדרה ראשונה: הספרייה והאינדקס נפרסים, וההגדרות מצביעות עליהם',
     setUp: () async {
+      DbReadWorker.corruptDatabaseDetected.value = true;
+      addTearDown(() => DbReadWorker.corruptDatabaseDetected.value = false);
       if (lib == null) return;
       writeLibrary(lib);
       writeIndex(lib);
@@ -264,6 +267,7 @@ void main() {
     },
     verify: (bloc) {
       if (lib == null) return;
+      expect(DbReadWorker.corruptDatabaseDetected.value, isFalse);
       expect(bloc.state, isA<EmptyLibraryDirectorySelected>());
       expect(File(p.join(books, _dbName)).readAsStringSync(), 'new-db');
       expect(
