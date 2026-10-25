@@ -203,8 +203,7 @@ class PluginProtocolRegistrationService {
     }
 
     // ===== אייקון — תוספת קוסמטית =====
-    // נריץ אחרי הרישום הקריטי וניתן ל-failures להיבלע, כדי שכשל
-    // ב-gtk-update-icon-cache (למשל בלי index.theme) לא יבטל את השיוך עצמו.
+    // אחרי הרישום הקריטי, וכשלו נבלע: אייקון חסר לא יבטל את השיוך עצמו.
     try {
       await _installLinuxMimeIcon(home, mimeIconName, executable);
     } catch (error, stackTrace) {
@@ -253,11 +252,8 @@ class PluginProtocolRegistrationService {
     }
     await sourceIcon.copy(destination.path);
 
-    // gtk-update-icon-cache דורש index.theme בתיקיית התמה כדי להצליח.
-    // ב-~/.local/share/icons/hicolor הקובץ הזה בדרך כלל לא קיים (התמה
-    // המערכתית יושבת ב-/usr/share/icons/hicolor), אז נריץ רק אם הוא קיים.
-    // ה-MIME database עצמו יודע על האייקון דרך mime-info XML, וסביבות
-    // עבודה רובן יסרקו מחדש את התיקייה בלי הקריאה הזו.
+    // gtk-update-icon-cache נכשל בלי index.theme, שבדרך כלל חסר בתיקייה הזו;
+    // ה-MIME database מכיר את האייקון גם בלעדיו (mime-info XML).
     final themeIndex = File(p.join(iconsRoot, 'index.theme'));
     if (await themeIndex.exists()) {
       await _runLinuxCommandIfAvailable('gtk-update-icon-cache', [
