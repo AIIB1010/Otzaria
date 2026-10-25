@@ -130,13 +130,6 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
     on<ResetSearch>(_onResetSearch);
     on<UpdateFilterQuery>(_onUpdateFilterQuery);
     on<ClearFilter>(_onClearFilter);
-
-    // Handlers חדשים לרגקס
-    on<ToggleRegex>(_onToggleRegex);
-    on<ToggleCaseSensitive>(_onToggleCaseSensitive);
-    on<ToggleMultiline>(_onToggleMultiline);
-    on<ToggleDotAll>(_onToggleDotAll);
-    on<ToggleUnicode>(_onToggleUnicode);
     on<UpdateFacetCounts>(_onUpdateFacetCounts);
     on<ReplaceFacetCounts>(_onReplaceFacetCounts);
     on<LoadMoreResults>(_onLoadMoreResults);
@@ -1032,56 +1025,6 @@ class SearchBloc extends Bloc<SearchEvent, SearchState> {
     _facetCountsSignature = null;
     _lastUserSearch = null;
     emit(const SearchState());
-  }
-
-  // Handlers חדשים לרגקס
-  void _onToggleRegex(
-    ToggleRegex event,
-    Emitter<SearchState> emit,
-  ) {
-    final newConfig = state.configuration.copyWith(
-      regexEnabled: !state.regexEnabled,
-    );
-    emit(state.copyWith(configuration: newConfig));
-    _reSearch();
-  }
-
-  void _onToggleCaseSensitive(
-    ToggleCaseSensitive event,
-    Emitter<SearchState> emit,
-  ) {
-    final newConfig = state.configuration.copyWith(
-      caseSensitive: !state.caseSensitive,
-    );
-    emit(state.copyWith(configuration: newConfig));
-    _reSearch();
-  }
-
-  void _onToggleMultiline(
-    ToggleMultiline event,
-    Emitter<SearchState> emit,
-  ) {
-    final newConfig = state.configuration.copyWith(multiline: !state.multiline);
-    emit(state.copyWith(configuration: newConfig));
-    _reSearch();
-  }
-
-  void _onToggleDotAll(
-    ToggleDotAll event,
-    Emitter<SearchState> emit,
-  ) {
-    final newConfig = state.configuration.copyWith(dotAll: !state.dotAll);
-    emit(state.copyWith(configuration: newConfig));
-    _reSearch();
-  }
-
-  void _onToggleUnicode(
-    ToggleUnicode event,
-    Emitter<SearchState> emit,
-  ) {
-    final newConfig = state.configuration.copyWith(unicode: !state.unicode);
-    emit(state.copyWith(configuration: newConfig));
-    _reSearch();
   }
 
   void _onUpdateFacetCounts(

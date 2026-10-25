@@ -113,11 +113,4 @@ class SearchState {
 
   /// המונה שהרשימה והדפדוף נמדדים בו: קבוצות כשהאיחוד פעיל, אחרת תוצאות.
   int get displayTotal => totalGroups ?? totalResults;
-
-  // Getters חדשים לרגקס
-  bool get regexEnabled => configuration.regexEnabled;
-  bool get caseSensitive => configuration.caseSensitive;
-  bool get multiline => configuration.multiline;
-  bool get dotAll => configuration.dotAll;
-  bool get unicode => configuration.unicode;
 }
