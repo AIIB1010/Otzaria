@@ -1,6 +1,9 @@
 // בדיקות להסתרת כותרת המקור המיותרת בלשונית הפרשנים (issue #896):
 // הכותרת מוסתרת רק כשכל מקטעי הקבוצה מאותה שורת מקור והיעד הוא המקום
 // הנקרא כעת; מקטע ממקום אחר, קבוצה רב-שורתית ואות-עוגן נשמרים.
+import 'dart:math';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
@@ -133,6 +136,45 @@ void main() {
         ),
         isTrue,
       );
+    });
+  });
+
+  group('referenceTokens', () {
+    // המימוש הקודם (שרשרת RegExp-ים), שהמעבר היחיד חייב להחזיר את הפלט שלו.
+    List<String> regexTokens(String reference) => reference
+        .replaceAll(RegExp(r'\p{Mn}', unicode: true), '')
+        .replaceAll(RegExp('''['"״׳’”“`]'''), '')
+        .replaceAll(RegExp(r'[-–־,.():]'), ' ')
+        .split(RegExp(r'\s+'))
+        .where((word) => word.isNotEmpty)
+        .toList();
+
+    test('זהה ל-RegExp-ים בכל תו, בניקוד, בגרשיים, ברווחים וב-surrogate', () {
+      final alphabet = [
+        ...'אבגשת az09'.codeUnits,
+        0x0591, 0x05B0, 0x05B4, 0x05BC, 0x05BD, 0x05C7, 0x0301, // סימני Mn
+        0x05BE, 0x05C3, 0x05F3, 0x05F4, 0x22, 0x27, 0x60, 0x2019, 0x201C,
+        0x201D, 0x2D, 0x2013, 0x2C, 0x2E, 0x28, 0x29, 0x3A, 0x3B,
+        0x09, 0x0A, 0xA0, 0x2009, 0x200B, 0x202F, 0x3000, 0xFEFF,
+        0xD834, 0xDD67, 0xD83D, 0xDE00, // U+1D167 (Mn) ו-U+1F600 בחלקים
+      ];
+      final random = Random(896);
+      final inputs = [
+        for (var c = 0; c <= 0xFFFF; c++) 'א${String.fromCharCode(c)}ב',
+        for (final c in [0x1D167, 0x1E8D0, 0x1F600, 0x10000])
+          'א${String.fromCharCode(c)}ב',
+        for (var n = 0; n < 20000; n++)
+          String.fromCharCodes([
+            for (var i = random.nextInt(24); i > 0; i--)
+              alphabet[random.nextInt(alphabet.length)],
+          ]),
+      ];
+      final mismatches = [
+        for (final input in inputs)
+          if (!listEquals(referenceTokens(input), regexTokens(input)))
+            input.codeUnits,
+      ];
+      expect(mismatches, isEmpty);
     });
   });
 
