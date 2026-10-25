@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:ui' show SemanticsRole;
 
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:otzaria_icons/otzaria_icons.dart';
@@ -261,29 +262,282 @@ Future<T?> showAnchoredAppMenu<T>({
       ? (spaceBelow >= menuHeight || spaceBelow >= spaceAbove)
       : !(spaceAbove >= menuHeight || spaceAbove >= spaceBelow);
 
-  final anchorTop = shouldOpenBelow
-      ? targetRect.bottom + offset.dy
-      : (targetRect.top - menuHeight - offset.dy).clamp(
-          0.0,
-          overlay.size.height,
-        );
-
-  final anchorRect = RelativeRect.fromRect(
-    Rect.fromLTWH(targetRect.left, anchorTop, targetRect.width, 0),
-    Offset.zero & overlay.size,
-  );
-
-  return showMenu<T>(
-    context: context,
-    position: anchorRect,
-    items: items,
-    initialValue: initialValue,
-    // רוחב מינימלי: רוחב הטריגר, או רוחב התוכן הרצוי (calculateAppMenuPreferredWidth) — הגדול מביניהם.
-    // התוכן בפועל עדיין קובע את הרוחב הסופי (IntrinsicWidth בתוך _PopupMenu).
-    constraints: BoxConstraints(
-      minWidth: max(targetRect.width, minWidth ?? 0.0),
+  final navigator = Navigator.of(context);
+  final localizations = MaterialLocalizations.of(context);
+  return navigator.push(
+    _AnchoredMenuRoute<T>(
+      anchorRect: targetRect,
+      gap: offset.dy,
+      opensBelow: shouldOpenBelow,
+      items: items,
+      initialValue: initialValue,
+      // רוחב מינימלי: רוחב הטריגר, או רוחב התוכן הרצוי (calculateAppMenuPreferredWidth) — הגדול מביניהם.
+      // התוכן בפועל עדיין קובע את הרוחב הסופי (IntrinsicWidth בתוך _AnchoredMenu).
+      constraints: BoxConstraints(
+        minWidth: max(targetRect.width, minWidth ?? 0.0),
+      ),
+      semanticLabel: switch (defaultTargetPlatform) {
+        TargetPlatform.iOS || TargetPlatform.macOS => null,
+        _ => localizations.popupMenuLabel,
+      },
+      barrierLabel: localizations.menuDismissLabel,
+      capturedThemes: InheritedTheme.capture(
+        from: context,
+        to: navigator.context,
+      ),
     ),
   );
+}
+
+/// ה-route של [showAnchoredAppMenu]: כמו showMenu של Flutter, אבל התפריט גדל
+/// מהכפתור — כלפי מטה מתחתיו וכלפי מעלה מעליו (ב-showMenu הקצה העליון תמיד קבוע).
+class _AnchoredMenuRoute<T> extends PopupRoute<T> {
+  _AnchoredMenuRoute({
+    required this.anchorRect,
+    required this.gap,
+    required this.opensBelow,
+    required this.items,
+    required this.initialValue,
+    required this.constraints,
+    required this.semanticLabel,
+    required this.barrierLabel,
+    required this.capturedThemes,
+  }) : itemKeys = [for (final _ in items) GlobalKey()],
+       super(traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop);
+
+  final Rect anchorRect;
+  final double gap;
+  final bool opensBelow;
+  final List<PopupMenuEntry<T>> items;
+  final List<GlobalKey> itemKeys;
+  final T? initialValue;
+  final BoxConstraints constraints;
+  final String? semanticLabel;
+  final CapturedThemes capturedThemes;
+
+  @override
+  final String barrierLabel;
+
+  @override
+  Color? get barrierColor => null;
+
+  @override
+  bool get barrierDismissible => true;
+
+  @override
+  Duration get transitionDuration => const Duration(milliseconds: 300);
+
+  CurvedAnimation? _animation;
+
+  @override
+  Animation<double> createAnimation() => _animation ??= CurvedAnimation(
+    parent: super.createAnimation(),
+    curve: Curves.linear,
+    reverseCurve: const Interval(0.0, 2.0 / 3.0),
+  );
+
+  @override
+  Widget buildPage(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+  ) {
+    final selectedIndex = initialValue == null
+        ? -1
+        : items.indexWhere((item) => item.represents(initialValue));
+    if (selectedIndex >= 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final itemContext = itemKeys[selectedIndex].currentContext;
+        if (itemContext != null) Scrollable.ensureVisible(itemContext);
+      });
+    }
+    final mediaQuery = MediaQuery.of(context);
+    return MediaQuery.removePadding(
+      context: context,
+      removeTop: true,
+      removeBottom: true,
+      removeLeft: true,
+      removeRight: true,
+      child: CustomSingleChildLayout(
+        delegate: _AnchoredMenuLayout(
+          anchorRect: anchorRect,
+          gap: gap,
+          opensBelow: opensBelow,
+          textDirection: Directionality.of(context),
+          padding: mediaQuery.padding,
+          avoidBounds: DisplayFeatureSubScreen.avoidBounds(mediaQuery).toSet(),
+        ),
+        child: capturedThemes.wrap(
+          _AnchoredMenu<T>(route: this, selectedIndex: selectedIndex),
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _animation?.dispose();
+    super.dispose();
+  }
+}
+
+/// מיקום כמו של showMenu, חוץ מהקצה הצמוד לכפתור: הוא נשאר במקומו לאורך כל
+/// האנימציה, גם כשהתפריט מעל הכפתור ([childSize] הוא הגודל הנוכחי באנימציה).
+class _AnchoredMenuLayout extends SingleChildLayoutDelegate {
+  const _AnchoredMenuLayout({
+    required this.anchorRect,
+    required this.gap,
+    required this.opensBelow,
+    required this.textDirection,
+    required this.padding,
+    required this.avoidBounds,
+  });
+
+  static const double _screenPadding = 8;
+
+  final Rect anchorRect;
+  final double gap;
+  final bool opensBelow;
+  final TextDirection textDirection;
+  final EdgeInsets padding;
+  final Set<Rect> avoidBounds;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
+      BoxConstraints.loose(
+        constraints.biggest,
+      ).deflate(const EdgeInsets.all(_screenPadding) + padding);
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) {
+    final spaceLeft = anchorRect.left;
+    final spaceRight = size.width - anchorRect.right;
+    final alignRight =
+        spaceLeft > spaceRight ||
+        (spaceLeft == spaceRight && textDirection == TextDirection.rtl);
+    var x = alignRight ? anchorRect.right - childSize.width : anchorRect.left;
+    var y = opensBelow
+        ? anchorRect.bottom + gap
+        : anchorRect.top - gap - childSize.height;
+
+    final screen =
+        DisplayFeatureSubScreen.subScreensInBounds(
+          Offset.zero & size,
+          avoidBounds,
+        ).reduce(
+          (a, b) =>
+              (b.center - anchorRect.center).distance <
+                  (a.center - anchorRect.center).distance
+              ? b
+              : a,
+        );
+    final left = screen.left + _screenPadding + padding.left;
+    final right = screen.right - _screenPadding - padding.right;
+    final top = screen.top + _screenPadding + padding.top;
+    final bottom = screen.bottom - _screenPadding - padding.bottom;
+    if (x < left) {
+      x = left;
+    } else if (x + childSize.width > right) {
+      x = right - childSize.width;
+    }
+    if (y < top) {
+      y = top;
+    } else if (y + childSize.height > bottom) {
+      y = bottom - childSize.height;
+    }
+    return Offset(x, y);
+  }
+
+  @override
+  bool shouldRelayout(_AnchoredMenuLayout oldDelegate) =>
+      anchorRect != oldDelegate.anchorRect ||
+      gap != oldDelegate.gap ||
+      opensBelow != oldDelegate.opensBelow ||
+      textDirection != oldDelegate.textDirection ||
+      padding != oldDelegate.padding ||
+      !setEquals(avoidBounds, oldDelegate.avoidBounds);
+}
+
+/// גוף התפריט כמו ב-showMenu: הרוחב נפתח ראשון, ואחריו הגובה והפריטים בזה
+/// אחר זה — מהפריט הצמוד לכפתור והלאה.
+class _AnchoredMenu<T> extends StatelessWidget {
+  const _AnchoredMenu({required this.route, required this.selectedIndex});
+
+  final _AnchoredMenuRoute<T> route;
+  final int selectedIndex;
+
+  @override
+  Widget build(BuildContext context) {
+    final animation = route.animation!;
+    final theme = Theme.of(context);
+    final menuTheme = PopupMenuTheme.of(context);
+    final count = route.items.length;
+    final unit = 1.0 / (count + 1.5);
+    final width = CurveTween(curve: Interval(0.0, unit));
+    final height = CurveTween(curve: Interval(0.0, unit * count));
+
+    Widget item(int i) {
+      final start = ((route.opensBelow ? i : count - 1 - i) + 1) * unit;
+      final opacity = Interval(start, min(start + 1.5 * unit, 1.0));
+      return FadeTransition(
+        key: route.itemKeys[i],
+        opacity: animation.drive(CurveTween(curve: opacity)),
+        child: i == selectedIndex
+            ? ColoredBox(color: theme.highlightColor, child: route.items[i])
+            : route.items[i],
+      );
+    }
+
+    return FadeTransition(
+      opacity: CurveTween(
+        curve: const Interval(0.0, 1.0 / 3.0),
+      ).animate(animation),
+      child: Material(
+        type: MaterialType.card,
+        shape:
+            menuTheme.shape ??
+            const RoundedRectangleBorder(
+              borderRadius: BorderRadius.all(Radius.circular(4)),
+            ),
+        color: menuTheme.color ?? theme.colorScheme.surfaceContainer,
+        elevation: menuTheme.elevation ?? 3,
+        shadowColor: menuTheme.shadowColor ?? theme.colorScheme.shadow,
+        surfaceTintColor: menuTheme.surfaceTintColor ?? Colors.transparent,
+        child: AnimatedBuilder(
+          animation: animation,
+          builder: (context, child) => Align(
+            alignment: route.opensBelow
+                ? AlignmentDirectional.topEnd
+                : AlignmentDirectional.bottomEnd,
+            widthFactor: width.evaluate(animation),
+            heightFactor: height.evaluate(animation),
+            child: child,
+          ),
+          child: ConstrainedBox(
+            constraints: route.constraints,
+            child: IntrinsicWidth(
+              stepWidth: 56,
+              child: Semantics(
+                role: SemanticsRole.menu,
+                scopesRoute: true,
+                namesRoute: true,
+                explicitChildNodes: true,
+                label: route.semanticLabel,
+                child: SingleChildScrollView(
+                  padding:
+                      menuTheme.menuPadding ??
+                      const EdgeInsets.symmetric(vertical: 8),
+                  child: ListBody(
+                    children: [for (var i = 0; i < count; i++) item(i)],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _DirectionalMenuEntry<T> extends PopupMenuEntry<T> {
