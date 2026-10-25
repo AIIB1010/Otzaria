@@ -34,8 +34,8 @@ class FileSystemData {
   final LibraryProviderManager _providerManager =
       LibraryProviderManager.instance;
 
-  /// Creates a new instance of [FileSystemData] and initializes the title to path mapping
-  /// and metadata
+  /// Creates a new instance of [FileSystemData] and starts loading metadata
+  /// and initializing the providers.
   FileSystemData() {
     libraryPath =
         Settings.getValue<String>(SettingsRepository.keyLibraryPath) ?? '.';
@@ -108,20 +108,16 @@ class FileSystemData {
   Future<String?> findBookCategoryPath(String title, {int? categoryId}) async {
     await _providerManager.initialize();
 
-    // 1. כשיש categoryId — פתרון ישיר של נתיב הקטגוריה לספר הבודד. הקריאה
-    // מבצעת resolveBook ממוקד + בניית מפת קטגוריות בלבד (~50ms), במקום לבנות
-    // את מפת `titleToPath` של כל הספרייה (~7030 ספרים, ~950ms בעלייה קרה —
-    // מה שחנק את טעינת הספר הראשון דרך isTanachBook/supportsContinuousReadingMode).
-    // הערך זהה: `titleToPath` נבנית ממילא ע"י findCategoryPathForBook לכל ספר DB.
+    // 1. עם categoryId — פתרון ישיר לספר (~50ms) ולא `titleToPath` של כל
+    // הספרייה (~950ms בעלייה קרה). הערך זהה: שתיהן דרך findCategoryPathForBook.
     if (categoryId != null) {
       final directPath = await _providerManager.databaseProvider
           .findCategoryPathForBook(title, categoryId: categoryId);
       if (directPath != null && directPath.isNotEmpty) return directPath;
     }
 
-    // 2. Check cached FileSystemData map
-    // Note: titleToPath might be stale if DB loaded later
-    // so we re-check providers below if not found.
+    // 2. Cached map; it may be stale if the DB loaded later, so step 3
+    // re-checks the database provider.
     final path = (await titleToPath)[title];
     if (path != null && path.isNotEmpty) return path;
 

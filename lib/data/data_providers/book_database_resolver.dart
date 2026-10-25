@@ -135,9 +135,8 @@ class BookDatabaseResolver {
 
     for (final candidate in candidates) {
       final repository = candidate.repository;
-      // categoryId טבעי לשני ה-DBs — אין יותר צורך בהמרה. אם הקורא העביר
-      // categoryId שייך ל-seforim ואנחנו ב-candidate של user_books, החיפוש
-      // פשוט יחזיר null וננסה את המועמד הבא.
+      // categoryId טבעי לכל מסד: categoryId של seforim על מועמד user_books
+      // פשוט מחזיר null, וממשיכים למועמד הבא.
       final candidateCategoryId = categoryId;
 
       // filePath ו-fileType שייכים רק לסכמת user_books; ל-seforim.db v3 אין

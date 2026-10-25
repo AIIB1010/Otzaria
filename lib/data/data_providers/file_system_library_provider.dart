@@ -82,8 +82,8 @@ class FileSystemLibraryProvider implements LibraryProvider, LinkLinesProvider {
     // We can populate the key map here as well to ensure it's accurate
     final map = await keyToPath;
 
-    // NOTE: The main library folder (אוצריא) is now stored in the database
-    // and loaded by DatabaseLibraryProvider. We do NOT scan it here to avoid duplicates.
+    // The main library folder and custom folders come from the database
+    // (DatabaseLibraryProvider); scanning them here would duplicate books.
 
     // Load books from the built-in personal folder (אוצריא/אישי)
     // This is NOT a custom folder, but a built-in location for personal books
@@ -96,9 +96,6 @@ class FileSystemLibraryProvider implements LibraryProvider, LinkLinesProvider {
     }
 
     await _loadBundledTalmudBavliBooks(metadata, booksByCategory, map);
-
-    // NOTE: Custom folders are now fully managed via the database.
-    // They are scanned by FileSyncService and loaded by DatabaseLibraryProvider.
 
     return booksByCategory;
   }
@@ -372,8 +369,8 @@ class FileSystemLibraryProvider implements LibraryProvider, LinkLinesProvider {
       keyToPath[key] = path;
     }
 
-    // NOTE: The main library folder (אוצריא) is now stored in the database
-    // and loaded by DatabaseLibraryProvider. We do NOT scan it here to avoid duplicates.
+    // The main library folder and custom folders come from the database
+    // (DatabaseLibraryProvider); scanning them here would duplicate books.
 
     // Load from the built-in personal folder (אוצריא/אישי)
     // This is NOT a custom folder, but a built-in location for personal books
@@ -398,8 +395,6 @@ class FileSystemLibraryProvider implements LibraryProvider, LinkLinesProvider {
         );
       }
     }
-
-    // NOTE: Custom folders are now managed via the database.
 
     return keyToPath;
   }
