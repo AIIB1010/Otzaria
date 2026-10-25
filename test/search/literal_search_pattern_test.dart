@@ -257,6 +257,17 @@ Future<void> main() async {
         ('וה ', '<b>וה</b>ארץ'),
         (' הא', '<b>ו</b> הארץ'),
         ('וה ', '<b>וה</b> ארץ'),
+        ('כם ', 'לכם<br>בני'),
+        ('כם ', '<div>לכם</div><div>בני</div>'),
+        (' כם', 'בני<br>כם'),
+        ('כם ', 'לכם&#x5d1;ני'),
+        (' כם', 'בני&#1489;כם'),
+        ('כם ', 'לכם<b>&#x5d1;</b>ני'),
+        (' כם', 'בני<b>&#1489;</b>כם'),
+        ('כם ', 'לכם&#32;בני'),
+        (' כם', 'בני&#32;כם'),
+        ('כם ', 'לכם<b></b><BR/>בני'),
+        ('כם ', 'לכם&unknown;בני'),
       ]) {
         final clean = utils.stripHtmlIfNeeded(html);
         final searchFound = buildLiteralPattern(
@@ -267,6 +278,16 @@ Future<void> main() async {
             .computeHighlightRanges(html, q, partialWordMatch: true)
             .isNotEmpty;
         expect(highlighted, searchFound, reason: '"$q" ב-"$html"');
+        expect(
+          utils.countMatches(html, q, partialWordMatch: true) > 0,
+          searchFound,
+          reason: 'מונה: "$q" ב-"$html"',
+        );
+        expect(
+          utils.searchMatchRangeAt(html, q, 0, partialWordMatch: true) != null,
+          searchFound,
+          reason: 'גלילה: "$q" ב-"$html"',
+        );
       }
     });
 

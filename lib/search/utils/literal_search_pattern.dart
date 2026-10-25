@@ -1,13 +1,12 @@
+import 'dart:typed_data';
+
 import 'package:otzaria/utils/text/text_manipulation.dart' as utils;
 import 'package:otzaria_search_engine/otzaria_search_engine.dart' as engine;
 
-/// מקור-אמת יחיד לתבנית ההתאמה הליטרלית של החיפוש בתוך ספר.
-///
-/// גם מציאת התוצאות (`section_search_utils`), גם ההדגשה בסרגל התוצאות
-/// (`SnippetBuilder.highlightLiteral`) וגם חישוב מיקום ההתאמה משתמשים באותה
-/// תבנית מהמנוע (`generateLiteralHighlightPattern`), כך שלא ייתכן פער ביניהם.
-
 final RegExp _whitespaceRun = RegExp(r'\s+');
+final RegExp _htmlContextTokens = RegExp(
+  r'<[^>]*>|&(?:#x?[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);',
+);
 
 /// תבנית ליטרלית: מקור המחרוזת (לשליחה ל-isolate worker) והרגקס המקומפל
 /// (לשימוש ב-isolate הראשי).
@@ -21,10 +20,7 @@ class LiteralSearchPattern {
   final RegExp regExp;
 }
 
-/// מנרמל שאילתה זהה ל-[cleanLineForSearch] של התוכן: מסיר ניקוד וממיר
-/// מפרידים (מקף עברי/פסק) לרווח, ואז מכווץ רצפי רווח. חובה שיהיה זהה
-/// לניקוי התוכן — אחרת שאילתה עם מקף ("אשר־שמע") לא תתאים לתוכן הנקי
-/// ("אשר שמע"), וגם שאילתה מנוקדת ("הֲרֵעֹתִי") לא תתאים לטקסט ללא ניקוד.
+/// מנרמל ניקוד, מפרידים ורווחים בדיוק כמו ניקוי התוכן לחיפוש.
 String normalizeLiteralQuery(String query) => _collapse(query).trim();
 
 String _collapse(String query) =>
@@ -61,30 +57,56 @@ LiteralEdgeCheck? _buildEdgeCheck(String query) {
   if (parts == null) return null;
   final before = edges.start ? compileLiteralPattern(parts.before) : null;
   final after = edges.end ? compileLiteralPattern(parts.after) : null;
-  return (text, start, end) =>
-      (before == null ||
-          before.matchAsPrefix(text, _skipTagsBefore(text, start)) != null) &&
-      (after == null ||
-          after.matchAsPrefix(text, _skipTagsAfter(text, end)) != null);
+  String? previousText;
+  var context = (text: '', offsets: const <int>[]);
+  return (text, start, end) {
+    if (previousText != text) {
+      context = _visibleEdgeContext(text);
+      previousText = text;
+    }
+    final offsets = context.offsets;
+    return (before == null ||
+            before.matchAsPrefix(
+                  context.text,
+                  offsets.isEmpty ? start : offsets[start],
+                ) !=
+                null) &&
+        (after == null ||
+            after.matchAsPrefix(
+                  context.text,
+                  offsets.isEmpty ? end : offsets[end],
+                ) !=
+                null);
+  };
 }
 
-// החיפוש רץ על טקסט נקי מתגים, ושם תג שבתוך מילה אינו מפריד בין חלקיה.
-int _skipTagsBefore(String text, int index) {
-  while (index > 0 && text.codeUnitAt(index - 1) == 0x3E) {
-    final open = text.lastIndexOf('<', index - 1);
-    if (open < 0) break;
-    index = open;
+// גבולות נבדקים בטקסט הגלוי; ההדגשה עדיין צריכה offsets של ה-HTML המקורי.
+({String text, List<int> offsets}) _visibleEdgeContext(String text) {
+  if (!text.contains('<') && !text.contains('&')) {
+    return (text: text, offsets: const []);
   }
-  return index;
-}
+  final out = StringBuffer();
+  final offsets = Int32List(text.length + 1);
+  var raw = 0;
+  var visible = 0;
+  void copyUntil(int end) {
+    out.write(text.substring(raw, end));
+    while (raw < end) {
+      offsets[raw++] = visible++;
+    }
+  }
 
-int _skipTagsAfter(String text, int index) {
-  while (index < text.length && text.codeUnitAt(index) == 0x3C) {
-    final close = text.indexOf('>', index);
-    if (close < 0) break;
-    index = close + 1;
+  for (final token in _htmlContextTokens.allMatches(text)) {
+    copyUntil(token.start);
+    final replacement = utils.stripHtmlIfNeeded(token.group(0)!);
+    offsets.fillRange(token.start, token.end, visible);
+    out.write(replacement);
+    visible += replacement.length;
+    raw = token.end;
   }
-  return index;
+  copyUntil(text.length);
+  offsets[text.length] = visible;
+  return (text: out.toString(), offsets: offsets);
 }
 
 /// עטיפת גבול-המילה שהמנוע מוסיף סביב הביטוי:
