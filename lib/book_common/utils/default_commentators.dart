@@ -66,9 +66,9 @@ class DefaultCommentators {
 
   static SqliteDataProvider get _provider => SqliteDataProvider.instance;
 
-  /// חיבור שנפתח ונסגר נפתח כאן מחדש, אחרת ברירות המחדל נעלמות בשקט (#3081).
+  /// חיבור שמעולם לא נפתח שייך לאתחול האפליקציה.
   static bool get _needsReopen =>
-      !_provider.isInitialized && _provider.wasOpened;
+      !_provider.isInitialized && _provider.canReopenAfterClose;
 
   static Future<SeforimRepository?> _reopenedRepository() async {
     await _provider.initialize();

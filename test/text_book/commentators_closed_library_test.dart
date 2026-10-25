@@ -11,6 +11,8 @@ import 'package:otzaria/data/repository/text_book_repository.dart';
 import 'package:otzaria/models/book_source.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/models/links.dart';
+import 'package:otzaria/library_update/services/library_access_gate.dart';
+import 'package:otzaria/data/sqlite/sqlite3_api.dart' as sqlite3;
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
 import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
@@ -23,7 +25,7 @@ import '../test_helpers/memory_cache_provider.dart';
 
 /// טעינת המפרשים זורקת; שאר הנתיבים מחזירים ספר קטן בלי קישורים.
 class _FailingCommentatorsRepository extends TextBookRepository {
-  _FailingCommentatorsRepository() : super(fileSystem: FileSystemData.instance);
+  _FailingCommentatorsRepository() : super(fileSystem: _NoFiles());
 
   int commentatorCalls = 0;
 
@@ -68,6 +70,8 @@ class _FailingCommentatorsRepository extends TextBookRepository {
   }) async => const [];
 }
 
+class _NoFiles extends Fake implements FileSystemData {}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory tempDir;
@@ -91,7 +95,7 @@ void main() {
       SettingsRepository.keyDbEffectivePath,
       fixture,
     );
-    // כמו חלון ממוחזר: החיבור נפתח ונסגר, ואיש לא פתח אותו מחדש.
+    // רענון הספרייה סוגר את החיבור, והטעינה הבאה חייבת לפתוח אותו בעצמה.
     await SqliteDataProvider.instance.initialize();
     await SqliteDataProvider.instance.dispose();
   });
@@ -112,12 +116,14 @@ void main() {
 
   test('חיבור סגור: רשימת המפרשים נטענת ואינה ריקה (#3081)', () async {
     expect(SqliteDataProvider.instance.isInitialized, isFalse);
-    final repository = TextBookRepository(fileSystem: FileSystemData.instance);
+    final repository = TextBookRepository(fileSystem: _NoFiles());
 
+    final before = DbReadWorker.sentMessageCount;
     final result = await repository.getCommentatorsWithRarity(bereshit);
 
     expect(result.all, contains(SeforimFixtureIds.rashiTitle));
     expect(repository.isLibraryConnectionOpen, isTrue);
+    expect(DbReadWorker.sentMessageCount - before, 1);
   });
 
   test('חיבור סגור: מפרשי ברירת המחדל נטענים (#3081)', () async {
@@ -129,14 +135,15 @@ void main() {
     );
   });
 
-  test('worker מושהה: השאילתה עוברת לחיבור הראשי ולא נכשלת', () async {
+  test('worker מושהה: אין עקיפה לשאילתה על ה-UI', () async {
     await SqliteDataProvider.instance.initialize();
     await DbReadWorker.suspendForExternalWrite();
-    final repository = TextBookRepository(fileSystem: FileSystemData.instance);
+    final repository = TextBookRepository(fileSystem: _NoFiles());
 
-    final result = await repository.getCommentatorsWithRarity(bereshit);
-
-    expect(result.all, contains(SeforimFixtureIds.rashiTitle));
+    await expectLater(
+      repository.getCommentatorsWithRarity(bereshit),
+      throwsA(isA<DbReadWorkerSuspended>()),
+    );
   });
 
   test('החלפת ספרייה בעיצומה: הטעינה ממתינה לפתיחה מחדש', () async {
@@ -148,7 +155,7 @@ void main() {
         reopenDatabase: false,
       ),
     );
-    final repository = TextBookRepository(fileSystem: FileSystemData.instance);
+    final repository = TextBookRepository(fileSystem: _NoFiles());
 
     var done = false;
     final pending = repository
@@ -160,6 +167,83 @@ void main() {
     await SqliteDataProvider.instance.reopenAfterExternalWrite();
     final result = await pending.timeout(const Duration(seconds: 10));
     expect(result.all, contains(SeforimFixtureIds.rashiTitle));
+  });
+
+  test('שער החלפה: שני מסלולי המפרשים ממתינים ורואים את המסד החדש', () async {
+    final provider = SqliteDataProvider.instance;
+    await provider.initialize();
+    final repository = TextBookRepository(fileSystem: _NoFiles());
+    late Future<({List<String> all, Set<String> rare})> commentators;
+    late Future<
+      ({
+        List<({String title, int position})> commentators,
+        List<String> targums,
+      })
+    >
+    defaults;
+    var commentatorsDone = false;
+    var defaultsDone = false;
+
+    await LibraryAccessGate(renameProbe: false).runExclusive(
+      dbPath: provider.dbPath,
+      body: (scope) async {
+        commentators = repository
+            .getCommentatorsWithRarity(bereshit)
+            .whenComplete(() => commentatorsDone = true);
+        defaults = DefaultCommentators.fetchDefaults(
+          bereshit,
+        ).whenComplete(() => defaultsDone = true);
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        expect(commentatorsDone, isFalse);
+        expect(defaultsDone, isFalse);
+        expect(provider.repository, isNull);
+
+        final db = sqlite3.sqlite3.open(provider.dbPath);
+        try {
+          db.execute('UPDATE book SET title = ? WHERE title = ?', [
+            'מפרש חדש',
+            SeforimFixtureIds.rashiTitle,
+          ]);
+        } finally {
+          db.close();
+        }
+        scope.markDbReplaced();
+      },
+    );
+    expect((await commentators).all, contains('מפרש חדש'));
+    expect(
+      (await defaults).commentators.map((c) => c.title),
+      contains('מפרש חדש'),
+    );
+  });
+
+  test('ספרייה חסרה אחרי סגירה: שני מסלולי המפרשים מחזירים ריק', () async {
+    await Settings.setValue<String>(
+      SettingsRepository.keyDbEffectivePath,
+      path.join(tempDir.path, 'missing.db'),
+    );
+    final repository = TextBookRepository(fileSystem: _NoFiles());
+    expect((await repository.getCommentatorsWithRarity(bereshit)).all, isEmpty);
+    expect(
+      (await DefaultCommentators.fetchDefaults(bereshit)).commentators,
+      isEmpty,
+    );
+    expect(SqliteDataProvider.instance.isInitialized, isFalse);
+  });
+
+  test('סגירה ליציאה: טעינת מפרשים אינה פותחת את החיבור מחדש', () async {
+    final provider = SqliteDataProvider.instance;
+    await provider.initialize();
+    await provider.dispose(forAppExit: true);
+    final repository = TextBookRepository(fileSystem: _NoFiles());
+
+    expect((await repository.getCommentatorsWithRarity(bereshit)).all, isEmpty);
+    expect(
+      (await DefaultCommentators.fetchDefaults(bereshit)).commentators,
+      isEmpty,
+    );
+    expect(provider.isInitialized, isFalse);
+    expect(provider.canReopenAfterClose, isFalse);
   });
 
   test('כשל בטעינת המפרשים נרשם ל-errors.txt עם ההקשר', () async {
@@ -195,6 +279,7 @@ void main() {
     expect(text, contains('ספר בדיקה'));
     expect(text, contains('DbReadWorkerSuspended'));
     expect(text, contains('libraryConnectionOpen'));
-    expect(text, contains('secondaryWindow'));
+    expect(text, contains('source: BookSource(u)'));
+    expect(text, contains('Stack:'));
   });
 }

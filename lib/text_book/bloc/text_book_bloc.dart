@@ -6,7 +6,6 @@ import 'package:otzaria/library/hidden/hidden_titles.dart';
 import 'dart:async';
 import 'dart:math';
 import 'package:otzaria/core/error_log_file.dart';
-import 'package:otzaria/core/windowing/window_role.dart';
 import 'package:otzaria/divine_names/repository/divine_names_repository.dart';
 import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:flutter/scheduler.dart';
@@ -3205,8 +3204,6 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
           'errorType': error.runtimeType.toString(),
           'libraryConnectionOpen': repository.isLibraryConnectionOpen
               .toString(),
-          'secondaryWindow': WindowRole.isSecondary.toString(),
-          'openedWithTab': WindowRole.openedWithTab.toString(),
         },
       );
     } catch (_) {}
