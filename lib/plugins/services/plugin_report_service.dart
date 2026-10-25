@@ -114,7 +114,7 @@ class PluginReportService {
 
     String? appVersion;
     try {
-      appVersion = canonicalAppVersion(await PackageInfo.fromPlatform());
+      appVersion = appReleaseVersion(await PackageInfo.fromPlatform());
     } catch (_) {}
 
     final email = reporterEmail?.trim() ?? '';

@@ -8,6 +8,7 @@ import 'package:archive/archive_io.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -606,6 +607,26 @@ Future<void> main() async {
         ),
       );
     });
+  });
+
+  test('app.getInfo reports the hotfix as the 4th version part', () async {
+    PackageInfo.setMockInitialValues(
+      appName: 'Otzaria',
+      packageName: 'otzaria',
+      version: '0.9.98',
+      buildNumber: '99801',
+      buildSignature: '',
+    );
+    final adapter = PluginBridgeAdapter(
+      _buildInstalledPlugin(permissions: const ['app.info.read']),
+      dependencies: _buildNetworkDeps(),
+      pluginRepository: _StubPluginRegistryRepository(),
+    );
+
+    final info = await adapter.execute('app', 'getInfo', {}) as Map;
+
+    expect(info['version'], '0.9.98.1');
+    expect(info['buildNumber'], '99801');
   });
 
   group('PluginBridgeAdapter.settings.get', () {

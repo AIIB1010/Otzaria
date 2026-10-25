@@ -116,7 +116,7 @@ class PluginInstallerService {
       final packageInfo = await PackageInfo.fromPlatform();
       final appVersionErrors = PluginManifestValidator.appVersionErrors(
         manifest,
-        canonicalAppVersion(packageInfo),
+        appReleaseVersion(packageInfo),
       );
       if (appVersionErrors.isNotEmpty) {
         throw PluginIncompatibleAppVersionException(
@@ -126,7 +126,7 @@ class PluginInstallerService {
       await PluginManifestValidator.validateManifest(
         manifest: manifest,
         directoryPath: tempDir.path,
-        currentAppVersion: canonicalAppVersion(packageInfo),
+        currentAppVersion: appReleaseVersion(packageInfo),
       );
       final extendedReport = await Isolate.run(
         () => PluginExtendedValidator.validate(

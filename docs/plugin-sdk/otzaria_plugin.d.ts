@@ -125,6 +125,7 @@ export interface ThemePayload {
 export interface BootPayload {
   plugin: { id: string; version: string };
   app: {
+    /** Includes the hotfix as a 4th part: `'0.9.98.1'`, or `'0.9.98'` without one. */
     version: string;
     platform: 'windows' | 'linux' | 'macos' | 'android' | 'ios' | string;
     /** Full locale tag, e.g. `'he-IL'` or `'en'`. */

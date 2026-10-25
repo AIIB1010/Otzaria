@@ -103,9 +103,8 @@ void main() {
     });
 
     test(
-      'iOS store version preserves minimum and maximum plugin requirements',
+      'a hotfix build enforces plugin requirements on its hotfix version',
       () async {
-        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
         addTearDown(() {
           debugDefaultTargetPlatformOverride = null;
           PackageInfo.setMockInitialValues(
@@ -116,40 +115,52 @@ void main() {
             buildSignature: '',
           );
         });
-        PackageInfo.setMockInitialValues(
-          appName: 'Otzaria',
-          packageName: 'com.otzaria.app',
-          version: '0.9.9801',
-          buildNumber: '99801',
-          buildSignature: '',
-        );
-        for (final requirement in [
-          ('0.9.99', null, false),
-          ('0.9.98', '0.9.98', true),
-          ('0.9.97', '0.9.97', false),
+        // iOS מקפל את ה-hotfix לגרסת החנות; שאר הפלטפורמות רק לקוד הגרסה.
+        for (final (platform, storeVersion) in [
+          (TargetPlatform.iOS, '0.9.9801'),
+          (TargetPlatform.windows, '0.9.98'),
         ]) {
-          final (minimum, maximum, compatible) = requirement;
-          final archivePath = _writeArchive(tempDir, 'version.zip', {
-            'schemaVersion': 1,
-            'id': 'test.ios.version',
-            'version': '1.0.0',
-            'name': 'iOS Version',
-            'entrypoint': 'index.html',
-            'minAppVersion': minimum,
-            'maxAppVersion': ?maximum,
-          });
-          if (compatible) {
-            final prepared = await installer.prepareInstall(archivePath);
-            await Directory(prepared.tempDirPath).delete(recursive: true);
-          } else {
-            await expectLater(
-              installer.prepareInstall(archivePath),
-              throwsA(
-                predicate(
-                  (error) => error.toString().contains('אך מותקנת 0.9.98'),
+          debugDefaultTargetPlatformOverride = platform;
+          PackageInfo.setMockInitialValues(
+            appName: 'Otzaria',
+            packageName: 'com.otzaria.app',
+            version: storeVersion,
+            buildNumber: '99801',
+            buildSignature: '',
+          );
+          for (final requirement in [
+            ('0.9.99', null, false),
+            ('0.9.98.2', null, false),
+            ('0.9.98.1', '0.9.98.1', true),
+            ('0.9.98', '0.9.98.1', true),
+            ('0.9.98', '0.9.98', false),
+            ('0.9.97', '0.9.97', false),
+          ]) {
+            final (minimum, maximum, compatible) = requirement;
+            final archivePath = _writeArchive(tempDir, 'version.zip', {
+              'schemaVersion': 1,
+              'id': 'test.hotfix.version',
+              'version': '1.0.0',
+              'name': 'Hotfix Version',
+              'entrypoint': 'index.html',
+              'minAppVersion': minimum,
+              'maxAppVersion': ?maximum,
+            });
+            final install = installer.prepareInstall(archivePath);
+            if (compatible) {
+              final prepared = await install;
+              await Directory(prepared.tempDirPath).delete(recursive: true);
+            } else {
+              await expectLater(
+                install,
+                throwsA(
+                  predicate(
+                    (error) => error.toString().contains('אך מותקנת 0.9.98.1'),
+                  ),
                 ),
-              ),
-            );
+                reason: '$platform: $minimum..$maximum',
+              );
+            }
           }
         }
       },

@@ -446,8 +446,13 @@ if (response.success) {
 
 ```javascript
 const { data } = await Otzaria.call('app.getInfo');
-// { version: "5.2.1", buildNumber: "123", platform: "windows" }
+// { version: "0.9.98.1", buildNumber: "99801", platform: "windows" }
 ```
+
+`version` כולל את גרסת התיקון (hotfix) כרכיב רביעי, כמו `minAppVersion`. בלי
+גרסת תיקון הוא בן שלושה רכיבים (`0.9.98`). אותו ערך מגיע ב-`payload.app.version`
+של `plugin.boot`. זו אינה גרסת SemVer, ולכן `semver.valid('0.9.98.1')` מחזיר
+`null`. השוו רכיב אחר רכיב, ורכיב חסר נחשב 0.
 
 ### `app.getTheme`
 מחזיר את ערכת הצבעים והטיפוגרפיה הנוכחית.

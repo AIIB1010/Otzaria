@@ -16,7 +16,7 @@ void main() {
     setUp(() => debugDefaultTargetPlatformOverride = TargetPlatform.iOS);
     tearDown(() => debugDefaultTargetPlatformOverride = null);
 
-    test('canonical base version is used for plugin bounds and metadata', () {
+    test('canonical version unfolds the store version to its base release', () {
       expect(canonicalAppVersion(_info('0.9.9801', '99801')), '0.9.98');
       expect(canonicalAppVersion(_info('0.9.9802', '99802')), '0.9.98');
       expect(canonicalAppVersion(_info('0.9.98', '99802')), '0.9.98');
@@ -43,14 +43,25 @@ void main() {
     });
 
     test(
-      'next canonical release stays newer and new plugin APIs stay blocked',
+      'the hotfix orders between its base release and the next release',
       () {
         final installed = appReleaseVersion(_info('0.9.9801', '99801'));
         expect(
           PluginVersionUtils.compareCoreVersions(installed, '0.9.99'),
           lessThan(0),
         );
-        expect(PluginVersionUtils.compareCoreVersions(installed, '0.9.98'), 0);
+        expect(
+          PluginVersionUtils.compareCoreVersions(installed, '0.9.98'),
+          greaterThan(0),
+        );
+        expect(
+          PluginVersionUtils.compareCoreVersions(installed, '0.9.98.1'),
+          0,
+        );
+        expect(
+          PluginVersionUtils.compareCoreVersions(installed, '0.9.98.2'),
+          lessThan(0),
+        );
       },
     );
   });

@@ -721,7 +721,7 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
     final bootPayload = {
       'plugin': {'id': plugin.pluginId, 'version': plugin.version},
       'app': {
-        'version': canonicalAppVersion(packageInfo),
+        'version': appReleaseVersion(packageInfo),
         'platform': Platform.operatingSystem,
         // שפת הממשק הפעילה (he-IL לתאימות; 'language' — קוד השפה)
         ...pluginLocalePayload(
