@@ -159,6 +159,35 @@ void main() {
     expect(found.single.heRef, 'ספר, ב., א');
   });
 
+  test('סדר שורות נשמר גם כשהוא הפוך מסדר הטקסט באינדקס', () async {
+    final db = await buildDb();
+    (await db.database).execute(
+      "INSERT INTO line_dh (bookId, dhText, lineIndex, dhDisplay) "
+      "VALUES (1, 'מאימתי א', 40, 'מאימתי א')",
+    );
+    final found = await db.lineDhDao.dibburimForBooks(
+      [999, 1, 1, 2],
+      'מאימתי',
+      limit: 1,
+    );
+    expect(found.single.lineIndex, 3);
+  });
+
+  test('מסנן שלא מצא בספר הראשון ממשיך לספר הבא לפני התקרה', () async {
+    final db = await buildDb();
+    (await db.database).execute(
+      "INSERT INTO line_dh (bookId, dhText, lineIndex, dhDisplay) "
+      "VALUES (2, 'מאימתי מתחילין', 7, 'מאימתי מתחילין')",
+    );
+    final found = await db.lineDhDao.dibburimForBooks(
+      [1, 2],
+      'מאימתי',
+      limit: 1,
+      where: (dibbur) => dibbur.bookId == 2,
+    );
+    expect(found.single.bookId, 2);
+  });
+
   test('רשימת ספרים ריקה או תחילית ריקה אינן פונות למסד', () async {
     final db = await buildDb();
     expect(await db.lineDhDao.dibburimForBooks([], 'מאימתי'), isEmpty);
