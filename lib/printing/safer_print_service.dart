@@ -1,9 +1,12 @@
+import 'dart:async';
+import 'dart:io';
 import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
+import 'package:otzaria/core/error_log_file.dart';
 import 'package:otzaria/core/messages/pdf_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/windowing/dialog_owner.dart';
@@ -35,13 +38,30 @@ Future<bool> printPdfWithSaferMode({
   int? ownerViewId,
   OnPrintSpooling? onSpooling,
 }) async {
+  final requestedFormat = format;
+  // ה-PDF דורש מידות סופיות. כשהמדפסת מחזירה מידה לא תקינה,
+  // משתמשים בגודל שהתבקש ושומרים אבחון במידת האפשר.
+  FutureOr<Uint8List> layout(PdfPageFormat printerFormat) {
+    if (isUsablePageFormat(printerFormat)) return onLayout(printerFormat);
+    try {
+      ErrorLogFile.append(
+        title: 'Printer page size',
+        error: 'The printer reported an unusable page size: $printerFormat',
+        details: {'Used instead': '$requestedFormat'},
+      );
+    } on FileSystemException {
+      // כשל באבחון לא צריך למנוע את ההדפסה.
+    }
+    return onLayout(requestedFormat);
+  }
+
   LayoutCallback reportSpooling(String? printerName) {
     if (onSpooling == null || defaultTargetPlatform != TargetPlatform.windows) {
-      return onLayout;
+      return layout;
     }
     var reported = false;
     return (format) async {
-      final bytes = await onLayout(format);
+      final bytes = await layout(format);
       if (!reported) {
         reported = true;
         onSpooling(printerName);
@@ -138,3 +158,17 @@ Future<bool> printPdfWithSaferMode({
   if (!printed) UiSnack.showError(PdfMessages.printFailed(selected.name));
   return printed;
 }
+
+/// עמוד שאפשר לפרוס עליו: מידות סופיות וחיוביות, ושוליים סופיים.
+@visibleForTesting
+bool isUsablePageFormat(PdfPageFormat format) =>
+    format.width.isFinite &&
+    format.width > 0 &&
+    format.height.isFinite &&
+    format.height > 0 &&
+    [
+      format.marginLeft,
+      format.marginTop,
+      format.marginRight,
+      format.marginBottom,
+    ].every((margin) => margin.isFinite);
