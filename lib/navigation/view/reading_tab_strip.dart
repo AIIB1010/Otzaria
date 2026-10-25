@@ -182,9 +182,8 @@ class _ReadingTabStripState extends State<ReadingTabStrip> {
 
   /// כרטיסיה מחלון אחר נגררת מעל החלון הזה.
   ///
-  /// ⚠️ המיקום מגיע בקואורדינטות **מסך**, כי הוא נמדד בחלון אחר. רק כאן
-  /// אפשר לתרגם אותו למיקום הכנסה, ולכן התוצאה נכתבת ל-
-  /// [externalTabDropIndex] שה-host מחזיר לשולח.
+  /// ⚠️ רק כאן אפשר לתרגם את המיקום למיקום הכנסה, ולכן התוצאה נכתבת ל-
+  /// [ExternalTabDragState.dropIndex], ש-`InProcessTabDrops` מחזיר לשולח.
   void _onExternalDrag() {
     final external = _externalDrag;
     if (external == null) return;

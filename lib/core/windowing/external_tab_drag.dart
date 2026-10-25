@@ -70,11 +70,3 @@ class ExternalTabDragScope extends InheritedWidget {
   bool updateShouldNotify(ExternalTabDragScope oldWidget) =>
       !identical(state, oldWidget.state);
 }
-
-/// [ExternalTabDragState.drag] של החלון של ה-isolate הזה.
-ValueNotifier<ExternalTabDrag?> get externalTabDrag =>
-    ExternalTabDragState.current.drag;
-
-/// [ExternalTabDragState.dropIndex] של החלון של ה-isolate הזה.
-ValueNotifier<int?> get externalTabDropIndex =>
-    ExternalTabDragState.current.dropIndex;
