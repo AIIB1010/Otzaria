@@ -65,7 +65,7 @@ dependencies:
   otzaria_icons:
     git:
       url: https://github.com/Otzaria/otzaria_icons
-      ref: 5225cd36c59097fe1f24a39fb60f9c2c0e15e47c
+      ref: 483fec355339f54f9e094994a106dad9a63b82e3
   file_picker_darwin: ^2.4.0
   file_picker: ^13.1.0
   # FilePickerWindowsOptions: בעלים מפורש לדיאלוג (חלון Dart ולא החלון שבחזית).
