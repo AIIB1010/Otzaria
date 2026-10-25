@@ -3716,8 +3716,14 @@ class MainWindowScreenState extends State<MainWindowScreen>
                                   ),
                                 ),
                               Expanded(
-                                child: OrientationBuilder(
-                                  builder: (context, orientation) {
+                                child: Builder(
+                                  builder: (context) {
+                                    // כיוון החלון כולו, כמו בסרגל הכותרת. כיוון
+                                    // אזור התוכן שונה ממנו בחלון כמעט ריבועי.
+                                    final orientation =
+                                        MediaQuery.orientationOf(
+                                          context,
+                                        );
                                     _handleOrientationChange(
                                       context,
                                       orientation,

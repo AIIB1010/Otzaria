@@ -29,7 +29,10 @@ import 'package:otzaria/library_update/bloc/library_update_bloc.dart';
 import 'package:otzaria/navigation/bloc/navigation_bloc.dart';
 import 'package:otzaria/navigation/bloc/navigation_event.dart';
 import 'package:otzaria/navigation/bloc/navigation_state.dart';
+import 'package:otzaria/navigation/view/custom_title_bar.dart';
 import 'package:otzaria/navigation/view/main_window_screen.dart';
+import 'package:otzaria/navigation/view/reading_tab_strip.dart';
+import 'package:otzaria/navigation/view/vertical_reading_tab_strip.dart';
 import 'package:otzaria/plugins/bloc/plugin_system_bloc.dart';
 import 'package:otzaria/plugins/bloc/plugin_system_event.dart';
 import 'package:otzaria/plugins/bloc/plugin_system_state.dart';
@@ -40,6 +43,7 @@ import 'package:otzaria/settings/engine/settings_state.dart';
 import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
 import 'package:otzaria/tabs/bloc/tabs_event.dart';
 import 'package:otzaria/tabs/bloc/tabs_state.dart';
+import 'package:otzaria/tabs/models/tab.dart';
 import 'package:otzaria/work_status/work_status_cubit.dart';
 import 'package:otzaria/workspaces/bloc/workspace_bloc.dart';
 import 'package:otzaria/workspaces/bloc/workspace_event.dart';
@@ -163,6 +167,53 @@ void main() {
     expect(tester.takeException(), isNull);
     verifyNever(() => harness.indexing.add(any()));
   });
+
+  group('כרטיסיות בצד מוצגות לפי כיוון אחד לכל החלון (issue #3180)', () {
+    // 1000×1030: החלון לאורך, אבל אזור התוכן שמתחת לסרגל הכותרת רחב מגובהו.
+    for (final (size, onSide) in [
+      (const Size(1000, 1030), false),
+      (const Size(1400, 900), true),
+    ]) {
+      testWidgets('חלון ${size.width.toInt()}×${size.height.toInt()}', (
+        tester,
+      ) async {
+        await _pumpMainWindow(
+          tester,
+          Future.value(Library(categories: [])),
+          isLoading: false,
+          size: size,
+          tabsPlacement: SettingsRepository.readingTabsPlacementSide,
+          openTabs: [_StubTab('ספר א')],
+        );
+        await tester.pumpAndSettle();
+
+        // רצועת כרטיסיות אחת בלבד: בצד, או בשורה שמתחת לסרגל הכותרת.
+        expect(
+          find.byType(VerticalReadingTabStrip).hitTestable(),
+          onSide ? findsOneWidget : findsNothing,
+        );
+        expect(
+          find
+              .descendant(
+                of: find.byType(CustomTitleBar),
+                matching: find.byType(ReadingTabStrip),
+              )
+              .hitTestable(),
+          onSide ? findsNothing : findsOneWidget,
+        );
+      });
+    }
+  });
+}
+
+class _StubTab extends OpenedTab {
+  _StubTab(super.title);
+
+  @override
+  OpenedTab clone() => this;
+
+  @override
+  Map<String, dynamic> toJson() => {'type': '_StubTab', 'title': title};
 }
 
 class _Harness {
@@ -178,6 +229,9 @@ Future<_Harness> _pumpMainWindow(
   Future<Library> catalog, {
   bool isLoading = true,
   Stream<IndexingState> indexingStates = const Stream.empty(),
+  Size size = const Size(1200, 900),
+  String tabsPlacement = SettingsRepository.readingTabsPlacementTop,
+  List<OpenedTab> openTabs = const [],
 }) async {
   await Settings.init(cacheProvider: MemoryCacheProvider());
   // כמו חלון שאינו בעל התהליך: בלי ניקוז הפעלות חיצוניות.
@@ -188,7 +242,9 @@ Future<_Harness> _pumpMainWindow(
   DataRepository.instance.library = catalog;
   // הבדיקה מאזינה בעצמה לכשל; כאן רק מונעים שה-Future המקורי ידווח כלא מטופל.
   DataRepository.instance.library.ignore();
-  await tester.binding.setSurfaceSize(const Size(1200, 900));
+  // גודל ה-view ולא רק המשטח, כדי ש-MediaQuery יראה את החלון האמיתי.
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1;
   final navigation = _NavigationBloc();
   whenListen(
     navigation,
@@ -201,7 +257,10 @@ Future<_Harness> _pumpMainWindow(
   whenListen(
     settings,
     const Stream<SettingsState>.empty(),
-    initialState: SettingsState.initial().copyWith(isOfflineMode: true),
+    initialState: SettingsState.initial().copyWith(
+      isOfflineMode: true,
+      readingTabsPlacement: tabsPlacement,
+    ),
   );
   final indexing = _IndexingBloc();
   whenListen(
@@ -226,7 +285,7 @@ Future<_Harness> _pumpMainWindow(
   whenListen(
     tabs,
     const Stream<TabsState>.empty(),
-    initialState: TabsState.initial(),
+    initialState: TabsState(tabs: openTabs, currentTabIndex: 0),
   );
   final workspace = _WorkspaceBloc();
   whenListen(
@@ -266,7 +325,7 @@ Future<_Harness> _pumpMainWindow(
       await bloc.close();
     }
     DataRepository.instance.invalidateLibraryCache();
-    await tester.binding.setSurfaceSize(null);
+    tester.view.reset();
   });
   const window = _FakeWindow(AppWindowId('test-window'));
   await tester.pumpWidget(
