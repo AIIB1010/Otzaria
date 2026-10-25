@@ -18,11 +18,15 @@ class PluginVersionUtils {
     return result;
   }
 
-  /// משווה שתי גרסאות לפי שלושת רכיבי הליבה major.minor.patch.
+  /// משווה שתי גרסאות לפי כל רכיבי הליבה; רכיב חסר נחשב 0.
+  /// גרסת אוצריא עם hotfix היא בת ארבעה רכיבים: `0.9.98.1` חדשה מ-`0.9.98`.
   static int compareCoreVersions(String first, String second) {
     final parts1 = parseCoreSegments(first);
     final parts2 = parseCoreSegments(second);
-    for (var i = 0; i < 3; i++) {
+    final length = parts1.length > parts2.length
+        ? parts1.length
+        : parts2.length;
+    for (var i = 0; i < length; i++) {
       final p1 = i < parts1.length ? parts1[i] : 0;
       final p2 = i < parts2.length ? parts2[i] : 0;
       if (p1 > p2) return 1;

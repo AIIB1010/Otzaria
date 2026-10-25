@@ -125,6 +125,7 @@ export interface ThemePayload {
 export interface BootPayload {
   plugin: { id: string; version: string };
   app: {
+    /** Includes the hotfix as a 4th part: `'0.9.98.1'`, or `'0.9.98'` without one. */
     version: string;
     platform: 'windows' | 'linux' | 'macos' | 'android' | 'ios' | string;
     /** Full locale tag, e.g. `'he-IL'` or `'en'`. */
@@ -154,11 +155,11 @@ export interface BootPayload {
    *  crash, update) — then `state` may be `null`. For a tab restored from a
    *  previous session or a workspace, present only if a state was saved.
    *  Absent on a fresh open. `state` is the last value passed to
-   *  `plugin.setRestoreState`. Since 0.9.99. */
+   *  `plugin.setRestoreState`. Since 0.9.98.1. */
   restore?: PluginRestorePayload;
 }
 
-/** The `restore` field of `plugin.boot`. Since 0.9.99. */
+/** The `restore` field of `plugin.boot`. Since 0.9.98.1. */
 export interface PluginRestorePayload {
   reason: 'discarded' | 'crashed' | 'reloaded' | 'session';
   state: unknown | null;
@@ -273,7 +274,7 @@ export interface SearchResult {
   /** `'text'` for a text book, `'pdf'` for a PDF book. */
   type: 'text' | 'pdf';
   book: string;
-  /** Snippet; שם הוי"ה per the user's setting (from 0.9.98) — see `RawDivineNamesOption`. */
+  /** Snippet; שם הוי"ה per the user's setting (from 0.9.98.1) — see `RawDivineNamesOption`. */
   text: string;
   /** ראה `SearchTextStatus`. */
   textStatus?: SearchTextStatus;
@@ -305,7 +306,7 @@ export interface BookIdentity {
 }
 
 /**
- * Opt-out of the user's divine-names display setting (from 0.9.98).
+ * Opt-out of the user's divine-names display setting (from 0.9.98.1).
  *
  * By default every API that returns book text applies the setting chosen by
  * the user (שם הוי"ה as יקוק / ה' / יי / ידוד, and the other names where the
@@ -344,7 +345,7 @@ export type HolyNameDisplay =
   | 'doubleYod'
   | 'daletDalet';
 
-/** Arguments to `app.getDivineNamesDisplay` (from 0.9.98). */
+/** Arguments to `app.getDivineNamesDisplay` (from 0.9.98.1). */
 export interface DivineNamesDisplayArgs extends BookIdentity {
   /** `'body'` (default): the book's text; `'commentary'`: commentaries and
    * link content. */
@@ -353,7 +354,7 @@ export interface DivineNamesDisplayArgs extends BookIdentity {
 
 /**
  * How divine names reach the plugin in book text, resolved at the moment of
- * the call as the reader would show that book (from 0.9.98). Without a book:
+ * the call as the reader would show that book (from 0.9.98.1). Without a book:
  * the general setting only. The setting can change at any time.
  */
 export interface DivineNamesDisplay {
@@ -381,7 +382,7 @@ export interface GetBookContentArgs extends BookIdentity, RawDivineNamesOption {
   textReaderDisplay?: boolean;
 }
 
-/** Arguments to `events.setOptions` (from 0.9.98). */
+/** Arguments to `events.setOptions` (from 0.9.98.1). */
 export interface EventOptionsArgs {
   /** An event topic subscribed with `events.subscribe:<topic>`. */
   topic: string;
@@ -441,7 +442,7 @@ export interface SearchQueryParams {
   wordMatchMode?: SearchWordMatchMode;
   /** חוקי רק ב-advanced יחד עם wordMatchMode: 'atLeast'. */
   wordMatchCount?: number;
-  /** מגרסה 0.9.99. אותו מרווח כמו לפי הסדר, אבל המילים בכל סדר; נדחה ב-fuzzy,
+  /** מגרסה 0.9.98.1. אותו מרווח כמו לפי הסדר, אבל המילים בכל סדר; נדחה ב-fuzzy,
    *  בטווח שאינו wordDistance, בהתאמה שאינה all ועם customSpacing. */
   anyOrder?: boolean;
   /** אפשרויות מילה שחלות על כל מילות השאילתה. */
@@ -470,7 +471,7 @@ export interface SearchQueryHit extends BookIdentity {
   categoryPath?: string | null;
   /** Stored form; a lookup key, never filtered. */
   reference: string;
-  /** Snippet; שם הוי"ה per the user's setting (from 0.9.98) — see `RawDivineNamesOption`. */
+  /** Snippet; שם הוי"ה per the user's setting (from 0.9.98.1) — see `RawDivineNamesOption`. */
   text: string;
   /** ראה `SearchTextStatus`. */
   textStatus?: SearchTextStatus;
@@ -565,13 +566,13 @@ export interface OpenSearchTabSettings {
   wordMatchMode?: SearchWordMatchMode;
   /** חוקי רק עם mode: 'advanced' ו-wordMatchMode: 'atLeast'. */
   wordMatchCount?: number;
-  /** מגרסה 0.9.99. אותו מרווח, אבל המילים בכל סדר; כללים כמו ב-search.query. */
+  /** מגרסה 0.9.98.1. אותו מרווח, אבל המילים בכל סדר; כללים כמו ב-search.query. */
   anyOrder?: boolean;
   /** אפשרויות מילה שחלות על כל מילות השאילתה (למשל 'קידומות דקדוקיות'). */
   options?: Record<string, boolean>;
   /** אפשרויות פר-מילה במפתח `"{מילה}_{אינדקס}"`; גובר על `options`. */
   wordOptions?: Record<string, Record<string, boolean>>;
-  /** מגרסה 0.9.99. השלילה, המילים החלופיות והמרווחים — רק עם mode: 'advanced'. */
+  /** מגרסה 0.9.98.1. השלילה, המילים החלופיות והמרווחים — רק עם mode: 'advanced'. */
   negativeQuery?: string;
   negativeOptions?: Record<string, boolean>;
   negativeWordOptions?: Record<string, Record<string, boolean>>;
@@ -579,7 +580,7 @@ export interface OpenSearchTabSettings {
   negativeAlternativeWords?: Record<string, string[]>;
   customSpacing?: Record<string, string>;
   negativeCustomSpacing?: Record<string, string>;
-  /** מגרסה 0.9.99. היקף החיפוש, כמו ב-`search.query`; ברירת מחדל כל הספרייה. */
+  /** מגרסה 0.9.98.1. היקף החיפוש, כמו ב-`search.query`; ברירת מחדל כל הספרייה. */
   facets?: string[];
   categories?: string[];
   books?: BookIdentity[];
@@ -600,7 +601,7 @@ export interface OpenSearchTabArgs {
 }
 
 export interface TocEntry {
-  /** Heading; שם הוי"ה per the user's setting (from 0.9.98). Navigate by
+  /** Heading; שם הוי"ה per the user's setting (from 0.9.98.1). Navigate by
    * `index` — a filtered heading may not resolve as a ref. */
   text: string;
   index: number;
@@ -615,7 +616,7 @@ export interface TocEntry {
 export interface AltStructure {
   key: string;
   title: string | null;
-  /** שם הוי"ה per the user's setting (from 0.9.98). */
+  /** שם הוי"ה per the user's setting (from 0.9.98.1). */
   heTitle: string | null;
 }
 
@@ -649,7 +650,7 @@ export type GetCommentatorsResult =
 export interface LinkAnchor {
   start: number;
   end: number | null;
-  /** שם הוי"ה per the user's setting (from 0.9.98). */
+  /** שם הוי"ה per the user's setting (from 0.9.98.1). */
   label: string | null;
 }
 
@@ -721,7 +722,7 @@ export interface GetLinkTargetsSummaryResult {
   maxSourceLine: number;
 }
 
-/** `content`: divine names per the user's commentary setting (from 0.9.98). */
+/** `content`: divine names per the user's commentary setting (from 0.9.98.1). */
 export type LinkContentItem =
   | { content: string }
   | { error: 'not_found' | 'forbidden' };
@@ -788,7 +789,7 @@ export interface HighlightCapabilities {
   /** בחירת טקסט אינה נתמכת ב-PDF. */
   selection: boolean;
   /** האזורים שבמשטח הנוכחי שבהם פריטי תפריט הקשר של תוספים מוצגים:
-   * `mainText` בספר טקסט, ומ־0.9.99 גם `commentary`, ו־`pdf` בספר PDF. */
+   * `mainText` בספר טקסט, ומ־0.9.98.1 גם `commentary`, ו־`pdf` בספר PDF. */
   contextMenu: Array<'mainText' | 'commentary' | 'pdf'>;
 }
 
@@ -973,7 +974,7 @@ export interface CityInfo {
   inIsrael: boolean;
 }
 
-/** Since 0.9.99. Raw HTML source is retained; editable text uses the host's stripHtml. */
+/** Since 0.9.98.1. Raw HTML source is retained; editable text uses the host's stripHtml. */
 export interface CorrectionChange {
   sectionIndex: number;
   originalSourceText: string;
@@ -1112,9 +1113,9 @@ export interface CorrectionSessionEndedEvent {
 }
 
 export interface ReaderState {
-  /** Since 0.9.99: text-tab identity, stable until closure; never persisted. */
+  /** Since 0.9.98.1: text-tab identity, stable until closure; never persisted. */
   currentTabId: string | null;
-  /** Since 0.9.99: existing session owned by the caller; never creates a session. */
+  /** Since 0.9.98.1: existing session owned by the caller; never creates a session. */
   currentCorrectionSessionId: string | null;
   currentBook: string | null;
   currentBookId: string | null;
@@ -1127,7 +1128,7 @@ export interface ReaderState {
   currentIndex: number;
   currentRef: string | null;
   openTabs: Array<{
-    /** Since 0.9.99: text-tab identity; null for other tabs. */
+    /** Since 0.9.98.1: text-tab identity; null for other tabs. */
     tabId: string | null;
     /** Existing correction session owned by the caller; null for other owners or tabs. */
     correctionSessionId: string | null;
@@ -1162,7 +1163,7 @@ export interface ReaderRefState {
 }
 
 /**
- * A reader selection. From 0.9.98 `text`, `renderedSelectedText` and
+ * A reader selection. From 0.9.98.1 `text`, `renderedSelectedText` and
  * `normalizedSelectedText` follow the user's divine-names setting (see
  * `RawDivineNamesOption`); the `source*` fields stay as stored.
  */
@@ -1184,7 +1185,7 @@ export interface ReaderSelection {
   selectionId?: string;
   bookId?: string;
   bookTitle?: string;
-  /** Since 0.9.99: exact tab identity in reader-book; absent in detached previews. */
+  /** Since 0.9.98.1: exact tab identity in reader-book; absent in detached previews. */
   tabId?: string;
   sectionIndex?: number;
   sectionId?: string;
@@ -1206,11 +1207,11 @@ export interface ReaderSelection {
    * click position. Act only on your own ids. From 0.9.97. */
   clickedHighlights?: ClickedHighlightRef[];
   /** `reader-commentary*` contexts only: the book being read, while the
-   * top-level fields describe the commentary. From 0.9.99. */
+   * top-level fields describe the commentary. From 0.9.98.1. */
   mainBook?: CommentaryMainBook;
   /** `reader-pdf*` contexts only (a PDF page, not its commentary pane): the
    * 1-based page that was clicked, or where the selection starts; also given
-   * as `sectionIndex`/`currentIndex`. From 0.9.99. */
+   * as `sectionIndex`/`currentIndex`. From 0.9.98.1. */
   pageNumber?: number;
   /** Identity of the book the text belongs to (see `BookIdentity`). */
   id?: number | null;
@@ -1219,7 +1220,7 @@ export interface ReaderSelection {
   external?: { provider: 'hebrewbooks' | 'otzar'; id: number | string };
 }
 
-/** The book a right-clicked commentary belongs to. From 0.9.99. */
+/** The book a right-clicked commentary belongs to. From 0.9.98.1. */
 export interface CommentaryMainBook extends BookIdentity {
   bookId: string;
   bookTitle: string;
@@ -1508,15 +1509,15 @@ export type ContextMenuContext =
   /** Right-click on a commentary (commentary list, page-shape column or the
    * PDF commentary pane) without a selection. Opt-in: an item without
    * `contexts` does not appear. The commentary is the current book; see
-   * `ReaderSelection.mainBook`. From 0.9.99. */
+   * `ReaderSelection.mainBook`. From 0.9.98.1. */
   | 'reader-commentary'
   /** Like `reader-commentary`, with selected text in the commentary.
-   * From 0.9.99. */
+   * From 0.9.98.1. */
   | 'reader-commentary-selection'
   /** Right-click on a PDF page without a selection. Opt-in; see
-   * `ReaderSelection.pageNumber`. From 0.9.99. */
+   * `ReaderSelection.pageNumber`. From 0.9.98.1. */
   | 'reader-pdf'
-  /** Like `reader-pdf`, with selected text on the page. From 0.9.99. */
+  /** Like `reader-pdf`, with selected text on the page. From 0.9.98.1. */
   | 'reader-pdf-selection';
 
 export interface ContextMenuColor {
@@ -1560,7 +1561,7 @@ export interface ContextMenuItem {
   showWhen?: ContextMenuShowWhen;
   /** By default the host draws a divider between the items of different
    * plugins. Set `false` on a plugin's first top-level item to opt out.
-   * Top-level items only. Available from 0.9.99. */
+   * Top-level items only. Available from 0.9.98.1. */
   separatorBefore?: boolean;
   /** Deliver the clicked selection (`selectedText`, `selection.text`,
    * `renderedSelectedText`, `normalizedSelectedText`, `sections`) with divine
@@ -1744,7 +1745,7 @@ export interface OtzariaEventMap {
   'plugin.permissions_changed': { permissions: string[] };
   /** User selected text in the reader. Requires permission: events.subscribe:reader.selection_changed.
    * `text` follows the user's divine-names setting; opt out per topic with
-   * `Otzaria.on(topic, cb, { rawDivineNames: true })` (from 0.9.98). */
+   * `Otzaria.on(topic, cb, { rawDivineNames: true })` (from 0.9.98.1). */
   'reader.selection_changed': {
     text: string;
     currentRef: string;
@@ -1789,7 +1790,7 @@ export interface OtzariaEventMap {
     /** Always `'all'` outside `mode: 'advanced'`. Older hosts omit it. */
     wordMatchMode?: SearchWordMatchMode;
     wordMatchCount?: number;
-    /** Since 0.9.99: same distance as ordered search, but the words may
+    /** Since 0.9.98.1: same distance as ordered search, but the words may
      *  appear in any order. Sent only when true. */
     anyOrder?: boolean;
     offset: number;
@@ -1944,7 +1945,7 @@ export interface DatabaseQuerySpec {
   limit?: number;
   offset?: number;
   rowFormat?: 'array' | 'object';
-  /** From 0.9.98, library-text sources (`talmud_synopsis`): `true` returns
+  /** From 0.9.98.1, library-text sources (`talmud_synopsis`): `true` returns
    * string values as stored instead of שם הוי"ה per the user's setting.
    * ⚠️ See the warning on `RawDivineNamesOption`. */
   rawDivineNames?: boolean;
@@ -2367,7 +2368,7 @@ export interface SubmitBookCorrectionResult {
 }
 
 /** Delivery options of an event topic for this plugin instance, until the
- * page reloads (`events.setOptions`, from 0.9.98). */
+ * page reloads (`events.setOptions`, from 0.9.98.1). */
 export interface OtzariaEventOptions {
   /** Book text in the event arrives with divine names as stored.
    * ⚠️ See the warning on `RawDivineNamesOption`. */
@@ -2568,13 +2569,13 @@ export interface OtzariaGlobal {
     payload: SearchQueryParams & RawDivineNamesOption
   ): AsyncIterable<SearchQueryChunk>;
 
-  /** How divine names reach the plugin in book text (from 0.9.98). */
+  /** How divine names reach the plugin in book text (from 0.9.98.1). */
   call(
     method: 'app.getDivineNamesDisplay',
     payload?: DivineNamesDisplayArgs
   ): Promise<OtzariaResponse<DivineNamesDisplay>>;
 
-  /** Delivery options of an event topic for this instance (from 0.9.98). */
+  /** Delivery options of an event topic for this instance (from 0.9.98.1). */
   call(
     method: 'events.setOptions',
     payload: EventOptionsArgs

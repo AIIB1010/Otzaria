@@ -685,7 +685,7 @@ async function forDisplay(rawText, bookUid) {
 
 ## תיקונים מקומיים: שמירה, אישור והתאוששות
 
-**מגרסה:** `0.9.99`. **הרשאות:** `reader.open`, `reader.local_edit`,
+**מגרסה:** `0.9.98.1`. **הרשאות:** `reader.open`, `reader.local_edit`,
 `plugin.storage.read`, `plugin.storage.write`.
 
 `beginCorrectionSession` מפעילה עורך מובנה בפסקאות פשוטות בקורא הרשמי.

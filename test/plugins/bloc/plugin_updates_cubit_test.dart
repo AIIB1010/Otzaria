@@ -55,7 +55,7 @@ void main() {
   }
 
   test(
-    'iOS default loader sends canonical app version to the plugin store',
+    'iOS default loader sends the hotfix release version to the plugin store',
     () async {
       TestWidgetsFlutterBinding.ensureInitialized();
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
@@ -79,7 +79,7 @@ void main() {
       );
       addTearDown(cubit.close);
       await cubit.ensureChecked(plugins);
-      expect(requests.single.url.queryParameters['appVersion'], '0.9.98');
+      expect(requests.single.url.queryParameters['appVersion'], '0.9.98.1');
       expect(cubit.state.updateFor('org.a'), isNotNull);
     },
   );

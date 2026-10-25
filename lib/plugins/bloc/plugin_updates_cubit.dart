@@ -48,7 +48,7 @@ class PluginUpdatesCubit extends Cubit<PluginUpdatesState> {
        super(const PluginUpdatesState({}));
 
   static Future<String> _loadAppVersion() async =>
-      canonicalAppVersion(await PackageInfo.fromPlatform());
+      appReleaseVersion(await PackageInfo.fromPlatform());
 
   /// מפעילה בדיקת עדכונים אם עבר ה-TTL. בטוחה לקריאה בכל פתיחת טאב תוסף:
   /// בדיקות מקבילות מתלכדות, ובתוך חלון ה-TTL הקריאה היא no-op.

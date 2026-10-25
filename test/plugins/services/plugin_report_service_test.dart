@@ -77,7 +77,7 @@ void main() {
   });
 
   group('PluginReportService.buildRecord', () {
-    test('iOS report metadata uses the canonical release version', () async {
+    test('iOS report metadata uses the hotfix release version', () async {
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
       addTearDown(() {
         debugDefaultTargetPlatformOverride = null;
@@ -105,8 +105,8 @@ void main() {
             pluginVersion: '1.0.0',
             details: 'דיווח בדיקה',
           );
-      expect(record.appVersion, '0.9.98');
-      expect(record.toApiPayload()['appVersion'], '0.9.98');
+      expect(record.appVersion, '0.9.98.1');
+      expect(record.toApiPayload()['appVersion'], '0.9.98.1');
     });
 
     test('בונה רשומה עם כל שדות החוזה, נרמול וחיתוך', () async {

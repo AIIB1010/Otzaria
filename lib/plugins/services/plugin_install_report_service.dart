@@ -82,7 +82,7 @@ class PluginInstallReportService {
     try {
       String? appVersion;
       try {
-        appVersion = canonicalAppVersion(await PackageInfo.fromPlatform());
+        appVersion = appReleaseVersion(await PackageInfo.fromPlatform());
       } catch (_) {}
 
       final response = await _client

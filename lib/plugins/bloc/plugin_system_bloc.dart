@@ -528,7 +528,7 @@ class PluginSystemBloc extends Bloc<PluginSystemEvent, PluginSystemState> {
     try {
       String? appVersion;
       try {
-        appVersion = canonicalAppVersion(await PackageInfo.fromPlatform());
+        appVersion = appReleaseVersion(await PackageInfo.fromPlatform());
       } catch (_) {}
 
       archivePath = await _downloadService.downloadPluginArchive(

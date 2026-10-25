@@ -1081,7 +1081,7 @@ class PluginBridgeAdapter {
       case 'getInfo':
         final packageInfo = await PackageInfo.fromPlatform();
         return {
-          'version': canonicalAppVersion(packageInfo),
+          'version': appReleaseVersion(packageInfo),
           'buildNumber': packageInfo.buildNumber,
           'platform': Platform.operatingSystem,
         };
@@ -6495,7 +6495,7 @@ class PluginBridgeAdapter {
         if (includeSystemInfo) {
           final packageInfo = await PackageInfo.fromPlatform();
           finalBody += '\n\n---\n';
-          finalBody += 'גרסה: ${canonicalAppVersion(packageInfo)}\n';
+          finalBody += 'גרסה: ${appReleaseVersion(packageInfo)}\n';
           finalBody += 'פלטפורמה: ${Platform.operatingSystem}\n';
           finalBody += 'תוסף: ${plugin.name} (${plugin.pluginId})\n';
         }
