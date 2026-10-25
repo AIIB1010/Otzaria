@@ -15,15 +15,11 @@ import 'package:otzaria/widgets/layout/tool_result_card_shell.dart';
 class GematriaResultCard extends StatelessWidget {
   final int number;
   final GematriaSearchResult result;
-  final bool isFocused;
-  final VoidCallback? onTap;
 
   const GematriaResultCard({
     super.key,
     required this.number,
     required this.result,
-    this.isFocused = false,
-    this.onTap,
   });
 
   void _copy(BuildContext context) {
@@ -47,8 +43,6 @@ class GematriaResultCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ToolResultCardShell(
-      isFocused: isFocused,
-      onTap: onTap,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final cs = Theme.of(context).colorScheme;
