@@ -352,7 +352,7 @@ void main() {
     expect('Stack:'.allMatches(log), hasLength(2));
   });
 
-  test('רק כשל של מסד פגום מסמן אותו, והחלפת המסד מנקה את הסימון', () async {
+  test('פתיחה מחדש משמרת סימון פגימה', () async {
     final validPath = await seedDb('seforim');
     final corruptPath = await seedDb('corrupt');
     // דף הכותרת נשאר שלם, וכל שאר הדפים נדרסים.
@@ -388,7 +388,7 @@ void main() {
 
     await DbReadWorker.suspendForExternalWrite();
     await DbReadWorker.resumeAfterExternalWrite();
-    expect(DbReadWorker.corruptDatabaseDetected.value, isFalse);
+    expect(DbReadWorker.corruptDatabaseDetected.value, isTrue);
   });
 
   test('בקשות של אותו סבב נשלחות ל-worker כהודעה אחת', () async {

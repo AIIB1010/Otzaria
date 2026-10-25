@@ -16,6 +16,7 @@ import 'package:flutter/services.dart' show PlatformException;
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:otzaria/core/http_client_registry.dart';
 import 'package:otzaria/data/constants/database_constants.dart';
+import 'package:otzaria/data/data_providers/db_read_worker.dart';
 import 'package:otzaria/data/data_providers/sqlite_data_provider.dart';
 import 'package:otzaria/empty_library/bloc/empty_library_event.dart';
 import 'package:otzaria/empty_library/bloc/empty_library_state.dart';
@@ -516,6 +517,7 @@ class EmptyLibraryBloc extends Bloc<EmptyLibraryEvent, EmptyLibraryState> {
       // הצלחה = state סופי DirectorySelected; אחרת (כשל שקט) משחזרים.
       if (state is EmptyLibraryDirectorySelected) {
         if (backupDir != null) await _discardBackupDir(backupDir);
+        DbReadWorker.corruptDatabaseDetected.value = false;
       } else if (backupDir != null) {
         await _restoreDatabaseFiles(backupDir, event.existingLibraryPath);
       }
@@ -846,6 +848,9 @@ class EmptyLibraryBloc extends Bloc<EmptyLibraryEvent, EmptyLibraryState> {
       final present = imported == null
           ? null
           : await _presentComponents(directoryPath);
+      if (imported?.contains(LibraryComponent.libraryDb) == true) {
+        DbReadWorker.corruptDatabaseDetected.value = false;
+      }
       emit(
         EmptyLibraryDirectorySelected(
           selectedPath: directoryPath,
@@ -1298,6 +1303,9 @@ class EmptyLibraryBloc extends Bloc<EmptyLibraryEvent, EmptyLibraryState> {
       // ניקוי override Android — ה-DB החדש נמצא ישירות בספרייה
       await Settings.setValue(SettingsRepository.keyDbEffectivePath, '');
 
+      if (!_accessGate.isSuspending) {
+        DbReadWorker.corruptDatabaseDetected.value = false;
+      }
       emit(EmptyLibraryDirectorySelected(selectedPath: libraryPath));
     } finally {
       _foregroundWork.release(this);

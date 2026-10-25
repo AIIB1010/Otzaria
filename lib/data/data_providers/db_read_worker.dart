@@ -379,8 +379,8 @@ class DbReadWorker {
   @visibleForTesting
   static void resetLoggedFailuresForTesting() => _loggedFailures.clear();
 
-  /// נדלק כשקריאה נכשלה כי seforim.db עצמו פגום, ונכבה בכל כתיבה חיצונית
-  /// (עדכון או החלפה); קריאה פגומה אחריה מדליקה אותו שוב.
+  /// נדלק כשקריאה נכשלה כי seforim.db עצמו פגום, ונכבה רק אחרי
+  /// התקנת מסד חדש בהצלחה; קריאה פגומה אחריה מדליקה אותו שוב.
   static final ValueNotifier<bool> corruptDatabaseDetected = ValueNotifier(
     false,
   );
@@ -561,7 +561,6 @@ class DbReadWorker {
 
   static Future<void> resumeAfterExternalWrite() async {
     _suspendedForExternalWrite = false;
-    corruptDatabaseDetected.value = false;
     await Future.wait([
       for (final service in _runningWorkers)
         service._lifecycle('resume', const {}),

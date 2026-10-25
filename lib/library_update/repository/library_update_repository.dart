@@ -963,6 +963,7 @@ class LibraryUpdateRepository implements LibraryUpdateService {
             _deleteQuietly('$newDbPath-wal');
             _deleteQuietly('$newDbPath-shm');
             recovery.finishSuccess(dbPath);
+            DbReadWorker.corruptDatabaseDetected.value = false;
             // מסמנים את נקודת האל-חזור לפני ה-await של reopen. כך ה-BLoC חוסם
             // Cancel/Reset גם אם הפתיחה מחדש או ריענון ה-runtime נמשכים/נכשלים.
             try {

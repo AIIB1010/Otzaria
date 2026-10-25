@@ -17,6 +17,7 @@ import 'package:otzaria/data/data_providers/database_library_provider.dart';
 import 'package:otzaria/data/data_providers/db_read_worker.dart';
 import 'package:otzaria/data/data_providers/sqlite_data_provider.dart';
 import 'package:otzaria/library_update/repository/library_update_repository.dart';
+import 'package:otzaria/library_update/services/library_access_gate.dart';
 import 'package:otzaria/library_update/services/library_runtime_refresh_service.dart';
 import 'package:otzaria/library_update/services/streaming_patch_downloader.dart';
 import 'package:otzaria/library_update/services/update_sqlite_setup.dart';
@@ -121,7 +122,16 @@ void main() {
         releaseTag: 'v2',
       );
 
-      await repository.applyFullDownload(plan);
+      DbReadWorker.corruptDatabaseDetected.value = true;
+      addTearDown(() => DbReadWorker.corruptDatabaseDetected.value = false);
+      await repository.applyFullDownload(
+        plan,
+        onDbReplaced: () {
+          expect(DbReadWorker.corruptDatabaseDetected.value, isFalse);
+          DbReadWorker.corruptDatabaseDetected.value = true;
+        },
+      );
+      expect(DbReadWorker.corruptDatabaseDetected.value, isTrue);
 
       expect(const LocalDbVersionReader().read(dbPath).dbVersion, 2);
       expect(_readMarker(dbPath), 'full-download');
@@ -454,12 +464,34 @@ void main() {
     },
   );
 
+  test('rollback אחרי החלפה משמר את סימון הפגימה של המסד הישן', () async {
+    final dbPath = p.join(tmp.path, DatabaseConstants.databaseFileName);
+    _writeDb(dbPath, version: 1, marker: 'old');
+    DbReadWorker.corruptDatabaseDetected.value = true;
+    addTearDown(() => DbReadWorker.corruptDatabaseDetected.value = false);
+    final repository = _localFullDownloadRepository(
+      tmp: tmp,
+      dbPath: dbPath,
+      recovery: _FailingFinishRecovery(),
+    );
+
+    await expectLater(
+      repository.applyFullDownload(_localFullDownloadPlan()),
+      throwsStateError,
+    );
+
+    expect(_readMarker(dbPath), 'old');
+    expect(DbReadWorker.corruptDatabaseDetected.value, isTrue);
+  });
+
   test(
     'applyFullDownload: commit מדווח לפני refresh גם אם refresh נכשל',
     () async {
       final dbPath = p.join(tmp.path, DatabaseConstants.databaseFileName);
       _writeDb(dbPath, version: 1, marker: 'old');
       final refresh = _ThrowingRefreshService();
+      DbReadWorker.corruptDatabaseDetected.value = true;
+      addTearDown(() => DbReadWorker.corruptDatabaseDetected.value = false);
       final repository = _localFullDownloadRepository(
         tmp: tmp,
         dbPath: dbPath,
@@ -479,6 +511,7 @@ void main() {
         throwsA(isA<StateError>()),
       );
 
+      expect(DbReadWorker.corruptDatabaseDetected.value, isFalse);
       expect(replacementReported, isTrue);
       expect(refresh.called, isTrue);
       expect(_readMarker(dbPath), 'new');
@@ -1674,6 +1707,18 @@ void main() {
     expect(forced.kind, LibraryUpdatePlanKind.fullDownload);
     expect(forced.targetVersion, 2);
     expect(forced.fullDbAsset?.size, 100);
+    final before = File(dbPath).readAsBytesSync();
+    final gate = LibraryAccessGate(renameProbe: false);
+    await expectLater(
+      gate.runExclusive<void>(
+        dbPath: dbPath,
+        body: (_) async => throw StateError('failed before replacement'),
+      ),
+      throwsStateError,
+    );
+    expect(File(dbPath).readAsBytesSync(), before);
+    final retry = await repository.checkForUpdate(allowPrerelease: false);
+    expect(retry.kind, LibraryUpdatePlanKind.fullDownload);
   });
 
   test('release בסכמה חדשה ללא דלתא דורש עדכון אפליקציה', () async {
@@ -2489,6 +2534,11 @@ class _GatedAfterBeginRecovery extends LibraryDbRecoveryService {
     beginCompleted.complete();
     await releaseBegin.future;
   }
+}
+
+class _FailingFinishRecovery extends LibraryDbRecoveryService {
+  @override
+  void finishSuccess(String dbPath) => throw StateError('commit failed');
 }
 
 class _ThrowingRefreshService extends LibraryRuntimeRefreshService {
