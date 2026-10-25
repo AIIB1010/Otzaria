@@ -1,3 +1,4 @@
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otzaria/settings/engine/settings_bloc.dart';
@@ -127,8 +128,20 @@ class TextDisplayPopupPanel extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const Spacer(),
-                  Text(viewLabel, style: theme.textTheme.bodySmall),
+                  const SizedBox(width: AppTokens.spaceSM),
+                  Expanded(
+                    child: Text(
+                      viewLabel,
+                      style: theme.textTheme.bodySmall,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(FluentIcons.dismiss_24_regular, size: 20),
+                    tooltip: 'סגור',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
                 ],
               ),
             ),
