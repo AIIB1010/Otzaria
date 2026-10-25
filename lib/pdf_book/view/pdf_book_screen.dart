@@ -1644,7 +1644,12 @@ class _PdfBookScreenState extends State<PdfBookScreen>
     return PdfViewerParams(
       isVisible: _isPdfVisible,
       imageCacheBudget: pdfSharedImageBudget,
-      onPageChanged: (pageNumber) => _pageNumberNotifier.value = pageNumber,
+      // מאזיני ה-controller קוראים את מספר העמוד לפני שהוא מתעדכן, ובפריים
+      // האחרון של קפיצה הכותרת והניווט היו נשארים על עמוד ביניים.
+      onPageChanged: (pageNumber) {
+        _pageNumberNotifier.value = pageNumber;
+        if (mounted) _onPdfViewerControllerUpdate();
+      },
       layoutPages: layoutMode.isBookView
           ? (pages, params) => _bookViewLayoutMemo.layout(
               pages,
@@ -1823,14 +1828,7 @@ class _PdfBookScreenState extends State<PdfBookScreen>
         );
 
         if (!mounted) return;
-        // בחירת המפרשים נטענת תמיד (לא תלוי ב-enablePerBookSettings); את הזום
-        // מחיל LoadPerBookSettings בבלוק.
-        final settings = await _loadPerBookSettings();
-        if (settings?.activeCommentators != null) {
-          widget.tab.activeCommentators.clear();
-          widget.tab.activeCommentators.addAll(settings!.activeCommentators!);
-        }
-
+        // נבדק לפני כל await: אחריו גלילת המשתמש נראית כנחיתה שגויה ומוחזרת.
         final currentReadyPage = resolveReadyPdfPageNumber(
           isReady: controller.isReady,
           readPageNumber: () => controller.pageNumber,
@@ -1854,6 +1852,15 @@ class _PdfBookScreenState extends State<PdfBookScreen>
           }
         } else {
           _initialPageNumber = null;
+        }
+
+        if (!mounted) return;
+        // בחירת המפרשים נטענת תמיד (לא תלוי ב-enablePerBookSettings); את הזום
+        // מחיל LoadPerBookSettings בבלוק.
+        final settings = await _loadPerBookSettings();
+        if (settings?.activeCommentators != null) {
+          widget.tab.activeCommentators.clear();
+          widget.tab.activeCommentators.addAll(settings!.activeCommentators!);
         }
 
         _runInitialSearchIfNeeded();
