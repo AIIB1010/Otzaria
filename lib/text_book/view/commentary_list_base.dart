@@ -2291,7 +2291,6 @@ class CommentaryListBaseState extends State<CommentaryListBase>
                           ),
                     )
                   : CommentatorsListView(
-                      onCommentatorSelected: _closeCommentatorsFilter,
                       typeChipKeys: visibleTypeChipKeys,
                       selectedTypeChips: effectiveTypes,
                       onTypeChipsChanged: _setSelectedCommentaryTypes,
