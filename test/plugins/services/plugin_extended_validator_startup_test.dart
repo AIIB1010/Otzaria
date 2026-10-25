@@ -188,7 +188,7 @@ void main() {
         'app.run_on_startup',
         'search.field_actions',
       ],
-      String minAppVersion = '0.9.99',
+      String minAppVersion = '0.9.98.1',
       List<Map<String, dynamic>>? items,
     }) => _manifest(
       permissions: permissions,
@@ -234,7 +234,7 @@ void main() {
       final report = _run(tempDir, actionsManifest(minAppVersion: '0.9.98'));
       expect(
         report.errors,
-        contains(contains('searchFieldActions נתמך החל מגרסה 0.9.99')),
+        contains(contains('searchFieldActions נתמך החל מגרסה 0.9.98.1')),
       );
     });
 
@@ -273,7 +273,7 @@ void main() {
       expect(report.warnings, contains(contains('no_such_icon')));
     });
 
-    test('קריאה ל-search.setFieldText מחייבת minAppVersion 0.9.99', () {
+    test('קריאה ל-search.setFieldText מחייבת minAppVersion 0.9.98.1', () {
       final dir = Directory(p.join(tempDir.path, 'plugin'))..createSync();
       final json = actionsManifest(minAppVersion: '0.9.98', items: const []);
       (json['contributes'] as Map).remove('startup');
@@ -1240,7 +1240,7 @@ void main() {
     }
 
     for (final openPlugin in [true, false]) {
-      for (final version in ['0.9.96', '0.9.98', '0.9.99']) {
+      for (final version in ['0.9.96', '0.9.98', '0.9.98.1']) {
         test('$openPlugin בגרסה $version: ולידציה ואריזה', () async {
           final report = _run(tempDir, manifest(openPlugin, version));
           final output = File(p.join(tempDir.path, 'plugin.otzplugin'));
@@ -1248,7 +1248,7 @@ void main() {
             directoryPath: p.join(tempDir.path, 'plugin'),
             outputPath: output.path,
           );
-          if (version == '0.9.99') {
+          if (version == '0.9.98.1') {
             expect(report.errors, isEmpty);
             expect((await packaging).validation.errors, isEmpty);
             expect(output.existsSync(), isTrue);
@@ -1259,13 +1259,13 @@ void main() {
                 isA<PluginPackagerException>().having(
                   (error) => error.message,
                   'message',
-                  allOf(contains('openPlugin'), contains('0.9.99')),
+                  allOf(contains('openPlugin'), contains('0.9.98.1')),
                 ),
               ),
             );
             expect(
               report.errors,
-              contains(allOf(contains('openPlugin'), contains('0.9.99'))),
+              contains(allOf(contains('openPlugin'), contains('0.9.98.1'))),
             );
             expect(output.existsSync(), isFalse);
           }
@@ -1295,7 +1295,7 @@ void main() {
     });
 
     test('openPlugin קשור עדיין נחסם בתוסף ללא ממשק', () {
-      final json = manifest(true, '0.9.99')..['headless'] = true;
+      final json = manifest(true, '0.9.98.1')..['headless'] = true;
       json['permissions'] = [
         ...json['permissions'] as List,
         'app.run_on_startup',

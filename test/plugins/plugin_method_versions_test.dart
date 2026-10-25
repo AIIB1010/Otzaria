@@ -39,7 +39,32 @@ void main() {
       );
     });
 
-    test('כל גרסה במפה היא SemVer חוקי', () {
+    // 0.9.98 כבר שוחררה: method שנוסף אחריה מסומן לפחות 0.9.98.1, אחרת
+    // החנות תגיש ל-0.9.98 תוסף שקורא לו ויקבל error.unknown_method.
+    test('רק methods שיצאו ב-0.9.98 מסומנים 0.9.98', () {
+      const shippedIn0998 = {
+        'fs.deleteFolder',
+        'fs.listUserFolder',
+        'fs.moveEntry',
+        'fs.openFolderFile',
+        'fs.pickUserFolder',
+        'fs.revokeFolder',
+        'library.getBookDetails',
+        'library.openBookFile',
+        'library.setProviderBooks',
+        'tools.biographies',
+      };
+      final unreleased =
+          versions.entries
+              .where((e) => e.value == '0.9.98')
+              .map((e) => e.key)
+              .where((m) => !shippedIn0998.contains(m))
+              .toList()
+            ..sort();
+      expect(unreleased, isEmpty);
+    });
+
+    test('כל גרסה במפה ניתנת לפענוח', () {
       for (final entry in versions.entries) {
         expect(
           () => PluginVersionUtils.parseCoreSegments(entry.value),
@@ -86,11 +111,11 @@ void main() {
   });
 }
 
-/// מפענח שורות טבלה בפורמט ``| `namespace.method` | 0.9.90 |``.
-/// משחזר את ה-regex שעל ה-website (pluginValidation.js) ליישם לפענוח METHOD_MIN_VERSION.
+/// מפענח שורות טבלה בפורמט ``| `namespace.method` | 0.9.90 |``, וגם גרסת
+/// hotfix בת ארבעה רכיבים.
 Map<String, String> _parseVersionTable(String md) {
   final rowRe = RegExp(
-    r'^\|\s*`([a-z][a-zA-Z0-9_]*\.[a-zA-Z0-9_]+)`\s*\|\s*(\d+\.\d+\.\d+)\s*\|',
+    r'^\|\s*`([a-z][a-zA-Z0-9_]*\.[a-zA-Z0-9_]+)`\s*\|\s*(\d+(?:\.\d+){2,3})\s*\|',
     multiLine: true,
   );
   final out = <String, String>{};
