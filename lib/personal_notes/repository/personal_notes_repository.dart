@@ -252,9 +252,8 @@ class PersonalNotesRepository {
       return await _fileSystem.getBookText(bookId);
     } catch (e) {
       _lastContent = null;
-      // ספרי PDF (וספרים שנמחקו) מגיעים לכאן דרך חריגה — '' הוא הסיגנל
-      // לעיגון-לפי-עמוד ב-_reconcileLocation, ולכן אין rethrow. הלוג מבחין
-      // כשל קריאה אמיתי ממצב ה-PDF הלגיטימי.
+      // ספר PDF (או שנמחק) מגיע לכאן דרך חריגה, ו-'' הוא הסיגנל לעיגון לפי
+      // עמוד ב-_reconcileLocation — ולכן אין rethrow.
       debugPrint('[PersonalNotes] book content load failed for "$bookId": $e');
       return '';
     }

@@ -22,9 +22,8 @@ class PersonalNotesState extends Equatable {
   final int? expandRequestLineNumber;
   final int expandRequestToken;
 
-  // מצב יצירת הערה חדשה — מתויג ב-bookId נפרד כדי לקשר את הטיוטה
-  // לספר שבו היא נוצרה, ללא תלות בספר שעבורו טעונות כעת ההערות
-  // (state.bookId משקף את הספר האחרון שעבורו נטענו הערות, לא את הטיוטה).
+  // יצירת הערה חדשה — הטיוטה מתויגת ב-[newNoteBookId], כי bookId הוא הספר
+  // האחרון שנטענו לו הערות ולא בהכרח ספר הטיוטה.
   final bool isCreatingNewNote;
   final String? newNoteBookId;
   final int? newNoteLineNumber;

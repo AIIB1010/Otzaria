@@ -241,10 +241,8 @@ class PersonalNotesService {
       );
     }
 
-    // Check if displayTitle exists in the current line (anywhere, not just at the start)
-    // This handles cases where user selected text from the middle of the line
+    // הטקסט המעוגן (בהערה בלי עוגן — הכותרת) עדיין בשורה: המיקום תקף.
     if (_noteMatchesLine(note, lines[lineIndex])) {
-      // Location is still valid - no change needed
       return note;
     }
 

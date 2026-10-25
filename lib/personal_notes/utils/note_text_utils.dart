@@ -112,12 +112,7 @@ String extractDisplayTextFromLine(
 /// Unicode ranges: 0591-05C7 (te'amim and nikud)
 /// Also replaces Hebrew maqaf (־) with space to separate words
 String removeHebrewDiacritics(String text) {
-  // Replace Hebrew maqaf (־) with space to separate words
-  // U+05BE is the Hebrew maqaf
   String result = text.replaceAll('\u05BE', ' ');
-
-  // Remove Hebrew diacritics (nikud and te'amim)
-  // Range: U+0591 to U+05C7
   result = result.replaceAll(RegExp(r'[\u0591-\u05C7]'), '');
 
   return result;
