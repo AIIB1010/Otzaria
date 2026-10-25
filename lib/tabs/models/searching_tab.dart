@@ -280,10 +280,8 @@ class SearchingTab extends OpenedTab {
   }
 
   factory SearchingTab.fromJson(Map<String, dynamic> json) {
-    // אנו מטמיעים את ה-configuration ישירות ב-SearchBloc בעת בנייתו,
-    // ולא דרך events אחרי הבנייה. שליחת events היא async ועלולה
-    // להתעבד אחרי שה-UI כבר הפעיל את החיפוש הראשון - וכך החיפוש היה
-    // רץ עם distance=0 גם כשנשמר ערך אחר.
+    // ה-configuration מוטמעת ב-SearchBloc בבנייתו ולא דרך events: אלה עלולים
+    // להתעבד אחרי החיפוש הראשון של ה-UI, שירוץ עם distance=0 במקום הערך השמור.
     const defaultConfig = SearchConfiguration();
     final distanceJson = json['distance'];
     final searchModeIndex = json['searchMode'];

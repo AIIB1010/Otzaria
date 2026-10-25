@@ -69,13 +69,8 @@ class ReadingScreen extends StatefulWidget {
 
 class _ReadingScreenState extends State<ReadingScreen>
     with WidgetsBindingObserver {
-  // PageController מנוהל ישירות במקום TabBarView: TabBarView עוטף ילדים
-  // ב-Semantics ללא key, וה-KeyedSubtree.wrap הפנימי שלו מקבע מפתח לפי
-  // אינדקס. בהזזת/סגירת טאב סמוך ה-reconciliation מצליח בחוץ אך נכשל
-  // ב-type-mismatch בילד הפנימי — מה שהורס את ה-State של ה-PDF
-  // (PdfViewerController + Bloc נוצרים מחדש → טעינה מחודשת של המסמך).
-  // PageView לא עוטף ב-Semantics, וה-SliverChildListDelegate משתמש ב-key
-  // של הילד עצמו, כך שהזזה שומרת על ה-State.
+  // PageView ולא TabBarView: TabBarView מקבע לילדים מפתח לפי אינדקס, והזזת או
+  // סגירת טאב סמוך הורסת את ה-State של ה-PDF (המסמך נטען מחדש).
   PageController? _pageController;
 
   /// מהירות שחרור (פיקסלים לוגיים/שנייה) שמעליה ההחלקה נחשבת הנפה
@@ -197,13 +192,8 @@ class _ReadingScreenState extends State<ReadingScreen>
   bool _inProgrammaticJump = false;
 
   void _syncPageController() {
-    // הקפיצה נדחית לפוסט-פריים בכוונה: ה-BlocListener שמפעיל את הסנכרון רץ
-    // *לפני* שה-BlocBuilder בונה מחדש את ה-PageView, כך שברגע הקריאה ל-PageView
-    // עדיין יש את מספר הילדים הישן. כשנפתח טאב חדש בסוף, jumpToPage לאינדקס
-    // החדש על תצוגה ישנה חורג מהתחום ונצמד (clamp) רגעית לאינדקס הקודם, מה
-    // שיורה onPageChanged עם אינדקס שגוי → SetCurrentTab שגוי → ההדגשה בשורת
-    // הטאבים קופצת לטאב הקודם במקום לחדש. דחייה לפוסט-פריים מבטיחה שהקפיצה
-    // תתבצע אחרי שהילד החדש כבר בעץ, על תצוגה תקינה.
+    // בפוסט-פריים: ה-listener רץ לפני שה-PageView נבנה מחדש, ו-jumpToPage לטאב
+    // חדש על התצוגה הישנה נצמד לאינדקס הקודם ומקפיץ אליו את ההדגשה.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _suppressPageSync) return;
       final controller = _pageController;
@@ -213,10 +203,8 @@ class _ReadingScreenState extends State<ReadingScreen>
       final targetIndex = state.currentTabIndex.clamp(0, state.tabs.length - 1);
       final currentPage = controller.page?.round();
       if (currentPage != null && currentPage != targetIndex) {
-        // כשהמסך מנותק מעץ הרינדור (keepAlive מחוץ למסך, למשל פתיחת ספר
-        // מהאיתור בזמן שהות בספרייה) ה-extent מיושן, וקפיצה מדווחת
-        // onPageChanged עם ערך clamp שגוי — שבמובייל היה מוזן חזרה
-        // כ-SetCurrentTab ומהפך את הבחירה לטאב הקודם. הדגל חוסם את המשוב.
+        // במסך מנותק (keepAlive מחוץ למסך) הקפיצה מדווחת ל-onPageChanged ערך
+        // clamp שגוי, שבמובייל מהפך את הבחירה לטאב הקודם. הדגל חוסם את המשוב.
         _inProgrammaticJump = true;
         try {
           controller.jumpToPage(targetIndex);
@@ -376,15 +364,11 @@ class _ReadingScreenState extends State<ReadingScreen>
               context.read<HistoryBloc>().add(
                 CaptureStateForHistory(state.currentTab!),
               );
-              // אין צורך לקרוא כאן ל-SaveTabs: כל פעולה שמשנה את הטאבים או את
-              // הטאב הנוכחי (SetCurrentTab/AddTab/RemoveTab/MoveTab וכו') כבר
-              // שומרת בעצמה ב-TabsBloc. קריאה נוספת כאן גרמה לשמירה כפולה
-              // (encoding של כל הטאבים) בכל מעבר טאב.
+              // בלי SaveTabs: כל פעולה שמשנה את הטאבים כבר שומרת ב-TabsBloc,
+              // וקריאה נוספת מקודדת שוב את כל הטאבים בכל מעבר טאב.
               _syncPageController();
-              // ממקד את אזור הקריאה של הטאב הפעיל כדי שגלילה עם החיצים תעבוד
-              // מיד במעבר טאב — הטאבים נשמרים חיים ולכן initState לא רץ שוב.
-              // בטאב מפוצל ממוקדת החלונית הפעילה: המסכים נרשמים לפוקוס לפי
-              // חלונית, ובקשה על הצומת העוטף הייתה נשארת תלויה ללא נמען.
+              // הטאבים חיים (initState לא רץ שוב), ולכן ממקדים כאן את החלונית
+              // הפעילה כדי שהחיצים יגללו מיד; המסכים נרשמים לפוקוס לפי חלונית.
               final focusTarget = state.activePane;
               if (focusTarget != null) {
                 final focusRepo = context.read<FocusRepository>();
@@ -417,10 +401,8 @@ class _ReadingScreenState extends State<ReadingScreen>
         ),
         BlocListener<TabsBloc, TabsState>(
           listener: (context, state) {
-            // כשסוגרים את הטאב האחרון, עוברים למסך הספרייה.
-            // משחררים גם את ה-PageController כדי שכשייפתחו טאבים חדשים
-            // ייווצר controller חדש עם initialPage תקין; אחרת ה-page
-            // הפנימי הישן נשאר ו-_syncPageController נכשל ב-hasClients.
+            // בסגירת הטאב האחרון — למסך הספרייה. ה-PageController משוחרר, כי
+            // ב-controller הישן _syncPageController נכשל ב-hasClients.
             if (!state.hasOpenTabs) {
               _pageController?.dispose();
               _pageController = null;
@@ -490,20 +472,13 @@ class _ReadingScreenState extends State<ReadingScreen>
                           PageView(
                             key: const ValueKey('normal_tab_view'),
                             controller: _pageController,
-                            // גלילת PageView רק במובייל; בדסקטופ
-                            // PageScrollPhysics מתנגשת עם סימון טקסט אופקי,
-                            // עם גלילה אופקית ב-PDF ועם אירועי גלגלת.
-                            // החלקת טאצ'פד/מגע בדסקטופ ממומשת בנפרד
-                            // ב-_wrapWithDesktopTabSwipe.
+                            // בדסקטופ הגלילה מתנגשת בסימון טקסט, ב-PDF
+                            // ובגלגלת; החלקה שם: _wrapWithDesktopTabSwipe.
                             physics: _isTouchPlatform
                                 ? const PageScrollPhysics()
                                 : const NeverScrollableScrollPhysics(),
-                            // רק במובייל הגלילה ידנית ולכן onPageChanged משקף
-                            // בחירת משתמש שצריך להזין חזרה ל-currentTabIndex.
-                            // בדסקטופ (NeverScrollable) אי-אפשר לגלול ידנית,
-                            // וה-callback היה יורה רק על קפיצות תוכנתיות —
-                            // כולל ערך clamp שגוי רגעי בעת פתיחת טאב חדש —
-                            // ודורס את האינדקס הנכון. לכן מנוטרל.
+                            // בדסקטופ הוא היה יורה רק בקפיצות תוכנתיות (גם
+                            // clamp שגוי בפתיחת טאב) ודורס את האינדקס הנכון.
                             onPageChanged: _isTouchPlatform
                                 ? (index) {
                                     if (_inProgrammaticJump) return;
@@ -610,9 +585,8 @@ class _ReadingScreenState extends State<ReadingScreen>
                 child: _buildPaneContent(
                   pane,
                   isInCombinedView: isSplit,
-                  // חימום מטמון התוכן טוען את הספר כולו; בטאב מפוצל שתי
-                  // החלוניות היו מחממות ספרים גדולים במקביל ומכפילות את
-                  // צריכת הזיכרון.
+                  // החימום טוען את הספר כולו; בטאב מפוצל שתי החלוניות היו
+                  // מחממות ספרים גדולים במקביל ומכפילות את צריכת הזיכרון.
                   allowBackgroundWarming: !isSplit,
                   pdfPaneCount: pdfPanes,
                 ),

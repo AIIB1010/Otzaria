@@ -38,7 +38,7 @@ class ReadingTabSearchState {
   );
 
   /// שדות ה-JSON נוספים למפת הטאב הקיימת, ולכן השמות מקודמת `search`.
-  /// שאילתה ריקה אינה נשמרת בכלל — טאב בלי חיפוש נשאר עם אותו JSON כמו קודם.
+  /// שאילתה ריקה אינה נשמרת בכלל, ולכן טאב בלי חיפוש אינו מקבל שדות אלה.
   Map<String, dynamic> toJson() {
     if (searchText.isEmpty) return const {};
     return {

@@ -48,9 +48,8 @@ class CommentatorsTab extends OpenedTab {
   CommentatorsTab({
     required this.sourceTab,
     bool disposeSourceTabOnDispose = false,
-    // שכפול בונה sourceTab חדש, שה-bloc שלו עדיין ב-TextBookInitial; בלי
-    // העברה מפורשת _resolveSelectedLine היה מחזיר null והשורה הנבחרת
-    // הייתה נעלמת בשכפול. null = "גזור מה-sourceTab", כמו קודם.
+    // בשכפול ה-bloc של ה-sourceTab החדש עדיין ב-TextBookInitial, ולכן השורה
+    // הנבחרת מועברת במפורש. null = "גזור מה-sourceTab".
     int? initialSelectedLine,
     // ⚠️ בשחזור ובשכפול ה-`sourceTab` הטרי עדיין ב-`TextBookInitial`, ולכן
     // הגזירה ממנו מחזירה את מיקום **הספר** ומיקום הכרטיסיה אובד.
@@ -115,8 +114,8 @@ class CommentatorsTab extends OpenedTab {
     return tab;
   }
 
-  /// המקור והשכפול חייבים לקבל [sourceTab] נפרד: קודם שניהם הצביעו על אותו
-  /// [TextBookTab], ו-[dispose] של האחד סגר את ה-BLoC ואת הבקרים של השני.
+  /// המקור והשכפול חייבים לקבל [sourceTab] נפרד, אחרת [dispose] של האחד סוגר
+  /// את ה-BLoC ואת הבקרים של השני.
   @override
   OpenedTab clone() =>
       CommentatorsTab(

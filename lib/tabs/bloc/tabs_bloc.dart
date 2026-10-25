@@ -73,10 +73,6 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
   final _pendingAddTabs = Queue<Completer<void>>();
   final _pendingRemovals = Queue<Future<void>?>();
 
-  /// מבקש שמירה של הטאבים, בלי להמתין לה.
-  ///
-  /// כל שמירה מקודדת את *כל* הטאבים, ולכן בקשות שמגיעות בזמן שכתיבה רצה
-  /// מתמזגות לכתיבה אחת שאחריה.
   /// סשן החלון ודור העץ; עץ חדש או ייבוא מונעים מהישן לשמור.
   final WindowTabsSession _session;
   final int _sessionGeneration;
@@ -102,6 +98,8 @@ class TabsBloc extends Bloc<TabsEvent, TabsState> {
     _scheduleSave(newTabs, currentTabIndex ?? state.currentTabIndex);
   }
 
+  /// מבקש שמירה של הטאבים, בלי להמתין לה. כל שמירה מקודדת את *כל* הטאבים,
+  /// ולכן בקשות שמגיעות בזמן שכתיבה רצה מתמזגות לכתיבה אחת שאחריה.
   void _scheduleSave(List<OpenedTab> tabs, int currentTabIndex) {
     if (_sessionReplaced) return;
     _pendingSaveTabs = tabs;
