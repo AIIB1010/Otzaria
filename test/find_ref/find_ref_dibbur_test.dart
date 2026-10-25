@@ -165,7 +165,11 @@ void main() {
     expect(location.keyTokens, ['כו', 'ב']);
 
     await repo.findRefs('תוספות ברכות ד"ה מאימתי');
-    expect(lookups.last.locations, isEmpty);
+    expect(lookups.last.locations, isNotEmpty);
+    expect(
+      lookups.last.locations.values.every((l) => l.keyTokens.isEmpty),
+      isTrue,
+    );
   });
 
   test('דיבור קודם לספר שנקרא בשמו אך אין בו דיבור (issue #3179)', () async {
@@ -173,6 +177,12 @@ void main() {
 
     expect(results.first.isSourceLine, isTrue);
     expect(results.indexWhere((r) => r.bookId == 70), greaterThan(0));
+  });
+
+  test('סי הוא מילת מיקום ולא חלק ממפתח ההפניה', () async {
+    final repo = buildRepo();
+    await repo.findRefs('תוספות ברכות סי כו ד"ה מאימתי');
+    expect(lookups.single.locations[1927]!.keyTokens, ['כו']);
   });
 
   test('שאילתה מאוגדת אחת לכל הספרים המועמדים', () async {

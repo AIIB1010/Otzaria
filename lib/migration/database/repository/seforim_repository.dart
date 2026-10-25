@@ -1428,15 +1428,40 @@ class SeforimRepository {
     Map<int, DibburLocation> locations = const {},
     int limit = 40,
   }) async {
+    final rangesByBook = <int, List<(int, int)>>{};
+    for (final MapEntry(key: bookId, value: location) in locations.entries) {
+      rangesByBook[bookId] = location.keyTokens.isEmpty
+          ? const []
+          : await _dibburLocationRanges(bookId, location);
+    }
+    bool numeric(String token) =>
+        isHebrewNumeral(token) || int.tryParse(token) != null;
+    final hasKnownLocation =
+        rangesByBook.values.any((ranges) => ranges.isNotEmpty) ||
+        locations.values.any((location) => location.keyTokens.every(numeric));
     bool withinLocation(DibburCandidate dibbur) {
       final location = locations[dibbur.bookId];
-      if (location == null) return true;
+      if (location == null || location.keyTokens.isEmpty) return true;
+      final ranges = rangesByBook[dibbur.bookId]!;
+      if (ranges.isNotEmpty) {
+        return ranges.any(
+          (range) =>
+              dibbur.lineIndex >= range.$1 && dibbur.lineIndex < range.$2,
+        );
+      }
+      // כשאף ספר לא פתר את הציון, שם לא מוכר אינו עילה למחיקת כל הדיבורים.
+      if (!hasKnownLocation) {
+        return true;
+      }
       final heRef = dibbur.heRef;
       return heRef != null &&
           heRefWithinLocation(heRef, location.bookTitle, location.keyTokens);
     }
 
-    final where = locations.isEmpty ? null : withinLocation;
+    final where =
+        locations.values.every((location) => location.keyTokens.isEmpty)
+        ? null
+        : withinLocation;
     final dao = _database.lineDhDao;
     final byPrefix = await dao.dibburimForBooks(
       bookIds,
@@ -2377,6 +2402,95 @@ extension BookAcronymRepository on SeforimRepository {
       }
     }
     return end;
+  }
+
+  Future<List<(int, int)>> _dibburLocationRanges(
+    int bookId,
+    DibburLocation location,
+  ) async {
+    final ranges = <(int, int)>[];
+    void addRanges(
+      List<Map<String, dynamic>> matches,
+      List<_TocSpan> entries,
+    ) {
+      final boundaries = <int, List<int>>{
+        for (final match in matches)
+          if (match['partialMatch'] != true) match['level'] as int: [],
+      };
+      for (final entry in entries) {
+        for (final MapEntry(key: level, value: starts) in boundaries.entries) {
+          if (entry.level <= level &&
+              (starts.isEmpty || starts.last != entry.segment)) {
+            starts.add(entry.segment);
+          }
+        }
+      }
+      for (final match in matches) {
+        if (match['partialMatch'] == true) continue;
+        final start = match['segment'] as int;
+        final starts = boundaries[match['level']]!;
+        var low = 0;
+        var high = starts.length;
+        while (low < high) {
+          final middle = (low + high) ~/ 2;
+          if (starts[middle] <= start) {
+            low = middle + 1;
+          } else {
+            high = middle;
+          }
+        }
+        final end = low == starts.length ? 0x7fffffff : starts[low];
+        ranges.add((start, end));
+      }
+    }
+
+    addRanges(
+      await getTocEntriesForReference(
+        bookId,
+        location.bookTitle,
+        queryTokens: location.keyTokens,
+      ),
+      (await _buildTocCacheForBook(bookId, location.bookTitle)).all,
+    );
+    if (ranges.isNotEmpty) return ranges;
+    final altMatches = await getAltTocEntriesForReference(
+      bookId,
+      location.bookTitle,
+      queryTokens: location.keyTokens,
+    );
+    if (altMatches.isNotEmpty) {
+      final matched = {
+        for (final match in altMatches)
+          (match['segment'], match['level'], match['reference']),
+      };
+      final db = await _database.database;
+      final structures = {
+        for (final row in db.select(
+          'SELECT e.id, e.structureId FROM alt_toc_entry e '
+          'JOIN alt_toc_structure s ON s.id = e.structureId WHERE s.bookId = ?',
+          [bookId],
+        ))
+          row['id'] as int: row['structureId'] as int,
+      };
+      final entries = await _buildAltTocCacheForBook(
+        bookId,
+        location.bookTitle,
+      );
+      final entriesByStructure = <int, List<_TocSpan>>{};
+      final matchesByStructure = <int, List<Map<String, dynamic>>>{};
+      for (final entry in entries) {
+        final structure = structures[entry.id]!;
+        (entriesByStructure[structure] ??= []).add(entry);
+        if (matched.contains((entry.segment, entry.level, entry.reference))) {
+          (matchesByStructure[structure] ??= []).add(entry.toTocMap());
+        }
+      }
+      for (final MapEntry(key: structure, value: matches)
+          in matchesByStructure.entries) {
+        addRanges(matches, entriesByStructure[structure]!);
+      }
+    }
+    return ranges;
   }
 
   bool _hasLineBookIndex(sqlite3.Database db) =>

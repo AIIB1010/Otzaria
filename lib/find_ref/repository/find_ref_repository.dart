@@ -2810,8 +2810,10 @@ class FindRefRepository {
     final searched = bookIds.take(_maxDibburBooks).toList();
     final locations = <int, DibburLocation>{};
     for (final MapEntry(key: hit, value: remaining) in remainingByHit.entries) {
-      final keyTokens = refKeyTokens(remaining.join(' '));
-      if (keyTokens.isEmpty || !searched.contains(hit.bookId)) continue;
+      final keyTokens = refKeyTokens(
+        remaining.map((token) => token == 'סי' ? 'סימן' : token).join(' '),
+      );
+      if (!searched.contains(hit.bookId)) continue;
       locations[hit.bookId] = (bookTitle: hit.title, keyTokens: keyTokens);
     }
     final rows = await _awaitCurrent(
