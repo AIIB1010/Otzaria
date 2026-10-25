@@ -173,6 +173,9 @@ class UncleanExitDetector {
   /// מחזיר מועמד לקריסה רק כשנשארה נעילה של תהליך שאינו חי, ויש ראיה לקריסה:
   /// רשומת שגיאה מאז תחילתו, `Startup stall`, או minidump של Sentry.
   Future<CrashCandidate?> detectPreviousCrash() async {
+    for (final dir in _sentryDirs ?? defaultSentryDatabaseDirs()) {
+      await pruneRecoveredMinidumps(dir);
+    }
     final SessionLock lock;
     try {
       final file = File(lockPath);

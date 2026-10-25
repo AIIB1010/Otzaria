@@ -4,11 +4,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
-/// ב-Windows ARM64 sentry-native רץ עם breakpad ולא עם crashpad. breakpad כותב
-/// את ה-dump לתיקיית ה-`*.run`, עוטף אותו כ-attachment ב-envelope ומוחק את
-/// קובץ ה-dmp — לכן `reports/*.dmp` (המבנה של crashpad) לא קיים שם, ורק ה-envelope
-/// נושא את ה-dump. הקובץ הזה שולף אותו משם.
-
 /// התיקייה (תחת `.sentry-native`) שאליה נשלפים ה-dumps. נפרדת מ-`reports` של
 /// crashpad, כי ב-breakpad אין מי שינקה אותה ואנחנו מנקים רק אותה.
 const String recoveredMinidumpsDirName = 'recovered_minidumps';
@@ -75,24 +70,11 @@ int _lineEnd(Uint8List bytes, int from) {
   return index < 0 ? bytes.length : index;
 }
 
-/// שולף dumps של breakpad מ-envelopes בתיקיות `*.run` של [sentryDir], שנכתבו
-/// מ-[since] והלאה, וכותב אותם כ-`recovered_minidumps/<שם-envelope>.dmp`.
-///
-/// הפענוח וצירוף ה-dump לדיווח ממשיכים אז כרגיל. envelope שנשלח ונמחק כבר
-/// אינו ניתן לשליפה, ולכן הקריאה צריכה לרוץ לפני שה-SDK מעבד את ההפעלות
-/// הישנות. dumps שנשלפו לפני יותר מ-[recoveredMinidumpRetention] נמחקים.
-/// לא זורק.
-///
-/// נסרקות רק תיקיות `*.run`: ב-sentry-native, envelope שנכתב ל-`cache` מוציא
-/// את ה-dump לקובץ נפרד (או שומר אותו רק עם `http_retry`, שכבוי כאן).
-Future<void> recoverBreakpadMinidumps(
-  String sentryDir,
-  DateTime since, {
-  DateTime Function()? clock,
-}) async {
+/// שולף dumps של breakpad מ-envelopes ב-`*.run` שנכתבו מ-[since] והלאה.
+/// יש לקרוא לפני אתחול Sentry, שמוחק envelopes ישנים אחרי שליחתם.
+Future<void> recoverBreakpadMinidumps(String sentryDir, DateTime since) async {
   final targetDir = p.join(sentryDir, recoveredMinidumpsDirName);
   try {
-    await _pruneRecovered(targetDir, (clock ?? DateTime.now)());
     final root = Directory(sentryDir);
     if (!await root.exists()) return;
     await for (final dir in root.list(followLinks: false)) {
@@ -109,18 +91,26 @@ Future<void> recoverBreakpadMinidumps(
   }
 }
 
-/// מוחק dumps ושאריות `.tmp` ישנים מתיקיית השליפה.
-Future<void> _pruneRecovered(String targetDir, DateTime now) async {
-  final dir = Directory(targetDir);
-  if (!await dir.exists()) return;
-  await for (final entity in dir.list(followLinks: false)) {
-    if (entity is! File) continue;
-    try {
-      final age = now.difference((await entity.stat()).modified);
-      if (age > recoveredMinidumpRetention) await entity.delete();
-    } catch (_) {
-      // קובץ נעול יימחק בפעם הבאה.
+/// מוחק dumps ושאריות `.tmp` ישנים, גם בהפעלות שלא קדמה להן קריסה.
+Future<void> pruneRecoveredMinidumps(
+  String sentryDir, {
+  DateTime Function()? clock,
+}) async {
+  try {
+    final dir = Directory(p.join(sentryDir, recoveredMinidumpsDirName));
+    if (!await dir.exists()) return;
+    final now = (clock ?? DateTime.now)();
+    await for (final entity in dir.list(followLinks: false)) {
+      if (entity is! File) continue;
+      try {
+        final age = now.difference((await entity.stat()).modified);
+        if (age > recoveredMinidumpRetention) await entity.delete();
+      } catch (_) {
+        // קובץ נעול יימחק בפעם הבאה.
+      }
     }
+  } catch (error) {
+    debugPrint('pruneRecoveredMinidumps: $error');
   }
 }
 

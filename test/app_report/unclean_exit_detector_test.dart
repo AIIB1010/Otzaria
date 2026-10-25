@@ -77,6 +77,45 @@ void main() {
     expect(await detector().detectPreviousCrash(), isNull);
   });
 
+  test('הפעלה אחרי יציאה נקייה מוחקת dumps ישנים ושומרת חדשים', () async {
+    final now = DateTime.now();
+    File recovered(String name, DateTime modified) =>
+        File(p.join(sentry.path, recoveredMinidumpsDirName, name))
+          ..createSync(recursive: true)
+          ..writeAsBytesSync(buildMinidump())
+          ..setLastModifiedSync(modified);
+    final stale = recovered(
+      'stale.dmp',
+      now.subtract(const Duration(days: 20)),
+    );
+    final fresh = recovered('fresh.dmp', now.subtract(const Duration(days: 1)));
+    final oldEnvelope = File(p.join(sentry.path, 'old.run', 'old.envelope'))
+      ..createSync(recursive: true)
+      ..writeAsBytesSync(buildCrashEnvelope());
+
+    final d = detector();
+    await d.startSession(version: 'test');
+    d.markCleanExitSync();
+    expect(
+      await AppCrashSession.detectAndStartSession(
+        version: 'test',
+        detector: d,
+      ),
+      isNull,
+    );
+
+    expect(stale.existsSync(), isFalse);
+    expect(fresh.existsSync(), isTrue);
+    expect(oldEnvelope.existsSync(), isTrue);
+    expect(
+      File(
+        p.join(sentry.path, recoveredMinidumpsDirName, 'old.dmp'),
+      ).existsSync(),
+      isFalse,
+    );
+    expect(File(d.lockPath).existsSync(), isTrue);
+  });
+
   test('נעילה בלי ראיה לקריסה אינה מועמד', () async {
     writeLock();
     writeErrors(entry('Old', previousStart.subtract(const Duration(days: 1))));

@@ -243,7 +243,7 @@ void main() {
           ..setLastModifiedSync(at);
       }
 
-      await recoverBreakpadMinidumps(sentry.path, since, clock: () => now);
+      await pruneRecoveredMinidumps(sentry.path, clock: () => now);
 
       expect(recovered('stale.dmp').existsSync(), isFalse);
       expect(recovered('stale.dmp.tmp').existsSync(), isFalse);
