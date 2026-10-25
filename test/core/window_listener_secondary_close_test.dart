@@ -29,6 +29,7 @@ import 'package:otzaria/core/window_listener.dart';
 import 'package:otzaria/core/windowing/app_quit.dart';
 import 'package:otzaria/core/windowing/app_window_controller.dart';
 import 'package:otzaria/core/windowing/runner_window_channel.dart';
+import 'package:otzaria/core/windowing/multiview/view_focus_sync.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_opener.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/core/windowing/multiview/view_window_close_flow.dart';
@@ -53,6 +54,8 @@ void main() {
   setUp(() async {
     // ה-runner מדומה כדי לבדוק את מסלול ריבוי החלונות בכל פלטפורמה.
     RunnerWindowChannel.debugSupportedOverride = true;
+    // onWindowFocus מתוך test() אחרי testWidgets פוגש FocusManager משוחרר.
+    ViewFocusSync.debugEnabledOverride = false;
     ViewWindowOpener.instance.resetCloseQueueForTest();
     runner = _FakeRunner()..install();
     tmp = Directory.systemTemp.createTempSync('otzaria_secclose_');
@@ -73,6 +76,7 @@ void main() {
     database.close();
     runner.uninstall();
     RunnerWindowChannel.debugSupportedOverride = null;
+    ViewFocusSync.resetForTest();
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });
 

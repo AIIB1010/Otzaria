@@ -3,6 +3,7 @@ import 'dart:ui' show ViewFocusDirection, ViewFocusEvent, ViewFocusState;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:otzaria/core/windowing/multiview/multiview_flag.dart';
 
 /// ה-embedder של Linux אינו שולח `ViewFocusEvent`, ולכן אחרי מעבר חלון המקשים
 /// היו ממשיכים לפוקוס שבחלון הקודם. כאן מסנתזים אותו מהפעלת החלון.
@@ -14,7 +15,8 @@ abstract final class ViewFocusSync {
 
   /// ב-Windows וב-macOS המנוע שולח את האירוע בעצמו.
   static bool get _enabled =>
-      debugEnabledOverride ?? (!kIsWeb && Platform.isLinux);
+      debugEnabledOverride ??
+      (!kIsWeb && Platform.isLinux && MultiViewMode.enabled);
 
   /// החלון שמציג את [viewId] הופעל.
   static void windowActivated(int viewId) {
@@ -41,7 +43,8 @@ abstract final class ViewFocusSync {
 
   /// macOS: המנוע שולח את האירוע במעבר key, אבל הבקר אינו מודיע על הפעלה.
   static bool get activationFollowsViewFocus =>
-      debugMacOSOverride ?? (!kIsWeb && Platform.isMacOS);
+      debugMacOSOverride ??
+      (!kIsWeb && Platform.isMacOS && MultiViewMode.enabled);
 
   /// חלון Dart נחשף. במק החלון נעשה key לפני שה-delegate שלו חובר, ולכן
   /// אין לו אירוע פוקוס ראשון: בלעדיו המקשים היו הולכים לחלון הקודם.
