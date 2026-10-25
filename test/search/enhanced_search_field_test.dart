@@ -8,17 +8,11 @@ import 'package:otzaria/history/bloc/history_state.dart';
 import 'package:otzaria/library/bloc/library_bloc.dart';
 import 'package:otzaria/library/bloc/library_event.dart';
 import 'package:otzaria/library/bloc/library_state.dart';
-import 'package:otzaria/navigation/bloc/navigation_bloc.dart';
-import 'package:otzaria/navigation/bloc/navigation_event.dart';
-import 'package:otzaria/navigation/bloc/navigation_state.dart';
 import 'package:otzaria/search/bloc/search_bloc.dart';
 import 'package:otzaria/search/bloc/search_event.dart';
 import 'package:otzaria/search/bloc/search_state.dart';
 import 'package:otzaria/search/view/enhanced_search_field.dart';
 import 'package:otzaria/tabs/models/searching_tab.dart';
-
-class MockNavigationBloc extends MockBloc<NavigationEvent, NavigationState>
-    implements NavigationBloc {}
 
 class MockHistoryBloc extends MockBloc<HistoryEvent, HistoryState>
     implements HistoryBloc {}
@@ -40,7 +34,6 @@ void main() {
     WidgetTester tester,
   ) async {
     final tab = SearchingTab('חיפוש', 'בדיקה');
-    final navigationBloc = MockNavigationBloc();
     final theme = ThemeData(
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(
@@ -48,25 +41,13 @@ void main() {
       ),
     );
 
-    whenListen(
-      navigationBloc,
-      const Stream<NavigationState>.empty(),
-      initialState: const NavigationState(currentScreen: Screen.search),
-    );
-
-    addTearDown(() async {
-      await navigationBloc.close();
-      tab.dispose();
-    });
+    addTearDown(tab.dispose);
 
     await tester.pumpWidget(
       MaterialApp(
         theme: theme,
-        home: MultiBlocProvider(
-          providers: [
-            BlocProvider<NavigationBloc>.value(value: navigationBloc),
-            BlocProvider.value(value: tab.searchBloc),
-          ],
+        home: BlocProvider.value(
+          value: tab.searchBloc,
           child: Scaffold(
             body: EnhancedSearchField(
               widget: _TestSearchDialogWrapper(tab),
@@ -93,16 +74,10 @@ void main() {
 
   testWidgets('שליחת חיפוש מעדכנת את כותרת הטאב', (tester) async {
     final tab = SearchingTab('חיפוש', null);
-    final navigationBloc = MockNavigationBloc();
     final historyBloc = MockHistoryBloc();
     final libraryBloc = MockLibraryBloc();
     final searchBloc = MockSearchBloc();
 
-    whenListen(
-      navigationBloc,
-      const Stream<NavigationState>.empty(),
-      initialState: const NavigationState(currentScreen: Screen.search),
-    );
     whenListen(
       historyBloc,
       const Stream<HistoryState>.empty(),
@@ -120,7 +95,6 @@ void main() {
     );
 
     addTearDown(() async {
-      await navigationBloc.close();
       await historyBloc.close();
       await libraryBloc.close();
       await searchBloc.close();
@@ -131,7 +105,6 @@ void main() {
       MaterialApp(
         home: MultiBlocProvider(
           providers: [
-            BlocProvider<NavigationBloc>.value(value: navigationBloc),
             BlocProvider<HistoryBloc>.value(value: historyBloc),
             BlocProvider<LibraryBloc>.value(value: libraryBloc),
             BlocProvider<SearchBloc>.value(value: searchBloc),

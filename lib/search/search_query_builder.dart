@@ -143,11 +143,6 @@ class SearchQueryBuilder {
 
   static String buildWordKey(String word, int index) => '${word}_$index';
 
-  static Map<String, bool> disabledWordOptionsTemplate() => {
-    for (final option in availableWordOptionKeys) option: false,
-    for (final option in vocalizedWordOptionKeys) option: false,
-  };
-
   /// פיצול שאילתה למילות חיפוש. מאציל למנוע ה-Rust
   /// ([`engine.splitQueryWords`]) שהוא מקור האמת היחיד, כך שהטוקניזציה
   /// בצד האפליקציה זהה תו-בתו לזו של האינדוקס והשאילתה במנוע:
