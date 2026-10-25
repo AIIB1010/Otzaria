@@ -1,5 +1,5 @@
 import 'package:otzaria/plugins/models/plugin_manifest.dart';
-import 'package:otzaria/plugins/models/plugin_network_allowlist.dart';
+import 'package:otzaria/plugins/models/plugin_network_permission_mode.dart';
 import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
 import 'package:otzaria/plugins/services/plugin_network_access_resolver.dart';
 
@@ -27,11 +27,18 @@ Future<PluginNetworkDecision> evaluatePluginNetworkAccess({
   required PluginRegistryRepository registry,
 }) async {
   if (!manifest.networkEnabled) return PluginNetworkDecision.notDeclared;
-  final granted = await registry.getPermission(
-    pluginId,
-    requiredNetworkPermissionFor(uri),
+  final accepted = acceptedNetworkPermissionsFor(
+    uri,
+    strict: await PluginNetworkPermissionMode.isStrict(),
   );
-  if (granted != true) return PluginNetworkDecision.permissionMissing;
+  var granted = false;
+  for (final permission in accepted) {
+    if (await registry.getPermission(pluginId, permission) == true) {
+      granted = true;
+      break;
+    }
+  }
+  if (!granted) return PluginNetworkDecision.permissionMissing;
   final allowed = await PluginNetworkAccessResolver.instance
       .isUriAllowedForPlugin(uri, manifest);
   return allowed

@@ -147,6 +147,215 @@ void main() {
       );
     });
 
+    group('הפרדת network.localhost / network.access', () {
+      PluginValidationReport run(
+        String minAppVersion,
+        List<String> permissions,
+        List<String> allowlist,
+      ) => _runOn(
+        tempDir,
+        manifestOverride: _baseManifest(
+          minAppVersion: minAppVersion,
+          permissions: permissions,
+          network: {'enabled': true, 'allowlist': allowlist},
+        ),
+      );
+
+      test('כתובת 127.x.x.x כלשהי תקינה עם network.localhost', () {
+        final report = run(
+          '0.9.99',
+          const ['network.localhost'],
+          const ['127.0.0.9', 'http://127.0.0.9:8080'],
+        );
+        expect(report.errors, isEmpty);
+        expect(
+          report.warnings.any((w) => w.contains('כתובת לא תקינה')),
+          isFalse,
+        );
+      });
+
+      test('מ-0.9.99 כתובת מקומית עם network.access בלבד היא שגיאה', () {
+        final report = run(
+          '0.9.99',
+          const ['network.access'],
+          const [
+            '127.0.0.9',
+          ],
+        );
+        expect(
+          report.errors.any((e) => e.contains('network.localhost')),
+          isTrue,
+        );
+      });
+
+      test('מ-0.9.99 כתובת אינטרנט עם network.localhost בלבד היא שגיאה', () {
+        final report = run(
+          '0.9.99',
+          const ['network.localhost'],
+          const [
+            'https://api.example.com',
+          ],
+        );
+        expect(report.errors.any((e) => e.contains('network.access')), isTrue);
+      });
+
+      test('מ-0.9.99 שתי ההרשאות עם שני סוגי יעדים תקינות', () {
+        final report = run(
+          '0.9.99',
+          const ['network.access', 'network.localhost'],
+          const ['127.0.0.9', 'https://api.example.com'],
+        );
+        expect(report.errors, isEmpty);
+      });
+
+      test('לפני 0.9.99 כתובת מקומית עם network.access היא אזהרה בלבד', () {
+        final report = run(
+          '0.9.98',
+          const ['network.access'],
+          const [
+            '127.0.0.9',
+          ],
+        );
+        expect(report.errors, isEmpty);
+        expect(
+          report.warnings.any(
+            (w) => w.contains('network.localhost') && w.contains('0.9.99'),
+          ),
+          isTrue,
+        );
+      });
+
+      test('לפני 0.9.99 הצהרה על שתי ההרשאות נקייה מאזהרות הפרדה', () {
+        final report = run(
+          '0.9.98',
+          const ['network.access', 'network.localhost'],
+          const ['127.0.0.9'],
+        );
+        expect(report.errors, isEmpty);
+        expect(report.warnings.any((w) => w.contains('0.9.99')), isFalse);
+      });
+    });
+
+    group('הפרדת network.localhost / network.access — מקרי קצה', () {
+      PluginValidationReport run(
+        String minAppVersion,
+        List<String> permissions,
+        List<String> allowlist, {
+        bool enabled = true,
+      }) => _runOn(
+        tempDir,
+        manifestOverride: _baseManifest(
+          minAppVersion: minAppVersion,
+          permissions: permissions,
+          network: {'enabled': enabled, 'allowlist': allowlist},
+        ),
+      );
+
+      test('כתובת מקומית לא קנונית אינה נספרת כאינטרנט', () {
+        final report = run(
+          '0.9.99',
+          const ['network.localhost'],
+          const [
+            'http://127.1:11434',
+            'http://localhost.:1234',
+            'http://127.10.10.1:8080',
+          ],
+        );
+        expect(report.errors, isEmpty);
+        expect(
+          report.warnings.where((w) => w.contains('אינה מזוהה כמקומית')),
+          hasLength(3),
+        );
+      });
+
+      test('שם מארח רגיל שמתחיל ב-localhost או ב-127 הוא אינטרנט', () {
+        final report = run(
+          '0.9.99',
+          const ['network.localhost'],
+          const [
+            'https://localhost.example.com',
+            'https://127.0.0.1.nip.io',
+          ],
+        );
+        expect(
+          report.errors.single,
+          allOf(
+            contains('localhost.example.com'),
+            contains('127.0.0.1.nip.io'),
+            contains('"network.access"'),
+          ),
+        );
+        expect(
+          report.warnings.any((w) => w.contains('אינה מזוהה כמקומית')),
+          isFalse,
+        );
+      });
+
+      test('הודעת השגיאה מציינת את הכתובת שגרמה לה', () {
+        final report = run(
+          '0.9.99',
+          const ['network.access'],
+          const [
+            'http://127.0.0.9:8080',
+          ],
+        );
+        expect(
+          report.errors.single,
+          allOf(contains('http://127.0.0.9:8080'), contains('0.9.99')),
+        );
+      });
+
+      test('לפני 0.9.99 יעד אינטרנט עם network.localhost בלבד הוא אזהרה', () {
+        final report = run(
+          '0.9.98',
+          const ['network.localhost'],
+          const [
+            'https://api.example.com',
+          ],
+        );
+        expect(report.errors, isEmpty);
+        expect(
+          report.warnings.any((w) => w.contains('"network.access"')),
+          isTrue,
+        );
+      });
+
+      test('לפני 0.9.99 יעד מקומי בלי אף הרשאת רשת הוא אזהרה', () {
+        final report = run('0.9.98', const [], const ['127.0.0.9']);
+        expect(report.errors, isEmpty);
+        expect(
+          report.warnings.any((w) => w.contains('"network.localhost"')),
+          isTrue,
+        );
+      });
+
+      test('מ-0.9.99 עם network.enabled כבוי אין שגיאת הפרדה', () {
+        final report = run(
+          '0.9.99',
+          const ['network.access'],
+          const [
+            '127.0.0.9',
+          ],
+          enabled: false,
+        );
+        expect(report.errors, isEmpty);
+      });
+
+      test('כתובת userinfo מטעה נספרת לפי ה-host האמיתי', () {
+        final report = run(
+          '0.9.99',
+          const ['network.localhost'],
+          const [
+            'http://127.0.0.1@evil.example.com',
+          ],
+        );
+        expect(
+          report.errors.any((e) => e.contains('"network.access"')),
+          isTrue,
+        );
+      });
+    });
+
     test('network.localhost ללא allowlist מקבל אזהרת allowlist ריק', () {
       final report = _runOn(
         tempDir,

@@ -1521,10 +1521,17 @@ const { data } = await Otzaria.call('library.getLinkContent', {
 
 ## network.* - גישה לרשת
 
-> כל גישת רשת מוגבלת לרשימת ההיתר של אוצריא — ראו [⚠️ הרשאת `network.access`](#️-הרשאת-networkaccess--דרישה-מיוחדת-pr-לאוצריא).
+> כל גישת רשת מוגבלת לרשימת ההיתר של אוצריא — ראו [⚠️ הרשאת `network.access`](#️-הרשאת-networkaccess--דרישה-מיוחדת-אישור-מאוצריא).
+>
+> **שתי הרשאות שונות — ההרשאה נקבעת לפי הכתובת שאליה פונים:**
+> - יעד **באינטרנט** (`https://api.example.com/...`) ← `network.access` בלבד.
+> - יעד **מקומי** (`localhost`, `::1`, `127.0.0.0` עד `127.0.0.255`, למשל `http://127.0.0.1:36900`) ← `network.localhost` בלבד.
+> - פנייה לשני סוגי יעדים ← מצהירים על **שתיהן**.
+>
+> **מאוצריא 0.9.99 ההפרדה מלאה:** תוסף שהצהיר רק על `network.access` לא יגיע לשירות מקומי, ותוסף שהצהיר רק על `network.localhost` לא יגיע לאינטרנט — בלי קשר ל-`minAppVersion` של התוסף. לפני כן `network.access` עדיין מכסה יעד מקומי (תאימות); אל תסתמכו על כך. הפירוט המלא, טבלת הבדלים וטעויות נפוצות — ב-[שירותים מקומיים](#שירותים-מקומיים-localhost--הרשאת-networklocalhost).
 
 ### `network.fetchStream`
-**הרשאה:** `network.access` (או `network.localhost` ליעד מקומי) · **מגרסה:** 0.9.97
+**הרשאה:** `network.access` ליעד אינטרנט, `network.localhost` ליעד מקומי (מאוצריא גרסה 0.9.99 ואילך אחת אינה מחליפה את השנייה) · **מגרסה:** 0.9.97
 
 מבצעת בקשת HTTP בצד אוצריא ומחזירה `AsyncIterable` מיד עם קבלת כותרות
 התשובה (ללא מעקב אחר redirects). פרמטרים: `url` (חובה), `method`
@@ -1534,7 +1541,7 @@ const { data } = await Otzaria.call('library.getLinkContent', {
 חיובי). חסם הזמן חל על הבקשה כולה, כולל קריאת הגוף; ברירת המחדל היא
 30,000 והמקסימום 120,000 מילישניות.
 
-שגיאות אפשריות: `error.permission_denied` (אין הרשאת network.access),
+שגיאות אפשריות: `error.permission_denied` (אין ההרשאה המתאימה ליעד: network.access לאינטרנט או network.localhost למקומי),
 `error.forbidden` (URL לא ברשימת ההיתר), `error.invalid_params` (URL
 חסר/לא תקין, `method` לא חוקי, `body` שאינו מחרוזת, `timeoutMs` שאינו
 שלם חיובי או מעל התקרה), `error.timeout` (חסם הזמן פקע). הפרמטרים נבדקים
@@ -1578,7 +1585,7 @@ if (pending.trim()) consumeResult(JSON.parse(pending));
 ```
 
 ### `network.download`
-**הרשאה:** `network.access` (או `network.localhost` ליעד מקומי)
+**הרשאה:** `network.access` ליעד אינטרנט, `network.localhost` ליעד מקומי (מאוצריא גרסה 0.9.99 ואילך אחת אינה מחליפה את השנייה)
 
 הורדה רגילה של קובץ מ-URL מותר אל **תיקיית ההורדות** של המערכת. ההורדה
 מתבצעת בצד אוצריא (Flutter), כך שאין צורך ב-`showDirectoryPicker` או
@@ -1614,12 +1621,12 @@ if (folder.success && folder.data.path) {
 }
 ```
 
-שגיאות אפשריות: `error.permission_denied` (אין הרשאת network.access),
+שגיאות אפשריות: `error.permission_denied` (אין ההרשאה המתאימה ליעד: network.access לאינטרנט או network.localhost למקומי),
 `error.forbidden` (URL לא ברשימת ההיתר, או `destPath` מחוץ לתיקייה מאושרת),
 `error.invalid_params` (URL חסר/לא תקין), `error.internal` (כשל הורדה).
 
 ### `network.fetchFile`
-**הרשאה:** `network.access` (או `network.localhost` ליעד מקומי) · **מגרסה:** 0.9.98.1
+**הרשאה:** `network.access` ליעד אינטרנט, `network.localhost` ליעד מקומי (מאוצריא גרסה 0.9.99 ואילך אחת אינה מחליפה את השנייה) · **מגרסה:** 0.9.98.1
 
 מורידה קובץ מ-URL מותר **בלי לשמור אותו בתיקיית המשתמש**: הקובץ נשמר במטמון
 זמני פרטי של התוסף, והתוסף מקבל עליו `token` לקריאה בלבד, מאותו סוג ש-
@@ -1636,7 +1643,7 @@ if (folder.success && folder.data.path) {
 
 פרמטרים: `url` (חובה; אותה בדיקת הרשאה, allowlist ו-redirects כמו
 `network.download` — גם יעד redirect בודק את הרשאת הרשת המתאימה לו, כך שהפניה
-מאתר מותר ל-`127.0.0.1` נחסמת בלי `network.localhost`), `maxBytes` (תקרת גודל לקובץ; ברירת מחדל 50MB, מקסימום
+מאתר מותר ל-`127.0.0.1` נחסמת כשאין לתוסף `network.localhost`; מאוצריא 0.9.99 `network.access` אינה מספיקה), `maxBytes` (תקרת גודל לקובץ; ברירת מחדל 50MB, מקסימום
 100MB) ו-`timeoutMs` (חסם זמן להורדה כולה; ברירת מחדל 120,000, מקסימום
 600,000). קובץ שחורג מהתקרה — כבר לפי `Content-Length`, ואם הוא חסר תוך כדי
 ההורדה — נמחק ומוחזרת `error.too_large`; הורדה שנכשלה באמצע אינה משאירה
@@ -6487,7 +6494,7 @@ Otzaria.on('plugin.boot', async (payload) => {
 
 ## ⚠️ הרשאת `network.access` — דרישה מיוחדת: אישור מאוצריא
 
-הצהרה על ההרשאה `network.access` ב-`manifest.json` **אינה מספיקה** כדי שתוסף יוכל לגשת לרשת. בפועל, ה-URL חייב לעבור שתי בדיקות מצטברות:
+הצהרה על ההרשאה `network.access` ב-`manifest.json` **אינה מספיקה** כדי שתוסף יוכל לגשת לרשת. הסעיף הזה חל על יעדי **אינטרנט** בלבד; יעד מקומי (`localhost` / `127.0.0.x`) נבדק לפי `network.localhost` ואינו דורש אישור מאוצריא (ראו [שירותים מקומיים](#שירותים-מקומיים-localhost--הרשאת-networklocalhost)). בפועל, ה-URL חייב לעבור שתי בדיקות מצטברות:
 
 1. להופיע ב-`network.allowlist` של התוסף עצמו.
 2. להופיע ברשימת ההיתר הרשמית של אוצריא.
@@ -6509,16 +6516,42 @@ Otzaria.on('plugin.boot', async (payload) => {
 
 ### שירותים מקומיים (localhost) — הרשאת `network.localhost`
 
-גישה לשירות מקומי על מחשב המשתמש (loopback: `localhost` / `127.0.0.1` / `::1`) — למשל מודל שפה מקומי כמו **Ollama** או **LM Studio** — מטופלת בנפרד:
+גישה לשירות שרץ על מחשב המשתמש — למשל מודל שפה מקומי כמו **Ollama** או **LM Studio**, או יישום מקומי אחר — מטופלת בהרשאה נפרדת. **היא אינה `network.access`.**
 
-- ההרשאה הנדרשת היא **`network.localhost`** (לא `network.access`). השתיים נפרדות: `network.localhost` אינה מתירה גישה לאינטרנט, ו-`network.access` אינה מתירה גישה ל-localhost.
-- היעד חייב להופיע ב-`network.allowlist` של התוסף, אבל **אין צורך ב-PR לאוצריא** — localhost אינו נכלל ב-allowlist הגלובלי.
-- הצהרת host חשוף (`"127.0.0.1"` / `"localhost"`) מתירה כל פורט על אותו host; הצהרת URL מלא (`"http://127.0.0.1:11434"`) נועלת לפורט שהוצהר.
-- כמו כל גישת רשת — חובה גם `network.enabled: true` ב-manifest. הקריאות חייבות לעבור דרך `network.fetchStream` (לא `fetch()` ישיר מה-WebView, שנחסם ב-CORS מול שרת מקומי שדוחה `Origin: null`).
+| | `network.access` | `network.localhost` |
+|---|---|---|
+| יעד | אתר או שרת באינטרנט | `localhost`, `::1`, `127.0.0.0` עד `127.0.0.255` |
+| מתירה אינטרנט | כן | **לא, בשום גרסה** |
+| מתירה יעד מקומי | **לא** מאוצריא 0.9.99 (לפני כן כן, לתאימות) | כן |
+| allowlist גלובלי (PR לאוצריא) | נדרש | לא נדרש |
+
+**כלל ההחלטה:** הסתכלו על ה-host שב-URL. `localhost` או `127.0.0.x` ← `network.localhost`. כל דבר אחר ← `network.access`.
+
+- **0.9.99 ומעלה:** ההפרדה מלאה וחובה, בלי קשר ל-`minAppVersion` של התוסף. תוסף שהצהיר רק על `network.access` — אין לו גישה לשום שירות מקומי. תוסף שהצהיר רק על `network.localhost` — אין לו גישה לאינטרנט. פנייה לשני סוגי יעדים דורשת את שתי ההרשאות.
+- **לפני 0.9.99 (תקופת מעבר):** יעד מקומי מתקבל עם `network.localhost` או עם `network.access`, כדי שתוסף שנכתב לפני ההפרדה לא יישבר. `network.localhost` לעולם אינה מתירה אינטרנט. כדי שהתוסף יעבוד נכון בשתי התקופות, הצהירו על ההרשאה שמתאימה לכל יעד שלו.
+- **אריזה והתקנה:** תוסף עם `minAppVersion` `0.9.99` ומעלה ו-`network.allowlist` שאינו תואם להרשאות שהוצהרו נכשל באריזה ובהתקנה. מתחת ל-`0.9.99` זו אזהרה.
+- **רק `127.0.0.0`–`127.0.0.255` בכתיבה עשרונית מלאה מוכרים כמקומיים.** `127.0.1.1`, `127.10.10.1`, `127.1`, `127.0.0.01`, `0.0.0.0`, `172.x.x.x`, `192.168.x.x`, `10.x.x.x` ושמות מחשב ברשת הם **אינטרנט** לצורך ההרשאות, ודורשים `network.access` ואישור ב-allowlist הגלובלי.
+- היעד חייב להופיע ב-`network.allowlist` של התוסף, אבל **אין צורך ב-PR לאוצריא** — יעד מקומי אינו נכלל ב-allowlist הגלובלי. הכתובת בהצהרה חייבת להיות זהה לכתובת בפנייה: הצהרה על `127.0.0.1` אינה מכסה `127.0.0.9`.
+- הצהרת host חשוף (`"127.0.0.1"` / `"localhost"`) מתירה כל פורט על אותו host; הצהרת URL מלא (`"http://127.0.0.1:36900"`) נועלת לפורט שהוצהר.
+- כמו כל גישת רשת — חובה גם `network.enabled: true` ב-manifest. הקריאות חייבות לעבור דרך `network.fetchStream` (או `network.download` / `network.fetchFile`), לא `fetch()` ישיר מה-WebView, שנחסם ב-CORS מול שרת מקומי שדוחה `Origin: null`.
+
+**טעויות נפוצות**
+- ❌ `network.access` כדי לגשת ל-Ollama או ליישום מקומי — נחסם מאוצריא 0.9.99. השתמשו ב-`network.localhost`.
+- ❌ `network.localhost` כדי להוריד קובץ מ-GitHub או לקרוא ל-API באינטרנט — נחסם בכל גרסה. הוסיפו `network.access`.
+- ❌ הצהרה על ההרשאה בלי להוסיף את הכתובת ל-`network.allowlist`.
+
+רק שירות מקומי:
 
 ```json
 "permissions": ["network.localhost"],
-"network": { "enabled": true, "allowlist": ["127.0.0.1", "localhost"] }
+"network": { "enabled": true, "allowlist": ["127.0.0.1", "http://127.0.0.9:36900"] }
+```
+
+אינטרנט ושירות מקומי:
+
+```json
+"permissions": ["network.access", "network.localhost"],
+"network": { "enabled": true, "allowlist": ["https://api.example.com/v1", "127.0.0.1"] }
 ```
 
 ### חובה: כתובות מדויקות בלבד

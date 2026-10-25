@@ -3,32 +3,36 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:otzaria/plugins/models/plugin_manifest.dart';
+import 'package:otzaria/plugins/models/plugin_network_permission_mode.dart';
 import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
 import 'package:otzaria/plugins/services/plugin_asset_scheme.dart';
 import 'package:otzaria/plugins/services/plugin_content_blockers.dart';
 import 'package:otzaria/plugins/services/plugin_network_access_resolver.dart';
 import 'package:otzaria/plugins/services/plugin_network_policy.dart';
 
-PluginManifest _manifest(List<String> allowlist, {bool enabled = true}) =>
-    PluginManifest(
-      schemaVersion: 1,
-      id: 'test.plugin',
-      name: 'Test Plugin',
-      version: '1.0.0',
-      description: '',
-      author: '',
-      homepage: '',
-      entrypoint: 'index.html',
-      minAppVersion: '0.0.0',
-      sdkVersion: '1.x',
-      permissions: const ['network.access', 'network.localhost'],
-      networkEnabled: enabled,
-      networkAllowlist: allowlist,
-      toolTabTitle: 'Test Plugin',
-      toolTabOrder: 1,
-      defaultPinned: true,
-      publishedDataTypes: const [],
-    );
+PluginManifest _manifest(
+  List<String> allowlist, {
+  bool enabled = true,
+  String minAppVersion = '0.0.0',
+}) => PluginManifest(
+  schemaVersion: 1,
+  id: 'test.plugin',
+  name: 'Test Plugin',
+  version: '1.0.0',
+  description: '',
+  author: '',
+  homepage: '',
+  entrypoint: 'index.html',
+  minAppVersion: minAppVersion,
+  sdkVersion: '1.x',
+  permissions: const ['network.access', 'network.localhost'],
+  networkEnabled: enabled,
+  networkAllowlist: allowlist,
+  toolTabTitle: 'Test Plugin',
+  toolTabOrder: 1,
+  defaultPinned: true,
+  publishedDataTypes: const [],
+);
 
 class _FakeRegistry implements PluginRegistryRepository {
   _FakeRegistry(this.grants);
@@ -64,12 +68,17 @@ Future<PluginNetworkPolicy> _policy(
     'network.localhost': true,
   },
   String official = 'https://github.com/Otzaria\nhttps://api.example.com/v1\n',
-}) async => resolvePluginNetworkPolicy(
-  pluginId: 'test.plugin',
-  manifest: _manifest(allowlist),
-  registry: _FakeRegistry(grants),
-  resolver: await _resolverWithOfficial(official),
-);
+  String appVersion = '0.9.98',
+  String minAppVersion = '0.0.0',
+}) async {
+  PluginNetworkPermissionMode.debugSetAppVersion(appVersion);
+  return resolvePluginNetworkPolicy(
+    pluginId: 'test.plugin',
+    manifest: _manifest(allowlist, minAppVersion: minAppVersion),
+    registry: _FakeRegistry(grants),
+    resolver: await _resolverWithOfficial(official),
+  );
+}
 
 /// מדמה את WebKit: הכלל האחרון שתואם קובע, וכל החריגה באה אחרי חסימת הכל.
 bool _allowed(List<ContentBlocker> rules, String url) {
@@ -87,6 +96,8 @@ bool _allowed(List<ContentBlocker> rules, String url) {
 }
 
 void main() {
+  tearDown(() => PluginNetworkPermissionMode.debugSetAppVersion(null));
+
   group('resolvePluginNetworkPolicy', () {
     test('מתיר רק מה שמכוסה גם במניפסט וגם ברשימה הרשמית', () async {
       final policy = await _policy([
@@ -116,14 +127,57 @@ void main() {
       expect(policy.prefixes, ['http://127.0.0.1:11434']);
     });
 
-    test('loopback דורש network.localhost', () async {
+    test('מ-0.9.99 loopback דורש network.localhost', () async {
       final policy = await _policy(
-        ['127.0.0.1', 'http://localhost:1234'],
+        ['127.0.0.1', '127.0.0.9', 'http://localhost:1234'],
         grants: const {'network.access': true},
+        appVersion: '0.9.99',
       );
 
       expect(policy.prefixes, isEmpty);
       expect(policy.loopbackHosts, isEmpty);
+    });
+
+    test('בתקופת המעבר network.access מכסה גם יעד מקומי', () async {
+      final policy = await _policy(
+        ['127.0.0.9', 'http://localhost:1234'],
+        grants: const {'network.access': true},
+        appVersion: '0.9.98',
+      );
+
+      expect(policy.loopbackHosts, ['127.0.0.9']);
+      expect(policy.prefixes, ['http://localhost:1234']);
+    });
+
+    test('network.localhost לבדה לא פותחת יעד מרוחק בשום גרסה', () async {
+      for (final version in ['0.9.98', '0.9.99']) {
+        final policy = await _policy(
+          ['https://github.com/Otzaria/otzaria-library', '127.0.0.9'],
+          grants: const {'network.localhost': true},
+          appVersion: version,
+        );
+
+        expect(policy.prefixes, isEmpty, reason: version);
+        expect(policy.loopbackHosts, ['127.0.0.9'], reason: version);
+      }
+    });
+
+    test('minAppVersion של התוסף אינו משפיע — קובעת גרסת האפליקציה', () async {
+      final strictApp = await _policy(
+        ['127.0.0.9'],
+        grants: const {'network.access': true},
+        appVersion: '0.9.99',
+        minAppVersion: '0.9.0',
+      );
+      final legacyApp = await _policy(
+        ['127.0.0.9'],
+        grants: const {'network.access': true},
+        appVersion: '0.9.98',
+        minAppVersion: '1.0.0',
+      );
+
+      expect(strictApp.loopbackHosts, isEmpty);
+      expect(legacyApp.loopbackHosts, ['127.0.0.9']);
     });
 
     test('מניפסט בלי network.enabled אינו מתיר דבר', () async {

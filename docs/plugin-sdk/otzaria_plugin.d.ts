@@ -518,6 +518,12 @@ export interface SearchOptionsCatalog {
   defaultLimit: number;
 }
 
+/**
+ * ההרשאה נקבעת לפי ה-host שב-`url`: `localhost` / `::1` / `127.0.0.0`–`127.0.0.255`
+ * דורשים `network.localhost`; כל יעד אחר (אינטרנט) דורש `network.access`.
+ * מאוצריא 0.9.99 אחת אינה מחליפה את השנייה; פנייה לשני סוגי יעדים דורשת את שתיהן.
+ * הכתובת חייבת להופיע גם ב-`network.allowlist` של המניפסט.
+ */
 export interface NetworkFetchParams {
   url: string;
   /** מומר לאותיות גדולות; אותיות בלבד. ברירת מחדל GET. */
@@ -529,6 +535,12 @@ export interface NetworkFetchParams {
   timeoutMs?: number;
 }
 
+/**
+ * ההרשאה נקבעת לפי ה-host שב-`url`: `localhost` / `::1` / `127.0.0.0`–`127.0.0.255`
+ * דורשים `network.localhost`; כל יעד אחר (אינטרנט) דורש `network.access`.
+ * מאוצריא 0.9.99 אחת אינה מחליפה את השנייה; פנייה לשני סוגי יעדים דורשת את שתיהן.
+ * הכתובת חייבת להופיע גם ב-`network.allowlist` של המניפסט.
+ */
 export interface NetworkFetchFileParams {
   url: string;
   /** ברירת מחדל 50MB; מקסימום 100MB. חריגה: `error.too_large`. */

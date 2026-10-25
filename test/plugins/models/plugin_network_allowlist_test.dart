@@ -143,7 +143,74 @@ void main() {
     });
   });
 
+  group('isLoopbackHost', () {
+    test('127.0.0.0–127.0.0.255, localhost ו-::1', () {
+      for (final host in [
+        'localhost',
+        'LOCALHOST',
+        '::1',
+        '127.0.0.1',
+        '127.0.0.9',
+        '127.0.0.0',
+        '127.0.0.255',
+      ]) {
+        expect(isLoopbackHost(host), isTrue, reason: host);
+      }
+    });
+
+    test('כתובות שאינן loopback קנוני נחשבות אינטרנט', () {
+      for (final host in [
+        '128.0.0.1',
+        '127.0.1.1',
+        '127.1.0.0',
+        '127.10.10.1',
+        '127.255.255.254',
+        '172.0.0.1',
+        '127.0.0.01',
+        '126.255.255.255',
+        '127.0.0',
+        '127.0.0.1.evil.com',
+        'evil127.0.0.1',
+        '127.0.0.256',
+        '127.1',
+        '0127.0.0.1',
+        '127.00.0.1',
+        '127.0.0.1 ',
+        '0.0.0.0',
+        '10.0.0.1',
+        '192.168.1.1',
+        '::ffff:127.0.0.1',
+        'example.com',
+        '',
+      ]) {
+        expect(isLoopbackHost(host), isFalse, reason: host);
+      }
+    });
+
+    test('matchingLoopbackPrefix: host חשוף נועל לכתובת המדויקת', () {
+      final uri = Uri.parse('http://127.0.0.9:8080/api');
+      expect(matchingLoopbackPrefix(uri, const ['127.0.0.9']), isNotNull);
+      expect(matchingLoopbackPrefix(uri, const ['127.0.0.1']), isNull);
+      expect(matchingLoopbackPrefix(uri, const ['127.0.0.8']), isNull);
+      expect(
+        matchingLoopbackPrefix(uri, const ['http://127.0.0.9:8080']),
+        isNotNull,
+      );
+      expect(
+        matchingLoopbackPrefix(uri, const ['http://127.0.0.9:9090']),
+        isNull,
+      );
+    });
+  });
+
   group('requiredNetworkPermissionFor', () {
+    test('כתובת 127.x.x.x כלשהי דורשת network.localhost', () {
+      expect(
+        requiredNetworkPermissionFor(Uri.parse('http://127.0.0.9:8080/x')),
+        'network.localhost',
+      );
+    });
+
     test('יעד loopback דורש network.localhost', () {
       expect(
         requiredNetworkPermissionFor(Uri.parse('http://127.0.0.1:11434')),
@@ -151,6 +218,29 @@ void main() {
       );
       expect(
         requiredNetworkPermissionFor(Uri.parse('http://localhost:1234')),
+        'network.localhost',
+      );
+    });
+
+    test('userinfo מטעה, נקודה סופית ו-IPv6 ממופה אינם נחשבים מקומיים', () {
+      for (final url in [
+        'http://127.0.0.1@evil.example.com/',
+        'http://127.0.0.1:80@evil.example.com/',
+        'http://127.0.0.1.:11434/',
+        'http://localhost.:1234/',
+        'http://[::ffff:127.0.0.1]:11434/',
+      ]) {
+        expect(
+          requiredNetworkPermissionFor(Uri.parse(url)),
+          'network.access',
+          reason: url,
+        );
+      }
+    });
+
+    test('אותיות גדולות ב-host מקומי נחשבות מקומיות', () {
+      expect(
+        requiredNetworkPermissionFor(Uri.parse('http://LocalHost:1234/')),
         'network.localhost',
       );
     });

@@ -129,6 +129,7 @@ import 'package:otzaria/printing/view/printing_screen.dart';
 import 'package:otzaria/plugins/services/plugin_runtime_dispatcher.dart';
 import 'package:otzaria/plugins/models/plugin_valid_permissions.dart';
 import 'package:otzaria/plugins/models/plugin_network_allowlist.dart';
+import 'package:otzaria/plugins/models/plugin_network_permission_mode.dart';
 import 'package:otzaria/plugins/services/plugin_network_gate.dart';
 import 'package:otzaria/plugins/services/plugin_file_download_service.dart';
 import 'package:otzaria/plugins/services/plugin_install_report_service.dart';
@@ -7849,20 +7850,32 @@ class PluginBridgeAdapter {
       case PluginNetworkDecision.notDeclared:
         throw Exception(
           'error.permission_denied: '
-          'התוסף אינו מצהיר על גישה לאינטרנט במניפסט.',
+          'התוסף אינו מצהיר על גישת רשת במניפסט (network.enabled).',
         );
       case PluginNetworkDecision.permissionMissing:
-        final what = requiredNetworkPermissionFor(uri) == 'network.localhost'
-            ? 'גישה לשירותים מקומיים (localhost)'
-            : 'גישה לאינטרנט';
+        final isLocal =
+            requiredNetworkPermissionFor(uri) == 'network.localhost';
+        final what = isLocal
+            ? 'גישה לשירותים מקומיים (network.localhost)'
+            : 'גישה לאינטרנט (network.access)';
+        final separation = !isLocal
+            ? 'network.localhost אינה מכסה אינטרנט.'
+            : await PluginNetworkPermissionMode.isStrict()
+            ? 'network.access אינה מכסה יעד מקומי.'
+            : 'לפני אוצריא 0.9.99 גם network.access מכסה יעד מקומי, '
+                  'אך משם תידרש network.localhost.';
         throw Exception(
           'error.permission_denied: '
-          'לתוסף אין הרשאת $what. '
-          'ניתן להפעיל אותה בהגדרות, תחת ניהול תוספים.',
+          'לתוסף אין הרשאת $what. $separation '
+          'ניתן להפעיל את ההרשאה בהגדרות, תחת ניהול תוספים.',
         );
       case PluginNetworkDecision.notAllowlisted:
         throw Exception(
-          'error.forbidden: הכתובת אינה ברשימת ההיתר לגישת רשת של תוספים',
+          isLoopbackHost(uri.host)
+              ? 'error.forbidden: היעד המקומי אינו מוצהר ב-network.allowlist '
+                    'של התוסף בכתובת זהה (host חשוף כמו "127.0.0.1" מתיר כל '
+                    'פורט, אבל "localhost" ו-"127.0.0.1" נבדלים)'
+              : 'error.forbidden: הכתובת אינה ברשימת ההיתר לגישת רשת של תוספים',
         );
     }
   }
