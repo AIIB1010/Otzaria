@@ -6,6 +6,7 @@ import 'package:otzaria/app_report/services/app_crash_session.dart';
 import 'package:otzaria/app_report/services/crash_report_decision.dart';
 import 'package:otzaria/app_report/services/unclean_exit_detector.dart';
 import 'package:otzaria/core/error_log_file.dart';
+import 'package:otzaria/core/app_paths.dart';
 import 'package:otzaria/core/startup_timeline.dart';
 import 'package:path/path.dart' as p;
 
@@ -320,12 +321,33 @@ void main() {
       p.join(p.dirname(ErrorLogFile.resolvePath()), '.sentry-native'),
     );
     expect(dirs.first, UncleanExitDetector.sentryDatabasePath());
+    expect(dirs, contains(p.join(Directory.current.path, '.sentry-native')));
     expect(
       dirs,
       contains(
         p.join(p.dirname(Platform.resolvedExecutable), '.sentry-native'),
       ),
     );
+  });
+
+  test('גילוי dump בתיקיית הלוגים ללא הגדרת מיקום מיוחדת בגלאי', () async {
+    final dataRoot = AppPaths.cachedDataRootPath;
+    AppPaths.debugOverrideDataRootPath(tmp.path);
+    addTearDown(() => AppPaths.debugOverrideDataRootPath(dataRoot));
+    writeLock();
+    final reports = Directory(
+      p.join(UncleanExitDetector.sentryDatabasePath(), 'reports'),
+    )..createSync(recursive: true);
+    final dump = File(p.join(reports.path, 'native.dmp'))
+      ..writeAsBytesSync(buildMinidump());
+    final candidate = await UncleanExitDetector(
+      isProcessAlive: (_) => false,
+      currentPid: 2000,
+      processStartedAt: thisStart,
+    ).detectPreviousCrash();
+    expect(candidate!.hasMinidump, isTrue);
+    expect(candidate.minidump!.path, dump.path);
+    expect(candidate.signature!.frames, ['flutter_windows.dll+0x1e220']);
   });
 
   test('defaultIsProcessAlive: התהליך הנוכחי חי', () {

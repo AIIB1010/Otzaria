@@ -34,7 +34,7 @@ void main() {
       expect(signature.frames, isEmpty);
     });
 
-    // כמו ב-dump אמיתי של crashpad: סגמנט ה-text של app.so ב-0xfec000 מבסיס ההקצאה.
+    // מפת זיכרון של app.so אינה כוללת ראיה לזהות התמונה.
     const dartText = (
       base: 0x20840b7c000,
       allocationBase: 0x2083fb90000,
@@ -43,7 +43,29 @@ void main() {
       type: 0x20000, // MEM_PRIVATE
     );
 
-    test('קריסה בקוד Dart — app.so+היסט מבסיס ההקצאה', () async {
+    test('קוד פרטי ללא זיהוי תמונה אינו app.so, למשל FFI trampoline', () async {
+      final signature = await readMinidumpSignature(
+        write(
+          buildMinidump(
+            exceptionAddress: 0x10001030,
+            modules: const [],
+            memoryRegions: const [
+              (
+                base: 0x10001000,
+                allocationBase: 0x10000000,
+                size: 0x1000,
+                protect: 0x20,
+                type: 0x20000,
+              ),
+            ],
+          ),
+        ),
+      );
+      expect(signature!.exceptionType, '0xc0000005');
+      expect(signature.frames, isEmpty);
+    });
+
+    test('מפת זיכרון ללא זהות תמונה אינה מספיקה לחתימת app.so', () async {
       final signature = await readMinidumpSignature(
         write(
           buildMinidump(
@@ -52,8 +74,8 @@ void main() {
           ),
         ),
       );
-      expect(signature!.exceptionType, '0xc0000005 app.so+0x11db25a');
-      expect(signature.frames, ['app.so+0x11db25a']);
+      expect(signature!.exceptionType, '0xc0000005');
+      expect(signature.frames, isEmpty);
     });
 
     test(
