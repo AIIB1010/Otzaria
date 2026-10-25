@@ -126,6 +126,7 @@ class SqliteDataProvider {
       _repository = SeforimRepository(database);
       await _repository.ensureInitialized();
       _isInitialized = true;
+      _canReopenAfterClose = true;
       DbReadWorker.allowReopen();
       unawaited(LibraryLineSource.configure(_dbPath));
     } on SqliteException catch (e) {
@@ -155,10 +156,16 @@ class SqliteDataProvider {
   /// Checks if the database is initialized and ready
   bool get isInitialized => _isInitialized;
 
+  /// חיבור שהיה פעיל וניתן לפתוח מחדש, כל עוד לא נסגר ליציאה מהתהליך.
+  bool get canReopenAfterClose => _canReopenAfterClose;
+  bool _canReopenAfterClose = false;
+
   /// Closes the database connection to free resources
   /// [forAppExit] לא ממתין ל-worker עסוק: התהליך מסתיים ממילא.
-  Future<void> dispose({bool forAppExit = false}) =>
-      _dispose(waitForWorker: !forAppExit);
+  Future<void> dispose({bool forAppExit = false}) {
+    if (forAppExit) _canReopenAfterClose = false;
+    return _dispose(waitForWorker: !forAppExit);
+  }
 
   Future<void> _dispose({required bool waitForWorker}) async {
     if (_isInitialized) {

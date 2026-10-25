@@ -721,11 +721,23 @@ class TextBookRepository {
   /// אישי — null (קישוריו ב-user_link).
   Future<SeforimRepository?> _linksRepositoryFor(BookSource source) =>
       switch (source) {
-        OfficialBookSource() => Future.value(_sqliteProvider.repository),
+        OfficialBookSource() => _officialRepository(),
         UserBookSource() => Future.value(),
         AttachedBookSource(:final slug) =>
           AttachedLibraryRegistry.instance.repositoryFor(slug),
       };
+
+  /// פותח מחדש חיבור שנסגר; חיבור שמעולם לא נפתח שייך לאתחול האפליקציה.
+  Future<SeforimRepository?> _officialRepository() async {
+    final provider = _sqliteProvider;
+    if (!provider.isInitialized && provider.canReopenAfterClose) {
+      await provider.initialize();
+    }
+    return provider.repository;
+  }
+
+  /// האם חיבור הספרייה הרשמית פתוח — לרישום כשל בטעינת המפרשים.
+  bool get isLibraryConnectionOpen => _sqliteProvider.isInitialized;
 
   Future<void> saveBookContent(TextBook book, String content) async {
     await _fileSystem.saveBookText(book.title, content);

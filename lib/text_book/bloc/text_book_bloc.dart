@@ -154,6 +154,13 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
   int _commentatorsLoadGeneration = 0;
   int _visibilityRefreshGeneration = 0;
 
+  /// הכשל האחרון שנרשם בטעינת המפרשים, כדי שטעינה חוזרת לא תכפיל רשומה.
+  String? _loggedCommentatorsFailure;
+
+  /// בבדיקות ובהרצת פיתוח לא נרשם, כדי לא לכתוב ל-errors.txt של המפתח.
+  @visibleForTesting
+  static bool logCommentatorsFailuresInDebug = false;
+
   /// מאפס את הדגלים הספציפיים-לספר. נקרא מ-_onLoadContent כשבלוק עובר
   /// לטעון ספר חדש (כיום בייצור bloc נוצר חדש לכל תא, אבל הקריאה כאן
   /// מגינה מפני דליפת state בין ספרים אם זה ישתנה בעתיד).
@@ -3081,6 +3088,14 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
     final generation = ++_commentatorsLoadGeneration;
     try {
       final commentatorsData = await repository.getCommentatorsWithRarity(book);
+      if (book.source.isOfficial &&
+          commentatorsData.all.isEmpty &&
+          !repository.isLibraryConnectionOpen) {
+        _logCommentatorsFailure(
+          book,
+          StateError('commentators list empty: library connection closed'),
+        );
+      }
       // מפרש שהמשתמש הסתיר יורד מרשימות הבחירה ומהתצוגה (issue #1448).
       // הסינון כאן ולא ב-repository: גשר התוספים קורא לאותה שאילתה, וההסתרה
       // היא של הממשק בלבד.
@@ -3160,10 +3175,38 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
         return;
       }
       _loadLinksAfterCommentatorsResolved(book);
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('⚠️ Failed to load commentators in background: $e');
+      _logCommentatorsFailure(book, e, stackTrace);
       _loadLinksAfterCommentatorsResolved(book);
     }
+  }
+
+  /// כשל כאן משאיר את חלונית המפרשים ריקה בלי שום סימן, ולכן נרשם ל-errors.txt.
+  void _logCommentatorsFailure(
+    TextBook book,
+    Object error, [
+    StackTrace? stackTrace,
+  ]) {
+    if (kDebugMode && !logCommentatorsFailuresInDebug) return;
+    final key = '${book.source}|${book.title}|${error.runtimeType}';
+    if (_loggedCommentatorsFailure == key) return;
+    _loggedCommentatorsFailure = key;
+    try {
+      ErrorLogFile.append(
+        title: 'כשל בטעינת רשימת המפרשים',
+        error: error,
+        stackTrace: stackTrace,
+        details: {
+          'book': book.title,
+          'categoryId': book.categoryId?.toString(),
+          'source': book.source.toString(),
+          'errorType': error.runtimeType.toString(),
+          'libraryConnectionOpen': repository.isLibraryConnectionOpen
+              .toString(),
+        },
+      );
+    } catch (_) {}
   }
 
   /// טעינת הקישורים שנדחתה ב-[_onLoadContent] עד לפתרון בחירת המפרשים,
