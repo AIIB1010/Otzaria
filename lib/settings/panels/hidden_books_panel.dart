@@ -283,7 +283,7 @@ class _HiddenBooksPanelState extends State<HiddenBooksPanel> {
   Future<String?> _pickFile() async {
     final result = await withFilePickerOwner(
       context,
-      () => FilePicker.pickFile(
+      (picker) => picker.pickFile(
         type: FileType.custom,
         allowedExtensions: const ['csv', 'json', 'txt'],
         windowsOptions: modalWindowsOptions(context),

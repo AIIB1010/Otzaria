@@ -74,7 +74,7 @@ class AppReportImageSources {
     final files =
         (await withFilePickerOwner(
           context,
-          () => FilePicker.pickFiles(
+          (picker) => picker.pickFiles(
             type: FileType.custom,
             allowedExtensions: AppReportImage.supportedExtensions,
             windowsOptions: modalWindowsOptions(context),

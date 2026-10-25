@@ -1,7 +1,6 @@
 import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/data/book_identity.dart';
 import 'dart:io';
-import 'package:file_picker/file_picker.dart';
 import 'package:otzaria/utils/file/file_picker_dialog_options.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
@@ -748,7 +747,7 @@ class _ChangeLocationDialogContentState
   Future<void> _pickFolder() async {
     final path = await withFilePickerOwner(
       context,
-      () => FilePicker.getDirectoryPath(
+      (picker) => picker.getDirectoryPath(
         windowsOptions: modalWindowsOptions(context),
         linuxOptions: kModalLinuxOptions,
       ),

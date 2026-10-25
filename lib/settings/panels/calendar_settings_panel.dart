@@ -594,7 +594,7 @@ class _CalendarSettingsTabState extends State<CalendarSettingsTab> {
     final cubit = context.read<CalendarCubit>();
     final result = await withFilePickerOwner(
       context,
-      () => FilePicker.pickFile(
+      (picker) => picker.pickFile(
         type: FileType.custom,
         allowedExtensions: ['ics'],
         windowsOptions: modalWindowsOptions(context),

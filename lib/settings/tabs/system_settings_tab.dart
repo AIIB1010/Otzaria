@@ -893,7 +893,7 @@ class _SystemSettingsTabState extends State<SystemSettingsTab> {
   Future<void> _restoreFromPickedFile() async {
     final result = await withFilePickerOwner(
       context,
-      () => FilePicker.pickFile(
+      (picker) => picker.pickFile(
         type: FileType.custom,
         allowedExtensions: ['json'],
         windowsOptions: modalWindowsOptions(context),
@@ -923,7 +923,7 @@ class _SystemSettingsTabState extends State<SystemSettingsTab> {
   Future<void> _importMergeFromPickedFile() async {
     final result = await withFilePickerOwner(
       context,
-      () => FilePicker.pickFile(
+      (picker) => picker.pickFile(
         type: FileType.custom,
         allowedExtensions: ['json'],
         windowsOptions: modalWindowsOptions(context),

@@ -1,4 +1,3 @@
-import 'package:file_picker/file_picker.dart';
 import 'package:otzaria/utils/file/file_picker_dialog_options.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
@@ -1071,7 +1070,7 @@ class _PathMenuButtonState extends State<_PathMenuButton> {
   Future<void> _pickAndChange() async {
     final path = await withFilePickerOwner(
       context,
-      () => FilePicker.getDirectoryPath(
+      (picker) => picker.getDirectoryPath(
         windowsOptions: modalWindowsOptions(context),
         linuxOptions: kModalLinuxOptions,
       ),

@@ -66,7 +66,7 @@ class _AttachedLibrariesPanelState extends State<AttachedLibrariesPanel> {
     final files =
         (await withFilePickerOwner(
           context,
-          () => FilePicker.pickFiles(
+          (picker) => picker.pickFiles(
             // בורר המערכת במובייל אינו מכיר את הסיומת db; הקובץ נבדק לפי תוכנו.
             type: widget.supportsLinking ? FileType.custom : FileType.any,
             allowedExtensions: widget.supportsLinking ? const ['db'] : null,
@@ -84,7 +84,7 @@ class _AttachedLibrariesPanelState extends State<AttachedLibrariesPanel> {
     final bloc = context.read<AttachedLibrariesBloc>();
     final path = await withFilePickerOwner(
       context,
-      () => FilePicker.getDirectoryPath(
+      (picker) => picker.getDirectoryPath(
         windowsOptions: modalWindowsOptions(context),
         linuxOptions: kModalLinuxOptions,
       ),

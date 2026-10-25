@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/widgets.dart';
 import 'package:otzaria/core/ui_snack.dart' show navigatorKey;
 import 'package:otzaria/settings/services/safer_mode_guard.dart';
@@ -32,11 +31,12 @@ Future<String?> saveFileWithExtension({
   if (effectiveContext != null && !effectiveContext.mounted) return null;
   final uri = await withFilePickerOwner(
     effectiveContext,
-    () => FilePicker.saveFile(
+    (picker) => picker.saveFile(
       dialogTitle: dialogTitle,
       fileName: fileName,
       initialDirectory: initialDirectory,
       bytes: bytes,
+      mimeType: 'application/octet-stream',
       windowsOptions: windowsOptions,
       linuxOptions: kModalLinuxOptions,
     ),
