@@ -1,4 +1,5 @@
 import 'package:flutter/gestures.dart';
+import 'package:flutter/scheduler.dart';
 
 /// צביטת מגע שמנצחת גלילה כבר בשינוי קטן במרחק בין שתי אצבעות,
 /// כל עוד השינוי גובר על התזוזה המשותפת שלהן (גלילה או החלקת כרטיסיות).
@@ -36,12 +37,20 @@ class TouchPinchScaleRecognizer extends ScaleGestureRecognizer {
     super.handleEvent(event);
     if (!_touches.containsKey(event.pointer)) return;
     if (event is PointerMoveEvent) {
-      // כל אצבע מדווחת בנפרד: בודקים רק כשכולן דיווחו, או כשאחת דיווחה פעמיים
-      // (השנייה נייחת) - אחרת תזוזה משותפת נראית לרגע כצביטה.
-      if (_movedSinceCheck.contains(event.pointer)) _checkPinch();
       _touches[event.pointer] = event.position;
       _movedSinceCheck.add(event.pointer);
-      if (_movedSinceCheck.length >= _touches.length) _checkPinch();
+      if (_movedSinceCheck.length >= _touches.length) {
+        _checkPinch();
+      } else {
+        // אירועים של אותה אצבע יכולים להגיע יחד; ממתינים לפריים לפני הנחת אצבע נייחת.
+        final start = _startCentroid;
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          if (identical(start, _startCentroid) && _movedSinceCheck.isNotEmpty) {
+            _checkPinch();
+          }
+        });
+        SchedulerBinding.instance.ensureVisualUpdate();
+      }
     } else if (event is PointerUpEvent || event is PointerCancelEvent) {
       _touches.remove(event.pointer);
       _resetStart();
@@ -58,6 +67,20 @@ class TouchPinchScaleRecognizer extends ScaleGestureRecognizer {
         spanChange > 1.5 * (_centroid - _startCentroid!).distance) {
       resolve(GestureDisposition.accepted);
     }
+  }
+
+  @override
+  void rejectGesture(int pointer) {
+    _touches.remove(pointer);
+    _resetStart();
+    super.rejectGesture(pointer);
+  }
+
+  @override
+  void dispose() {
+    _touches.clear();
+    _resetStart();
+    super.dispose();
   }
 
   @override

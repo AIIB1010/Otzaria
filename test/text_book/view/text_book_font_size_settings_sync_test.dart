@@ -307,6 +307,34 @@ void main() {
     verifyNever(() => bloc.add(any(that: isA<UpdateFontSize>())));
   });
 
+  testWidgets('a parallel drag with batched pointer events does not zoom', (
+    tester,
+  ) async {
+    registerFallbackValue(const UpdateFontSize(0));
+    final bloc = await pumpViewer(
+      tester,
+      fontSize: 20,
+      content: List.generate(200, (i) => 'שורה $i'),
+    );
+    final text = tester.getCenter(find.byType(CombinedView).first);
+    final first = await tester.startGesture(text, pointer: 1);
+    final second = await tester.startGesture(
+      text + const Offset(0, 100),
+      pointer: 2,
+    );
+    for (var step = 0; step < 4; step++) {
+      await second.moveBy(const Offset(0, -6));
+      await second.moveBy(const Offset(0, -6));
+      await second.moveBy(const Offset(0, -6));
+      await first.moveBy(const Offset(0, -18));
+      await tester.pump();
+    }
+    await first.up();
+    await second.up();
+    await tester.pump();
+    verifyNever(() => bloc.add(any(that: isA<UpdateFontSize>())));
+  });
+
   test('TextBookBloc מחיל UpdateFontSize על מצב טעון', () async {
     final book = TextBook(title: 'ספר בדיקה');
     final bloc = TextBookBloc(

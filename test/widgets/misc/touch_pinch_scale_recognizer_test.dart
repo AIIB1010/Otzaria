@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/tabs/utils/touch_tab_swipe_recognizer.dart';
@@ -57,10 +58,68 @@ void main() {
       // אצבע נייחת לא שולחת אירועי תזוזה.
       if (firstStep != Offset.zero) await first.moveBy(firstStep);
       await second.moveBy(secondStep);
+      await tester.pump();
     }
     await first.up();
     await second.up();
     await tester.pump();
+  }
+
+  void beginPendingPinch(_RecordingRecognizer recognizer) {
+    for (final (pointer, position) in [
+      (1, const Offset(300, 200)),
+      (2, const Offset(300, 300)),
+    ]) {
+      final down = PointerDownEvent(pointer: pointer, position: position);
+      recognizer.addPointer(down);
+      recognizer.handleEvent(down);
+    }
+    recognizer.handleEvent(
+      const PointerMoveEvent(
+        pointer: 2,
+        position: Offset(300, 312),
+        delta: Offset(0, 12),
+      ),
+    );
+  }
+
+  for (final ending in [
+    'up',
+    'cancel',
+    'reject',
+    'reject one',
+    'dispose',
+    'reuse',
+  ]) {
+    testWidgets('pending pinch is invalidated by $ending', (tester) async {
+      final recognizer = _RecordingRecognizer()..onUpdate = (_) {};
+      addTearDown(() {
+        if (ending != 'dispose') recognizer.dispose();
+        for (final pointer in [1, 2]) {
+          GestureBinding.instance.gestureArena.close(pointer);
+          GestureBinding.instance.gestureArena.sweep(pointer);
+        }
+      });
+      beginPendingPinch(recognizer);
+      if (ending == 'dispose') {
+        recognizer.dispose();
+      } else {
+        for (final pointer in ending == 'reject one' ? [1] : [1, 2]) {
+          switch (ending) {
+            case 'reject':
+            case 'reject one':
+              recognizer.rejectGesture(pointer);
+            case 'cancel':
+              recognizer.handleEvent(PointerCancelEvent(pointer: pointer));
+            default:
+              recognizer.handleEvent(PointerUpEvent(pointer: pointer));
+          }
+        }
+        if (ending == 'reuse') beginPendingPinch(recognizer);
+      }
+      await tester.pump();
+      expect(recognizer.acceptedResolutions, ending == 'reuse' ? 1 : 0);
+    });
   }
 
   testWidgets('a small one-sided pinch zooms instead of scrolling', (
@@ -157,5 +216,15 @@ void main() {
       expect(pinchUpdates, 0);
       expect(scrollUpdates, greaterThan(0));
     });
+  }
+}
+
+class _RecordingRecognizer extends TouchPinchScaleRecognizer {
+  int acceptedResolutions = 0;
+
+  @override
+  void resolve(GestureDisposition disposition) {
+    if (disposition == GestureDisposition.accepted) acceptedResolutions++;
+    super.resolve(disposition);
   }
 }
