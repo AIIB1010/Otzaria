@@ -8,13 +8,13 @@ typedef DibburCandidate = ({
   int lineIndex,
   int lineId,
   String display,
+  String? heRef,
 });
 
-/// גישה ל-`line_dh` — דיבורי-המתחיל `(bookId, dhText) → lineIndex`.
-///
-/// `dhText` מנורמל (בלי ניקוד וגרשיים) ויושב ב-PRIMARY KEY, ולכן חיפוש
-/// תחילית בתוך ספר מוגש מהאינדקס. הטבלה והעמודה `dhDisplay` נוספו בגרסאות
-/// מאוחרות של המסד; [isAvailable] מאפשר לקורא לדלג בשקט על מסד ישן.
+/// ציון בתוך ספר; [refKeyTokens] ריקים מציינים התאמה לספר כולו.
+typedef DibburLocation = ({String bookTitle, List<String> keyTokens});
+
+/// גישה ל-`line_dh`; התחילית המנורמלת מוגשת מה-PRIMARY KEY.
 class LineDhDao {
   final MyDatabase _db;
   bool? _available;
@@ -40,45 +40,60 @@ class LineDhDao {
     return _available = hasDisplay;
   }
 
-  /// הדיבורים שתחילתם [prefix] בכל אחד מ-[bookIds], בשאילתה מאוגדת אחת.
-  ///
-  /// כש-[contains] דלוק, [prefix] מחופש בכל מקום בדיבור — מסלול יקר יותר
-  /// (סריקת שורות הספרים), ולכן הקורא מפעיל אותו רק כשהתחילית לא החזירה כלום.
+  /// הדיבורים שתחילתם [prefix], בסדר הספרים שנמסר ואז לפי שורה.
+  /// [contains] סורק גם את פנים הדיבור, ולכן מיועד לקבוצת ספרים מצומצמת.
+  /// [where] מסנן לפני התקרה, כך שדיבורים שנדחו אינם תופסים את מקומה.
   Future<List<DibburCandidate>> dibburimForBooks(
     List<int> bookIds,
     String prefix, {
     bool contains = false,
     int limit = 40,
+    bool Function(DibburCandidate dibbur)? where,
   }) async {
     if (bookIds.isEmpty || prefix.isEmpty || !await isAvailable()) {
       return const [];
     }
     final db = await database;
-    final ids = bookIds.join(',');
     final match = contains
         ? "d.dhText LIKE '%' || ? || '%'"
         // התו הגבוה ביותר ב-Unicode סוגר את טווח התחילית מלמעלה.
         : 'd.dhText >= ? AND d.dhText < ? || char(1114111)';
-    final args = contains ? [prefix, limit] : [prefix, prefix, limit];
-    return db
-        .select(
-          'SELECT d.bookId, d.lineIndex, d.dhDisplay AS display, '
-          'l.id AS lineId '
-          'FROM line_dh d '
-          'JOIN line l ON l.bookId = d.bookId AND l.lineIndex = d.lineIndex '
-          'WHERE d.bookId IN ($ids) AND $match '
-          'ORDER BY d.bookId, d.lineIndex '
-          'LIMIT ?',
-          args,
-        )
-        .map(
-          (row) => (
+    final statement = db.prepare(
+      'SELECT d.bookId, d.lineIndex, d.dhDisplay AS display, '
+      'l.id AS lineId, l.heRef '
+      'FROM line_dh d '
+      'JOIN line l ON l.bookId = d.bookId AND l.lineIndex = d.lineIndex '
+      'WHERE d.bookId = ? AND $match '
+      'ORDER BY d.lineIndex LIMIT ?',
+    );
+    final found = <DibburCandidate>[];
+    try {
+      // לא ממיינים את כל הספרים כשכבר הספר הראשון ממלא את התקרה.
+      for (final bookId in bookIds.toSet()) {
+        if (found.length >= limit) break;
+        final cursor = statement.selectCursor(
+          [
+            bookId,
+            prefix,
+            if (!contains) prefix,
+            where == null ? limit - found.length : -1,
+          ],
+        );
+        while (found.length < limit && cursor.moveNext()) {
+          final row = cursor.current;
+          final dibbur = (
             bookId: row['bookId'] as int,
             lineIndex: row['lineIndex'] as int,
             lineId: row['lineId'] as int,
             display: (row['display'] as String?) ?? '',
-          ),
-        )
-        .toList();
+            heRef: row['heRef'] as String?,
+          );
+          if (where == null || where(dibbur)) found.add(dibbur);
+        }
+      }
+    } finally {
+      statement.close();
+    }
+    return found;
   }
 }

@@ -118,6 +118,76 @@ void main() {
     expect(await noDisplay.lineDhDao.dibburimForBooks([1], 'מאימתי'), isEmpty);
   });
 
+  test('התקרה חותכת לפי סדר הספרים שנמסר, לא לפי המזהה', () async {
+    final db = await buildDb();
+    (await db.database).execute(
+      "INSERT INTO line_dh (bookId, dhText, lineIndex, dhDisplay) "
+      "VALUES (2, 'מאימתי מתחילין', 7, 'מאימתי מתחילין')",
+    );
+    final found = await db.lineDhDao.dibburimForBooks(
+      [2, 1],
+      'מאימתי',
+      limit: 1,
+    );
+
+    expect(found.single.bookId, 2);
+  });
+
+  test('המסנן חל לפני התקרה, ודיבור שנדחה אינו תופס מקום', () async {
+    final db = await buildDb();
+    (await db.database).execute(
+      "INSERT INTO line_dh (bookId, dhText, lineIndex, dhDisplay) "
+      "VALUES (1, 'מאימתי מתחילין', 40, 'מאימתי מתחילין')",
+    );
+    final found = await db.lineDhDao.dibburimForBooks(
+      [1],
+      'מאימתי',
+      limit: 1,
+      where: (dibbur) => dibbur.lineIndex == 40,
+    );
+
+    expect(found.single.lineIndex, 40);
+  });
+
+  test('ה-heRef של שורת הדיבור מוחזר', () async {
+    final db = await buildDb();
+    (await db.database).execute(
+      "UPDATE line SET heRef = 'ספר, ב., א' WHERE id = 501",
+    );
+    final found = await db.lineDhDao.dibburimForBooks([1], 'מאימתי');
+
+    expect(found.single.heRef, 'ספר, ב., א');
+  });
+
+  test('סדר שורות נשמר גם כשהוא הפוך מסדר הטקסט באינדקס', () async {
+    final db = await buildDb();
+    (await db.database).execute(
+      "INSERT INTO line_dh (bookId, dhText, lineIndex, dhDisplay) "
+      "VALUES (1, 'מאימתי א', 40, 'מאימתי א')",
+    );
+    final found = await db.lineDhDao.dibburimForBooks(
+      [999, 1, 1, 2],
+      'מאימתי',
+      limit: 1,
+    );
+    expect(found.single.lineIndex, 3);
+  });
+
+  test('מסנן שלא מצא בספר הראשון ממשיך לספר הבא לפני התקרה', () async {
+    final db = await buildDb();
+    (await db.database).execute(
+      "INSERT INTO line_dh (bookId, dhText, lineIndex, dhDisplay) "
+      "VALUES (2, 'מאימתי מתחילין', 7, 'מאימתי מתחילין')",
+    );
+    final found = await db.lineDhDao.dibburimForBooks(
+      [1, 2],
+      'מאימתי',
+      limit: 1,
+      where: (dibbur) => dibbur.bookId == 2,
+    );
+    expect(found.single.bookId, 2);
+  });
+
   test('רשימת ספרים ריקה או תחילית ריקה אינן פונות למסד', () async {
     final db = await buildDb();
     expect(await db.lineDhDao.dibburimForBooks([], 'מאימתי'), isEmpty);

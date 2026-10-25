@@ -56,6 +56,7 @@ import 'package:otzaria/bookmarks/utils/section_bookmark.dart';
 import 'package:otzaria/core/messages/text_book_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/search/models/search_configuration.dart';
+import 'package:otzaria/search/utils/literal_search_pattern.dart';
 import 'package:otzaria/widgets/feedback/scrollable_positioned_list_scrollbar.dart';
 import 'package:otzaria/widgets/layout/reading_area_width.dart';
 import 'package:otzaria/widgets/selection/item_selection_container.dart';
@@ -1883,7 +1884,10 @@ class _CombinedViewState extends State<CombinedView> {
       searchMode: state.searchMode,
       searchDistance: state.searchDistance,
       matchPolicy: state.matchPolicy,
-      partialWordHighlight: !state.searchWholeWord,
+      partialWordHighlight: literalPartialWordMatch(
+        state.searchText,
+        wholeWord: state.searchWholeWord,
+      ),
       fontSize: widget.textSize,
       fontFamily: settingsState.fontFamily,
       fontWeight: settingsState.fontBold ? FontWeight.bold : null,

@@ -1,13 +1,12 @@
+import 'dart:typed_data';
+
 import 'package:otzaria/utils/text/text_manipulation.dart' as utils;
 import 'package:otzaria_search_engine/otzaria_search_engine.dart' as engine;
 
-/// מקור-אמת יחיד לתבנית ההתאמה הליטרלית של החיפוש בתוך ספר.
-///
-/// גם מציאת התוצאות (`section_search_utils`), גם ההדגשה בסרגל התוצאות
-/// (`SnippetBuilder.highlightLiteral`) וגם חישוב מיקום ההתאמה משתמשים באותה
-/// תבנית מהמנוע (`generateLiteralHighlightPattern`), כך שלא ייתכן פער ביניהם.
-
 final RegExp _whitespaceRun = RegExp(r'\s+');
+final RegExp _htmlContextTokens = RegExp(
+  r'<[^>]*>|&(?:#x?[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);',
+);
 
 /// תבנית ליטרלית: מקור המחרוזת (לשליחה ל-isolate worker) והרגקס המקומפל
 /// (לשימוש ב-isolate הראשי).
@@ -21,18 +20,105 @@ class LiteralSearchPattern {
   final RegExp regExp;
 }
 
-/// מנרמל שאילתה זהה ל-[cleanLineForSearch] של התוכן: מסיר ניקוד וממיר
-/// מפרידים (מקף עברי/פסק) לרווח, ואז מכווץ רצפי רווח. חובה שיהיה זהה
-/// לניקוי התוכן — אחרת שאילתה עם מקף ("אשר־שמע") לא תתאים לתוכן הנקי
-/// ("אשר שמע"), וגם שאילתה מנוקדת ("הֲרֵעֹתִי") לא תתאים לטקסט ללא ניקוד.
-String normalizeLiteralQuery(String query) =>
-    utils.removeVolwels(query).replaceAll(_whitespaceRun, ' ').trim();
+/// מנרמל ניקוד, מפרידים ורווחים בדיוק כמו ניקוי התוכן לחיפוש.
+String normalizeLiteralQuery(String query) => _collapse(query).trim();
+
+String _collapse(String query) =>
+    utils.removeVolwels(query).replaceAll(_whitespaceRun, ' ');
+
+/// רווח בתחילת/בסוף [query]: בהתאמה חלקית הוא מעגן את ההתאמה לתחילת/סוף מילה.
+({bool start, bool end}) literalQueryWordEdges(String query) {
+  final collapsed = _collapse(query);
+  if (collapsed.trim().isEmpty) return (start: false, end: false);
+  return (start: collapsed.startsWith(' '), end: collapsed.endsWith(' '));
+}
+
+/// בודקת שהתאמה בטווח `[start, end)` של `text` עומדת בגבול המילה שהרווח
+/// בקצה דורש.
+typedef LiteralEdgeCheck = bool Function(String text, int start, int end);
+
+String? _edgeCheckQuery;
+LiteralEdgeCheck? _edgeCheck;
+
+/// גבולות המילה של המנוע בקצוות של [query] שיש בהם רווח — אותם גבולות של
+/// [buildLiteralPattern]. `null` כשאין קצה מעוגן.
+LiteralEdgeCheck? literalEdgeCheck(String query) {
+  if (query == _edgeCheckQuery) return _edgeCheck;
+  final check = _buildEdgeCheck(query);
+  _edgeCheckQuery = query;
+  return _edgeCheck = check;
+}
+
+LiteralEdgeCheck? _buildEdgeCheck(String query) {
+  final edges = literalQueryWordEdges(query);
+  if (!edges.start && !edges.end) return null;
+  final source = _literalSource(normalizeLiteralQuery(query));
+  final parts = source == null ? null : _splitWordBoundaryWrapper(source);
+  if (parts == null) return null;
+  final before = edges.start ? compileLiteralPattern(parts.before) : null;
+  final after = edges.end ? compileLiteralPattern(parts.after) : null;
+  String? previousText;
+  var context = (text: '', offsets: const <int>[]);
+  return (text, start, end) {
+    if (previousText != text) {
+      context = _visibleEdgeContext(text);
+      previousText = text;
+    }
+    final offsets = context.offsets;
+    return (before == null ||
+            before.matchAsPrefix(
+                  context.text,
+                  offsets.isEmpty ? start : offsets[start],
+                ) !=
+                null) &&
+        (after == null ||
+            after.matchAsPrefix(
+                  context.text,
+                  offsets.isEmpty ? end : offsets[end],
+                ) !=
+                null);
+  };
+}
+
+// גבולות נבדקים בטקסט הגלוי; ההדגשה עדיין צריכה offsets של ה-HTML המקורי.
+({String text, List<int> offsets}) _visibleEdgeContext(String text) {
+  if (!text.contains('<') && !text.contains('&')) {
+    return (text: text, offsets: const []);
+  }
+  final out = StringBuffer();
+  final offsets = Int32List(text.length + 1);
+  var raw = 0;
+  var visible = 0;
+  void copyUntil(int end) {
+    out.write(text.substring(raw, end));
+    while (raw < end) {
+      offsets[raw++] = visible++;
+    }
+  }
+
+  for (final token in _htmlContextTokens.allMatches(text)) {
+    copyUntil(token.start);
+    final replacement = utils.stripHtmlIfNeeded(token.group(0)!);
+    offsets.fillRange(token.start, token.end, visible);
+    out.write(replacement);
+    visible += replacement.length;
+    raw = token.end;
+  }
+  copyUntil(text.length);
+  offsets[text.length] = visible;
+  return (text: out.toString(), offsets: offsets);
+}
 
 /// עטיפת גבול-המילה שהמנוע מוסיף סביב הביטוי:
 /// `(?<!גבול לפני)(?:ביטוי)(?!גבול אחרי)`. מחזירה את הביטוי בלבד, או `null`
 /// אם המבנה אינו מזוהה — ואז החיפוש נשאר בהתאמת מילה שלמה במקום לסרוק
 /// בתבנית חתוכה שגויה.
-String? stripWordBoundaryWrapper(String source) {
+String? stripWordBoundaryWrapper(String source) =>
+    _splitWordBoundaryWrapper(source)?.phrase;
+
+({String before, String phrase, String after})? _splitWordBoundaryWrapper(
+  String source,
+) {
   if (!source.startsWith('(?<!')) return null;
 
   // מחלקות התווים שבעטיפה אינן מכילות סוגריים, ולכן הסוגר המאזן את הפותח
@@ -59,7 +145,12 @@ String? stripWordBoundaryWrapper(String source) {
   if (lookaheadStart <= lookbehindEnd) return null;
 
   final phrase = source.substring(lookbehindEnd + 1, lookaheadStart);
-  return phrase.isEmpty ? null : phrase;
+  if (phrase.isEmpty) return null;
+  return (
+    before: source.substring(0, lookbehindEnd + 1),
+    phrase: phrase,
+    after: source.substring(lookaheadStart),
+  );
 }
 
 /// [source] שבודקת את הביטוי לפני גבול-המילה שלפניו. ה-lookbehind באורך משתנה
@@ -74,6 +165,11 @@ final Map<String, LiteralSearchPattern?> _cache = {};
 /// אורך השאילתה המינימלי להתאמה בתוך מילה.
 const int _minPartialMatchChars = 2;
 
+/// האם החיפוש הליטרלי ל-[query] מתאים גם בתוך מילה. ההדגשה בגוף הספר חייבת
+/// לקבל אותו ערך, אחרת אות בודדת מודגשת בתוך מילים שהחיפוש לא מצא.
+bool literalPartialWordMatch(String query, {required bool wholeWord}) =>
+    !wholeWord && normalizeLiteralQuery(query).length >= _minPartialMatchChars;
+
 const Map<String, String> _finalToRegularLetter = {
   'ך': 'כ',
   'ם': 'מ',
@@ -82,19 +178,26 @@ const Map<String, String> _finalToRegularLetter = {
   'ץ': 'צ',
 };
 
-/// הביטוי בלי גבולות המילה. אות סופית בסוף השאילתה מתאימה גם לצורה הרגילה,
-/// שבה היא כתובה באמצע מילה: "מלך" מוצא את "המלכים".
-String? _partialPhrase(String q, String source) {
-  final phrase = stripWordBoundaryWrapper(source);
-  final regular = _finalToRegularLetter[q[q.length - 1]];
-  if (phrase == null || regular == null) return phrase;
-
-  final altQuery = '${q.substring(0, q.length - 1)}$regular';
-  final altSource = _literalSource(altQuery);
-  final altPhrase = altSource == null
-      ? null
-      : stripWordBoundaryWrapper(altSource);
-  return altPhrase == null ? phrase : '(?:$phrase|$altPhrase)';
+/// הביטוי בלי גבולות המילה, חוץ מהקצוות שב-[edges]. אות סופית בסוף שאילתה
+/// שסופה פתוח מתאימה גם לצורה הרגילה: "מלך" מוצא את "המלכים".
+String? _partialPhrase(
+  String q,
+  String source,
+  ({bool start, bool end}) edges,
+) {
+  final parts = _splitWordBoundaryWrapper(source);
+  if (parts == null) return null;
+  var phrase = parts.phrase;
+  final regular = edges.end ? null : _finalToRegularLetter[q[q.length - 1]];
+  if (regular != null) {
+    final altSource = _literalSource('${q.substring(0, q.length - 1)}$regular');
+    final altPhrase = altSource == null
+        ? null
+        : stripWordBoundaryWrapper(altSource);
+    if (altPhrase != null) phrase = '(?:$phrase|$altPhrase)';
+  }
+  if (!edges.start) return edges.end ? '$phrase${parts.after}' : phrase;
+  return '(?=$phrase)${parts.before}$phrase${edges.end ? parts.after : ''}';
 }
 
 /// תבנית המנוע ל-[query], שבה כל מופע של מילת "יקוק" (או "ידוד") מתאים גם
@@ -155,7 +258,8 @@ String? _wordPhrase(String word) {
 /// בונה (עם קאש) תבנית ליטרלית לשאילתה, לאחר נרמול.
 /// מחזיר `null` לשאילתה ריקה/רק-רווחים.
 ///
-/// [wholeWord] `false` מסיר את גבולות המילה, כך ש"שמים" מתאים גם בתוך "השמים".
+/// [wholeWord] `false` מסיר את גבולות המילה, כך ש"שמים" מתאים גם בתוך "השמים";
+/// רווח בקצה השאילתה משאיר את הגבול שבאותו צד (ראו [literalQueryWordEdges]).
 /// שאילתה של תו אחד נשארת במילים שלמות: בתוך מילה היא מתאימה כמעט לכל דבר.
 ///
 /// חובה להיקרא ב-isolate הראשי בלבד — קורא למנוע (flutter_rust_bridge)
@@ -165,8 +269,12 @@ LiteralSearchPattern? buildLiteralPattern(
   bool wholeWord = true,
 }) {
   final q = normalizeLiteralQuery(query);
-  final partial = !wholeWord && q.length >= _minPartialMatchChars;
-  final cacheKey = '${partial ? 'p' : 'w'}|$q';
+  final partial = literalPartialWordMatch(query, wholeWord: wholeWord);
+  final edges = partial
+      ? literalQueryWordEdges(query)
+      : (start: false, end: false);
+  final cacheKey =
+      '${partial ? 'p' : 'w'}${edges.start ? '<' : ''}${edges.end ? '>' : ''}|$q';
   if (_cache.containsKey(cacheKey)) return _cache[cacheKey];
 
   // בונים לפני עדכון ה-cache: אם המנוע זורק, ה-cache נשאר עקבי ולא מקבל
@@ -176,7 +284,7 @@ LiteralSearchPattern? buildLiteralPattern(
     final source = _literalSource(q);
     if (source != null) {
       final effective = partial
-          ? (_partialPhrase(q, source) ?? source)
+          ? (_partialPhrase(q, source, edges) ?? source)
           : _phraseFirst(source);
       try {
         result = LiteralSearchPattern(
