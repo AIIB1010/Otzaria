@@ -68,7 +68,7 @@ class LibraryState extends Equatable {
       (state.failedRefreshRequestIds?.contains(requestId) ?? false);
 
   factory LibraryState.initial() {
-    // יצירת ספרייה ראשונית עם כל הקטגוריות מה-DB
+    // ספרייה ראשונית עד שהקטלוג נטען: קטגוריות השורש של ה-DB, קבועות בקוד
     final placeholderCategories = [
       Category(
         title: 'תנ״ך',

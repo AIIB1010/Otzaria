@@ -426,7 +426,6 @@ class CategoryGridItem extends StatelessWidget {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  BookGridItem
-//  Layout RTL: [action-col] [media-col] [12px] [Expanded text (right-aligned)]
 //  במצב RTL: טקסט מימין, אייקונים משמאל כדי לשמור ויזואלית תקינה.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -507,7 +506,6 @@ class _BookGridMediaColumn extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    // אייקונים מעוצבים: 32×32 container, 16px icon או קונטיינר רחוק שיותר
     const double iconBoxSize = 32.0;
     const double iconSize = 16.0;
 
@@ -614,7 +612,7 @@ class _BookGridTextColumn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    // כותרת: onSurface כדי מבנה מאוחד ומסודר (ולא primary שיכול להיות מדי בולט)
+    // כותרת ב-onSurface ולא ב-primary, שבולט מדי.
     final titleStyle = theme.textTheme.titleMedium?.copyWith(
       fontWeight: FontWeight.w700,
       color: theme.colorScheme.onSurface,
@@ -962,11 +960,6 @@ Future<void> _showDeleteFolderDialog(
     UiSnack.show(LibraryMessages.folderDeletedFromLibrary(title));
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  MyGridView
-//  • FocusTraversalGroup כדי לנווט Tab בסדר קריאה (ולא קפיצה ציגזג)
-// ─────────────────────────────────────────────────────────────────────────────
 
 /// ריווח אחיד בין כרטיסי הרשת — משותף לתצוגת הספרייה ולתוצאות החיפוש.
 const double kLibraryGridSpacing = 14;
