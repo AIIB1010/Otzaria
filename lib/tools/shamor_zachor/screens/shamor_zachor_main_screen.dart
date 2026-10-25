@@ -49,6 +49,7 @@ class _ShamorZachorMainScreenState extends State<ShamorZachorMainScreen>
   String? _selectedCategoryName; // Display name (e.g. Zeraim)
   String? _selectedTopLevelName; // Key (e.g. Mishnah)
   BookCategory? _selectedCategoryObject;
+  String? _selectedBookCategory;
   String? _selectedBookName;
   BookDetails? _selectedBookDetails;
   String _searchQuery = ''; // Search query from top bar
@@ -108,12 +109,8 @@ class _ShamorZachorMainScreenState extends State<ShamorZachorMainScreen>
     );
 
     setState(() {
-      // עדכון הקטגוריה לקטגוריה האמיתית של הספר
-      _selectedCategoryName = category;
-
-      // שמירת ה-topLevelName הנוכחי אם לא הוגדר
-      _selectedTopLevelName ??= 'all_books_virtual';
-
+      // בחירת הרשימה נשמרת כמות שהיא — אליה חוזרים מהספר.
+      _selectedBookCategory = category;
       _selectedBookName = book;
       _selectedBookDetails = details;
     });
@@ -428,8 +425,7 @@ class _ShamorZachorMainScreenState extends State<ShamorZachorMainScreen>
               String? currentTopLevelName = _selectedTopLevelName;
 
               if (currentCategoryObject == null &&
-                  currentCategoryName == null &&
-                  _selectedBookName == null) {
+                  currentCategoryName == null) {
                 // Construct 'All Books' category (same logic as Sidebar)
                 final allCategories = dataProvider.allBookData;
                 // Use natural order from DataProvider (already sorted by orderIndex from DB)
@@ -541,12 +537,11 @@ class _ShamorZachorMainScreenState extends State<ShamorZachorMainScreen>
 
                                         return KeyedSubtree(
                                           key: ValueKey(
-                                            'Book_${_selectedCategoryName}_$_selectedBookName',
+                                            'Book_${_selectedBookCategory}_$_selectedBookName',
                                           ),
                                           child: BookDetailScreen(
                                             topLevelCategoryKey:
-                                                _selectedTopLevelName ??
-                                                _selectedCategoryName!,
+                                                _selectedBookCategory!,
                                             bookName: _selectedBookName!,
                                             bookId: _selectedBookDetails!.id,
                                             bookDetails: _selectedBookDetails!,
