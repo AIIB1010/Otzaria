@@ -152,17 +152,6 @@ class UpdateNumResults extends SearchEvent {
 
 class ResetSearch extends SearchEvent {}
 
-// Events חדשים להגדרות רגקס
-class ToggleRegex extends SearchEvent {}
-
-class ToggleCaseSensitive extends SearchEvent {}
-
-class ToggleMultiline extends SearchEvent {}
-
-class ToggleDotAll extends SearchEvent {}
-
-class ToggleUnicode extends SearchEvent {}
-
 // Event פנימי לעדכון facet counts
 class UpdateFacetCounts extends SearchEvent {
   final Map<String, int> facetCounts;
