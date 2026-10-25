@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
@@ -38,15 +39,19 @@ Future<bool> printPdfWithSaferMode({
   OnPrintSpooling? onSpooling,
 }) async {
   final requestedFormat = format;
-  // דרייבר שלא מדווח את מידות ההתקן נותן עמוד NaN או אינסופי, ו-pdf מניח עמוד
-  // סופי (#3172). מדפיסים בגודל שהתבקש, ורושמים מה המדפסת החזירה.
+  // ה-PDF דורש מידות סופיות. כשהמדפסת מחזירה מידה לא תקינה,
+  // משתמשים בגודל שהתבקש ושומרים אבחון במידת האפשר.
   FutureOr<Uint8List> layout(PdfPageFormat printerFormat) {
     if (isUsablePageFormat(printerFormat)) return onLayout(printerFormat);
-    ErrorLogFile.append(
-      title: 'Printer page size',
-      error: 'The printer reported an unusable page size: $printerFormat',
-      details: {'Used instead': '$requestedFormat'},
-    );
+    try {
+      ErrorLogFile.append(
+        title: 'Printer page size',
+        error: 'The printer reported an unusable page size: $printerFormat',
+        details: {'Used instead': '$requestedFormat'},
+      );
+    } on FileSystemException {
+      // כשל באבחון לא צריך למנוע את ההדפסה.
+    }
     return onLayout(requestedFormat);
   }
 
