@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/data/sqlite/sqlite3_api.dart';
@@ -7,6 +8,8 @@ import 'package:otzaria/plugins/repository/plugin_correction_draft_repository.da
 import 'package:otzaria/plugins/services/plugin_correction_session_service.dart';
 import 'package:otzaria/plugins/view/plugin_correction_paragraph.dart';
 import 'package:otzaria/widgets/smart_text/render_settings.dart';
+import 'package:otzaria/widgets/smart_text/smart_text_widget.dart';
+import 'package:otzaria/widgets/smart_text/text_renderer_service.dart';
 import 'package:otzaria/widgets/text/rtl_text_field.dart';
 import '../../test_helpers/activate_correction_paragraph.dart';
 
@@ -106,6 +109,131 @@ TextStyle _styleAt(TextSpan span, int offset, [TextStyle? inherited]) {
 }
 
 void main() {
+  testWidgets('ביטול וביצוע חוזר במקלדת מעדכנים גם את טיוטת הטקסט', (
+    tester,
+  ) async {
+    const source = 'אב<b>גד</b>ה';
+    final service = await _begin(tester, [source]);
+    await _pumpEditor(tester, service, source);
+    await tester.showKeyboard(find.byType(EditableText));
+    await tester.pump(const Duration(seconds: 1));
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'אבה',
+        selection: TextSelection.collapsed(offset: 2),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 1));
+    expect(service.editableText('tab', 0, source), 'אבה');
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+    expect(_editor(tester).controller.text, 'אבגדה');
+    expect(service.editableText('tab', 0, source), 'אבגדה');
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+    expect(_editor(tester).controller.text, 'אבה');
+    expect(service.editableText('tab', 0, source), 'אבה');
+    await _finish(tester, service);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('שחזור והרכבה מחדש שומרים טקסט פשוט ומקור מעוצב ללא שינוי', (
+    tester,
+  ) async {
+    const source =
+        '<div><font color="#ff0000"><s>אב</s></font> רגיל <i>גד</i></div>';
+    const proposed = ' אם רגיל גק ';
+    const original = SmartTextWidget(
+      text: source,
+      settings: RenderSettings(fontSize: 20),
+    );
+    final service = await _begin(tester, [source]);
+    await _pumpEditor(
+      tester,
+      service,
+      source,
+      activate: false,
+      original: original,
+    );
+    await tester.pumpAndSettle();
+    TextStyle readerStyle(String character) {
+      final span = tester
+          .renderObjectList<RenderParagraph>(
+            find.descendant(
+              of: find.byType(SmartTextWidget),
+              matching: find.byType(RichText),
+            ),
+          )
+          .map((paragraph) => paragraph.text)
+          .firstWhere(
+            (span) => span.toPlainText().contains(character),
+          );
+      return _styleAt(span as TextSpan, span.toPlainText().indexOf(character));
+    }
+
+    final redStruck = readerStyle('א');
+    final italic = readerStyle('ד');
+    expect(redStruck.color, const Color(0xffff0000));
+    expect(redStruck.decoration?.contains(TextDecoration.lineThrough), isTrue);
+    expect(italic.fontStyle, FontStyle.italic);
+    final restored = (await tester.runAsync(
+      () => service.restore(
+        owner: 'owner',
+        id: service.sessionIdForTab('owner', 'tab')!,
+        expectedRevision: 0,
+        bookUid: 'id:1',
+        libraryVersion: '1',
+        changes: [
+          {
+            'sectionIndex': 0,
+            'originalSourceText': source,
+            'originalText': TextRendererService.stripHtml(source),
+            'proposedText': proposed,
+          },
+        ],
+      ),
+    ))!;
+    await tester.pump();
+    expect(_editor(tester).controller.text, 'אם רגיל גק');
+    expect(
+      _styleAt(_renderedSpan(tester), 0).color,
+      _editor(tester).style.color,
+    );
+    expect(
+      _styleAt(_renderedSpan(tester), 8).fontStyle,
+      isNot(FontStyle.italic),
+    );
+    final oldController = _editor(tester).controller;
+    await tester.pumpWidget(const SizedBox());
+    await _pumpEditor(tester, service, source, original: original);
+    expect(_editor(tester).controller, isNot(same(oldController)));
+    expect(_editor(tester).controller.text, 'אם רגיל גק');
+    expect(service.editableText('tab', 0, source), proposed);
+    final change = (restored['changes'] as List).single as Map;
+    expect(change['originalSourceText'], source);
+    expect(change['originalText'], TextRendererService.stripHtml(source));
+    service.reset(
+      'owner',
+      service.sessionIdForTab('owner', 'tab')!,
+      0,
+      restored['revision'] as int,
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(RtlTextField), findsNothing);
+    expect(
+      tester.widget<SmartTextWidget>(find.byType(SmartTextWidget)).text,
+      source,
+    );
+    expect(readerStyle('א'), redStruck);
+    expect(readerStyle('ד'), italic);
+    await _finish(tester, service);
+  });
+
   testWidgets('הקשה, קישור, הערה, פוקוס צאצא ובחירה משמרים את המקור', (
     tester,
   ) async {
@@ -195,14 +323,6 @@ void main() {
     await _finish(tester, service);
   });
 
-  testWidgets('מאפיינים רגילים שומרים בולד בעורך המחובר', (tester) async {
-    const source = '<b class="bold">אב</b>';
-    final service = await _begin(tester, [source]);
-    await _pumpEditor(tester, service, source);
-    expect(_styleAt(_renderedSpan(tester), 0).fontWeight, FontWeight.bold);
-    await _finish(tester, service);
-  });
-
   testWidgets('מאפיין עם סוגר תג מצוטט שאינו קנוני נשאר במקור', (tester) async {
     const source = '<b title="x > y">אב</b>';
     final service = await _begin(tester, [source]);
@@ -237,49 +357,7 @@ void main() {
     });
   }
 
-  final styles = <String, Matcher>{
-    'b': predicate<TextStyle>((style) => style.fontWeight == FontWeight.bold),
-    'i': predicate<TextStyle>((style) => style.fontStyle == FontStyle.italic),
-    'big': predicate<TextStyle>((style) => style.fontSize! > 20),
-    'small': predicate<TextStyle>((style) => style.fontSize! < 20),
-    'h2': predicate<TextStyle>(
-      (style) => style.fontWeight == FontWeight.bold && style.fontSize! > 20,
-    ),
-  };
-  for (final entry in styles.entries) {
-    testWidgets('העורך המחובר משמר ${entry.key} לפני הקלדה ואחריה', (
-      tester,
-    ) async {
-      final source = '<${entry.key}>אב</${entry.key}>';
-      final service = await _begin(tester, [source]);
-      await _pumpEditor(tester, service, source);
-      expect(_renderedSpan(tester).toPlainText(), 'אב');
-      expect(_styleAt(_renderedSpan(tester), 0), entry.value);
-      await tester.showKeyboard(find.byType(EditableText));
-      final focus = _editor(tester).focusNode;
-      final controller = _editor(tester).controller;
-      tester.testTextInput.updateEditingValue(
-        const TextEditingValue(
-          text: 'אגב',
-          selection: TextSelection.collapsed(offset: 2),
-        ),
-      );
-      await tester.pump();
-      expect(_editor(tester).controller, same(controller));
-      expect(_editor(tester).focusNode, same(focus));
-      expect(focus.hasFocus, isTrue);
-      expect(_renderedSpan(tester).toPlainText(), 'אגב');
-      expect(_styleAt(_renderedSpan(tester), 1), entry.value);
-      expect(_editor(tester).controller.selection.extentOffset, 2);
-      expect(
-        service.editableText('tab', 0, source),
-        entry.key == 'h2' ? ' אגב ' : 'אגב',
-      );
-      await _finish(tester, service);
-    });
-  }
-
-  testWidgets('בחירה ו-IME נשמרים בעורך המעוצב בעת הקלדה והתראה חיצונית', (
+  testWidgets('בחירה ו-IME נשמרים בעורך הטקסט בעת הקלדה והתראה חיצונית', (
     tester,
   ) async {
     const source = '<b>אב גד</b>';
@@ -296,7 +374,6 @@ void main() {
     expect(_editor(tester).controller.value, value);
     final span = _renderedSpan(tester);
     expect(span.toPlainText(), value.text);
-    expect(_styleAt(span, 1).fontWeight, FontWeight.bold);
     expect(_styleAt(span, 1).decoration, TextDecoration.underline);
     service.editParagraph('tab', 1, 'אחר', 'חדש');
     await tester.pump();
@@ -307,11 +384,10 @@ void main() {
     );
     await tester.pump();
     expect(_editor(tester).controller.value.composing, TextRange.empty);
-    expect(_styleAt(_renderedSpan(tester), 1).fontWeight, FontWeight.bold);
     await _finish(tester, service);
   });
 
-  testWidgets('עדכון חיצוני מסנכרן טקסט ועיצוב בלי להחליף עורך או מיקוד', (
+  testWidgets('עדכון חיצוני מסנכרן טקסט בלי להחליף עורך או מיקוד', (
     tester,
   ) async {
     const source = '<b>אב</b> <i>גד</i>';
@@ -324,25 +400,20 @@ void main() {
     await tester.pump();
     final span = _renderedSpan(tester);
     expect(span.toPlainText(), 'אם גד');
-    expect(_styleAt(span, 0).fontWeight, FontWeight.bold);
-    expect(_styleAt(span, 3).fontStyle, FontStyle.italic);
     expect(_editor(tester).controller, same(controller));
     expect(_editor(tester).focusNode, same(focus));
     expect(focus.hasFocus, isTrue);
     await _finish(tester, service);
   });
 
-  testWidgets('מעבר פסקה עם אותו טקסט מרענן סגנון גם במצב כהה', (tester) async {
+  testWidgets('מעבר פסקה עם אותו טקסט מרענן מקור גם במצב כהה', (tester) async {
     const first = '<b>אב</b>';
     const second = '<i>אב</i>';
     final service = await _begin(tester, [first, second]);
     await _pumpEditor(tester, service, first);
-    expect(_styleAt(_renderedSpan(tester), 0).fontWeight, FontWeight.bold);
     await _pumpEditor(tester, service, second, section: 1);
     final lightSpan = _renderedSpan(tester);
     expect(lightSpan.toPlainText(), 'אב');
-    expect(_styleAt(lightSpan, 0).fontStyle, FontStyle.italic);
-    expect(_styleAt(lightSpan, 0).fontWeight, isNot(FontWeight.bold));
     await _pumpEditor(
       tester,
       service,
@@ -352,7 +423,6 @@ void main() {
     );
     final darkSpan = _renderedSpan(tester);
     expect(darkSpan.toPlainText(), 'אב');
-    expect(_styleAt(darkSpan, 0).fontStyle, FontStyle.italic);
     expect(_styleAt(darkSpan, 0).color, _editor(tester).style.color);
     expect(tester.takeException(), isNull);
     await _finish(tester, service);

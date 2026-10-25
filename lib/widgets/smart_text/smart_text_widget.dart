@@ -252,7 +252,8 @@ class SmartTextWidget extends StatelessWidget {
                       style: lineStyle,
                       strutStyle: line.strutStyle,
                       textAlign: textAlign,
-                      linkColor: InlineHtmlText.readerLinkColor(colorScheme),
+                      // ב-HtmlWidget צבע הקישור עובר ב-CSS כ-hex בלי שקיפות.
+                      linkColor: Color(0xFF000000 | linkColor.toARGB32()),
                       primaryColor: colorScheme.primary,
                       splitLongLines: !line.isHeading,
                       onTapUrl: onTapUrl,
