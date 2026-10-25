@@ -31,7 +31,7 @@ class ExternalSearchSummary {
 
   /// אותם ספרים לא-משויכים, כשהספק צירף את שמותיהם לאינדקס: מהם נבנות
   /// שורות הספרים שתחת הדלי בעץ. ריק כשהספק שלח אינדקס בלי שמות — ואז
-  /// הדלי נשאר שורה שאי אפשר לפתוח, כמו קודם.
+  /// הדלי נשאר שורה שאי אפשר לפתוח.
   final List<ExternalSearchBook> namedOtherBooks;
 
   const ExternalSearchSummary({

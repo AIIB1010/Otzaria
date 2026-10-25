@@ -464,10 +464,8 @@ class _TantivySearchResultsState extends State<TantivySearchResults> {
         : widget.tab.queryController.text;
     final configuration = widget.tab.searchBloc.state.configuration;
 
-    // אין צורך בזיהוי "שאילתת רגקס": המנוע מנקה מטא-תווים
-    // ב-sanitize_query לפני בניית השאילתה, כך שקלט המשתמש
-    // לעולם אינו מפורש כתבנית — שאילתה בלי אפשרויות מיוחדות
-    // היא תמיד ליטרלית וניתנת לחיפוש פשוט בתוך הספר.
+    // אין זיהוי "שאילתת רגקס": המנוע מנקה מטא-תווים ב-sanitize_query, ולכן
+    // שאילתה בלי אפשרויות מיוחדות תמיד ליטרלית וניתנת לחיפוש פשוט בספר.
     final inBookParameters = InBookSearchRouting.resolveForReadingTab(
       searchMode: configuration.searchMode,
       distance: configuration.distance,
@@ -672,7 +670,6 @@ class _TantivySearchResultsState extends State<TantivySearchResults> {
                 previous.errorMessage != current.errorMessage ||
                 previous.resultsTruncated != current.resultsTruncated,
             builder: (context, state) {
-              // עכשיו רק מציגים את התוצאות - השורה התחתונה מוצגת במקום אחר
               return _buildResultsContent(state, constrains);
             },
           ),
@@ -691,10 +688,8 @@ class _TantivySearchResultsState extends State<TantivySearchResults> {
         return BlocBuilder<SettingsBloc, SettingsState>(
           buildWhen: (p, c) => p.externalResultsFirst != c.externalResultsFirst,
           builder: (context, settings) {
-            // ה-key מאפשר ל-Flutter לזהות את המדור כשהוא נודד בין ראש
-            // הרשימה לסופה (החלפת "קודמות/מאוחרות"): בלעדיו ה-State היה
-            // מפורק ונבנה מחדש — והמדור היה יורה חיפוש חיצוני חדש במקום
-            // רק להחליף מקום.
+            // ה-key שומר את ה-State כשהמדור נודד בין ראש הרשימה לסופה
+            // ("קודמות/מאוחרות"): בלעדיו המדור נבנה מחדש ויורה חיפוש חיצוני.
             final externalSliver = ExternalSearchResultsSection(
               key: const ValueKey('external-results-sliver'),
               tab: widget.tab,
@@ -955,7 +950,6 @@ class _TantivySearchResultsState extends State<TantivySearchResults> {
                 colorScheme.onSurface.toARGB32(),
               ].join('|');
 
-              // Create the snippet using the new robust function
               // שימוש בגופן וגודל של המשתמש מההגדרות
               final snippetSpans = _snippetCache.putIfAbsent(
                 snippetCacheKey,
@@ -1109,10 +1103,8 @@ class _TantivySearchResultsState extends State<TantivySearchResults> {
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
-                                    // תגית מקור: מבדילה את תוצאות המנוע המובנה
-                                    // מתוצאות ספק חיצוני שמוצגות באותו מסך. בלי
-                                    // מדור חיצוני אין ממה להבדיל, והתגית הייתה
-                                    // רק גוזלת רוחב משם הספר.
+                                    // תגית מקור מול ספק חיצוני; בלי מדור
+                                    // חיצוני היא רק גוזלת רוחב משם הספר.
                                     ValueListenableBuilder<
                                       ExternalSearchStatus?
                                     >(

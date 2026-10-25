@@ -216,15 +216,12 @@ class _EnhancedSearchFieldState extends State<EnhancedSearchField> {
                 left: textFieldGlobalPosition.dx,
                 top: textFieldGlobalPosition.dy + textFieldBox.size.height,
                 width: textFieldBox.size.width,
-                // ======== התיקון מתחיל כאן ========
                 child: AnimatedSize(
-                  // 1. עוטפים ב-AnimatedSize
                   duration: const Duration(milliseconds: 200),
                   curve: Curves.easeInOut,
                   alignment: Alignment.topCenter,
                   child: Container(
                     key: _searchOptionsOverlayKey,
-                    // height: 40.0, // 2. מסירים את הגובה הקבוע
                     decoration: BoxDecoration(
                       color: Theme.of(context).scaffoldBackgroundColor,
                       boxShadow: [
@@ -581,8 +578,6 @@ class _EnhancedSearchFieldState extends State<EnhancedSearchField> {
               ],
             ),
           ),
-          // אזורי ריחוף הוסרו - לא נחוצים יותר
-          // כפתורי ה+ וכפתורי המרווח הוסרו - עכשיו משתמשים בבקרים בדיאלוג
         ],
       ),
     );
