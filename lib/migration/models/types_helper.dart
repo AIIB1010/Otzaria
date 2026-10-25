@@ -18,5 +18,3 @@ bool safeBoolFromJson(dynamic jsonValue, [bool defaultValue = false]) {
   // טיפול כללי או החזרת ערך ברירת מחדל
   return defaultValue;
 }
-
-// ניתן להוסיף כאן פונקציות עזר נוספות (למשל, המרת String בטוחה ל-int)

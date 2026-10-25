@@ -23,9 +23,7 @@ import 'package:otzaria/utils/file/toc_parser.dart'
     show TocParser, isTocExcludedHeadingLine;
 
 /// DatabaseGenerator is responsible for generating the Otzaria database from source files.
-/// It processes directories, books, and links to create a structured database.
-///
-/// This is a Dart conversion of the original Kotlin DatabaseGenerator.
+/// It processes directories and books to create a structured database.
 class DatabaseGenerator {
   static final _log = Logger('DatabaseGenerator');
 
@@ -57,7 +55,7 @@ class DatabaseGenerator {
   DatabaseGenerator(this.sourceDirectory, this.repository, {this.onProgress})
     : _libraryRoot = sourceDirectory;
 
-  /// Initializes the generator for sync operations where generate() is not called.
+  /// Initializes the generator for sync operations.
   /// [libraryRoot] Optional root path for library-relative calculations.
   void initializeForSync({String? libraryRoot}) {
     _libraryRoot = libraryRoot ?? sourceDirectory;
@@ -97,10 +95,8 @@ class DatabaseGenerator {
         if (parentCategoryId == null) {
           continue;
         }
-        // קובץ בודד אינו מפיל את ייבוא הספרייה כולה — הכשל נרשם והסריקה
-        // ממשיכה לקובץ הבא (§76). גם כשל שאינו המרה נתפס: קובץ שננעל או
-        // נמחק בין הסריקה לקריאה (כונן רשת, OneDrive) היה מבטל את הייבוא
-        // כולו ומשאיר ספרייה חלקית.
+        // כשל של קובץ בודד נרשם והסריקה ממשיכה (§76), גם כשאינו כשל המרה:
+        // קובץ שננעל או נמחק באמצע הסריקה לא יבטל את ייבוא הספרייה כולה.
         try {
           await createAndProcessBook(entity.path, parentCategoryId);
         } on DocumentConversionException catch (e) {
@@ -193,7 +189,7 @@ class DatabaseGenerator {
       // ה-outline שלו נקרא בהוספת התיקייה.
       final processContent = insertContent || (format?.isTextual ?? false);
 
-      // Check for duplicates in the same category with the same file type (for performance measurement)
+      // Check for duplicates in the same category with the same file type
       final existingBook = await repository
           .checkBookExistsInCategoryWithFileType(title, categoryId, fileType);
       if (existingBook != null) {
@@ -261,12 +257,9 @@ class DatabaseGenerator {
               (_totalBooksToProcess > 0 ? _totalBooksToProcess : 1),
           'עודכן ספר: $title ($pct%)',
         );
-        // The book was updated; no need to fall through to the duplicate-skip
-        // or delete-and-re-insert logic.
         return;
       }
 
-      // For non-txt files (external), get file stats
       int? fileSize;
       int? lastModified;
       try {
@@ -322,9 +315,6 @@ class DatabaseGenerator {
             (_totalBooksToProcess > 0 ? _totalBooksToProcess : 1),
         'מעבד ספר: $title ($pct%)',
       );
-
-      // NOTE: Original files are never deleted. The DB is the single source of truth
-      // but original files are always preserved on disk.
     } catch (e, stackTrace) {
       final title = path.basenameWithoutExtension(bookPath);
       _log.severe(
@@ -511,9 +501,8 @@ class DatabaseGenerator {
       final level = detectHeaderLevel(line);
 
       if (level > 0) {
-        // מעבר לכותרת באותה רמה או ברמה גבוהה יותר סוגר את כל הענפים
-        // העמוקים הקודמים. בלעדיו h4 שבא אחרי h3 ואז h2 היה מקבל בטעות את
-        // ה-h3 הישן כהורה במקום את ה-h2 החדש.
+        // כותרת סוגרת את כל הענפים מרמתה ומטה; בלי זה h4 שאחרי h3 ואז h2
+        // היה מקבל בטעות את ה-h3 הישן כהורה במקום את ה-h2.
         localParentStack.removeWhere((stackLevel, _) => stackLevel >= level);
 
         // cleanHtml יקר — מחשבים רק לשורות כותרת שבהן הטקסט נצרך.
@@ -650,8 +639,6 @@ class DatabaseGenerator {
     return topicNames.map((name) => Topic(name: name)).toList();
   }
 
-  /// Helper methods for source management and priority processing
-
   /// Deletes a directory if it is empty.
   Future<void> _deleteIfEmpty(Directory dir) async {
     try {
@@ -677,7 +664,7 @@ class DatabaseGenerator {
     }
   }
 
-  /// Resolve a source id for a book file using the manifest mapping
+  /// Resolves and caches the source id of [sourceName] (`Personal` by default).
   Future<int> _resolveSourceIdFor(
     String filePath, {
     String? sourceName,
