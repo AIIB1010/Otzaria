@@ -10,6 +10,7 @@ const List<String> pluginNetworkAllowlist = <String>[
   'https://tablet.otzar.org',
   'https://hebrewbooks.org',
   'https://beta.hebrewbooks.org',
+  'https://download.hebrewbooks.org',
   'https://library.alhatorah.org',
   'https://mg.alhatorah.org',
   'https://rambam.alhatorah.org',
@@ -55,4 +56,5 @@ const List<String> pluginNetworkAllowlist = <String>[
   'https://github.com/yakov100/otzaria-voice/releases/download',
   'https://api.github.com/repos/yakov100/otzaria-voice',
   'http://chavruta-relay.chavruta.workers.dev',
+  'http://hiruv.com',
 ];
