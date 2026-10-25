@@ -32,12 +32,14 @@ class ReadingSettingsPanel extends StatelessWidget {
             // הפאנל נשאר חי גם כשהוא סגור, וגלילה בקורא משדרת מצב בכל שורה.
             buildWhen: (previous, current) =>
                 _isPageShape(previous) != _isPageShape(current),
-            builder: (context, textState) {
-              return TextSettingsTab(
-                isDialog: true,
-                hideCommentaryFontSize: _isPageShape(textState),
-              );
-            },
+            // מופע const זהה עוצר כאן את הבנייה: בלעדיו כל שינוי בטאבים (מעבר,
+            // סימון, סידור) בונה מחדש את כל ההגדרות, גם כשהפאנל סגור.
+            builder: (context, textState) => _isPageShape(textState)
+                ? const TextSettingsTab(
+                    isDialog: true,
+                    hideCommentaryFontSize: true,
+                  )
+                : const TextSettingsTab(isDialog: true),
           );
         }
         return const TextSettingsTab(isDialog: true);
