@@ -25,7 +25,6 @@ class CommentatorsSelectionPanel extends StatefulWidget {
   final List<CommentatorGroup> groups;
   final List<String> selectedCommentators;
   final ValueChanged<List<String>> onSelectionChanged;
-  final VoidCallback? onSelectionApplied;
   final String bookTitle;
 
   /// מפרשים "נדירים" שמוסתרים מהרשימה, אלא אם הם ב-[lineRelevantCommentators].
@@ -62,7 +61,6 @@ class CommentatorsSelectionPanel extends StatefulWidget {
     required this.selectedCommentators,
     required this.onSelectionChanged,
     required this.bookTitle,
-    this.onSelectionApplied,
     this.rareCommentators = const {},
     this.lineRelevantCommentators = const {},
     this.typeChipKeys = const [],
@@ -260,7 +258,6 @@ class _CommentatorsSelectionPanelState
 
   void _emitSelection(List<String> commentators) {
     widget.onSelectionChanged(_orderSelection(commentators));
-    widget.onSelectionApplied?.call();
   }
 
   List<String> _selectionOrder() {

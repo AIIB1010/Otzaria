@@ -13,8 +13,6 @@ import 'package:otzaria/text_book/widgets/text_book_state_builder.dart';
 import 'package:otzaria/widgets/lists/commentators_selection_panel.dart';
 
 class CommentatorsListView extends StatefulWidget {
-  final VoidCallback? onCommentatorSelected;
-
   /// צ׳יפי הסינון לפי סוג מפרש. ריקים = ציר הסוגים אינו מוצג.
   final List<String> typeChipKeys;
   final Set<String> selectedTypeChips;
@@ -22,7 +20,6 @@ class CommentatorsListView extends StatefulWidget {
 
   const CommentatorsListView({
     super.key,
-    this.onCommentatorSelected,
     this.typeChipKeys = const [],
     this.selectedTypeChips = const {},
     this.onTypeChipsChanged,
