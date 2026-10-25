@@ -310,7 +310,7 @@ void StartLoad(bool strip, int scale) {
   req->size = kIconSize * scale;
   req->path = strip ? dir + (scale >= 2 ? "/data/splash/splash_book_200.png"
                                         : "/data/splash/splash_book_100.png")
-                    : dir + "/data/flutter_assets/assets/icon/iconnew.png";
+                    : dir + "/data/flutter_assets/assets/icon/icon.png";
   g_loading = true;
   GTask* task = g_task_new(nullptr, nullptr, OnLoaded, nullptr);
   g_task_set_task_data(task, req, FreeRequest);

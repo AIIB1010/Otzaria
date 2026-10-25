@@ -282,7 +282,7 @@ class AboutSettingsTab extends StatelessWidget {
       child: Row(
         children: [
           Image.asset(
-            'assets/icon/iconnew_256.png',
+            'assets/icon/icon_256.png',
             width: 60,
             height: 60,
             errorBuilder: (_, _, _) =>

@@ -84,26 +84,13 @@ void main() {
       }
     });
 
-    test('shamor_zachor uses imageIcon (regression for P3: it must not be '
-        'wrench-icon in the nav rail)', () {
+    test('שמור וזכור משתמש באייקון הספרייה shamor_vezachor', () {
       final shamor = kBuiltInToolsCatalog.firstWhere(
         (m) => m.toolId == 'builtin.shamor_zachor',
       );
-      expect(
-        shamor.imageIcon,
-        isNotNull,
-        reason:
-            'shamor_zachor uses its own logo image; if this becomes null '
-            'the nav rail will fall back to a generic wrench icon (P3 bug)',
-      );
-      expect(
-        shamor.icon,
-        isNull,
-        reason:
-            'when imageIcon is set, icon should be null to make the choice '
-            'explicit (NavRailItem prefers imageAsset when both are set, '
-            'but having both is confusing)',
-      );
+      expect(shamor.icon, OtzariaIcons.shamor_vezachor_24_regular);
+      expect(shamor.iconFilled, OtzariaIcons.shamor_vezachor_24_filled);
+      expect(shamor.imageIcon, isNull);
     });
 
     test('המילון הארמי משתמש באייקון האותיות של Otzaria', () {

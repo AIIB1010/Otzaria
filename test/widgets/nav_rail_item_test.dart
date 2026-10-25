@@ -99,7 +99,7 @@ void main() {
             home: Directionality(
               textDirection: TextDirection.rtl,
               child: NavRailItem(
-                imageAsset: 'assets/icon/shamor_zachor.png',
+                imageAsset: 'assets/icon/icon_256.png',
                 label: 'שמור וזכור',
                 isSelected: false,
                 onTap: () {},
@@ -129,7 +129,7 @@ void main() {
           home: Directionality(
             textDirection: TextDirection.rtl,
             child: NavRailItem(
-              imageAsset: 'assets/icon/shamor_zachor.png',
+              imageAsset: 'assets/icon/icon_256.png',
               label: 'שמור וזכור',
               isSelected: selected,
               onTap: () {},
@@ -166,7 +166,7 @@ void main() {
               textDirection: TextDirection.rtl,
               child: NavRailItem(
                 icon: FluentIcons.wrench_24_regular,
-                imageAsset: 'assets/icon/shamor_zachor.png',
+                imageAsset: 'assets/icon/icon_256.png',
                 label: 'שמור וזכור',
                 isSelected: false,
                 onTap: () {},

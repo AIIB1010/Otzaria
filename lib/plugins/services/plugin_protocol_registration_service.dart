@@ -125,7 +125,7 @@ class PluginProtocolRegistrationService {
       'flutter_assets',
       'assets',
       'icon',
-      'iconnew.png',
+      'icon.png',
     );
     final existingEntry = await desktopFile.exists()
         ? utf8.decode(await desktopFile.readAsBytes(), allowMalformed: true)
@@ -331,8 +331,14 @@ class PluginProtocolRegistrationService {
     required Iterable<String> executables,
     required String iconPath,
   }) {
+    // גרסאות קודמות כתבו את האייקון בשם iconnew.png, לפני שנקרא icon.png;
+    // בלי זה הקובץ שלהן נחשב ערוך, לא יתעדכן, והאייקון שלו נעלם.
+    final legacyIconPath = p.posix.join(
+      p.posix.dirname(iconPath),
+      'iconnew.png',
+    );
     for (final executable in executables) {
-      for (final icon in [iconPath, null]) {
+      for (final icon in [iconPath, legacyIconPath, null]) {
         final entry = buildLinuxDesktopEntry(
           executable: executable,
           scheme: scheme,

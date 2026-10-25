@@ -47,7 +47,8 @@ const List<BuiltInToolMeta> kBuiltInToolsCatalog = [
     toolId: 'builtin.shamor_zachor',
     label: 'שמור וזכור',
     order: 20,
-    imageIcon: 'assets/icon/shamor_zachor.png',
+    icon: OtzariaIcons.shamor_vezachor_24_regular,
+    iconFilled: OtzariaIcons.shamor_vezachor_24_filled,
   ),
   BuiltInToolMeta(
     toolId: 'builtin.measurements',

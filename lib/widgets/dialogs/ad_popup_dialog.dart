@@ -240,7 +240,7 @@ class _AdPopupDialogState extends State<AdPopupDialog>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Image.asset(
-                      'assets/icon/iconnew_256.png',
+                      'assets/icon/icon_256.png',
                       width: logoSize,
                       height: logoSize,
                     ),

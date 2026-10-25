@@ -1,6 +1,7 @@
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:otzaria_icons/otzaria_icons.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/services/book_details_service.dart';
@@ -12,7 +13,7 @@ import 'package:url_launcher/url_launcher.dart';
 final _sourceNormalizationRegex = RegExp(r'[-_\s]');
 
 /// נכס הלוגו של "ים החכמה" — לוגו צבעוני, מוצג בצבעיו המקוריים.
-const String kYamHaHachmaLogoAsset = 'assets/logo_books/yam_hahachma_logo.png';
+const String kYamHaHachmaLogoAsset = 'assets/logo_books/yam_hahachma.svg';
 
 // מיפוי שמות המקורות לטקסט בעברית, קישור ולוגו (ללא כפילויות).
 // logo ריק = אין לוגו להצגה; לוגו מוצג רק כשהמקור מחייב קרדיט חזותי.
@@ -327,11 +328,10 @@ class _SourceCredit extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Image.asset(
+              SvgPicture.asset(
                 info.logo,
                 height: 36,
-                filterQuality: FilterQuality.medium,
-                semanticLabel: info.text,
+                semanticsLabel: info.text,
               ),
               const SizedBox(width: 8),
               Flexible(child: label),

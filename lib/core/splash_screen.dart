@@ -11,7 +11,7 @@ class SplashIcon extends StatelessWidget {
       child: Opacity(
         opacity: 0.70,
         child: Image.asset(
-          'assets/icon/iconnew_256.png',
+          'assets/icon/icon_256.png',
           width: 128,
           height: 128,
         ),

@@ -9,7 +9,7 @@ import 'package:otzaria/utils/ui/image_decode_size.dart';
 const _heavyAssetBytes = 100 * 1024;
 
 /// עותק מוקטן מראש של הלוגו, לתצוגה עד 128 לוגי ב-DPR 2.
-const _appLogoAsset = 'assets/icon/iconnew_256.png';
+const _appLogoAsset = 'assets/icon/icon_256.png';
 
 void main() {
   group('imageDecodeSize', () {
@@ -100,7 +100,7 @@ void main() {
         final src = file.readAsStringSync();
         for (final call in _callSites(src, 'Image.asset(')) {
           final asset = _firstStringLiteral(call.body);
-          if (asset == 'assets/icon/iconnew.png' ||
+          if (asset == 'assets/icon/icon.png' ||
               (asset == _appLogoAsset && call.body.contains('cache'))) {
             offenders.add(file.path);
           }
@@ -118,14 +118,15 @@ void main() {
   group('רגרסיה: נכסים כבדים', () {
     test('כל Image.asset על נכס כבד מגדיר cacheWidth', () {
       final offenders = <String>[];
-      var heavyCallsScanned = 0;
+      var literalCallsScanned = 0;
 
       for (final file in _dartFiles(Directory('lib'))) {
         final src = file.readAsStringSync();
         for (final call in _callSites(src, 'Image.asset(')) {
           final asset = _firstStringLiteral(call.body);
-          if (asset == null || !_isHeavyAsset(asset)) continue;
-          heavyCallsScanned++;
+          if (asset == null) continue;
+          literalCallsScanned++;
+          if (!_isHeavyAsset(asset)) continue;
           if (call.body.contains('cacheWidth') ||
               call.body.contains('cacheHeight')) {
             continue;
@@ -136,9 +137,9 @@ void main() {
 
       // בלי זה טסט שלא מוצא דבר (נתיב שגוי, פרסור שבור) עובר בטעות
       expect(
-        heavyCallsScanned,
+        literalCallsScanned,
         greaterThan(0),
-        reason: 'הסורק לא מצא אף Image.asset על נכס כבד — כנראה שבור',
+        reason: 'הסורק לא מצא אף Image.asset עם נתיב מילולי — כנראה שבור',
       );
       expect(
         offenders,

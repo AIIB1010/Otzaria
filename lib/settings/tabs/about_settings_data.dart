@@ -169,13 +169,13 @@ const aboutMainSources = <Map<String, String>>[
   {
     'name': 'ספריא',
     'url': 'https://www.sefaria.org/texts',
-    'logo': 'assets/logo_books/safria logo.svg',
+    'logo': 'assets/logo_books/safria.svg',
   },
   {
     'name': 'דיקטה',
     'url':
         'https://github.com/Dicta-Israel-Center-for-Text-Analysis/Dicta-Library-Download',
-    'logo': 'assets/logo_books/dicta_logo.svg',
+    'logo': 'assets/logo_books/dicta.svg',
   },
 ];
 
@@ -183,7 +183,7 @@ const aboutAdditionalSources = <Map<String, String>>[
   {
     'name': 'פרויקט פרידברג',
     'url': 'https://fjms.genizah.org/',
-    'logo': 'assets/logo_books/friedberg_logo.svg',
+    'logo': 'assets/logo_books/friedberg.svg',
   },
   {
     'name': 'הספרייה הלאומית',
@@ -205,7 +205,7 @@ const aboutAdditionalSources = <Map<String, String>>[
   {
     'name': 'ובלכתך בדרך',
     'url': 'http://mobile.tora.ws',
-    'logo': 'assets/logo_books/OnYourWay_logo.svg',
+    'logo': 'assets/logo_books/OnYourWay.svg',
   },
   {
     'name': 'פנינים',
@@ -215,14 +215,14 @@ const aboutAdditionalSources = <Map<String, String>>[
   {
     'name': 'ויקיטקסט',
     'url': 'https://he.wikisource.org/wiki',
-    'logo': 'assets/logo_books/wikisource_logo.svg',
+    'logo': 'assets/logo_books/wikisource.svg',
     'logoOriginalColor': 'true',
   },
   {
     'name': 'אוצר הספרים היהודי',
     'url':
         'https://wiki.jewishbooks.org.il/mediawiki/wiki/%D7%A2%D7%9E%D7%95%D7%93_%D7%A8%D7%90%D7%A9%D7%99',
-    'logo': 'assets/logo_books/JewishBook-logo.svg',
+    'logo': 'assets/logo_books/JewishBook.svg',
   },
   {
     'name': 'תא שמע',
@@ -232,16 +232,16 @@ const aboutAdditionalSources = <Map<String, String>>[
   {
     'name': 'מיקרופדיה תלמודית',
     'url': 'https://www.yadharavherzog.net/',
-    'logo': 'assets/logo_books/mikrapedia_talmudit_logo.svg',
+    'logo': 'assets/logo_books/mikrapedia_talmudit.svg',
   },
   {
     'name': 'מכון שלמה אומן',
     'url': 'https://www.machonso.org/',
-    'logo': 'assets/logo_books/machonso_logo.svg',
+    'logo': 'assets/logo_books/machonso.svg',
   },
   {
     'name': 'מכון פי ישרים',
-    'logo': 'assets/logo_books/pi_yesharim_logo.svg',
+    'logo': 'assets/logo_books/pi_yesharim.svg',
   },
   {
     'name': 'פרויקט בן י.',
@@ -250,7 +250,7 @@ const aboutAdditionalSources = <Map<String, String>>[
   {
     'name': 'ים החכמה',
     'url': 'https://github.com/torahtyh/yam-HaHachma',
-    'logo': 'assets/logo_books/yam_hahachma_logo.png',
+    'logo': 'assets/logo_books/yam_hahachma.svg',
     'logoOriginalColor': 'true',
   },
   {

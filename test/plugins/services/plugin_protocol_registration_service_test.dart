@@ -189,7 +189,7 @@ void main() {
     group('isGeneratedLinuxDesktopEntry (issue #2777)', () {
       const launcher = '/opt/otzaria/otzaria';
       const binary = '/opt/otzaria/otzaria.bin';
-      const icon = '/opt/otzaria/data/flutter_assets/assets/icon/iconnew.png';
+      const icon = '/opt/otzaria/data/flutter_assets/assets/icon/icon.png';
 
       bool isGenerated(String content) =>
           PluginProtocolRegistrationService.isGeneratedLinuxDesktopEntry(
@@ -226,6 +226,18 @@ void main() {
 
       test('מזהה קובץ שכתבה גרסה משוחררת', () {
         expect(isGenerated(releasedEntry), isTrue);
+      });
+
+      test('מזהה קובץ שנכתב עם שם האייקון הישן iconnew.png', () {
+        expect(
+          isGenerated(
+            releasedEntry.replaceFirst(
+              'assets/icon/icon.png',
+              'assets/icon/iconnew.png',
+            ),
+          ),
+          isTrue,
+        );
       });
 
       test('קובץ שהמשתמש ערך אינו נחשב שלנו', () {
