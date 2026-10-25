@@ -9,9 +9,6 @@ import 'package:otzaria/text_book/widgets/text_book_state_builder.dart';
 
 /// Scaffold for text book viewing that uses Strategy Pattern
 /// to select the appropriate view mode.
-///
-/// This replaces the previous if/else chains with a cleaner
-/// strategy-based approach that makes adding new view modes easier.
 class TextBookScaffold extends StatelessWidget {
   final List<String> content;
   final Function(OpenedTab) openBookCallback;

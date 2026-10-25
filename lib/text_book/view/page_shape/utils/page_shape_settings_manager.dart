@@ -38,7 +38,7 @@ class PageShapeSettingsManager {
   static const String _useWorkspaceSettingsPrefix =
       'page_shape_use_workspace_settings_';
 
-  // מפתחות פר-קטגוריה (חדש!)
+  // מפתחות פר-קטגוריה
   static const String _categoryConfigPrefix = 'page_shape_category_';
 
   // הטורים המוסתרים נשמרים לצד בחירת המפרשים, תחת מפתחה + סיומת זו
