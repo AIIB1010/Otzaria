@@ -72,10 +72,6 @@ class WindowTitleSync {
     return '$trimmed$suffix — $appName';
   }
 
-  /// מעדכן את כותרת החלון של ה-isolate הזה, אם היא שונה מזו שנשלחה.
-  static Future<void> update(String? activeTabTitle, {int tabCount = 0}) =>
-      current.syncIfSupported(activeTabTitle, tabCount: tabCount);
-
   /// כמו [sync], ורק בפלטפורמות שיש בהן כותרת חלון.
   Future<void> syncIfSupported(
     String? activeTabTitle, {
