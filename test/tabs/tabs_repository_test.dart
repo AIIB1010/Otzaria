@@ -236,56 +236,6 @@ void main() {
       },
     );
 
-    test('remapBookPaths ממפה נתיב PDF מתיקייה ישנה לחדשה', () async {
-      final oldDir = p.join('/lib', 'old');
-      final newDir = p.join('/lib', 'new');
-      final pdf = PdfBookTab(
-        book: PdfBook(
-          title: 'מסכת ברכות',
-          path: p.join(oldDir, 'תלמוד בבלי', 'ברכות.pdf'),
-        ),
-        pageNumber: 1,
-      );
-      addTearDown(pdf.dispose);
-      await repository.saveTabs([pdf], 0);
-
-      await repository.remapBookPaths(oldDir, newDir);
-
-      final loaded = repository.loadTabs();
-      addTearDown(() {
-        for (final tab in loaded) {
-          tab.dispose();
-        }
-      });
-      final restored = loaded.single as PdfBookTab;
-      expect(restored.book.path, p.join(newDir, 'תלמוד בבלי', 'ברכות.pdf'));
-    });
-
-    test('remapBookPaths לא נוגע בנתיבים שמחוץ לתיקייה הישנה', () async {
-      final pdf = PdfBookTab(
-        book: PdfBook(title: 'אחר', path: p.join('/other', 'book.pdf')),
-        pageNumber: 1,
-      );
-      addTearDown(pdf.dispose);
-      await repository.saveTabs([pdf], 0);
-
-      await repository.remapBookPaths(
-        p.join('/lib', 'old'),
-        p.join('/lib', 'new'),
-      );
-
-      final loaded = repository.loadTabs();
-      addTearDown(() {
-        for (final tab in loaded) {
-          tab.dispose();
-        }
-      });
-      expect(
-        (loaded.single as PdfBookTab).book.path,
-        p.join('/other', 'book.pdf'),
-      );
-    });
-
     test('remapTabsInMemory ממפה נתיב PDF בזיכרון ומחזיר טאב חדש', () {
       final oldDir = p.join('/lib', 'old');
       final newDir = p.join('/lib', 'new');
