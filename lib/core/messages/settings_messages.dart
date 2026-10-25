@@ -250,10 +250,4 @@ abstract class SettingsMessages {
   static const String portableShortcutRemoved = 'קיצור הדרך הוסר מהמחשב הזה';
   static const String portableShortcutRemoveFailed =
       'לא ניתן היה להסיר את קיצור הדרך';
-  static const String driveRootLauncherAdded =
-      'הקובץ "אוצריא" נוסף לתיקייה הראשית של הדיסק';
-  static const String driveRootLauncherFailed =
-      'לא ניתן היה לכתוב לתיקייה הראשית של הדיסק';
-  static const String driveRootLauncherRemoved =
-      'הקובץ "אוצריא" הוסר מהתיקייה הראשית של הדיסק';
 }

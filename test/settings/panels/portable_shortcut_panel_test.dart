@@ -28,9 +28,12 @@ void main() {
     commands.add(args.single);
     final ini = File(p.join(hostDir, 'launcher.ini'));
     if (args.single == '--install-shortcut') {
-      final id = File(
-        p.join(appDir, 'otzaria_data', 'portable_id'),
-      ).readAsStringSync();
+      final idFile = File(p.join(appDir, 'otzaria_data', 'portable_id'));
+      if (!idFile.existsSync()) {
+        idFile.parent.createSync(recursive: true);
+        idFile.writeAsStringSync('{native-id}');
+      }
+      final id = idFile.readAsStringSync();
       ini.parent.createSync(recursive: true);
       ini.writeAsStringSync('[Otzaria]\nId=$id\nRoot=$appDir\n');
     } else if (args.single == '--remove-shortcut') {
@@ -64,6 +67,10 @@ void main() {
 
     expect(find.text('גרסה ניידת'), findsOneWidget);
     expect(find.text('קיצור דרך במחשב הזה'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('portable-drive-root-launcher')),
+      findsNothing,
+    );
 
     await tester.tap(find.text('צור קיצור'));
     await settle(tester);

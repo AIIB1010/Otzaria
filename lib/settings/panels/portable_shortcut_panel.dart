@@ -7,7 +7,7 @@ import 'package:otzaria/settings/l10n/settings_l10n_exports.dart';
 import 'package:otzaria/settings/widgets/settings_widgets_exports.dart';
 import 'package:otzaria/widgets/widgets_exports.dart';
 
-/// כרטיס "גרסה ניידת": קיצור דרך במחשב הזה וקובץ פתיחה בשורש הדיסק.
+/// כרטיס "גרסה ניידת": קיצור דרך במחשב הזה.
 /// מוצג רק בעותק נייד ב-Windows שנבנה עם המפעיל.
 class PortableShortcutPanel extends StatefulWidget {
   const PortableShortcutPanel({super.key, this.shortcut});
@@ -24,9 +24,6 @@ class _PortableShortcutPanelState extends State<PortableShortcutPanel> {
       widget.shortcut ?? PortableHostShortcut.forCurrentProcess();
   bool _available = false;
   PortableShortcutState _state = PortableShortcutState.none;
-  bool _hasRootLauncher = false;
-  // נבדק בטעינה: GetDriveType הוא קריאה סינכרונית ל-Windows, לא מקומה ב-build.
-  String? _rootLauncherPath;
   bool _busy = false;
 
   @override
@@ -39,14 +36,10 @@ class _PortableShortcutPanelState extends State<PortableShortcutPanel> {
     final shortcut = _shortcut;
     if (shortcut == null || !await shortcut.isAvailable()) return;
     final state = await shortcut.state();
-    final rootLauncherPath = shortcut.driveRootLauncherPath;
-    final hasRootLauncher = await shortcut.hasDriveRootLauncher();
     if (!mounted) return;
     setState(() {
       _available = true;
       _state = state;
-      _hasRootLauncher = hasRootLauncher;
-      _rootLauncherPath = rootLauncherPath;
     });
   }
 
@@ -75,20 +68,6 @@ class _PortableShortcutPanelState extends State<PortableShortcutPanel> {
       return;
     }
     UiSnack.show(SettingsMessages.portableShortcutRemoved);
-  }
-
-  Future<void> _toggleRootLauncher(PortableHostShortcut shortcut) async {
-    if (_hasRootLauncher) {
-      if (await shortcut.removeDriveRootLauncher()) {
-        UiSnack.show(SettingsMessages.driveRootLauncherRemoved);
-      } else {
-        UiSnack.showError(SettingsMessages.driveRootLauncherFailed);
-      }
-    } else if (await shortcut.addDriveRootLauncher()) {
-      UiSnack.show(SettingsMessages.driveRootLauncherAdded);
-    } else {
-      UiSnack.showError(SettingsMessages.driveRootLauncherFailed);
-    }
   }
 
   @override
@@ -134,31 +113,6 @@ class _PortableShortcutPanelState extends State<PortableShortcutPanel> {
               ),
           ],
         ),
-        if (_rootLauncherPath != null)
-          SettingsActionTile.text(
-            key: const ValueKey('portable-drive-root-launcher'),
-            icon: FluentIcons.usb_stick_24_regular,
-            title: context.settingsText('קובץ פתיחה בדיסק'),
-            subtitle: _hasRootLauncher
-                ? context.settingsText(
-                    'בתיקייה הראשית של הדיסק יש קובץ "אוצריא" שפותח את התוכנה',
-                  )
-                : context.settingsText(
-                    'קובץ "אוצריא" בתיקייה הראשית של הדיסק, כדי לפתוח את התוכנה בלי לחפש בתוך התיקיות',
-                  ),
-            actions: [
-              if (_hasRootLauncher)
-                ActionButton.neutral(
-                  text: context.settingsText('הסר'),
-                  onPressed: _busy ? null : () => _run(_toggleRootLauncher),
-                )
-              else
-                ActionButton.recommended(
-                  text: context.settingsText('הוסף'),
-                  onPressed: _busy ? null : () => _run(_toggleRootLauncher),
-                ),
-            ],
-          ),
       ],
     );
   }

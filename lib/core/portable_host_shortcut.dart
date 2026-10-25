@@ -1,11 +1,8 @@
 import 'dart:io';
-import 'dart:math';
 
-import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 import 'package:otzaria/core/app_paths.dart';
 import 'package:path/path.dart' as p;
-import 'package:win32/win32.dart';
 
 /// לאיזה עותק נייד שייך קיצור הדרך של המחשב הזה.
 enum PortableShortcutState { none, thisCopy, otherCopy }
@@ -42,7 +39,6 @@ class PortableHostShortcut {
   static const String hostDirName = 'OtzariaPortable';
   static const String configFileName = 'launcher.ini';
   static const String idFileName = 'portable_id';
-  static const String driveRootLauncherName = 'אוצריא.exe';
 
   /// תיקיית ה-exe של העותק הנייד.
   final String appDir;
@@ -69,23 +65,6 @@ class PortableHostShortcut {
     }
   }
 
-  /// המזהה נוצר בבקשה הראשונה לקיצור, ונשאר עם העותק בכל כונן ותיקייה.
-  Future<String> _ensureId() async {
-    final existing = await _readId();
-    if (existing != null) return existing;
-    final random = Random.secure();
-    final hex = List.generate(
-      16,
-      (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'),
-    ).join();
-    final id =
-        '{${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
-        '${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}}';
-    await _idFile.parent.create(recursive: true);
-    await _idFile.writeAsString(id, flush: true);
-    return id;
-  }
-
   Future<Map<String, String>?> _readConfig() async {
     try {
       return parseLauncherConfig(await File(_configPath).readAsBytes());
@@ -106,7 +85,6 @@ class PortableHostShortcut {
 
   /// יוצר את הקיצור בשולחן העבודה ובתפריט התחל; מחליף קיצור של עותק אחר.
   Future<PortableShortcutResult> create() async {
-    await _ensureId();
     final code = await _runLauncher(_launcherPath, const [
       '--install-shortcut',
     ]);
@@ -123,12 +101,6 @@ class PortableHostShortcut {
   /// אחרי העברת התיקייה או עדכון התוכנה, הקיצור במחשב מתעדכן בהפעלה הבאה.
   /// תהליך נפתח רק כשבאמת יש מה לעדכן.
   Future<void> refreshIfNeeded() async {
-    final rootLauncher = driveRootLauncherPath;
-    if (rootLauncher != null &&
-        await File(rootLauncher).exists() &&
-        !await _sameFile(_launcherPath, rootLauncher)) {
-      await File(_launcherPath).copy(rootLauncher);
-    }
     if (await state() != PortableShortcutState.thisCopy) return;
     final root = (await _readConfig())?['Root'] ?? '';
     if (!_samePath(root, appDir) ||
@@ -144,48 +116,6 @@ class PortableHostShortcut {
     return strip(a) == strip(b);
   }
 
-  // ── קובץ ההפעלה בשורש הדיסק ─────────────────────────────────────────────
-
-  /// `E:\אוצריא.exe` לעותק ב-`E:\OtzariaPortable`. `null` כשהעותק אינו בדיוק
-  /// תיקייה אחת מתחת לשורש (המפעיל בשורש מחפש רק שם), או בכונן המערכת.
-  String? get driveRootLauncherPath {
-    final root = p.rootPrefix(appDir);
-    if (root.isEmpty || !p.equals(p.dirname(appDir), root)) return null;
-    final systemDrive = Platform.environment['SystemDrive'] ?? 'C:';
-    if (root.toLowerCase().startsWith(systemDrive.toLowerCase())) return null;
-    if (Platform.isWindows && !_isLocalDrive(root)) return null;
-    return p.join(root, driveRootLauncherName);
-  }
-
-  Future<bool> hasDriveRootLauncher() async {
-    final path = driveRootLauncherPath;
-    return path != null && await File(path).exists();
-  }
-
-  Future<bool> addDriveRootLauncher() async {
-    final path = driveRootLauncherPath;
-    if (path == null) return false;
-    try {
-      await File(_launcherPath).copy(path);
-      return true;
-    } on FileSystemException catch (e) {
-      debugPrint('PortableHostShortcut: drive root launcher failed: $e');
-      return false;
-    }
-  }
-
-  Future<bool> removeDriveRootLauncher() async {
-    final path = driveRootLauncherPath;
-    if (path == null) return false;
-    try {
-      await File(path).delete();
-      return true;
-    } on FileSystemException catch (e) {
-      debugPrint('PortableHostShortcut: drive root launcher removal: $e');
-      return false;
-    }
-  }
-
   static Future<bool> _sameFile(String a, String b) async {
     try {
       final (sa, sb) = (await File(a).stat(), await File(b).stat());
@@ -195,16 +125,6 @@ class PortableHostShortcut {
           sa.modified == sb.modified;
     } on FileSystemException {
       return false;
-    }
-  }
-
-  static bool _isLocalDrive(String root) {
-    final path = root.toPcwstr();
-    try {
-      final type = GetDriveType(path);
-      return type == DRIVE_REMOVABLE || type == DRIVE_FIXED;
-    } finally {
-      malloc.free(path);
     }
   }
 

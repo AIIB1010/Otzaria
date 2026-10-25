@@ -1,11 +1,4 @@
-// otzaria_launcher.exe — opens a portable Otzaria wherever its drive is today.
-//
-// It runs in three places:
-//  * next to otzaria.exe in the portable folder: launches it, and serves
-//    `--install-shortcut` / `--remove-shortcut` / `--refresh` for the app;
-//  * in %LOCALAPPDATA%\OtzariaPortable with launcher.ini: the target of the
-//    desktop shortcut, searches every drive for the copy whose id matches;
-//  * at a drive root (renamed "אוצריא.exe"): launches the copy in a subfolder.
+// Starts an adjacent portable app, or finds the configured copy by ID.
 #include <windows.h>
 
 #include <knownfolders.h>
@@ -40,8 +33,7 @@ constexpr wchar_t kShortcutName[] = L"אוצריא (נייד).lnk";
 // window pinned to the taskbar relaunches through this shortcut.
 constexpr wchar_t kPortableAumid[] = L"Otzaria.Otzaria.Portable";
 
-// PKEY_AppUserModel_ID, defined locally for the same reason as PKEY_Title in
-// runner/jump_list_manager.cpp.
+// PKEY_AppUserModel_ID, matching runner/jump_list_manager.cpp.
 const PROPERTYKEY kPropertyKeyAppUserModelId = {
     {0x9F4C2855,
      0x9F79,
@@ -230,26 +222,6 @@ std::wstring FindCopy(const Config& config) {
   return std::wstring();
 }
 
-// A launcher placed at a drive root finds the copy one folder down.
-std::wstring FindCopyInSubfolders(const std::wstring& dir) {
-  WIN32_FIND_DATAW data;
-  const HANDLE find =
-      ::FindFirstFileW((dir + L"\\*").c_str(), &data);
-  if (find == INVALID_HANDLE_VALUE) return std::wstring();
-  std::wstring found;
-  do {
-    if (!(data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) continue;
-    if (data.cFileName[0] == L'.') continue;
-    const std::wstring candidate = dir + L"\\" + data.cFileName;
-    if (IsPortableAppDir(candidate)) {
-      found = candidate;
-      break;
-    }
-  } while (::FindNextFileW(find, &data));
-  ::FindClose(find);
-  return found;
-}
-
 bool LaunchApp(const std::wstring& app_dir, const wchar_t* arguments) {
   const std::wstring exe = app_dir + L"\\" + kAppExe;
   std::wstring command_line = L"\"" + exe + L"\"";
@@ -281,7 +253,12 @@ bool LaunchApp(const std::wstring& app_dir, const wchar_t* arguments) {
 
 bool PollForCopy(void* context) {
   auto* search = static_cast<std::pair<const Config*, std::wstring>*>(context);
-  search->second = FindCopy(*search->first);
+  static const std::wstring config_path = HostDir() + L"\\" + kConfigName;
+  Config current;
+  const bool refreshed =
+      ReadConfig(config_path, &current) &&
+      _wcsicmp(current.id.c_str(), search->first->id.c_str()) == 0;
+  search->second = FindCopy(refreshed ? current : *search->first);
   return !search->second.empty();
 }
 
@@ -434,9 +411,8 @@ int ShowNotFound(HINSTANCE instance) {
   status_window::Content content = {};
   content.caption = Text(L"אוצריא", L"Otzaria");
   content.title = Text(L"לא נמצאה אוצריא", L"Otzaria was not found");
-  content.body = Text(L"הקובץ הזה פותח את אוצריא שבתיקייה שלידו, ובתיקייה הזו אין אוצריא.",
-                      L"This file opens the Otzaria next to it, and there is "
-                      L"no Otzaria in this folder.");
+  content.body = Text(L"לא נמצא עותק נייד ליד המפעיל, ולא הוגדר קיצור דרך במחשב הזה.",
+                      L"No adjacent portable copy or configured shortcut was found.");
   content.button = Text(L"סגור", L"Close");
   content.rtl = IsHebrewUi();
   status_window::Show(instance, IDI_APP_ICON, content);
@@ -472,8 +448,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE,
       app_dir = FindCopy(config);
       if (app_dir.empty()) app_dir = WaitForDrive(instance, config);
     } else {
-      app_dir = FindCopyInSubfolders(own_dir);
-      if (app_dir.empty()) result = ShowNotFound(instance);
+      result = ShowNotFound(instance);
     }
     if (!app_dir.empty() && !LaunchApp(app_dir, arguments)) {
       result = kAppNotFound;

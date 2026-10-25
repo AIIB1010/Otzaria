@@ -92,20 +92,26 @@ void main() {
   });
 
   group('create', () {
-    test('יוצר מזהה GUID לפני הפעלת המפעיל', () async {
+    test('יצירת המזהה נעשית בידי המפעיל ולא כותבת מראש לתיקייה', () async {
+      File(p.join(appDir, 'otzaria_data')).writeAsStringSync('not a directory');
+
       final result = await shortcut().create();
 
-      final id = File(
-        p.join(appDir, 'otzaria_data', 'portable_id'),
-      ).readAsStringSync();
-      expect(
-        id,
-        matches(RegExp(r'^\{[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}\}$')),
-      );
       expect(result, PortableShortcutResult.created);
       expect(calls, [
         [p.join(appDir, 'otzaria_launcher.exe'), '--install-shortcut'],
       ]);
+      expect(
+        File(p.join(appDir, 'otzaria_data')).readAsStringSync(),
+        'not a directory',
+      );
+    });
+
+    test('כשל יצירת מזהה בידי המפעיל מוחזר בלי כתיבה מקדימה', () async {
+      File(p.join(appDir, 'otzaria_data')).writeAsStringSync('not a directory');
+      exitCode = 3;
+
+      expect(await shortcut().create(), PortableShortcutResult.failed);
     });
 
     test('מזהה קיים נשמר', () async {
@@ -175,12 +181,32 @@ void main() {
     });
   });
 
-  test('בעותק שבשורש הכונן אין קובץ פתיחה נוסף בשורש', () {
-    final atRoot = PortableHostShortcut(
-      appDir: p.rootPrefix(appDir),
+  test('רענון אינו משנה קובץ הפעלה קיים מחוץ לעותק הנייד', () async {
+    final unrelated = File(p.join(root.path, 'drive', 'אוצריא.exe'));
+    unrelated.writeAsStringSync('unrelated app');
+    final isolatedShortcut = _IsolatedDriveShortcut(
+      appDir: appDir,
       hostDir: hostDir,
+      rootLauncherPath: unrelated.path,
     );
 
-    expect(atRoot.driveRootLauncherPath, isNull);
+    await isolatedShortcut.refreshIfNeeded();
+
+    expect(unrelated.readAsStringSync(), 'unrelated app');
+    expect(await isolatedShortcut.state(), PortableShortcutState.none);
+    expect(File(p.join(hostDir, 'launcher.ini')).existsSync(), isFalse);
   });
+}
+
+class _IsolatedDriveShortcut extends PortableHostShortcut {
+  _IsolatedDriveShortcut({
+    required super.appDir,
+    required super.hostDir,
+    required this.rootLauncherPath,
+  });
+
+  final String rootLauncherPath;
+
+  // מבודד את קובץ הכונן כדי שהבדיקה לא תכתוב מחוץ לתיקייה הזמנית.
+  String get driveRootLauncherPath => rootLauncherPath;
 }
