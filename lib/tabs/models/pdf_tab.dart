@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/models/pdf_headings.dart';
@@ -19,7 +20,12 @@ class PdfBookTab extends OpenedTab {
   final PdfBook book;
 
   /// The current page number.
-  int pageNumber;
+  int get pageNumber => _pageNumber.value;
+  set pageNumber(int value) => _pageNumber.value = value;
+
+  /// מודיע על כל מעבר עמוד, גם כשהכותרת ([currentTitle]) לא משתנה.
+  ValueListenable<int> get pageNumberListenable => _pageNumber;
+  final ValueNotifier<int> _pageNumber;
 
   /// The pdf viewer controller.
   PdfViewerController pdfViewerController = PdfViewerController();
@@ -126,7 +132,7 @@ class PdfBookTab extends OpenedTab {
 
   PdfBookTab({
     required this.book,
-    required this.pageNumber,
+    required int pageNumber,
     bool openLeftPane = false,
     this.searchText = '',
     this.searchOptions = const {},
@@ -141,7 +147,8 @@ class PdfBookTab extends OpenedTab {
     super.dedupeKey,
     this.requiresStableLayout = false,
     ExternalBookMatches? externalMatches,
-  }) : externalMatches = ValueNotifier<ExternalBookMatches?>(externalMatches),
+  }) : _pageNumber = ValueNotifier<int>(pageNumber),
+       externalMatches = ValueNotifier<ExternalBookMatches?>(externalMatches),
        super(book.title) {
     debugPrint(
       '🔧 PdfBookTab created: book=${book.title}, pageNumber=$pageNumber',
@@ -225,6 +232,7 @@ class PdfBookTab extends OpenedTab {
     outline.dispose();
     documentRef.dispose();
     currentTitle.dispose();
+    _pageNumber.dispose();
     linksLoadingNotifier.dispose();
     showLeftPane.dispose();
     pinLeftPane.dispose();

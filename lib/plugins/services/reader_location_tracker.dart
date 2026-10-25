@@ -96,8 +96,8 @@ class ReaderLocationTracker {
       };
       tab.currentTitle.addListener(_currentTabValueListener!);
 
-      // האזנה גם לשינויי עמוד דרך ה-controller
-      // (זה יקרה אוטומטית כי PdfBookTab מעדכן את pageNumber שלו)
+      // וגם לעמוד: מעבר עמוד בתוך אותו פרק אינו משנה את הכותרת.
+      tab.pageNumberListenable.addListener(_currentTabValueListener!);
     }
   }
 
@@ -111,9 +111,9 @@ class ReaderLocationTracker {
           _currentTabValueListener!,
         );
       } else if (_lastTab is PdfBookTab) {
-        (_lastTab as PdfBookTab).currentTitle.removeListener(
-          _currentTabValueListener!,
-        );
+        final pdfTab = _lastTab as PdfBookTab;
+        pdfTab.currentTitle.removeListener(_currentTabValueListener!);
+        pdfTab.pageNumberListenable.removeListener(_currentTabValueListener!);
       }
       _currentTabValueListener = null;
     }
