@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:file_picker_darwin/file_picker_darwin.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/settings/dialogs/safer_mode_password_dialog.dart';
@@ -37,7 +37,7 @@ void main() {
     );
     await tester.pumpWidget(const SizedBox.shrink());
     var invoked = false;
-    final result = await withFilePickerOwner<String>(origin, () async {
+    final result = await withFilePickerOwner<String>(origin, (_) async {
       invoked = true;
       return 'wrong window';
     });
@@ -66,11 +66,42 @@ void main() {
     );
     final path = await withFilePickerOwner(
       origin,
-      () => FilePickerDarwin().getDirectoryPath(),
+      (picker) => picker.getDirectoryPath(),
     );
     expect(path, '/tmp/chosen');
     expect((arguments as Map)['viewId'], tester.view.viewId);
   }, skip: !Platform.isMacOS);
+
+  testWidgets('macOS: חלון מקור שנסגר מבטל את הבקשה במקום שגיאה', (
+    tester,
+  ) async {
+    const channel = MethodChannel('miguelruivo.flutter.plugins.filepicker');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      throw PlatformException(code: 'window_not_found');
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    late BuildContext origin;
+    await tester.pumpWidget(
+      Builder(
+        builder: (context) {
+          origin = context;
+          return const SizedBox.shrink();
+        },
+      ),
+    );
+    final path = await withFilePickerOwner(
+      origin,
+      (picker) => picker.getDirectoryPath(),
+    );
+    expect(path, isNull);
+  }, skip: !Platform.isMacOS);
+
+  test('מחוץ ל-macOS הבורר הוא המופע הרשום', () async {
+    final picker = await withFilePickerOwner(null, (picker) async => picker);
+    expect(picker, same(FilePickerPlatform.instance));
+  }, skip: Platform.isMacOS);
 
   group('ensureFileExtension', () {
     test(

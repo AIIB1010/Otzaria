@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:file_picker_darwin/file_picker_darwin.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:otzaria/core/windowing/dialog_owner.dart';
 import 'package:windows_file_picker/windows_file_picker.dart';
@@ -17,19 +18,26 @@ WindowsOptions modalWindowsOptions([BuildContext? context]) =>
 
 const kModalLinuxOptions = LinuxOptions(lockParentWindow: true);
 
-/// שומר בעלות לכל בקשת בורר בנפרד, גם כשבדיקת הרשאות בנייטיב ממתינה.
+/// מריץ את [action] עם בורר שבעליו הוא החלון של [context]. ב-macOS זה בורר
+/// משלו לכל בקשה; חלון שנסגר בינתיים מבטל את הבקשה, כמו ב-Windows.
 Future<T?> withFilePickerOwner<T>(
   BuildContext? context,
-  Future<T?> Function() action,
-) {
-  if (context != null && !context.mounted) return Future.value();
+  Future<T?> Function(FilePickerPlatform picker) action,
+) async {
+  if (context != null && !context.mounted) return null;
   if (Platform.isWindows &&
       context != null &&
       DialogOwner.hwnd(context: context) == null) {
-    return Future.value();
+    return null;
   }
   final viewId = context == null ? null : View.maybeOf(context)?.viewId;
-  return Platform.isMacOS
-      ? FilePickerDarwin.withWindow(viewId, action)
-      : action();
+  if (!Platform.isMacOS || viewId == null) {
+    return action(FilePickerPlatform.instance);
+  }
+  try {
+    return await action(FilePickerDarwin(viewId: viewId));
+  } on PlatformException catch (e) {
+    if (e.code == 'window_not_found') return null;
+    rethrow;
+  }
 }

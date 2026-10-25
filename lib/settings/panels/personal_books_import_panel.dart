@@ -98,7 +98,7 @@ class _PersonalBooksImportPanelState extends State<PersonalBooksImportPanel> {
     final files =
         (await withFilePickerOwner(
           context,
-          () => FilePicker.pickFiles(
+          (picker) => picker.pickFiles(
             type: FileType.custom,
             allowedExtensions: kSupportedBookExtensions,
             dialogTitle: context.settingsText('בחר קבצי ספרים לייבוא'),

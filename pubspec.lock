@@ -429,11 +429,11 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/file_picker_darwin"
-      ref: "0e2d40a01849e3a1ae52ae8f750f9e3fad1444de"
-      resolved-ref: "0e2d40a01849e3a1ae52ae8f750f9e3fad1444de"
-      url: "https://github.com/Y-PLONI/flutter_file_picker"
+      ref: f67f1b6868ae172377f44f75797ac3142a6cd554
+      resolved-ref: f67f1b6868ae172377f44f75797ac3142a6cd554
+      url: "https://github.com/palmoni5/flutter_file_picker"
     source: git
-    version: "2.3.4"
+    version: "2.4.0"
   file_picker_linux:
     dependency: transitive
     description:

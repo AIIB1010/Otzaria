@@ -275,7 +275,7 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
         if (ctx == null || !ctx.mounted) return null;
         return withFilePickerOwner(
           ctx,
-          () => FilePicker.getDirectoryPath(
+          (picker) => picker.getDirectoryPath(
             windowsOptions: modalWindowsOptions(ctx),
             linuxOptions: kModalLinuxOptions,
             dialogTitle: title,
@@ -290,7 +290,7 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
             allowedExtensions != null && allowedExtensions.isNotEmpty;
         final result = await withFilePickerOwner(
           ctx,
-          () => FilePicker.pickFile(
+          (picker) => picker.pickFile(
             dialogTitle: title,
             windowsOptions: modalWindowsOptions(ctx),
             linuxOptions: kModalLinuxOptions,
@@ -310,7 +310,7 @@ mixin PluginWebViewHost<T extends StatefulWidget> on State<T> {
             if (ctx == null || !ctx.mounted) return null;
             final folder = await withFilePickerOwner(
               ctx,
-              () => FilePicker.getDirectoryPath(
+              (picker) => picker.getDirectoryPath(
                 dialogTitle: pluginSaveFolderDialogTitle(title),
                 windowsOptions: modalWindowsOptions(ctx),
                 linuxOptions: kModalLinuxOptions,

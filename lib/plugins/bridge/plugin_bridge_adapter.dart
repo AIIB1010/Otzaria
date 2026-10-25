@@ -4446,7 +4446,7 @@ class PluginBridgeAdapter {
     if (!context.mounted) return null;
     return withFilePickerOwner(
       context,
-      () => FilePicker.getDirectoryPath(
+      (picker) => picker.getDirectoryPath(
         windowsOptions: windowsOptions,
         linuxOptions: kModalLinuxOptions,
         dialogTitle: title,
@@ -5102,7 +5102,7 @@ class PluginBridgeAdapter {
     if (!context.mounted) return null;
     final result = await withFilePickerOwner(
       context,
-      () => FilePicker.pickFile(
+      (picker) => picker.pickFile(
         dialogTitle: title,
         windowsOptions: windowsOptions,
         linuxOptions: kModalLinuxOptions,
@@ -5347,7 +5347,7 @@ class PluginBridgeAdapter {
     if (!context.mounted) return null;
     final folder = await withFilePickerOwner(
       context,
-      () => FilePicker.getDirectoryPath(
+      (picker) => picker.getDirectoryPath(
         dialogTitle: pluginSaveFolderDialogTitle(title),
         windowsOptions: windowsOptions,
         linuxOptions: kModalLinuxOptions,

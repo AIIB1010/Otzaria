@@ -134,7 +134,7 @@ class _CustomFoldersPanelState extends State<CustomFoldersPanel> {
     final bloc = context.read<CustomFoldersBloc>();
     final path = await withFilePickerOwner(
       context,
-      () => FilePicker.getDirectoryPath(
+      (picker) => picker.getDirectoryPath(
         windowsOptions: modalWindowsOptions(context),
         linuxOptions: kModalLinuxOptions,
       ),
@@ -659,7 +659,7 @@ class UserContentImportTile extends StatelessWidget {
     final files =
         (await withFilePickerOwner(
           context,
-          () => FilePicker.pickFiles(
+          (picker) => picker.pickFiles(
             type: FileType.custom,
             allowedExtensions: const ['csv', 'json'],
             windowsOptions: modalWindowsOptions(context),

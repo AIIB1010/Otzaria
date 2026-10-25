@@ -237,7 +237,7 @@ class _ToolsLauncherPanelState extends State<ToolsLauncherPanel> {
     if (!verified || !mounted) return;
     final result = await withFilePickerOwner(
       context,
-      () => FilePicker.pickFile(
+      (picker) => picker.pickFile(
         type: FileType.custom,
         allowedExtensions: ['otzplugin'],
         windowsOptions: modalWindowsOptions(context),
@@ -256,7 +256,7 @@ class _ToolsLauncherPanelState extends State<ToolsLauncherPanel> {
     if (!verified || !mounted) return;
     final rootPath = await withFilePickerOwner(
       context,
-      () => FilePicker.getDirectoryPath(
+      (picker) => picker.getDirectoryPath(
         windowsOptions: modalWindowsOptions(context),
         linuxOptions: kModalLinuxOptions,
       ),

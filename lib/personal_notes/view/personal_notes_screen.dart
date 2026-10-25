@@ -617,7 +617,7 @@ class _PersonalNotesManagerScreenState
     if (!mounted) return;
     final picked = await withFilePickerOwner(
       context,
-      () => FilePicker.pickFile(
+      (picker) => picker.pickFile(
         dialogTitle: 'בחר קובץ ייבוא',
         allowedExtensions: ['json'],
         type: FileType.custom,
