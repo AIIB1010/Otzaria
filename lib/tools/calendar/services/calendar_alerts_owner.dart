@@ -76,28 +76,6 @@ class CalendarScheduleStatus {
   final int revision;
   final bool ok;
   final int failures;
-
-  Map<String, Object?> toJson() => {
-    'epoch': epoch,
-    'revision': revision,
-    'ok': ok,
-    'failures': failures,
-  };
-
-  static CalendarScheduleStatus? fromJson(Object? json) {
-    if (json is! Map) return null;
-    final epoch = json['epoch'];
-    final revision = json['revision'];
-    final ok = json['ok'];
-    final failures = json['failures'];
-    if (epoch is! String || revision is! int || ok is! bool) return null;
-    return CalendarScheduleStatus(
-      epoch: epoch,
-      revision: revision,
-      ok: ok,
-      failures: failures is int ? failures : 0,
-    );
-  }
 }
 
 /// הבעלים היחיד של התראות לוח השנה והתוספים בתהליך: שינויים עוברים בתור
@@ -127,10 +105,6 @@ class CalendarAlertsOwner {
   /// הבעלים של ה-isolate. נבנה בזול ואינו נוגע בתוסף הנייטיבי.
   static CalendarAlertsOwner get instance =>
       _instance ??= CalendarAlertsOwner();
-
-  @visibleForTesting
-  static set instanceForTesting(CalendarAlertsOwner? owner) =>
-      _instance = owner;
 
   final CalendarAlertsStore _store;
   final NotificationService? _notificationsOverride;
