@@ -116,7 +116,7 @@ class PluginCrashGuard {
   }
 
   /// `true` אם התוסף נמצא ב-quarantine — כלומר הופיע בקובץ בתחילת ההפעלה
-  /// הזו (= הופיע בריצה הקודמת בלי שהושלם markSuccess).
+  /// הזו (= הופיע בריצה הקודמת בלי שהושלם [markLoadSuccess]).
   ///
   /// canary שנוסף בסשן הנוכחי אינו נחשב חסימה — אחרת rebuild של הווידג'ט
   /// באמצע טעינה תקינה היה מציג "התוסף קרס" וקוטע את הטעינה.
@@ -172,9 +172,7 @@ class PluginCrashGuard {
   /// כי שם async writes לא תמיד מגיעים ל-disk לפני שהאפליקציה נסגרת.
   /// מבטיח שניקוי ה-canary יקרה גם בעת סגירה רגילה של התוכנה בזמן טעינה.
   static void markLoadSuccessSync(String pluginId, {String owner = ''}) {
-    // לפני ensureInitialized — אם הגענו לכאן בלי שאתחלנו, _blocked עוד null.
-    // במקרה כזה אין מה לעדכן בזיכרון, אבל גם הקובץ לא מכיל את ה-pluginId
-    // (כי לא הוספנו אותו עדיין). אין מה לעשות.
+    // לפני ensureInitialized ה-pluginId עוד לא נרשם, לא בזיכרון ולא בקובץ.
     final blocked = _blocked;
     if (blocked == null) return;
     if (!_finishLoad(pluginId, owner)) return;

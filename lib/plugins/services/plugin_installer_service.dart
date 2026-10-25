@@ -193,10 +193,8 @@ class PluginInstallerService {
       stagedInstallDir = await installParent.createTemp('.release-');
       await _copyDirectory(tempDir, stagedInstallDir);
 
-      // 4. Save to DB
-      // לעדכון/התקנה-מחדש: שומרים את הסדר הידני של המשתמש.
-      // להתקנה חדשה: אם כבר יש תוספים שסודרו ידנית, התוסף החדש מצטרף
-      // בסוף הסדר — אחרת הוא היה נכנס *לפני* הבלוק המסודר (raw 900 < 1000+).
+      // עדכון שומר את הסדר הידני; תוסף חדש מצטרף לסוף הסדר הידני, אחרת היה
+      // נכנס לפני הבלוק המסודר (raw 900 < 1000+).
       final newUserOrder = existingPlugin != null
           ? existingPlugin.userOrder
           : await _repository.getNextUserOrderForNewPlugin();

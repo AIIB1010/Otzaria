@@ -456,11 +456,8 @@ class PluginFileServer {
       if (session != null) await _deleteQuietly(session.tempFile);
     }
 
-    // שאריות מריצה שקרסה: אין להן session בזיכרון, ולכן אף אחד לא ימחק אותן.
-    // הגיל נמדד מול [orphanMinAge] ולא מול [uploadTtl] בכוונה: התיקייה משותפת
-    // לכל מופעי השרת, וסף קצר היה גורם למופע אחד למחוק temp פעיל של אחר.
-    // ל-session חי אין בעיה כזאת — הוא מזוהה ב-live ומדולג — אבל מופע אחר
-    // אינו מופיע שם.
+    // שאריות מריצה שקרסה. הסף הוא [orphanMinAge] ולא [uploadTtl]: התיקייה
+    // משותפת לכל מופעי השרת, וסף קצר היה מוחק temp פעיל של מופע אחר.
     try {
       final dir = await _uploadDir();
       final live = _uploads.values.map((u) => u.tempFile.path).toSet();
@@ -712,9 +709,8 @@ class PluginFileServer {
     try {
       await for (final chunk in request) {
         written += chunk.length;
-        // הגנה, לא מסלול צפוי: framing של HTTP קובע את אורך הגוף לפי
-        // Content-Length, ולכן גוף ארוך מהמוצהר אינו אמור להגיע לכאן בכלל.
-        // נשאר כי המחיר אפס והחלופה היא לכתוב לדיסק בלי גבול.
+        // הגנה בלבד: framing של HTTP חוסם גוף ארוך מ-Content-Length, אבל בלי
+        // הבדיקה הכתיבה לדיסק אינה חסומה.
         if (written > declared || written > session.maxBytes) {
           await discard();
           reject(HttpStatus.requestEntityTooLarge);

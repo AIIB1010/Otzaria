@@ -158,9 +158,8 @@ Future<String?> pluginFolderRejectionReason(
   List<String>? protectedRoots,
   List<String>? exactOnlyFolders,
 }) async {
-  // נתיב UNC (`\\server\share`, וגם `\\localhost\c$\Windows`) עוקף את בדיקת
-  // isWithin מול השורשים המוגנים — ותוסף אינו אמור לקבל תיקיית רשת. הבדיקה על
-  // הקלט הגולמי: p.absolute הופך `\\host\share` ל-`C:\host\share` ומטשטש אותו.
+  // נתיב UNC (גם `\\localhost\c$\Windows`) עוקף את isWithin מול השורשים
+  // המוגנים; נבדק על הקלט הגולמי מאותה סיבה כמו ב-[resolveWithinRoot].
   if (Platform.isWindows && (path.startsWith(r'\\') || path.startsWith('//'))) {
     return 'תיקיית רשת אינה תיקייה מותרת לתוספים';
   }
