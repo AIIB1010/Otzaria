@@ -130,10 +130,8 @@ class TabsState extends Equatable {
     // משתמשים בהקשר הקודם רק אם הוא עדיין פתוח.
     if (previous == null) return null;
     for (final tab in tabs) {
-      // identity by design: [OpenedTab] אינו דורס `operator ==`, ולכן
-      // `contains` משווה זהות אובייקט — בדיוק כמו [_resolveActivePane].
-      // מי שיוסיף `==` מבוסס-מזהה חייב להחליף כאן ל-`identical`, אחרת שני
-      // עותקים של אותו ספר ייחשבו לאותה חלונית.
+      // `contains` משווה זהות, כמו [_resolveActivePane]. `==` מבוסס-מזהה
+      // יחייב כאן `identical`, אחרת שני עותקים של ספר ייחשבו לאותה חלונית.
       if (leafPanes(tab).contains(previous)) return previous;
     }
     return null;
