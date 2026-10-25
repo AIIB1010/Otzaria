@@ -168,4 +168,71 @@ void main() {
     expect(rects.middle.bottom, moreOrLessEquals(rects.end.bottom));
     expect(rects.middle.top, greaterThan(rects.end.top));
   });
+
+  for (final alignment in [
+    Alignment.topRight,
+    Alignment.bottomRight,
+    Alignment.topLeft,
+    Alignment.bottomLeft,
+  ]) {
+    for (final direction in TextDirection.values) {
+      testWidgets('תפריט נשאר צמוד לעוגן לאחר resize: $alignment $direction', (
+        tester,
+      ) async {
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = const Size(800, 600);
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Directionality(
+              textDirection: direction,
+              child: Scaffold(
+                body: Padding(
+                  padding: const EdgeInsets.all(30),
+                  child: Align(
+                    alignment: alignment,
+                    child: AppPopupMenuButton<int>(
+                      entries: const [
+                        AppMenuEntry(value: 1, label: 'פריט בתפריט'),
+                      ],
+                      child: const SizedBox(
+                        width: 80,
+                        height: 40,
+                        child: Text('פתח תפריט'),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('פתח תפריט'));
+        await tester.pumpAndSettle();
+        final alignRight = alignment.x > 0;
+        final originalAnchor = tester.getRect(find.text('פתח תפריט'));
+        final originalMenu = tester.getRect(menuBox('פריט בתפריט'));
+
+        for (final size in [const Size(1000, 800), const Size(700, 500)]) {
+          tester.view.physicalSize = size;
+          await tester.pumpAndSettle();
+          final anchor = tester.getRect(find.text('פתח תפריט'));
+          final menu = tester.getRect(menuBox('פריט בתפריט'));
+          expect(
+            alignRight ? menu.right - anchor.right : menu.left - anchor.left,
+            moreOrLessEquals(
+              alignRight
+                  ? originalMenu.right - originalAnchor.right
+                  : originalMenu.left - originalAnchor.left,
+            ),
+          );
+          final gap = alignment.y < 0
+              ? menu.top - anchor.bottom
+              : anchor.top - menu.bottom;
+          expect(gap, moreOrLessEquals(4));
+          expect(tester.takeException(), isNull);
+        }
+      });
+    }
+  }
 }

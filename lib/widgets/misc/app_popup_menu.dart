@@ -267,6 +267,7 @@ Future<T?> showAnchoredAppMenu<T>({
   return navigator.push(
     _AnchoredMenuRoute<T>(
       anchorRect: targetRect,
+      overlaySize: overlay.size,
       gap: offset.dy,
       opensBelow: shouldOpenBelow,
       items: items,
@@ -294,6 +295,7 @@ Future<T?> showAnchoredAppMenu<T>({
 class _AnchoredMenuRoute<T> extends PopupRoute<T> {
   _AnchoredMenuRoute({
     required this.anchorRect,
+    required this.overlaySize,
     required this.gap,
     required this.opensBelow,
     required this.items,
@@ -306,6 +308,7 @@ class _AnchoredMenuRoute<T> extends PopupRoute<T> {
        super(traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop);
 
   final Rect anchorRect;
+  final Size overlaySize;
   final double gap;
   final bool opensBelow;
   final List<PopupMenuEntry<T>> items;
@@ -361,6 +364,7 @@ class _AnchoredMenuRoute<T> extends PopupRoute<T> {
       child: CustomSingleChildLayout(
         delegate: _AnchoredMenuLayout(
           anchorRect: anchorRect,
+          overlaySize: overlaySize,
           gap: gap,
           opensBelow: opensBelow,
           textDirection: Directionality.of(context),
@@ -386,6 +390,7 @@ class _AnchoredMenuRoute<T> extends PopupRoute<T> {
 class _AnchoredMenuLayout extends SingleChildLayoutDelegate {
   const _AnchoredMenuLayout({
     required this.anchorRect,
+    required this.overlaySize,
     required this.gap,
     required this.opensBelow,
     required this.textDirection,
@@ -396,6 +401,7 @@ class _AnchoredMenuLayout extends SingleChildLayoutDelegate {
   static const double _screenPadding = 8;
 
   final Rect anchorRect;
+  final Size overlaySize;
   final double gap;
   final bool opensBelow;
   final TextDirection textDirection;
@@ -410,11 +416,17 @@ class _AnchoredMenuLayout extends SingleChildLayoutDelegate {
 
   @override
   Offset getPositionForChild(Size size, Size childSize) {
-    final spaceLeft = anchorRect.left;
-    final spaceRight = size.width - anchorRect.right;
+    final spaceLeft = this.anchorRect.left;
+    final spaceRight = overlaySize.width - this.anchorRect.right;
     final alignRight =
         spaceLeft > spaceRight ||
         (spaceLeft == spaceRight && textDirection == TextDirection.rtl);
+    final anchorRect = this.anchorRect.shift(
+      Offset(
+        alignRight ? size.width - overlaySize.width : 0,
+        opensBelow ? 0 : size.height - overlaySize.height,
+      ),
+    );
     var x = alignRight ? anchorRect.right - childSize.width : anchorRect.left;
     var y = opensBelow
         ? anchorRect.bottom + gap
@@ -451,6 +463,7 @@ class _AnchoredMenuLayout extends SingleChildLayoutDelegate {
   @override
   bool shouldRelayout(_AnchoredMenuLayout oldDelegate) =>
       anchorRect != oldDelegate.anchorRect ||
+      overlaySize != oldDelegate.overlaySize ||
       gap != oldDelegate.gap ||
       opensBelow != oldDelegate.opensBelow ||
       textDirection != oldDelegate.textDirection ||
