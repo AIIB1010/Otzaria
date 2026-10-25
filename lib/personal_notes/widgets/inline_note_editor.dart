@@ -80,10 +80,8 @@ class _InlineNoteEditorState extends State<InlineNoteEditor> {
     originalController.quillController.dispose();
     _controller.quillController.addListener(_scheduleDraftSave);
     widget.cancelRequest?.addListener(_handleCancelRequest);
-    // QuillEditor.autoFocus לא תמיד תופס פוקוס כשהעורך נפתח בתוך פאנל
-    // שנפתח דינמית. ה-post-frame הראשון יורה לפני שאנימציית פתיחת הפאנל
-    // הסתיימה, ולפעמים ה-FocusNode עוד לא מחובר. ה-Timer מנסה שוב
-    // אחרי אורך אנימציה טיפוסי של Material (300ms).
+    // autoFocus לא תמיד תופס בפאנל שנפתח דינמית: ה-post-frame עלול לקדום לסוף
+    // אנימציית הפתיחה, ולכן ניסיון נוסף אחרי שהיא מסתיימת.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _focusNode.requestFocus();
     });

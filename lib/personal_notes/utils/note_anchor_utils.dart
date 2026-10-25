@@ -148,8 +148,7 @@ LineProjection projectLine(
     appendCode(code, i);
   }
 
-  // רווח בסוף נשמר במפה (כדי שאורך המפה יהיה עקבי) אך לא נכלל בטקסט —
-  // למעשה אנו פשוט מתעלמים ממנו ומסיימים את המפה בסוף השורה.
+  // רווח שממתין בסוף השורה אינו נכתב; המפה מסתיימת באינדקס סוף השורה.
   rawIndex.add(rawLine.length);
   return LineProjection(buffer.toString(), rawIndex);
 }

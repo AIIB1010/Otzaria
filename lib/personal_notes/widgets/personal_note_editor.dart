@@ -13,14 +13,8 @@ import 'package:otzaria/personal_notes/widgets/personal_note_link_dialog.dart';
 import 'package:otzaria/shortcuts/shortcut_helper.dart';
 import 'package:otzaria/widgets/misc/app_menu_exports.dart';
 
-// RTL-aware arrow key shortcuts for QuillEditor.
-//
-// LEFT/RIGHT: flutter_quill doesn't flip forward/backward for RTL, so we swap them.
-//
-// UP/DOWN: the Windows platform text input handles arrow keys at the OS level,
-// but it can't compute vertical line positions in a multi-block rich text editor.
-// Adding them here routes them through QuillEditor's own adjacentLineAction,
-// which correctly finds the character position on the line above/below.
+// LEFT/RIGHT swapped (flutter_quill doesn't flip them for RTL). UP/DOWN use
+// Quill's adjacentLineAction: Windows input can't find lines across blocks.
 const _rtlArrowShortcuts = <ShortcutActivator, Intent>{
   // Horizontal navigation (RTL-swapped)
   SingleActivator(LogicalKeyboardKey.arrowRight):
@@ -174,9 +168,8 @@ class _PersonalNoteEditorBodyState extends State<PersonalNoteEditorBody> {
 
   void _handleFocusChange() {
     if (!widget.focusNode.hasFocus) return;
-    // ה-QuillEditor מקבל פוקוס לפני שאנימציית פתיחת הכרטיס (AnimatedSize)
-    // והגלילה של הפאנל הסתיימו. גלילה ראשונה ב-post-frame, ושנייה אחרי
-    // שהאנימציה מתייצבת (animPanel ~200ms) כדי לתפוס את המיקום הסופי הנמוך.
+    // הפוקוס קודם לסוף אנימציית פתיחת הכרטיס והגלילה: גלילה ב-post-frame,
+    // ושוב אחרי שהאנימציה (~200ms) מתייצבת, כדי לתפוס את המיקום הסופי.
     _scrollEditorIntoView();
     _settleTimer?.cancel();
     _settleTimer = Timer(
@@ -190,9 +183,8 @@ class _PersonalNoteEditorBodyState extends State<PersonalNoteEditorBody> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final ctx = _editorAreaKey.currentContext;
       if (ctx == null) return;
-      // keepVisibleAtEnd גולל רק אם תחתית אזור הכתיבה מוסתרת מתחת לתצוגה —
-      // אם הוא כבר גלוי לא מתבצעת גלילה, כך שאין קפיצות מיותרות.
-      // רק הרשימה העוטפת — לא ה-PageView של כרטיסייה מוסתרת.
+      // keepVisibleAtEnd גולל רק כשתחתית אזור הכתיבה מוסתרת; רק הרשימה העוטפת,
+      // לא ה-PageView של כרטיסייה מוסתרת.
       Scrollable.maybeOf(ctx)?.position.ensureVisible(
         ctx.findRenderObject()!,
         duration: const Duration(milliseconds: 200),
@@ -353,15 +345,8 @@ class _PersonalNoteEditorBodyState extends State<PersonalNoteEditorBody> {
                   final available = media.size.height - media.viewInsets.bottom;
                   return (available * 0.35).clamp(120.0, 220.0);
                 }(),
-                // RawGestureDetector תופס מחוות גרירה אנכית באזור העורך
-                // לפני שה-ListView ההורה (פאנל ההערות) רואה אותן.
-                // אחרת כשהמשתמש גורר אלכסונית כדי לסמן יותר ממילה,
-                // ה-VerticalDragGestureRecognizer של ה-ListView מנצח
-                // את ה-HorizontalDragGestureRecognizer של Quill,
-                // והסימון בעורך כלל לא נוצר.
-                // ה-recognizer כאן לא עושה כלום — רק "תופס" את המחווה
-                // כדי לא לתת לאב לגלול. גלילה בגלגלת תמשיך לעבוד
-                // (היא PointerSignal, לא GestureRecognizer).
+                // תופס גרירה אנכית לפני ה-ListView של הפאנל, שאחרת גובר
+                // על גרירת הסימון של Quill; הגלגלת (PointerSignal) עדיין גוללת.
                 child: RawGestureDetector(
                   behavior: HitTestBehavior.translucent,
                   gestures: <Type, GestureRecognizerFactory>{
@@ -383,9 +368,8 @@ class _PersonalNoteEditorBodyState extends State<PersonalNoteEditorBody> {
                         // Ctrl+Enter (במק Cmd+Enter) — קיצור השמירה המומלץ.
                         ShortcutHelper.activatorFromShortcut('ctrl+enter')!:
                             widget.onSaveShortcut!,
-                        // Alt+Enter — נשמר לתאימות לאחור. ב-Windows מפיק
-                        // צליל "דינג" של המערכת (מאפיין של צירופי Alt
-                        // ב-Flutter), ולכן קיצור השמירה הראשי עדיף.
+                        // Alt+Enter — לתאימות לאחור; ב-Windows הוא משמיע
+                        // "דינג" מערכת, ולכן הקיצור הראשי הוא Ctrl+Enter.
                         const SingleActivator(
                           LogicalKeyboardKey.enter,
                           alt: true,
@@ -436,9 +420,8 @@ class _PersonalNoteEditorBodyState extends State<PersonalNoteEditorBody> {
   }
 }
 
-// מכבה הדבקת Rich-Text מהלוח החיצוני. בלי זה Quill מזהה HTML שמערכת
-// ההעתקה של אוצריא מזריקה ללוח (super_native_extensions) וגוררת את
-// העיצוב של הספר לתוך ההערה — וגם משפיע על טקסט עתידי שיוקלד באותו מקום.
+// בלי ביטול הדבקת Rich-Text, ה-HTML שהעתקת אוצריא שמה בלוח גורר את עיצוב
+// הספר לתוך ההערה ולטקסט שיוקלד אחריו.
 // ignore: experimental_member_use
 const _noteClipboardConfig = quill.QuillClipboardConfig(
   // ignore: experimental_member_use
@@ -503,9 +486,8 @@ class _PersonalNoteToolbar extends StatelessWidget {
       ..formatSelection(
         isActive ? quill.Attribute.clone(attribute, null) : attribute,
       );
-    // לחיצה על IconButton גוזלת פוקוס מ-QuillEditor, ובדסקטופ Quill לא
-    // מחזיר אותו אוטומטית (_keyboardVisible תמיד true). מחזירים פוקוס
-    // ידנית כדי שהסמן יישאר נראה ושטקסט שיוקלד יקבל את ה-toggledStyle.
+    // הכפתור גוזל את הפוקוס, ו-Quill בדסקטופ אינו מחזיר אותו; בלעדיו הסמן
+    // נעלם וטקסט שיוקלד לא יקבל את ה-toggledStyle.
     editorFocusNode.requestFocus();
   }
 

@@ -23,9 +23,8 @@ String? personalNoteLocationRef(
   final lineNumber = note.lineNumber;
   if (lineNumber == null) return null;
 
-  // ב-PDF העוגן הוא שורת-טקסט לוגית, אך הכתובת מחושבת ממספר עמוד — אי-התאמה
-  // שמייצרת כתובת שגויה. כשכבר יש כותרת (מילות הדף) היא כוללת את המיקום, ולכן
-  // מדלגים על הכתובת הנפרדת. בלי כותרת (PDF ללא טקסט) משאירים אותה כפי שהיא.
+  // ב-PDF הכתובת מחושבת ממספר עמוד ואינה תואמת לעוגן; כותרת (מילות הדף) כבר
+  // מציינת את המיקום, ורק בלעדיה (PDF ללא טקסט) מציגים את הכתובת.
   if (isPdf && (note.displayTitle?.isNotEmpty ?? false)) {
     return null;
   }
