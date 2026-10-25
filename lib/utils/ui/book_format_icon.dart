@@ -11,26 +11,41 @@ import 'package:otzaria/utils/file/document_format.dart';
 /// הפורמט קודם למחלקת הספר: רשומות היסטוריה ותיקות של ספרי מסמך נשמרו
 /// כ-`PdfBook`, ורק הנתיב מגלה שאינן PDF.
 IconData bookFormatIcon(Book book) {
-  final path = book is FileBook ? book.path : book.filePath;
-  // הסיומת קודמת ל-`fileType`: `PdfBook.fileType` הוא ברירת מחדל של הבנאי
-  // ולא עובדה שנשמרה, ולכן ספר מסמך שנשמר בהיסטוריה כ-PdfBook היה מוצג
-  // כ-PDF לנצח.
-  final format =
-      (path == null ? null : documentFormatFromExtension(path)) ??
-      documentFormatFromFileType(book.fileType);
+  final format = _documentFormatOf(book);
   if (format == null) {
     return book is PdfBook
         ? OtzariaIcons.book_pdf_24_regular
         : _plainTextIcon(book);
   }
   if (format == DocumentFormat.pdf) return OtzariaIcons.book_pdf_24_regular;
+  return _documentIcon(book, format) ?? _plainTextIcon(book);
+}
+
+/// אייקון המסמך של Word, HTML ו-Markdown, או `null` לכל פורמט אחר.
+///
+/// משותף לכרטיסיות, שבהן רק שלושת הפורמטים האלה מקבלים אייקון ראש משלהם.
+IconData? documentFormatIcon(Book book) {
+  final format = _documentFormatOf(book);
+  return format == null ? null : _documentIcon(book, format);
+}
+
+DocumentFormat? _documentFormatOf(Book book) {
+  final path = book is FileBook ? book.path : book.filePath;
+  // הסיומת קודמת ל-`fileType`: `PdfBook.fileType` הוא ברירת מחדל של הבנאי
+  // ולא עובדה שנשמרה, ולכן ספר מסמך שנשמר בהיסטוריה כ-PdfBook היה מוצג
+  // כ-PDF לנצח.
+  return (path == null ? null : documentFormatFromExtension(path)) ??
+      documentFormatFromFileType(book.fileType);
+}
+
+IconData? _documentIcon(Book book, DocumentFormat format) {
   if (format.isWordDocument) return OtzariaIcons.document_word_24_regular;
   if (format.isHtmlDocument) return OtzariaIcons.document_html_24_regular;
   if (book.isUserBook &&
       (format == DocumentFormat.md || format == DocumentFormat.markdown)) {
     return OtzariaIcons.document_md_24_regular;
   }
-  return _plainTextIcon(book);
+  return null;
 }
 
 /// ספרי הספרייה הרשמית הם כולם טקסט, ולכן הפורמט אינו מבדיל ביניהם והם

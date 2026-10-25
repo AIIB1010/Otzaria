@@ -1,6 +1,7 @@
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:otzaria/models/book_source.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/navigation/view/tab_visuals.dart';
 import 'package:otzaria/tabs/models/combined_tab.dart';
@@ -9,6 +10,7 @@ import 'package:otzaria/tabs/models/searching_tab.dart';
 import 'package:otzaria/tabs/models/tab.dart';
 import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/tabs/models/tool_tab.dart';
+import 'package:otzaria_icons/otzaria_icons.dart';
 
 import '../helpers/memory_settings_cache.dart';
 
@@ -35,7 +37,7 @@ void main() {
     expect(tabTypeIconData(pdfTab()), FluentIcons.document_pdf_16_regular);
     expect(
       tabTypeIconData(SearchingTab('חיפוש', null)),
-      FluentIcons.search_24_regular,
+      OtzariaIcons.search_24_regular,
     );
     expect(
       tabTypeIconData(
@@ -62,5 +64,71 @@ void main() {
     ].map(tabTypeIconData).toSet();
 
     expect(icons, hasLength(4));
+  });
+
+  /// כרטיסיית טקסט של מסמך שיובא: הפורמט נקבע לפי הסיומת, כמו ברשימות.
+  TextBookTab documentTab(String fileType, {bool isUserBook = true}) =>
+      TextBookTab(
+        book: TextBook(
+          title: 'מסמך',
+          categoryId: 1,
+          filePath: 'C:/docs/a.$fileType',
+          fileType: fileType,
+          source: BookSource.fromUserFlag(isUserBook),
+        ),
+        index: 0,
+      );
+
+  test('מסמכי Word, HTML ו-Markdown מקבלים אייקון משלהם בראש הכרטיסיה', () {
+    for (final type in ['docx', 'docm', 'doc']) {
+      expect(
+        tabContentIconData(documentTab(type)),
+        OtzariaIcons.document_word_24_regular,
+        reason: type,
+      );
+    }
+    for (final type in ['html', 'htm']) {
+      expect(
+        tabContentIconData(documentTab(type)),
+        OtzariaIcons.document_html_24_regular,
+        reason: type,
+      );
+    }
+    for (final type in ['md', 'markdown']) {
+      expect(
+        tabContentIconData(documentTab(type)),
+        OtzariaIcons.document_md_24_regular,
+        reason: type,
+      );
+    }
+    expect(
+      tabTypeIconData(documentTab('docx')),
+      OtzariaIcons.document_word_24_regular,
+    );
+  });
+
+  test('כרטיסיות אחרות נשארות בלי אייקון תוכן', () {
+    expect(tabContentIconData(textTab()), isNull);
+    expect(tabContentIconData(documentTab('txt')), isNull);
+    expect(tabContentIconData(documentTab('epub')), isNull);
+    expect(tabContentIconData(pdfTab()), isNull);
+    expect(
+      tabContentIconData(ToolTab(toolId: 'builtin.calendar', title: 'לוח')),
+      isNull,
+    );
+    expect(
+      tabContentIconData(SearchingTab('חיפוש', null)),
+      OtzariaIcons.search_24_regular,
+    );
+  });
+
+  test('אייקון החיפוש מחליף את המילה "חיפוש:" בכותרת ולא מתווסף אליה', () {
+    final tab = SearchingTab('x', null);
+    expect(tabTitleBesideContentIcon(tab, 'חיפוש: קקק'), 'קקק');
+    // בלי שאילתה המילה נשארת: כרטיסיה בלי טקסט אינה ניתנת לזיהוי.
+    expect(tabTitleBesideContentIcon(tab, 'חיפוש'), 'חיפוש');
+    // כרטיסיה בלי אייקון תוכן לא משתנה.
+    expect(tabTitleBesideContentIcon(textTab(), 'חיפוש: קקק'), 'חיפוש: קקק');
+    expect(tabTitleBesideContentIcon(pdfTab(), 'חיפוש: קקק'), 'חיפוש: קקק');
   });
 }

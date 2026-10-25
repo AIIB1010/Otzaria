@@ -1049,6 +1049,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
           tab.isPinned && (contentWidth - closeBudget) >= _kTabPinExtent;
       // אייקון ליד שם הטאב — רק כשהטאב רחב (אותו סף כמו מפריד ה-CombinedTab).
       final showPdfIcon = tab is PdfBookTab && tabWidth >= 100;
+      final contentIconData = tabWidth >= 100 ? tabContentIconData(tab) : null;
       final toolIcon = tab is ToolTab && tabWidth >= 100
           ? buildToolTabLeadingIcon(
               tab.toolId,
@@ -1069,7 +1070,9 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
         contentWidth -
             closeBudget -
             (showPin ? _kTabPinExtent : 0) -
-            (showPdfIcon || toolIcon != null ? _kTabLeadingIconExtent : 0),
+            (showPdfIcon || toolIcon != null || contentIconData != null
+                ? _kTabLeadingIconExtent
+                : 0),
       );
 
       final tabRow = Row(
@@ -1135,6 +1138,17 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
                                       color: colorScheme.onSurface,
                                     ),
                                   ),
+                                if (contentIconData != null)
+                                  Padding(
+                                    padding: const EdgeInsetsDirectional.only(
+                                      end: 4,
+                                    ),
+                                    child: Icon(
+                                      contentIconData,
+                                      size: 14,
+                                      color: colorScheme.onSurface,
+                                    ),
+                                  ),
                                 if (toolIcon != null)
                                   Padding(
                                     padding: const EdgeInsetsDirectional.only(
@@ -1183,8 +1197,13 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
 
     Widget buildLiveTabAppearance() => LiveTabTitleBuilder(
       tab: tab,
-      builder: (_, displayTitle, tooltipMessage) =>
-          buildTabAppearance(displayTitle, tooltipMessage),
+      // אייקון הראש מחליף את המילה "חיפוש:" רק כשהוא מוצג (ברוחב מספיק).
+      builder: (_, displayTitle, tooltipMessage) => buildTabAppearance(
+        tabWidth >= 100
+            ? tabTitleBesideContentIcon(tab, displayTitle)
+            : displayTitle,
+        tooltipMessage,
+      ),
     );
 
     return _wrapWithTabPointer(

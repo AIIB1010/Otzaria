@@ -443,7 +443,7 @@ class _TabRow extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    tab.title,
+                    tabTitleBesideContentIcon(tab, tab.title),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
