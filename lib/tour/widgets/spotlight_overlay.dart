@@ -5,16 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:otzaria/theme/app_tokens.dart';
 
 class SpotlightOverlay extends StatelessWidget {
-  final Rect targetRect;
   final List<Rect> targetRects;
   final BorderRadius borderRadius;
 
-  SpotlightOverlay({
+  const SpotlightOverlay({
     super.key,
-    required this.targetRect,
-    List<Rect>? targetRects,
+    required this.targetRects,
     this.borderRadius = AppTokens.borderRadiusAll,
-  }) : targetRects = targetRects ?? [targetRect];
+  });
 
   @override
   Widget build(BuildContext context) {

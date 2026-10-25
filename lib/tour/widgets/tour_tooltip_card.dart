@@ -21,7 +21,6 @@ class TourTooltipCard extends StatelessWidget {
   final bool isWelcomeStep;
   final bool isRestartEntry;
   final bool isAutoPlaying;
-  final bool isDialog;
   final VoidCallback onNext;
   final VoidCallback onSkip;
   final VoidCallback onToggleAutoPlay;
@@ -38,7 +37,6 @@ class TourTooltipCard extends StatelessWidget {
     required this.isWelcomeStep,
     this.isRestartEntry = false,
     this.isAutoPlaying = false,
-    this.isDialog = false,
     required this.onNext,
     required this.onSkip,
     required this.onToggleAutoPlay,

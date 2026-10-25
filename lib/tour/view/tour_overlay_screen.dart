@@ -219,7 +219,6 @@ class _TourOverlayScreenState extends State<TourOverlayScreen> {
                 isWelcomeStep: isWelcomeStep,
                 isRestartEntry: isRestartEntry,
                 isAutoPlaying: state.isAutoPlaying,
-                isDialog: step.isDialog,
                 onNext: () => _advance(step),
                 onSkip: () => context.read<TourCubit>().skip(),
                 onToggleAutoPlay: () =>
@@ -245,7 +244,6 @@ class _TourOverlayScreenState extends State<TourOverlayScreen> {
                     )
                   else
                     SpotlightOverlay(
-                      targetRect: combinedTargetRect,
                       targetRects: targetRects,
                       borderRadius: AppTokens.borderRadiusAll,
                     ),
