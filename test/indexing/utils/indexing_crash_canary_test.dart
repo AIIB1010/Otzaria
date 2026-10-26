@@ -64,6 +64,27 @@ void main() {
     expect(jsonDecode(file.readAsStringSync()), {'a': 2, 'b': 2});
   });
 
+  test('אצווה נכתבת לדיסק פעם אחת ב-flush ולא לכל ספר (issue #3330)', () async {
+    final temp = await Directory.systemTemp.createTemp('canary_save_');
+    addTearDown(() => temp.delete(recursive: true));
+    final index = p.join(temp.path, 'index');
+    final file = File('$index.in_flight.json');
+    IndexingCrashCanary.start(index);
+    final canary = IndexingCrashCanary.current!;
+    addTearDown(canary.finish);
+
+    expect(canary.begin('a', save: false), isTrue);
+    expect(canary.begin('b', save: false), isTrue);
+    expect(file.existsSync(), isFalse);
+    canary.flush();
+    expect(jsonDecode(file.readAsStringSync()), {'a': 1, 'b': 1});
+
+    canary.end('a', save: false);
+    expect(jsonDecode(file.readAsStringSync()), {'a': 1, 'b': 1});
+    canary.flush();
+    expect(jsonDecode(file.readAsStringSync()), {'b': 1});
+  });
+
   test('ספר שבטיסה בסגירה מסודרת אינו נספר כקריסה (issue #2038)', () async {
     final tempDir = await Directory.systemTemp.createTemp('canary_');
     addTearDown(() => tempDir.delete(recursive: true));

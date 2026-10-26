@@ -46,6 +46,7 @@ class IndexingCrashCanary {
   final Set<String> _inFlight = {};
   final Set<String> _skipped = {};
   RandomAccessFile? _raf;
+  bool _unsaved = false;
 
   /// ריצה קודמת מתה באמצע: מאנדקסים ספר-ספר, כדי שרק האשם ייספר.
   bool get recovering => _attempts.isNotEmpty;
@@ -59,7 +60,8 @@ class IndexingCrashCanary {
   }
 
   /// false לספר שכבר הפיל [maxAttempts] ריצות; החסימה נשמרת עד commit.
-  bool begin(String key) {
+  /// עם `save: false` חובה לקרוא ל-[flush] לפני שהספר נכנס לעבודה native.
+  bool begin(String key, {bool save = true}) {
     final attempts = _attempts[key] ?? 0;
     if (attempts >= maxAttempts) {
       _skipped.add(key);
@@ -67,15 +69,29 @@ class IndexingCrashCanary {
     }
     if (_inFlight.add(key)) {
       _attempts[key] = attempts + 1;
-      _write();
+      _changed(save);
     }
     return true;
   }
 
-  void end(String key) {
+  void end(String key, {bool save = true}) {
     if (_skipped.contains(key)) return;
     if (!_inFlight.remove(key)) return;
-    if (_attempts.remove(key) != null) _write();
+    if (_attempts.remove(key) != null) _changed(save);
+  }
+
+  /// כתיבה אחת לכל השינויים שנדחו; כתיבה סינכרונית לכל ספר באצווה תוקעת
+  /// את ה-UI בדיסק עמוס.
+  void flush() {
+    if (_unsaved) _write();
+  }
+
+  void _changed(bool save) {
+    if (save) {
+      _write();
+    } else {
+      _unsaved = true;
+    }
   }
 
   /// רק דילוגים שנחתמו באינדקס יכולים לאבד את חסימת הקריסה.
@@ -124,6 +140,7 @@ class IndexingCrashCanary {
 
   // קובץ פתוח לאורך הריצה: פתיחה לכל כתיבה עלתה פי 10 (נמדד ב-Windows).
   void _write() {
+    _unsaved = false;
     try {
       final bytes = utf8.encode(jsonEncode(_attempts));
       (_raf ??= _file.openSync(mode: FileMode.write))

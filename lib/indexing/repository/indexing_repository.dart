@@ -1143,12 +1143,13 @@ class IndexingRepository {
         final source = _engineBookSource(book);
         if (source == null ||
             batches.attempted.contains(book) ||
-            canary?.begin(key) == false) {
+            canary?.begin(key, save: false) == false) {
           break;
         }
         pickedKeys.add(key);
         picked.add((book as TextBook, source));
       }
+      canary?.flush();
       if (picked.isEmpty) break;
 
       onActualIndexingStarted?.call();
@@ -1207,7 +1208,7 @@ class IndexingRepository {
             final key = BookIdentity.indexedFilePath(book);
             _markWritten(key);
             batches.handled.add(book);
-            canary?.end(key);
+            canary?.end(key, save: false);
             added.add(result.docs);
             indexedBooks++;
             docs += result.docs;
@@ -1219,6 +1220,7 @@ class IndexingRepository {
             batches.attempted.add(book);
         }
       }
+      canary?.flush();
       if (cancelledBooks == 0) {
         batches.sizer.recordBatch(picked.length, stopwatch.elapsed);
       }
