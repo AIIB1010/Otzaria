@@ -14,6 +14,7 @@ import 'package:otzaria/models/books.dart';
 import 'package:otzaria/navigation/bloc/navigation_bloc.dart';
 import 'package:otzaria/navigation/bloc/navigation_event.dart';
 import 'package:otzaria/navigation/bloc/navigation_state.dart';
+import 'package:otzaria/plugins/services/plugin_search_dialog_registry.dart';
 import 'package:otzaria/search/bloc/search_bloc.dart';
 import 'package:otzaria/search/bloc/search_event.dart';
 import 'package:otzaria/search/bloc/search_state.dart';
@@ -374,6 +375,56 @@ Future<void> main() async {
     }
     await pumpSearch(tester, width: 909);
 
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('פעולת תוסף נוספת ומוסרת מהסרגל הפתוח בלי פריט ריק', (
+    tester,
+  ) async {
+    final registry = PluginSearchDialogRegistry.instance;
+    addTearDown(() => registry.removeAll('topbar.test'));
+    final searchBloc = await pumpSearch(tester, width: 909);
+    expect(find.byType(PluginSearchResultsActions), findsNothing);
+    registry.registerPayload('topbar.test', {
+      'id': 'continue',
+      'type': 'checkbox',
+      'title': 'המשך',
+      'openPluginOnSubmit': true,
+      'resultsAction': 'המשך בתוסף',
+      'visibleInModes': ['advanced'],
+    });
+    await tester.pump();
+    expect(find.text('המשך בתוסף'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    final completed = searchBloc.state;
+    for (final hidden in [
+      completed.copyWith(isLoading: true),
+      completed.copyWith(
+        configuration: completed.configuration.copyWith(
+          searchMode: SearchMode.exact,
+        ),
+      ),
+      completed.copyWith(errorMessage: 'נכשל'),
+    ]) {
+      searchBloc.publish(hidden);
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(PluginSearchResultsActions), findsNothing);
+      expect(tester.takeException(), isNull);
+      searchBloc.publish(completed);
+      await tester.pump();
+      await tester.pump();
+      expect(
+        find.text('המשך בתוסף'),
+        findsOneWidget,
+        reason:
+            'return from loading=${hidden.isLoading}, mode=${hidden.configuration.searchMode}, error=${hidden.errorMessage}',
+      );
+      expect(tester.takeException(), isNull);
+    }
+    registry.removeAll('topbar.test');
+    await tester.pump();
+    expect(find.byType(PluginSearchResultsActions), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
