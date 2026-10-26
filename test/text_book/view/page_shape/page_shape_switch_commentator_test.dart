@@ -96,6 +96,7 @@ void main() {
     TextBook book,
     List<String> names, {
     String column = 'left',
+    Map<String, String?>? defaults,
   }) async {
     tester.view.physicalSize = const Size(1400, 900);
     tester.view.devicePixelRatio = 1.0;
@@ -150,11 +151,15 @@ void main() {
               openBookCallback: (_) {},
               tab: tab,
               defaultsLoader: (book, available) async => (
-                commentators: <String, String?>{
-                  for (final c in _columns) c: c == column ? names.first : null,
-                },
+                commentators:
+                    defaults ??
+                    <String, String?>{
+                      for (final c in _columns)
+                        c: c == column ? names.first : null,
+                    },
                 visibility: <String, bool>{
-                  for (final c in _columns) c: c == column,
+                  for (final c in _columns)
+                    c: defaults == null ? c == column : defaults[c] != null,
                 },
               ),
             ),
@@ -162,7 +167,7 @@ void main() {
         ),
       ),
     );
-    await _pumpUntil(tester, () => shownCommentator(tester) != null);
+    await _pumpUntil(tester, () => commentaryViewer().evaluate().isNotEmpty);
   }
 
   // כל התרחישים בבדיקה אחת: אתחול המסד שמתחיל בבדיקת צורת הדף נשאר תלוי
@@ -231,6 +236,25 @@ void main() {
     );
     await pumpPageShape(tester, categoryBook, names);
     expect(shownCommentator(tester), names[1]);
+
+    const duplicateNames = ['מפרש כפול', 'מפרש חלופי'];
+    const duplicateBook = 'ספר מפרשים כפולים';
+    await pumpPageShape(
+      tester,
+      TextBook(title: duplicateBook),
+      duplicateNames,
+      defaults: {'left': duplicateNames[0], 'bottom': duplicateNames[0]},
+    );
+    await _pumpUntil(tester, () => commentaryViewer().evaluate().length == 2);
+    final bottom = tester.widgetList<SimpleTextViewer>(commentaryViewer()).last;
+    bottom.onSwitchCommentator!(duplicateNames[1]);
+    await _pumpUntil(
+      tester,
+      () => PageShapeSettingsManager.loadConfiguration(duplicateBook) != null,
+    );
+    final saved = PageShapeSettingsManager.loadConfiguration(duplicateBook)!;
+    expect(saved['left'], duplicateNames[0]);
+    expect(saved['bottom'], duplicateNames[1]);
   });
 }
 
