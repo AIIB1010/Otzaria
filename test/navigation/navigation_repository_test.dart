@@ -185,7 +185,10 @@ void main() {
     setUp(() async {
       NavigationRepository.debugIsAndroidOverride = true;
       final tempDir = await Directory.systemTemp.createTemp('otzaria_1483');
-      addTearDown(() => tempDir.delete(recursive: true));
+      addTearDown(() async {
+        await SqliteDataProvider.instance.dispose();
+        await tempDir.delete(recursive: true);
+      });
       // יעד שנבחר בדיאלוג ההגדרה, מחוץ לתיקיות האפליקציה.
       booksDir = await Directory(
         '${tempDir.path}/storage/emulated/0/Documents/books',
@@ -204,8 +207,7 @@ void main() {
       );
     });
 
-    tearDown(() async {
-      await SqliteDataProvider.instance.dispose();
+    tearDown(() {
       NavigationRepository.debugIsAndroidOverride = null;
       NavigationRepository.debugCanOpenSqliteOverride = null;
     });
