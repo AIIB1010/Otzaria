@@ -72,6 +72,7 @@ import 'package:otzaria/bookmarks/bloc/bookmark_bloc.dart';
 import 'package:otzaria/services/book_details_service.dart';
 import 'package:otzaria/book_common/view/book_source_dialog.dart'
     show getSourceDisplayInfo, libraryDisplayPath;
+import 'package:otzaria/tools/biographies/models/biographies_bundle.dart';
 import 'package:otzaria/tools/biographies/models/biography.dart';
 import 'package:otzaria/tools/biographies/repository/biographies_repository.dart';
 import 'package:otzaria/tools/dictionary/repository/dictionary_lookup_repository.dart';
@@ -6933,8 +6934,8 @@ class PluginBridgeAdapter {
             throw Exception('error.invalid_params: query must be a string');
           }
           final id = args['id'];
-          if (id != null && id is! int) {
-            throw Exception('error.invalid_params: id must be a number');
+          if (id != null && (id is! String || id.isEmpty || id.length > 50)) {
+            throw Exception('error.invalid_params: id must be a string');
           }
           final limit = args['limit'];
           if (limit != null && (limit is! int || limit < 1 || limit > 50)) {
@@ -6947,7 +6948,7 @@ class PluginBridgeAdapter {
           } catch (_) {
             throw Exception('error.not_supported: biographies unavailable');
           }
-          final matched = id is int
+          final matched = id is String
               ? all.where((bio) => bio.id == id).toList()
               : BiographiesRepository.filter(all, (rawQuery as String?) ?? '');
           return {
@@ -6966,28 +6967,48 @@ class PluginBridgeAdapter {
     }
   }
 
-  /// [names] — לתקצירים בלבד; שאר השדות הם שמות ומפתחות.
+  /// [names] applies to the prose fields only; the rest are names and keys.
   Map<String, dynamic> _biographyToJson(
     Biography bio,
     PluginDivineNamesDisplay names,
-  ) => {
-    'id': bio.id,
-    'name': bio.name,
-    'generation': bio.generation,
-    'appelations': bio.appelations,
-    'communities': bio.communities,
-    'countries': bio.countries,
-    'birth': bio.birthHebrew?.display,
-    'death': bio.deathHebrew?.display,
-    'summary': switch (bio.summary) {
-      final text? => filterPluginDivineNamesText(text, names),
-      null => null,
-    },
-    'biographyShort': switch (bio.biographyShort) {
-      final text? => filterPluginDivineNamesText(text, names),
-      null => null,
-    },
-  };
+  ) {
+    String? prose(String? text) =>
+        text == null ? null : filterPluginDivineNamesText(text, names);
+    Map<String, dynamic> person(RelatedPerson p) => {
+      'name': p.name,
+      'relation': p.relation,
+      'ref': p.ref,
+    };
+    return {
+      'id': bio.id,
+      'name': bio.name,
+      'honorific': bio.honorific,
+      'era': bio.era,
+      'eraLabel': bio.eraLabel,
+      'generation': bio.generation,
+      'appelations': bio.knownAs,
+      'countries': bio.region,
+      'birth': bio.born?.display,
+      'death': bio.died?.display,
+      'buried': bio.buried,
+      'roles': bio.roles,
+      'teachers': bio.teachers.map(person).toList(),
+      'students': bio.students.map(person).toList(),
+      'family': bio.family.map(person).toList(),
+      'works': [
+        for (final work in bio.works)
+          {'title': work.title, 'description': prose(work.description)},
+      ],
+      'mentionedIn': bio.mentionedIn,
+      'summary': prose(bio.summary),
+      'remember': prose(bio.remember),
+      'sources': [
+        for (final source in bio.sources)
+          {'credit': source.credit, 'title': source.title, 'url': source.url},
+      ],
+      'attribution': BiographiesBundle.authorCredit,
+    };
+  }
 
   // ----------------------------------------------------------------
   // notifications.*

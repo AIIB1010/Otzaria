@@ -253,7 +253,11 @@ void main() {
         _codedError('error.invalid_params'),
       );
       expect(
-        () => adapter.execute('tools', 'biographies', {'id': 'abc'}),
+        () => adapter.execute('tools', 'biographies', {'id': 123}),
+        _codedError('error.invalid_params'),
+      );
+      expect(
+        () => adapter.execute('tools', 'biographies', {'id': ''}),
         _codedError('error.invalid_params'),
       );
       expect(

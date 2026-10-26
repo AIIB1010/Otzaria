@@ -9,9 +9,9 @@ import 'package:otzaria/tools/biographies/biographies_screen.dart';
 import 'package:otzaria/tools/biographies/repository/biographies_repository.dart';
 import 'package:otzaria/tools/biographies/widgets/biography_card.dart';
 
-/// מריץ את מסך הביוגרפיות על קובץ רילייס אמיתי. ידני בלבד:
+/// Runs the biographies screen on a real release file. Manual only:
 /// `flutter test test/tools/biographies_screen_test.dart --tags manual`
-/// `--dart-define=BIO_OBF_KEY=<המפתח> --dart-define=BIO_FILE=<נתיב הקובץ>`
+/// `--dart-define=BIO_FILE=<path of biographies-app.json.gz>`
 void main() {
   const path = String.fromEnvironment('BIO_FILE');
 
@@ -30,10 +30,13 @@ void main() {
       updatedPathProvider: () async => path,
     );
 
-    await tester.pumpWidget(host(repository));
-    // הפענוח רץ ב-isolate אמיתי, ולכן חייב runAsync ולא pumpAndSettle
-    // (שנתקע ממילא על אנימציית הטעינה).
+    // Load in the real zone before building the screen: file reads and the
+    // decoding isolate never complete when started in the fake-async zone.
     await tester.runAsync(repository.loadAll);
+    await tester.pumpWidget(host(repository));
+    // The loaded Future belongs to the real zone, so its callbacks need a turn
+    // of the real event loop.
+    await tester.runAsync(() async {});
     await tester.pump();
     await tester.pump();
 
@@ -41,9 +44,13 @@ void main() {
     expect(find.byType(BiographyCard), findsWidgets);
 
     // חיפוש מצמצם לתוצאות רלוונטיות בלבד.
-    await tester.enterText(find.byType(TextField).first, 'אונקלוס');
+    await tester.enterText(find.byType(TextField).first, 'הרמב"ם');
     await tester.pump();
-    expect(find.textContaining('אונקלוס'), findsWidgets);
+    final first = tester
+        .widgetList<BiographyCard>(find.byType(BiographyCard))
+        .first
+        .biography;
+    expect(first.name, 'רבינו משה בן מימון');
 
     // שאילתה חסרת תוצאות מציגה מצב ריק.
     await tester.enterText(find.byType(TextField).first, 'זזזזזזז');

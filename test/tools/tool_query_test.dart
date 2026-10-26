@@ -12,6 +12,7 @@ import 'package:otzaria/tools/acronyms_dictionary/widgets/acronym_result_card.da
 import 'package:otzaria/tools/aramaic_dictionary/aramaic_dictionary_screen.dart';
 import 'package:otzaria/tools/aramaic_dictionary/widgets/aramaic_result_card.dart';
 import 'package:otzaria/tools/biographies/biographies_screen.dart';
+import 'package:otzaria/tools/biographies/models/biographies_bundle.dart';
 import 'package:otzaria/tools/biographies/models/biography.dart';
 import 'package:otzaria/tools/biographies/repository/biographies_repository.dart';
 import 'package:otzaria/tools/biographies/widgets/biography_card.dart';
@@ -38,12 +39,14 @@ class _FakeBiographiesRepository extends BiographiesRepository {
   final Future<void>? gate;
 
   @override
-  Future<List<Biography>> loadAll() async {
+  Future<BiographiesBundle> loadBundle() async {
     await gate;
-    return const [
-      Biography(id: 1, name: 'רבי שלמה יצחקי', appelations: ['רש"י']),
-      Biography(id: 2, name: 'רבי משה בן מימון', appelations: ['רמב"ם']),
-    ];
+    return const BiographiesBundle(
+      entries: [
+        Biography(id: '1', name: 'רבי שלמה יצחקי', knownAs: ['רש"י']),
+        Biography(id: '2', name: 'רבי משה בן מימון', knownAs: ['רמב"ם']),
+      ],
+    );
   }
 }
 
@@ -114,7 +117,7 @@ void main() {
       final cards = tester.widgetList<BiographyCard>(
         find.byType(BiographyCard),
       );
-      expect(cards.map((card) => card.biography.id), [2]);
+      expect(cards.map((card) => card.biography.id), ['2']);
     });
 
     testWidgets('ראשי תיבות', (tester) async {
@@ -257,6 +260,6 @@ void main() {
 
     expect(_fieldText(tester), 'רש"י');
     final cards = tester.widgetList<BiographyCard>(find.byType(BiographyCard));
-    expect(cards.map((card) => card.biography.id), [1]);
+    expect(cards.map((card) => card.biography.id), ['1']);
   });
 }

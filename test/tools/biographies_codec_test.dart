@@ -2,112 +2,120 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/tools/biographies/data/biographies_codec.dart';
-import 'package:otzaria/tools/biographies/models/biography.dart';
 
-/// מקודד payload לפורמט TSB1 — מראה של הקוד בצינור הבנייה (build_biographies.py).
-Uint8List encodeTsb1(Map<String, dynamic> payload, String key) {
-  final plain = utf8.encode(jsonEncode(payload));
-  final compressed = gzip.encode(plain);
-  final keystream = sha256.convert(utf8.encode(key)).bytes;
-  final out = BytesBuilder()..add(ascii.encode('TSB1'));
-  for (var i = 0; i < compressed.length; i++) {
-    out.addByte(compressed[i] ^ keystream[i % keystream.length]);
-  }
-  return out.toBytes();
-}
+/// Encodes a payload the way `scripts/app_bundle.py` of toldot-gedolei-yisrael
+/// does: gzip of compact UTF-8 JSON.
+Uint8List encodeBundle(Map<String, dynamic> payload) =>
+    Uint8List.fromList(gzip.encode(utf8.encode(jsonEncode(payload))));
 
-// אותו מקור כמו BiographiesCodec._obfKey — מוזרק ב-CI, ריק מקומית.
-// גם מפתח ריק נותן keystream תקין, כך שה-round-trip עובד בשני המצבים.
-const _key = String.fromEnvironment('BIO_OBF_KEY');
+Map<String, dynamic> samplePayload({Object version = 1}) => {
+  'format': 'biographies-app',
+  'version': version,
+  'built': '2026-10-23',
+  'release': 'v0.3.0',
+  'author': 'abaye',
+  'eras': [
+    {'key': 'tannaim', 'label': 'תנאים'},
+    {'key': 'rishonim', 'label': 'ראשונים'},
+    {'key': 'acharonim', 'label': 'אחרונים'},
+  ],
+  'credits': {
+    'wikipedia': {
+      'name': 'ויקיפדיה העברית',
+      'license': 'CC BY-SA 4.0',
+      'license_url': 'https://creativecommons.org/licenses/by-sa/4.0/deed.he',
+      'attribution': 'על פי ערכי ויקיפדיה העברית.',
+    },
+  },
+  'entries': [
+    {
+      'id': 'Q127398',
+      'era': 'rishonim',
+      'name': 'רבינו משה בן מימון',
+      'known_as': ['הרמב"ם'],
+      'honorific': 'זצ"ל',
+      'born': {'hebrew': 'ד\'תתצ"ח (או: ד\'תתצ"ה)', 'gregorian': '1138'},
+      'died': {'place': 'פוסטאט'},
+      'teachers': [
+        {'name': 'רבי יוסף אבן מיגאש', 'ref': 'Q958361'},
+        {'name': 'רבי פלוני'},
+      ],
+      'family': [
+        {'relation': 'אביו', 'name': 'רבי מימון הדיין', 'ref': 'Q3303401'},
+      ],
+      'works': [
+        {'title': 'משנה תורה', 'description': 'חיבור הלכתי'},
+        {'title': 'מורה נבוכים'},
+      ],
+      'summary': 'מגדולי הפוסקים.',
+      'sources': [
+        {'credit': 'wikipedia', 'title': 'רמב"ם', 'url': 'https://he.x/1'},
+      ],
+    },
+    {'id': 'tta-1', 'era': 'tannaim', 'name': 'אונקלוס הגר'},
+    // Malformed entries are skipped, not fatal.
+    {'id': 'no-name'},
+    'not an entry',
+  ],
+};
 
 void main() {
-  final samplePayload = {
-    'format': 'tashma-biographies',
-    'version': 1,
-    'entries': [
-      {
-        'id': 1,
-        'name': null,
-        'birthHebrew': null,
-        'deathHebrew': {'month': 'סיון', 'day': 'כו'},
-        'doc': {
-          'nameFirst': {'he': 'אונקלוס', 'en': 'Onkelos'},
-          'appelations': [
-            {'he': 'הגר'},
-          ],
-          'summary': {'he': 'תנא, מתרגם התורה.'},
-        },
-        'resolved': {'generation': 'תנאים'},
-      },
-      {
-        'id': 3,
-        'name': 'רבינו סעדיה אלפיומי גאון',
-        'doc': {
-          'nameFirst': {'he': 'סעדיה'},
-          'nameLast': {'he': 'אלפיומי'},
-          'biographyShort': {'he': 'מגאוני בבל.'},
-        },
-      },
-    ],
-    'translation': [],
-  };
-
   group('BiographiesCodec', () {
-    test('מפענח קובץ TSB1 תקין', () {
-      final decoded = BiographiesCodec.decode(encodeTsb1(samplePayload, _key));
-      expect(decoded['format'], 'tashma-biographies');
-      expect((decoded['entries'] as List).length, 2);
+    test('decodes the bundle, its eras, credits and entries', () {
+      final bundle = BiographiesCodec.decode(encodeBundle(samplePayload()));
+
+      expect(bundle.release, 'v0.3.0');
+      expect(bundle.built, '2026-10-23');
+      expect(bundle.eras.map((e) => e.key), [
+        'tannaim',
+        'rishonim',
+        'acharonim',
+      ]);
+      expect(bundle.presentEras.map((e) => e.key), ['tannaim', 'rishonim']);
+      expect(bundle.credits['wikipedia']?.license, 'CC BY-SA 4.0');
+      expect(bundle.entries.map((b) => b.id), ['Q127398', 'tta-1']);
+
+      final rambam = bundle.entries.first;
+      expect(rambam.fullName, 'רבינו משה בן מימון זצ"ל');
+      expect(rambam.eraLabel, 'ראשונים');
+      expect(rambam.knownAs, ['הרמב"ם']);
+      expect(rambam.born?.display, 'ד\'תתצ"ח (או: ד\'תתצ"ה) (1138)');
+      expect(rambam.died?.display, 'פוסטאט');
+      expect(rambam.teachers.first.ref, 'Q958361');
+      expect(rambam.teachers.last.ref, isNull);
+      expect(rambam.family.single.display, 'אביו: רבי מימון הדיין');
+      expect(rambam.works.first.display, 'משנה תורה - חיבור הלכתי');
+      expect(rambam.works.last.display, 'מורה נבוכים');
+      expect(rambam.sources.single.url, 'https://he.x/1');
+
+      final onkelos = bundle.entries.last;
+      expect(onkelos.summary, isNull);
+      expect(onkelos.born, isNull);
+      expect(onkelos.teachers, isEmpty);
     });
 
-    test('זורק על כותרת שגויה', () {
-      final bytes = encodeTsb1(samplePayload, _key);
-      bytes[0] = 0x58;
-      expect(() => BiographiesCodec.decode(bytes), throwsFormatException);
+    test('rejects bytes that are not gzip', () {
+      expect(
+        () => BiographiesCodec.decode(Uint8List.fromList([1, 2, 3])),
+        throwsFormatException,
+      );
     });
 
-    test('זורק על מפתח לא תואם', () {
-      final bytes = encodeTsb1(samplePayload, 'wrong-key');
-      expect(() => BiographiesCodec.decode(bytes), throwsFormatException);
-    });
-  });
-
-  group('Biography.fromEntry', () {
-    test('מרכיב שם כשאין שם מוכן, וקורא שדות רב-לשוניים', () {
-      final decoded = BiographiesCodec.decode(encodeTsb1(samplePayload, _key));
-      final entries = (decoded['entries'] as List)
-          .whereType<Map<String, dynamic>>()
-          .map(Biography.fromEntry)
-          .toList();
-
-      final onkelos = entries.firstWhere((b) => b.id == 1);
-      // הכינוי משלים שם חסר-משפחה, כמו בתצוגת אתר תא שמע.
-      expect(onkelos.name, 'אונקלוס הגר');
-      expect(onkelos.summary, 'תנא, מתרגם התורה.');
-      expect(onkelos.appelations, ['הגר']);
-      expect(onkelos.generation, 'תנאים');
-      expect(onkelos.birthHebrew, isNull);
-      expect(onkelos.deathHebrew?.display, 'כו סיון');
-
-      final saadia = entries.firstWhere((b) => b.id == 3);
-      expect(saadia.name, 'רבינו סעדיה אלפיומי גאון');
-      expect(saadia.biographyShort, 'מגאוני בבל.');
+    test('rejects another format', () {
+      final payload = samplePayload()..['format'] = 'tashma-biographies';
+      expect(
+        () => BiographiesCodec.decode(encodeBundle(payload)),
+        throwsFormatException,
+      );
     });
 
-    test('טקסט ביוגרפיה באנגלית בלבד אינו מוצג (#2556)', () {
-      final bio = Biography.fromEntry({
-        'id': 4,
-        'name': 'בית הלל',
-        'doc': {
-          'summary': {'en': 'Beit Hillel was a school of thought.'},
-          'biographyShort': {'en': 'Traditionally seen in rivalry.'},
-        },
-      });
-      expect(bio.name, 'בית הלל');
-      expect(bio.summary, isNull);
-      expect(bio.biographyShort, isNull);
+    test('rejects a newer bundle version', () {
+      expect(
+        () => BiographiesCodec.decode(encodeBundle(samplePayload(version: 2))),
+        throwsFormatException,
+      );
     });
   });
 }
