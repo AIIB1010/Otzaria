@@ -61,12 +61,6 @@ class TextRendererService {
   static String _beforeHighlight(String rawText, RenderSettings settings) {
     String processed = rawText;
 
-    // 0. תיקון סדר סימוני הערות (<sup>) ב-RTL
-    processed = _fixFootnoteMarkers(processed);
-
-    // 0a. המרת טקסט תחתי (<sub>) לטקסט טהור — ראו _fixSubscripts.
-    processed = _fixSubscripts(processed);
-
     // 0b. הסרת גוף הערות inline (<i class="footnote">...</i>) - מוצגות כמפרש בצד.
     processed = notes.stripInlineNotes(processed);
 
@@ -87,6 +81,7 @@ class TextRendererService {
 
   static String _processTextUncached(String rawText, RenderSettings settings) {
     String processed = _beforeHighlight(rawText, settings);
+    final unhighlighted = processed;
 
     // 3. הדגשת טקסט חיפוש (אם יש) — לפני החלפת שם הוי"ה: תבנית ההדגשה
     // מכירה את הכתיב שבשאילתה, ואחרי ההחלפה "יהוה" כבר לא נמצא בטקסט.
@@ -110,6 +105,9 @@ class TextRendererService {
         nextLine: neighbour(settings.nextLineText),
       );
     }
+
+    // ההדגשה זקוקה ל-sup/sub המקוריים כדי לזהות גבולות מילים ואות תלויה.
+    processed = _fixSubscripts(_fixFootnoteMarkers(processed, unhighlighted));
 
     // 4. סמני השמות שבמסד — אחרי ההדגשה (כמו שם הוי"ה) ולפני ה-regex, כדי
     // ששם שכבר הוחלף בסמן לא יוחלף שוב.
@@ -155,41 +153,20 @@ class TextRendererService {
   static final RegExp _isolateStartRegex = RegExp(r'[\u2066\u2067\u2068]');
   static final RegExp _rtlCharRegex = RegExp(r'[\u0590-\u08FF]');
 
-  /// ממיר תגי <sup> ל-span טקסט טהור, כדי למנוע היפוך סדר ב-RTL ולאפשר
-  /// הצגה מורמת אמיתית.
-  ///
-  /// הבעיה האמיתית אינה bidi של הטקסט: HtmlWidget מממש `<sup>` באמצעות
-  /// WidgetSpan, ומנוע Flutter משבץ inline-placeholders בפסקת RTL בסדר
-  /// ויזואלי (שמאל→ימין) במקום לוגי. לכן כשיש שני סימוני הערות או יותר
-  /// באותה פסקה — ה*תכנים* שלהם מוצגים בסדר הפוך (2 לפני 1), בעוד מיקומי
-  /// העוגנים נשארים נכונים. סימון בודד בשורה אינו מושפע.
-  ///
-  /// הפתרון: sup פשוט נפלט כ-span טקסט טהור, בשני טעמים ששומרים על
-  /// המטריקות המקוריות של כל אחד:
-  ///   * מרקר הערה (`class="footnote-marker"`) → `footnote-marker-number`,
-  ///     מוקטן ל-0.75em ונטוי.
-  ///   * sup חשוף — אות הפניה מקובץ משתמש או superscript תוכני
-  ///     (`<sup>מעלית</sup>`) → `raised-sup`, מוקטן ל-5/6 בלי נטייה, כמו
-  ///     שה-`<sup>` נראה קודם ב-fwfh ובקריאה הרציפה.
-  ///
-  /// גם מרקר מספרי עובר במסלול הזה. ספרות-העילית של יוניקוד (¹²³…) אינן
-  /// אפשרות: הבלוק Superscripts חסר ברוב הגופנים העבריים, ולכן 4–9 נפלו
-  /// לגופן מערכת ונראו שונה מ-1–3 באותה שורה (issue #1236).
-  ///
-  /// ההרמה הוויזואלית מעל השורה נעשית בציור: [SmartTextWidget] צובע את שני
-  /// ה-class-ים שקופים ומצייר את תוכנם מורם דרך RaisedMarkerOverlay — ל-fwfh
-  /// אין תמיכה ב-`position`/`top` (הן היו no-op גם קודם, ולכן מרקרי הערות
-  /// כלל לא הורמו), ולכן ההרמה חייבת שכבת ציור; ראו raised_markers.dart.
-  /// בנוסף, התוכן עטוף בסימני בידוד דו־כיווניות (LRI/RLI + PDI) בהתאם
-  /// לתוכן כדי שסימונים סמוכים לא יתמזגו.
-  static String _fixFootnoteMarkers(String text) {
-    // Early-exit מהיר: אם אין בכלל תג <sup> בשורה, מחזירים את הטקסט כפי שהוא
-    // בלי לבצע replaceAllMapped (שמקצה StringBuffer גם כשאין התאמות).
-    // משתמשים ב-_supRegex.hasMatch כדי לכבד case-insensitivity של ה-regex
-    // עצמו (text.contains('<sup') היה מפספס <SUP>/<Sup>).
+  /// sup פשוט מצויר כטקסט מורם כדי למנוע היפוך WidgetSpan ב-RTL.
+  /// sup עם עיצוב פנימי נשאר HTML כדי לשמר את העיצוב.
+  static String _fixFootnoteMarkers(String text, String unhighlighted) {
+    // hasMatch מכבד גם SUP ומונע הקצאה בשורה ללא sup.
     if (!_supRegex.hasMatch(text)) return text;
 
+    final originalTags = identical(text, unhighlighted)
+        ? null
+        : _supRegex.allMatches(unhighlighted).iterator;
     return text.replaceAllMapped(_supRegex, (match) {
+      originalTags?.moveNext();
+      final originalInner = originalTags == null
+          ? match[2]!
+          : originalTags.current[2]!;
       final attrs = match[1] ?? '';
       final innerHtml = match[2] ?? '';
       final innerText = innerHtml.replaceAll(_htmlTagRegex, '');
@@ -200,9 +177,9 @@ class TextRendererService {
       final wrappedInner = _wrapWithBidiIsolate(innerHtml);
       final isFootnoteMarker = _footnoteMarkerClassRegex.hasMatch(attrs);
       // סמן שם אינו עיצוב — אחרת הוא לבדו מעביר את ה-sup לנתיב ה-HTML.
-      final styledInner = innerHtml.contains(kDivineNameMarkerPrefix)
-          ? resolveDivineNameMarkers(innerHtml, substituteOtherNames: false)
-          : innerHtml;
+      final styledInner = originalInner.contains(kDivineNameMarkerPrefix)
+          ? resolveDivineNameMarkers(originalInner, substituteOtherNames: false)
+          : originalInner;
 
       // sup סמנטי או מעוצב נשאר בנתיב ה-HTML כדי לא לאבד attributes וסגנונות
       // מקוננים שהציור המורם אינו יכול לשחזר מ-TextStyle הבסיסי בלבד.
@@ -229,13 +206,7 @@ class TextRendererService {
     dotAll: true,
   );
 
-  /// ממיר תגי <sub> לטקסט טהור.
-  ///
-  /// HtmlWidget מממש `<sub>` כ-WidgetSpan עם padding עליון (0.4×fontSize),
-  /// ולכן הוא מותח את השורה / נשבר לשורה נפרדת, ואינו נכלל בבחירת טקסט
-  /// (SelectableRegion מדלג על WidgetSpan). sub *מספרי* מומר לספרות-תחתיות
-  /// יוניקוד (₁₂₃…); לתוכן אחר (למשל עברית) אין גליפים תחתיים — נפלט
-  /// כ-`<span class="subscript-text">` שמוקטן ב-CSS ונשאר טקסט נבחר.
+  /// sub מספרי הופך לגליפים תחתיים נבחרים; תוכן אחר נשאר span מוקטן.
   static String _fixSubscripts(String text) {
     if (!_subRegex.hasMatch(text)) return text;
 
@@ -248,15 +219,18 @@ class TextRendererService {
 
       final trimmedInner = innerText.trim();
       if (_digitsOnlyRegex.hasMatch(trimmedInner)) {
-        final subscript = trimmedInner.split('').map((d) {
-          return _subscriptDigits[d]!;
-        }).join();
+        final subscript = innerHtml.trim().replaceAllMapped(
+          _subscriptTextTokens,
+          (m) => _subscriptDigits[m[0]] ?? m[0]!,
+        );
         return _wrapWithBidiIsolate(subscript);
       }
 
       return '<span class="subscript-text">${_wrapWithBidiIsolate(innerHtml)}</span>';
     });
   }
+
+  static final RegExp _subscriptTextTokens = RegExp(r'<[^>]*>|[0-9]');
 
   /// מיפוי ספרה רגילה → ספרת-תחתית יוניקוד (U+2080–U+2089).
   static const Map<String, String> _subscriptDigits = {

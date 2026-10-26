@@ -40,51 +40,114 @@ final RegExp _footnoteMarkerWord = RegExp(
   caseSensitive: false,
 );
 
-/// תג השבירה שמתחיל ב-[lt], כמו tag_breaks_word במנוע: sup/sub מפרידים, חוץ
-/// מאות תלויה בתוך מילה (`מְ<sup>נַ</sup>שֶּׁה`) שאינה סימן הערה.
+/// sup/sub מפרידים, חוץ מאות תלויה במילה; ההקשר נבדק במקור המלא.
 Match? _breakingTagAt(String text, int lt) {
   final tag = _breakingTagStripper.matchAsPrefix(text, lt);
   if (tag == null || tag[1] == null) return tag;
-  if (text.codeUnitAt(lt + 1) != 0x2F) {
-    return _isHangingLetterTag(text, lt, tag.end - 1) ? null : tag;
+  var openLt = lt;
+  var openGt = tag.end - 1;
+  if (text.codeUnitAt(lt + 1) == 0x2F) {
+    var i = _scriptContextEnd(text, lt);
+    if (i == 0 || !_isScriptLetter(text.codeUnitAt(i - 1))) return tag;
+    i = _scriptFormattingEnd(text, i - 1);
+    if (i == 0 || text.codeUnitAt(i - 1) != 0x3E) return tag;
+    openGt = i - 1;
+    openLt = text.lastIndexOf('<', openGt);
+    if (openLt < 0 || text.indexOf('>', openLt) != openGt) return tag;
   }
-  // תג סגירה: תג הפתיחה נגמר מיד לפני האות (וסימניה) שלפניו.
-  var i = lt;
-  while (i > 0 && _isAttachedMark(text.codeUnitAt(i - 1))) {
-    i--;
-  }
-  if (i < 2 || !_isScriptLetter(text.codeUnitAt(i - 1))) return tag;
-  final openGt = i - 2;
-  if (text.codeUnitAt(openGt) != 0x3E) return tag;
-  final openLt = text.lastIndexOf('<', openGt);
-  if (openLt < 0 || text.indexOf('>', openLt) != openGt) return tag;
   return _isHangingLetterTag(text, openLt, openGt) ? null : tag;
 }
 
-/// תג הפתיחה [lt]..[gt] עוטף אות אחת (וסימניה) בין אותיות, ואינו סימן הערה.
-bool _isHangingLetterTag(String text, int lt, int gt) {
-  final nameEnd = _tagNameEnd(text, lt + 1, gt);
-  if (nameEnd < 0 || lt == 0) return false;
-  final before = text.codeUnitAt(lt - 1);
-  if (!_isScriptLetter(before) && !_isAttachedMark(before)) return false;
-  var i = gt + 1;
-  if (i >= text.length || !_isScriptLetter(text.codeUnitAt(i))) return false;
-  i++;
-  while (i < text.length && _isAttachedMark(text.codeUnitAt(i))) {
-    i++;
-  }
-  if (!text.startsWith('</', i)) return false;
-  final closeGt = text.indexOf('>', i);
-  if (closeGt < 0 || closeGt + 1 >= text.length) return false;
-  final closeNameEnd = _tagNameEnd(text, i + 2, closeGt);
-  return closeNameEnd >= 0 &&
-      text.substring(i + 2, closeNameEnd).toLowerCase() ==
-          text.substring(lt + 1, nameEnd).toLowerCase() &&
-      _isScriptLetter(text.codeUnitAt(closeGt + 1)) &&
-      !_footnoteMarkerWord.hasMatch(text.substring(lt + 1, gt));
+Match? _displayBreakingTagAt(String text, int lt) {
+  final tag = _breakingTagStripper.matchAsPrefix(text, lt);
+  return tag?[1] == null ? tag : null;
 }
 
-/// סוף שם התג (1–10 תווי ASCII אלפאנומריים) שמתחיל ב-[start], או -1.
+/// גבול מילה לוגי לחיפוש, בלי לשנות את טקסט התצוגה או עוגני המקור.
+bool isSearchBreakingTag(String text, int lt) =>
+    _breakingTagAt(text, lt) != null;
+
+int _scriptFormattingStart(String text, int i) {
+  while (i < text.length) {
+    if (isSearchInvisibleUnit(text.codeUnitAt(i))) {
+      i++;
+      continue;
+    }
+    if (text.codeUnitAt(i) != 0x3C) break;
+    final gt = text.indexOf('>', i + 1);
+    if (gt < 0 || _breakingTagStripper.matchAsPrefix(text, i) != null) break;
+    i = gt + 1;
+  }
+  return i;
+}
+
+int _scriptFormattingEnd(String text, int i) {
+  while (i > 0) {
+    if (isSearchInvisibleUnit(text.codeUnitAt(i - 1))) {
+      i--;
+      continue;
+    }
+    if (text.codeUnitAt(i - 1) != 0x3E) break;
+    final lt = text.lastIndexOf('<', i - 1);
+    if (lt < 0 ||
+        text.indexOf('>', lt) != i - 1 ||
+        _breakingTagStripper.matchAsPrefix(text, lt) != null) {
+      break;
+    }
+    i = lt;
+  }
+  return i;
+}
+
+int _scriptContextStart(String text, int i) {
+  while (true) {
+    final before = i;
+    i = _scriptFormattingStart(text, i);
+    while (i < text.length && _isWordMark(text.codeUnitAt(i))) {
+      i++;
+    }
+    if (before == i) return i;
+  }
+}
+
+int _scriptContextEnd(String text, int i) {
+  while (true) {
+    final before = i;
+    i = _scriptFormattingEnd(text, i);
+    while (i > 0 && _isWordMark(text.codeUnitAt(i - 1))) {
+      i--;
+    }
+    if (before == i) return i;
+  }
+}
+
+bool _isHangingLetterTag(String text, int lt, int gt) {
+  if (text.codeUnitAt(lt + 1) == 0x2F) return false;
+  final nameEnd = _tagNameEnd(text, lt + 1, gt);
+  if (nameEnd < 0 || _footnoteMarkerWord.hasMatch(text.substring(lt + 1, gt))) {
+    return false;
+  }
+  final before = _scriptContextEnd(text, lt);
+  if (before == 0 || !_isScriptLetter(text.codeUnitAt(before - 1))) {
+    return false;
+  }
+  var i = _scriptFormattingStart(text, gt + 1);
+  if (i == text.length || !_isScriptLetter(text.codeUnitAt(i))) return false;
+  i = _scriptContextStart(text, i + 1);
+  if (!text.startsWith('</', i)) return false;
+  final closeGt = text.indexOf('>', i + 2);
+  if (closeGt < 0) return false;
+  final closeNameEnd = _tagNameEnd(text, i + 2, closeGt);
+  if (closeNameEnd < 0 ||
+      text.substring(i + 2, closeNameEnd).toLowerCase() !=
+          text.substring(lt + 1, nameEnd).toLowerCase()) {
+    return false;
+  }
+  final after = _scriptContextStart(text, closeGt + 1);
+  return after < text.length && _isScriptLetter(text.codeUnitAt(after));
+}
+
+/// סוף שם תג ASCII, באותו תחביר של סורק המנוע.
 int _tagNameEnd(String text, int start, int gt) {
   var i = start;
   while (i < gt) {
@@ -95,6 +158,25 @@ int _tagNameEnd(String text, int start, int gt) {
   }
   return i > start && i - start <= 10 ? i : -1;
 }
+
+bool _isWordMark(int c) =>
+    _isAttachedMark(c) || (c >= 0x0300 && c <= 0x036F) || c == 0xFB1E;
+
+/// תווים שקופים שהטוקנייזר משמיט משני שדות הטקסט.
+bool isSearchInvisibleUnit(int c) =>
+    (c >= 0x200B && c <= 0x200F) ||
+    (c >= 0x202A && c <= 0x202E) ||
+    (c >= 0x2066 && c <= 0x2069) ||
+    c == 0xFEFF ||
+    c == 0x034F ||
+    c == 0xFB1E;
+
+final RegExp _searchInvisibles = RegExp(
+  r'[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF\u034F\uFB1E]',
+);
+
+String removeSearchInvisibles(String text) =>
+    text.replaceAll(_searchInvisibles, '');
 
 /// ניקוד וטעמים, בלי מקף, פסק, סוף פסוק ונון הפוכה.
 bool _isAttachedMark(int c) =>
@@ -182,16 +264,27 @@ final RegExp _holyName = RegExp(
 /// תגי שבירה הופכים לרווח; תגי inline נמחקים נטו (`מי<b>לה` — מילה אחת).
 String stripHtmlIfNeeded(String text) {
   if (!text.contains('<')) return decodeHtmlEntities(text);
-  return decodeHtmlEntities(removeHtmlTags(_replaceBreakingTags(text)));
+  return decodeHtmlEntities(
+    removeHtmlTags(_replaceBreakingTags(text, _displayBreakingTagAt)),
+  );
 }
 
+/// מסיר HTML לפי גבולות המילים של המנוע; תווי כיווניות אינם תוכן לחיפוש.
+String stripHtmlForSearch(String text) => removeSearchInvisibles(
+  decodeHtmlEntities(
+    text.contains('<')
+        ? removeHtmlTags(_replaceBreakingTags(text, _breakingTagAt))
+        : text,
+  ),
+);
+
 /// מחליף ברווח את תגי השבירה ([_breakingTagAt]), ובודק רק במקומות `<`.
-String _replaceBreakingTags(String text) {
+String _replaceBreakingTags(String text, Match? Function(String, int) tagAt) {
   StringBuffer? out;
   var copied = 0;
   var i = text.indexOf('<');
   while (i >= 0) {
-    final tag = _breakingTagAt(text, i);
+    final tag = tagAt(text, i);
     if (tag == null) {
       i = text.indexOf('<', i + 1);
       continue;

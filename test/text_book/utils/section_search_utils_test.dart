@@ -606,7 +606,7 @@ Future<void> main() async {
       expect(queryCanCrossLines('אשר־שמע'), isTrue);
       expect(queryCanCrossLines('הלכה\u0085ברורה'), isTrue);
       expect(queryCanCrossLines('\u0085הלכה\u0085'), isFalse);
-      expect(queryCanCrossLines('הלכה\uFEFFברורה'), isTrue);
+      expect(queryCanCrossLines('הלכה\uFEFFברורה'), isFalse);
     });
 
     for (final wholeWord in [true, false]) {
@@ -1008,7 +1008,7 @@ Future<void> main() async {
     // אורקל: המימוש הקודם.
     String oracle(String rawLine) => utils
         .removeVolwels(
-          utils.stripHtmlIfNeeded(notes.stripInlineNotesForSearch(rawLine)),
+          utils.stripHtmlForSearch(notes.stripInlineNotesForSearch(rawLine)),
         )
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();

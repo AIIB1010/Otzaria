@@ -72,6 +72,8 @@ class RaisedMarker {
   /// אות המפרש שחלונית התצוגה שלה פתוחה — מצוירת מודגשת עם רקע.
   final bool active;
 
+  final String? inlineHtml;
+
   const RaisedMarker({
     required this.text,
     required this.occurrence,
@@ -81,6 +83,7 @@ class RaisedMarker {
     this.useLinkColor = false,
     this.variantIndex,
     this.active = false,
+    this.inlineHtml,
   });
 
   @override
@@ -93,7 +96,8 @@ class RaisedMarker {
       clickable == other.clickable &&
       useLinkColor == other.useLinkColor &&
       variantIndex == other.variantIndex &&
-      active == other.active;
+      active == other.active &&
+      inlineHtml == other.inlineHtml;
 
   @override
   int get hashCode => Object.hash(
@@ -105,7 +109,17 @@ class RaisedMarker {
     useLinkColor,
     variantIndex,
     active,
+    inlineHtml,
   );
+
+  TextSpan textSpan(TextStyle style) {
+    final parsed = inlineHtml == null
+        ? null
+        : SimpleInlineHtml.tryParse(inlineHtml!, style);
+    return parsed == null
+        ? TextSpan(text: text, style: style)
+        : TextSpan(style: style, children: [parsed]);
+  }
 
   @override
   String toString() =>
@@ -279,6 +293,9 @@ class RaisedMarkers {
           useLinkColor: useLinkColor,
           variantIndex: variantIndex,
           active: active,
+          inlineHtml: rawContent.contains('<span style="')
+              ? rawContent.replaceAll(_sizeTagRegex, '')
+              : null,
         ),
       );
     }
@@ -526,7 +543,7 @@ class RenderRaisedMarkerOverlay extends RenderProxyBox {
   TextPainter _painterFor(RaisedMarker marker) {
     final key =
         '${marker.scale}|${marker.italic}|${marker.useLinkColor}'
-        '|${marker.variantIndex}|${marker.active}|${marker.text}';
+        '|${marker.variantIndex}|${marker.active}|${marker.text}|${marker.inlineHtml}';
     return _painters.putIfAbsent(key, () {
       var style = _baseStyle.copyWith(
         fontSize: _fontSizeOf(marker),
@@ -553,7 +570,7 @@ class RenderRaisedMarkerOverlay extends RenderProxyBox {
         );
       }
       final painter = TextPainter(
-        text: TextSpan(text: marker.text, style: style),
+        text: marker.textSpan(style),
         textDirection: TextDirection.rtl,
         maxLines: 1,
       );

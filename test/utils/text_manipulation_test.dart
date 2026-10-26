@@ -426,7 +426,7 @@ Future<void> main() async {
         'מ<sup>ﭏ</sup>ה': 'מ ﭏ ה',
       };
       cases.forEach((html, stripped) {
-        expect(stripHtmlIfNeeded(html), stripped, reason: html);
+        expect(stripHtmlForSearch(html), stripped, reason: html);
       });
     });
 

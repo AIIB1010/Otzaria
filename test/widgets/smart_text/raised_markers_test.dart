@@ -708,6 +708,47 @@ void main() {
       expect(markers.every((marker) => marker.useLinkColor), isTrue);
     });
 
+    test('הציור המורם שומר הדגשת חיפוש חלקית בלי לשנות מטריקות', () {
+      final html = TextRendererService.processText(
+        'א<sup>12</sup>ב',
+        const RenderSettings(searchText: '1', partialWordHighlight: true),
+      );
+      final marker = RaisedMarkers.extract(html).single;
+      expect(marker.text, '${lri}12$pdi');
+      expect(marker.inlineHtml, isNotNull, reason: html);
+      final span = marker.textSpan(
+        const TextStyle(color: Colors.black, fontSize: 18),
+      );
+      final highlighted = <String>[];
+      span.visitChildren((s) {
+        if (s is TextSpan && s.style?.color == const Color(0xFFFF0000)) {
+          highlighted.add(s.text ?? '');
+        }
+        return true;
+      });
+      expect(highlighted.join(), '1', reason: span.toStringDeep());
+      expect(span.toPlainText(), marker.text);
+      expect(span.style?.fontSize, 18);
+      expect(span.style?.color, Colors.black);
+      final painted = TextPainter(text: span, textDirection: TextDirection.rtl)
+        ..layout();
+      final plainPainter = TextPainter(
+        text: TextSpan(text: marker.text, style: span.style),
+        textDirection: TextDirection.rtl,
+      )..layout();
+      addTearDown(painted.dispose);
+      addTearDown(plainPainter.dispose);
+      expect(painted.size, plainPainter.size);
+      expect(marker.scale, kHtmlSmallerFontScale);
+      final plain = RaisedMarkers.extract(
+        TextRendererService.processText(
+          'א<sup>12</sup>ב',
+          const RenderSettings(),
+        ),
+      ).single;
+      expect(marker, isNot(plain));
+    });
+
     test('סמן עוגן עגול שומר על יחס ההקטנה של עצמו בלבד', () {
       final markers = RaisedMarkers.extract(
         TextRendererService.processText(
