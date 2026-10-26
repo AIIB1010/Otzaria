@@ -160,8 +160,6 @@ class PdfBookLoaded extends PdfBookState {
   final double sidebarWidth;
   final bool showRightPane;
   final double rightPaneWidth;
-  final int leftPaneTabIndex;
-  final int rightPaneInitialTabIndex;
 
   // Search state
   final String searchText;
@@ -191,8 +189,6 @@ class PdfBookLoaded extends PdfBookState {
     this.sidebarWidth = 300.0,
     this.showRightPane = false,
     this.rightPaneWidth = 300.0,
-    this.leftPaneTabIndex = 0,
-    this.rightPaneInitialTabIndex = 0,
     this.searchText = '',
     this.searchOptions = const {},
     this.alternativeWords = const {},
@@ -220,8 +216,6 @@ class PdfBookLoaded extends PdfBookState {
     double? sidebarWidth,
     bool? showRightPane,
     double? rightPaneWidth,
-    int? leftPaneTabIndex,
-    int? rightPaneInitialTabIndex,
     String? searchText,
     Map<String, Map<String, bool>>? searchOptions,
     Map<int, List<String>>? alternativeWords,
@@ -250,9 +244,6 @@ class PdfBookLoaded extends PdfBookState {
       sidebarWidth: sidebarWidth ?? this.sidebarWidth,
       showRightPane: showRightPane ?? this.showRightPane,
       rightPaneWidth: rightPaneWidth ?? this.rightPaneWidth,
-      leftPaneTabIndex: leftPaneTabIndex ?? this.leftPaneTabIndex,
-      rightPaneInitialTabIndex:
-          rightPaneInitialTabIndex ?? this.rightPaneInitialTabIndex,
       searchText: searchText ?? this.searchText,
       searchOptions: searchOptions ?? this.searchOptions,
       alternativeWords: alternativeWords ?? this.alternativeWords,
@@ -278,8 +269,6 @@ class PdfBookLoaded extends PdfBookState {
     sidebarWidth,
     showRightPane,
     rightPaneWidth,
-    leftPaneTabIndex,
-    rightPaneInitialTabIndex,
     searchText,
     searchMode,
     searchDistance,

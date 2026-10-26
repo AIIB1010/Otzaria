@@ -745,20 +745,6 @@ void main() {
     );
 
     blocTest<PdfBookBloc, PdfBookState>(
-      'ToggleRightPane עם initialTabIndex מגדיר טאב',
-      build: () => _makeBloc(_tab()),
-      seed: () => _loaded(showRightPane: false),
-      act: (b) => b.add(const ToggleRightPane(show: true, initialTabIndex: 2)),
-      expect: () => [
-        isA<PdfBookLoaded>().having(
-          (s) => s.rightPaneInitialTabIndex,
-          'rightPaneInitialTabIndex',
-          2,
-        ),
-      ],
-    );
-
-    blocTest<PdfBookBloc, PdfBookState>(
       'UpdateRightPaneWidth מעדכן רוחב',
       build: () => _makeBloc(_tab()),
       seed: () => _loaded(),

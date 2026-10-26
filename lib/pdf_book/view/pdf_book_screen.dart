@@ -821,15 +821,13 @@ class _PdfBookScreenState extends State<PdfBookScreen>
     _bloc.add(pdf_events.ToggleLeftPane(show));
   }
 
-  void _setRightPaneVisibility(bool show, {int? initialTabIndex}) {
+  void _setRightPaneVisibility(bool show) {
     final current = _bloc.state;
     if (current is PdfBookLoaded && current.showRightPane == show) {
       return;
     }
     _prepareViewportTopAnchor(changesReaderWidth: _rightPaneUsesPushLayout);
-    _bloc.add(
-      pdf_events.ToggleRightPane(show: show, initialTabIndex: initialTabIndex),
-    );
+    _bloc.add(pdf_events.ToggleRightPane(show: show));
   }
 
   /// שומר את קו הראש של התצוגה לפני שינוי רוחב הקורא. מדיניות השינוי-גודל
@@ -3854,7 +3852,7 @@ class _PdfBookScreenState extends State<PdfBookScreen>
       return;
     }
     _didAutoOpenCommentary = true;
-    _setRightPaneVisibility(true, initialTabIndex: 0);
+    _setRightPaneVisibility(true);
     // פתיחה אוטומטית נחשבת כ"שימוש במפרשים" — מדכאת את טיפ "כדאי לפתוח מפרשים".
     _recordCommentaryOpenedIfNeeded();
   }
