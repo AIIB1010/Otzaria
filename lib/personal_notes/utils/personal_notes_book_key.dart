@@ -97,6 +97,14 @@ TextBook? findTextBookForPersonalNotesKey(Library library, String key) {
   return document?.toTextBook();
 }
 
+/// תוכן העניינים של ספר הטקסט ש-[key] מצביע עליו, או null כשאינו בספרייה.
+Future<List<TocEntry>?> personalNotesBookToc(Library? library, String key) {
+  final book = library == null
+      ? null
+      : findTextBookForPersonalNotesKey(library, key);
+  return book?.tableOfContents ?? Future.value(null);
+}
+
 Iterable<Book> _candidates(Library library, String title, BookSource? source) =>
     library.getIndexableBooks().where(
       (b) =>

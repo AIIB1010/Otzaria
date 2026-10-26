@@ -468,16 +468,14 @@ class _PersonalNotesManagerScreenState
   }
 
   /// טוען (פעם אחת, עם קאש) את ה-TOC של ספר טקסט לפי כותרתו, לחישוב המיקום.
-  /// מחזיר Future ל-null כשהספר אינו ספר טקסט או שאינו בספרייה.
   Future<List<TocEntry>?> _tocFor(String bookId) {
-    return _tocFutureByBook.putIfAbsent(bookId, () {
-      final library = context.read<LibraryBloc>().state.library;
-      final book = library == null
-          ? null
-          : findTextBookForPersonalNotesKey(library, bookId);
-      if (book is! TextBook) return Future.value(null);
-      return book.tableOfContents;
-    });
+    return _tocFutureByBook.putIfAbsent(
+      bookId,
+      () => personalNotesBookToc(
+        context.read<LibraryBloc>().state.library,
+        bookId,
+      ),
+    );
   }
 
   List<PersonalNote> _collectAllNotes() {

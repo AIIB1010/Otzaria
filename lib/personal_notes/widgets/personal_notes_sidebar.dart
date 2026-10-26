@@ -10,8 +10,11 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/messages/notes_messages.dart';
 import 'package:otzaria/navigation/view/main_window_screen.dart';
+import 'package:otzaria/library/bloc/library_bloc.dart';
+import 'package:otzaria/library/models/library.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/personal_notes/utils/note_location_ref.dart';
+import 'package:otzaria/personal_notes/utils/personal_notes_book_key.dart';
 import 'package:otzaria/personal_notes/utils/personal_notes_filter.dart';
 import 'package:otzaria/personal_notes/utils/open_personal_notes_target.dart';
 import 'package:otzaria/personal_notes/bloc/personal_notes_bloc.dart';
@@ -88,6 +91,30 @@ class PersonalNotesSidebarState extends State<PersonalNotesSidebar>
       context.findAncestorWidgetOfExactType<BlocProvider<TextBookBloc>>() !=
       null;
 
+  /// האם ההערות בחלונית הן של הספר שבקורא. הערות מפרש שנפתחו מהמפרשים הן של
+  /// ספר אחר, ולכן השורה הנבחרת, השורות הנראות ותוכן העניינים בקורא אינם שלהן.
+  bool _isReaderBook(TextBookLoaded state) =>
+      personalNotesBookKey(state.book) == widget.bookId;
+
+  ({String bookId, Library? library, Future<List<TocEntry>?> toc})?
+  _notesBookToc;
+
+  /// תוכן העניינים של [PersonalNotesSidebar.bookId], כשאינו הספר שבקורא.
+  Future<List<TocEntry>?> _tocOfNotesBook(BuildContext context) {
+    final library = context.select<LibraryBloc?, Library?>(
+      (bloc) => bloc?.state.library,
+    );
+    final cached = _notesBookToc;
+    if (cached != null &&
+        cached.bookId == widget.bookId &&
+        identical(cached.library, library)) {
+      return cached.toc;
+    }
+    final toc = personalNotesBookToc(library, widget.bookId);
+    _notesBookToc = (bookId: widget.bookId, library: library, toc: toc);
+    return toc;
+  }
+
   void _syncVisibleLines() {
     final fromWidget = widget.visibleLineIndices;
     if (fromWidget != null) {
@@ -97,9 +124,12 @@ class PersonalNotesSidebarState extends State<PersonalNotesSidebar>
     if (!_hasTextBookBloc) return;
     final textBookState = context.read<TextBookBloc>().state;
     if (textBookState is TextBookLoaded) {
-      _setVisibleLines(textBookState.visibleIndices);
+      _setReaderVisibleLines(textBookState);
     }
   }
+
+  void _setReaderVisibleLines(TextBookLoaded state) =>
+      _setVisibleLines(_isReaderBook(state) ? state.visibleIndices : const []);
 
   void _setVisibleLines(List<int> lines) {
     if (!listEquals(_visibleLineIndices.value, lines)) {
@@ -226,11 +256,7 @@ class PersonalNotesSidebarState extends State<PersonalNotesSidebar>
 
     final child = BlocBuilder<PersonalNotesBloc, PersonalNotesState>(
       buildWhen: (previous, current) {
-        // ה-sidebar הזה צריך rebuild אם הטיוטה הפעילה שייכת אליו —
-        // לפני השינוי או אחריו. זה תופס גם את המקרה של מעבר ישיר
-        // מטיוטה של ספר א' לטיוטה של ספר ב' בלי לעבור דרך
-        // CancelCreatingPersonalNote (isCreatingNewNote נשאר true,
-        // אבל newNoteBookId משתנה).
+        // מעבר ישיר בין טיוטות של ספרים צריך לרענן את שתי החלוניות.
         final wasMyDraft =
             previous.isCreatingNewNote &&
             previous.newNoteBookId == widget.bookId;
@@ -275,6 +301,24 @@ class PersonalNotesSidebarState extends State<PersonalNotesSidebar>
                           return true;
                         },
                         builder: (context, textBookState) {
+                          if (textBookState is TextBookLoaded &&
+                              !_isReaderBook(textBookState)) {
+                            final toc = _tocOfNotesBook(context);
+                            return FutureBuilder<List<TocEntry>?>(
+                              future: toc,
+                              builder: (context, snapshot) => _buildContent(
+                                context,
+                                state,
+                                visibleLineIndices: visibleLineIndices,
+                                tableOfContents:
+                                    snapshot.connectionState ==
+                                        ConnectionState.done
+                                    ? snapshot.data
+                                    : null,
+                              ),
+                            );
+                          }
+
                           final selectedLineNumber =
                               textBookState is TextBookLoaded
                               ? (textBookState.selectedIndex != null
@@ -323,9 +367,7 @@ class PersonalNotesSidebarState extends State<PersonalNotesSidebar>
         listeners: [
           BlocListener<TextBookBloc, TextBookState>(
             listener: (context, state) {
-              if (state is TextBookLoaded) {
-                _setVisibleLines(state.visibleIndices);
-              }
+              if (state is TextBookLoaded) _setReaderVisibleLines(state);
             },
           ),
         ],
@@ -400,9 +442,7 @@ class PersonalNotesSidebarState extends State<PersonalNotesSidebar>
     final linkableNotes = [...state.locatedNotes, ...state.missingNotes];
     final items = <Widget>[];
 
-    // עורך הערה חדשה — מוצג רק אם הטיוטה שייכת לספר של ה-sidebar הזה.
-    // משתמשים ב-newNoteBookId (ה-bookId שנשמר בטיוטה) ולא ב-state.bookId,
-    // כי state.bookId משקף את הספר האחרון שנטענו עבורו הערות.
+    // הטיוטה מזוהה לפי newNoteBookId; state.bookId הוא הספר האחרון שנטען.
     if (state.isCreatingNewNote && state.newNoteBookId == widget.bookId) {
       items.add(_buildNewNoteEditor(context, state));
     }
