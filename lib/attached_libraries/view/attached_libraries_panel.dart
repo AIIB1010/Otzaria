@@ -482,7 +482,6 @@ class _AttachedLibraryTile extends StatelessWidget {
               !library.updateSourceMismatch) ...[
             const SizedBox(height: 4),
             AttachedLibraryUpdateRow(
-              library: library,
               status: update,
               onCheck: onCheckUpdate,
               onInstall: onInstallUpdate,
