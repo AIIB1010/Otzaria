@@ -9,6 +9,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:otzaria/book_common/selection/selection_hit_test.dart';
 import 'package:otzaria/text_book/utils/reading_layout.dart';
+import 'package:otzaria/text_book/view/widgets/selection_gutter_painter.dart';
 
 /// שורת המקור שתחת נקודה בפריט קריאה.
 @immutable
@@ -253,39 +254,11 @@ class RenderReaderParagraphLines extends RenderProxyBox {
       final color = line.background;
       if (color == null) continue;
       final paint = Paint()..color = color;
-      // סמן הבחירה שמצויר מתחת לטקסט נשאר גלוי מעל רקע השורה.
-      final bar = line.selected ? _gutterStrip() : null;
-      if (bar != null) {
-        canvas.save();
-        canvas.clipRect(bar.shift(offset), clipOp: ui.ClipOp.difference);
-      }
       for (final rect in lineRects(line.lineIndex)) {
         canvas.drawRect(rect.shift(offset), paint);
       }
-      if (bar != null) canvas.restore();
     }
     super.paint(context, offset);
-  }
-
-  /// רצועת הסמן של [RenderReaderLineGutter] שמעל, במרחב של הפסקה הזו.
-  Rect? _gutterStrip() {
-    RenderObject? node = parent;
-    while (node != null && node is! RenderReaderLineGutter) {
-      node = node.parent;
-    }
-    if (node is! RenderReaderLineGutter || node._foreground || !node.hasSize) {
-      return null;
-    }
-    final width = node.size.width;
-    return MatrixUtils.transformRect(
-      node.getTransformTo(this),
-      Rect.fromLTRB(
-        width - RenderReaderLineGutter.barWidth,
-        0,
-        width,
-        node.size.height,
-      ),
-    );
   }
 }
 
@@ -336,7 +309,7 @@ class ReaderLineGutter extends SingleChildRenderObjectWidget {
     super.key,
     required this.color,
     required this.selectedLines,
-    this.foreground = false,
+    required this.gutter,
     required super.child,
   });
 
@@ -345,15 +318,15 @@ class ReaderLineGutter extends SingleChildRenderObjectWidget {
   /// משמש לזיהוי שינוי בבחירה; הציור עצמו נקרא מהשורות שבתת-העץ.
   final Set<int> selectedLines;
 
-  /// בציור מתחת לטקסט אותיות בקצה השורה אינן מוסתרות.
-  final bool foreground;
+  /// רוחב השוליים הפנויים מימין לרכיב, שבהם מצויר הסמן.
+  final double gutter;
 
   @override
   RenderReaderLineGutter createRenderObject(BuildContext context) =>
       RenderReaderLineGutter(
         color: color,
         selectedLines: selectedLines,
-        foreground: foreground,
+        gutter: gutter,
       );
 
   @override
@@ -364,7 +337,7 @@ class ReaderLineGutter extends SingleChildRenderObjectWidget {
     renderObject
       ..color = color
       ..selectedLines = selectedLines
-      ..foreground = foreground;
+      ..gutter = gutter;
   }
 }
 
@@ -372,10 +345,8 @@ class RenderReaderLineGutter extends RenderProxyBox {
   RenderReaderLineGutter({
     required this._color,
     required this._selectedLines,
-    required this._foreground,
+    required this._gutter,
   });
-
-  static const double barWidth = 3;
 
   Color _color;
   set color(Color value) {
@@ -391,10 +362,10 @@ class RenderReaderLineGutter extends RenderProxyBox {
     markNeedsPaint();
   }
 
-  bool _foreground;
-  set foreground(bool value) {
-    if (value == _foreground) return;
-    _foreground = value;
+  double _gutter;
+  set gutter(double value) {
+    if (value == _gutter) return;
+    _gutter = value;
     markNeedsPaint();
   }
 
@@ -405,9 +376,7 @@ class RenderReaderLineGutter extends RenderProxyBox {
     final child = this.child;
     if (_selectedLines.isEmpty || child == null || !hasSize) return rects;
     void add(double top, double bottom) {
-      rects.add(
-        Rect.fromLTRB(size.width - barWidth, top, size.width, bottom),
-      );
+      rects.add(selectionBarRect(size.width, _gutter, top, bottom));
     }
 
     void visit(RenderObject object) {
@@ -449,9 +418,8 @@ class RenderReaderLineGutter extends RenderProxyBox {
 
   @override
   void paint(PaintingContext context, Offset offset) {
-    if (!_foreground) _paintBars(context, offset);
     super.paint(context, offset);
-    if (_foreground) _paintBars(context, offset);
+    _paintBars(context, offset);
   }
 }
 

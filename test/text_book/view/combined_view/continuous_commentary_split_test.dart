@@ -333,8 +333,7 @@ void main() {
     final cardRect = tester.getRect(card);
     final gutterFinder = _selectionMarkers();
     expect(gutterFinder, findsOneWidget);
-    // הסמן מצויר מתחת לטקסט ונמתח רק לאורך השורה הנבחרת — לא על הכרטיס.
-    expect(tester.widget<ReaderLineGutter>(gutterFinder).foreground, isFalse);
+    // הסמן נמתח רק לאורך השורה הנבחרת — לא על הכרטיס.
     final gutter = tester.renderObject<RenderReaderLineGutter>(gutterFinder);
     final bars = gutter
         .barRects()

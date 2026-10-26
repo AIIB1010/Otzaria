@@ -376,6 +376,7 @@ Future<void> saveCommentaryNoteToRepository({
   );
 }
 
+/// סמן הבחירה מצויר בריפוד הימני של הרשימה, מחוץ לטקסט.
 const _readerListPadding = EdgeInsets.all(4);
 
 /// תצוגת טקסט פשוטה - משמשת גם לטקסט המרכזי וגם למפרשים
@@ -3100,7 +3101,6 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
       duration: const Duration(milliseconds: 200),
       curve: Curves.easeInOut,
       decoration: BoxDecoration(color: backgroundColor),
-      // Paint selection over the paragraph without changing text margins.
       padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
       child: BlocBuilder<SettingsBloc, SettingsState>(
         builder: (context, settingsState) {
@@ -3274,12 +3274,15 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
                 ? ReaderLineGutter(
                     color: theme.colorScheme.primary,
                     selectedLines: selectedLines,
-                    foreground: true,
+                    gutter: _readerListPadding.right,
                     child: gutterChild,
                   )
                 : CustomPaint(
                     foregroundPainter: isSelected
-                        ? SelectionGutterPainter(theme.colorScheme.primary)
+                        ? SelectionGutterPainter(
+                            theme.colorScheme.primary,
+                            gutter: _readerListPadding.right,
+                          )
                         : null,
                     child: gutterChild,
                   ),
