@@ -419,11 +419,7 @@ class _ReadingScreenState extends State<ReadingScreen>
         // סימון החלונית הפעילה אינו משנה את מה שמצויר כאן — הוא מכוון פוקוס
         // והקשר. בלי הסינון כל לחיצה בחלונית בנתה מחדש את כל הטאבים הפתוחים
         // (כולם מותקנים בעץ בגלל KeepAlive).
-        buildWhen: (previous, current) =>
-            previous.tabs != current.tabs ||
-            previous.currentTabIndex != current.currentTabIndex ||
-            previous.updateCounter != current.updateCounter ||
-            previous.selectedTabs != current.selectedTabs,
+        buildWhen: TabsState.changedBesidesActivePane,
         builder: (context, state) {
           // Scaffold יחיד לשני המצבים — Theme מפיץ את scaffoldBackgroundColor
           // לכל Scaffold פנימי (TextBookScreen, PdfBookScreen וכד').

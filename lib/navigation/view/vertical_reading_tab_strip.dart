@@ -69,6 +69,7 @@ class _VerticalReadingTabStripState extends State<VerticalReadingTabStrip> {
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<TabsBloc, TabsState>(
+      buildWhen: TabsState.changedBesidesActivePane,
       builder: (context, state) {
         // MouseRegion.onExit אינו נורה כששורת הכרטיסיה מוסרת מהעץ, ולכן סגירת
         // הכרטיסיה שהסמן מעליה הייתה משאירה הפניה חזקה אליה עד הריחוף הבא.
