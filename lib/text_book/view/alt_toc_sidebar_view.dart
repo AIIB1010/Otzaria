@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:otzaria/widgets/feedback/otzaria_empty_state.dart';
 import 'package:otzaria/widgets/lists/nav_tree_tile.dart';
@@ -257,9 +258,26 @@ class _AltTocSidebarViewState extends State<AltTocSidebarView>
     return _flattenedEntries[structureId] = result;
   }
 
+  /// התוצאות האחרונות, לפי השאילתה וזהות הרשימות של [_flattenEntries] (טעינה
+  /// מחליפה רשימה): כל חץ בונה מחדש, וסריקת אלפי דיבורים עולה אלפיות שנייה.
+  ({
+    String query,
+    List<List<AltTocEntry>> sources,
+    List<({int structureId, AltTocEntry entry})> matches,
+  })?
+  _lastMatches;
+
   List<({int structureId, AltTocEntry entry})> _getMatchingEntries(
     String rawQuery,
   ) {
+    final sources = [for (final s in _structures) _flattenEntries(s.id)];
+    final last = _lastMatches;
+    if (last != null &&
+        last.query == rawQuery &&
+        listEquals(last.sources, sources)) {
+      return last.matches;
+    }
+
     final normalizedQuery = normalizeFindQuery(rawQuery);
     if (normalizedQuery.isEmpty) return [];
 
@@ -271,6 +289,7 @@ class _AltTocSidebarViewState extends State<AltTocSidebarView>
         }
       }
     }
+    _lastMatches = (query: rawQuery, sources: sources, matches: results);
     return results;
   }
 
