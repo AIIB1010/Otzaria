@@ -639,7 +639,6 @@ class PdfBookBloc extends Bloc<PdfBookEvent, PdfBookState> {
     emit(
       current.copyWith(
         showRightPane: newShow,
-        isRightPaneHovering: newShow ? current.isRightPaneHovering : false,
         rightPaneInitialTabIndex:
             event.initialTabIndex ?? current.rightPaneInitialTabIndex,
       ),

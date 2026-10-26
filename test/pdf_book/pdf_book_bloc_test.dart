@@ -103,12 +103,10 @@ PdfBookLoaded _loaded({
   bool showLeftPane = false,
   bool showRightPane = false,
   bool pinLeftPane = false,
-  bool isRightPaneHovering = false,
   double zoom = 1.0,
   bool showZoomBar = false,
   PdfLayoutMode layoutMode = PdfLayoutMode.regularView,
   String searchText = '',
-  String currentTitle = '',
 }) => PdfBookLoaded(
   book: book ?? _book(),
   currentPageNumber: currentPageNumber,
@@ -116,12 +114,10 @@ PdfBookLoaded _loaded({
   showLeftPane: showLeftPane,
   showRightPane: showRightPane,
   pinLeftPane: pinLeftPane,
-  isRightPaneHovering: isRightPaneHovering,
   zoom: zoom,
   showZoomBar: showZoomBar,
   layoutMode: layoutMode,
   searchText: searchText,
-  currentTitle: currentTitle,
   isLoading: false,
 );
 
@@ -738,14 +734,13 @@ void main() {
     );
 
     blocTest<PdfBookBloc, PdfBookState>(
-      'ToggleRightPane סגירה מאפסת isRightPaneHovering',
+      'ToggleRightPane סוגר חלונית',
       build: () => _makeBloc(_tab()),
-      seed: () => _loaded(showRightPane: true, isRightPaneHovering: true),
+      seed: () => _loaded(showRightPane: true),
       act: (b) => b.add(const ToggleRightPane(show: false)),
       verify: (b) {
         final s = b.state as PdfBookLoaded;
         expect(s.showRightPane, isFalse);
-        expect(s.isRightPaneHovering, isFalse);
       },
     );
 
