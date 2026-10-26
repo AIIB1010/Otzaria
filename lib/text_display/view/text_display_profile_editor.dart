@@ -79,7 +79,7 @@ abstract final class TextDisplayProfileEditor {
         onChanged: (v) => onChanged(profile.copyWith(divineNames: v)),
       ),
       SettingsActionTile.segmentedTile<MarkVisibility>(
-        icon: OtzariaIcons.alef_1_24_filled,
+        icon: OtzariaIcons.text_font_hebrew_24_filled,
         title: t('ציוני המפרשים'),
         subtitle: t('אותיות הציון שבטקסט, למשל (א)'),
         options: showHide,

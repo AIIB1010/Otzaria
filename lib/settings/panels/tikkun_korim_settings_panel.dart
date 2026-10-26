@@ -1,4 +1,5 @@
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:otzaria_icons/otzaria_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:otzaria/settings/l10n/settings_text.dart';
@@ -149,7 +150,7 @@ class _TikkunKorimSettingsTabState extends State<TikkunKorimSettingsTab> {
               },
             ),
             SettingsActionTile.segmentedTile<String>(
-              icon: FluentIcons.globe_24_regular,
+              icon: OtzariaIcons.shabbat_candles_24_regular,
               title: context.settingsText('מנהג לקריאות חגים ומועדים'),
               options: [
                 SegmentOption(
@@ -168,7 +169,7 @@ class _TikkunKorimSettingsTabState extends State<TikkunKorimSettingsTab> {
               },
             ),
             SettingsActionTile.switchTile(
-              icon: FluentIcons.shield_24_regular,
+              icon: OtzariaIcons.alef_lock_24_filled,
               title: context.settingsText('הסתרת שם השם'),
               subtitle: hideDivineName
                   ? context.settingsText('י-ה-ו-ה יוצג כ-י-ק-ו-ק')

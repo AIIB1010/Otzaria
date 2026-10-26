@@ -34,7 +34,7 @@ void main() {
         find.byIcon(OtzariaIcons.otzaria_icon_24_regular),
       );
       expect(quoteIcon.size, 48);
-      expect(find.byIcon(OtzariaIcons.person_24_filled), findsWidgets);
+      expect(find.byIcon(OtzariaIcons.person_portrait_24_filled), findsWidgets);
     });
   });
 }

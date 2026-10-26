@@ -243,13 +243,13 @@ class AboutSettingsTab extends StatelessWidget {
                       _InfoChipSection(
                         label: aboutTopEditorsLabel,
                         items: aboutTopEditors,
-                        icon: OtzariaIcons.person_24_filled,
+                        icon: OtzariaIcons.person_portrait_24_filled,
                       ),
                       const SizedBox(height: 20),
                       _InfoChipSection(
                         label: aboutRegularEditorsLabel,
                         items: aboutRegularEditors,
-                        icon: OtzariaIcons.person_24_filled,
+                        icon: OtzariaIcons.person_portrait_24_filled,
                       ),
                       const SizedBox(height: 16),
                       _SubtitleText(
