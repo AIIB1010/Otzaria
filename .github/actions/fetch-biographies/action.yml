@@ -1,23 +1,24 @@
 name: Fetch biographies data
 description: >
-  מוריד את biographies.tsb מה-release האחרון של Otzaria/ta-shma-to-otzaria
-  אל assets/bio/, כך שהוא נארז בתוך האפליקציה ומגיע עם כל מתקין.
-  best-effort: בכשל הבנייה ממשיכה בלי הקובץ, והאזור מציג "אין נתונים"
-  עד שמערכת העדכונים תוריד אותו בזמן ריצה.
+  Downloads biographies-app.json.gz from the latest release of
+  Otzaria/toldot-gedolei-yisrael into assets/bio/, so it is packed into the
+  app and ships with every installer. Best effort: on failure the build goes
+  on without it, and the tool shows "no data" until the library update
+  downloads it at runtime.
 
 runs:
   using: composite
   steps:
-    - name: Download biographies.tsb
+    - name: Download biographies-app.json.gz
       shell: bash
       run: |
         mkdir -p assets/bio
         if curl -fsSL --retry 3 \
-            -o assets/bio/biographies.tsb.part \
-            "https://github.com/Otzaria/ta-shma-to-otzaria/releases/latest/download/biographies.tsb"; then
-          mv -f assets/bio/biographies.tsb.part assets/bio/biographies.tsb
-          echo "Bundled biographies data ($(wc -c < assets/bio/biographies.tsb) bytes)."
+            -o assets/bio/biographies-app.json.gz.part \
+            "https://github.com/Otzaria/toldot-gedolei-yisrael/releases/latest/download/biographies-app.json.gz"; then
+          mv -f assets/bio/biographies-app.json.gz.part assets/bio/biographies-app.json.gz
+          echo "Bundled biographies data ($(wc -c < assets/bio/biographies-app.json.gz) bytes)."
         else
-          rm -f assets/bio/biographies.tsb.part
-          echo "::warning::Could not download biographies data — building without it."
+          rm -f assets/bio/biographies-app.json.gz.part
+          echo "::warning::Could not download biographies data; building without it."
         fi
