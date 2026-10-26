@@ -6,7 +6,7 @@ import 'package:path/path.dart' as p;
 
 /// פורס tar שמגיע בנתחים (ustar, GNU long names ו-pax) ישירות לתיקייה,
 /// בלי לשמור את ה-tar. כל רשומה חייבת לשבת תחת [rootFolder] (null — כל שורש),
-/// ונתיב שבורח מהיעד נדחה. הכתיבה סינכרונית: פלט מפענח ה-zstd תקף רק בקריאה.
+/// ונתיב שבורח מהיעד נדחה. [add] מסתיים רק אחרי שכל הכתיבות שלו הסתיימו.
 class TarStreamExtractor {
   TarStreamExtractor(this.destination, {required this.rootFolder});
 
@@ -15,9 +15,16 @@ class TarStreamExtractor {
 
   static const _block = 512;
   static const _maxMetaEntrySize = 1 << 20;
+  // תקרה על קבצים פתוחים בו-זמנית (ב-macOS המגבלה היא 256); ה-IO מקבילי ממילא
+  // עד 32.
+  static const _maxInFlight = 32;
 
   final _header = BytesBuilder(copy: true);
   RandomAccessFile? _file;
+  Future<void>? _write;
+  final _inFlight = <Future<void>>[];
+  final _inFlightPaths = <String>{};
+  String? _filePath;
   BytesBuilder? _meta;
   int _metaType = 0;
   int _remaining = 0;
@@ -31,7 +38,19 @@ class TarStreamExtractor {
   /// מספר הקבצים הרגילים שנכתבו.
   int get filesWritten => _filesWritten;
 
-  void add(Uint8List data) {
+  Future<void> add(Uint8List data) async {
+    try {
+      await _feed(data);
+    } catch (_) {
+      try {
+        await _drain();
+      } catch (_) {}
+      rethrow;
+    }
+    await _drain();
+  }
+
+  Future<void> _feed(Uint8List data) async {
     var offset = 0;
     while (offset < data.length) {
       if (_ended) return;
@@ -53,7 +72,7 @@ class TarStreamExtractor {
       final take = (data.length - offset).clamp(0, need);
       _header.add(Uint8List.sublistView(data, offset, offset + take));
       offset += take;
-      if (_header.length == _block) _onHeader(_header.takeBytes());
+      if (_header.length == _block) await _onHeader(_header.takeBytes());
     }
   }
 
@@ -72,16 +91,44 @@ class TarStreamExtractor {
   /// סוגר קובץ פתוח בלי בדיקות — לניקוי אחרי כשל או ביטול.
   void abort() => _closeFile();
 
+  // קבצים שהסתיימו באותו נתח נכתבים ונסגרים במקביל; המתנה לכל אחד הייתה
+  // מוסיפה סבב IO לכל קובץ קטן.
   void _closeFile() {
-    _file?.closeSync();
+    final file = _file;
+    final write = _write;
     _file = null;
+    _write = null;
+    if (file == null) return;
+    if (write == null) {
+      file.closeSync();
+    } else {
+      _inFlight.add(write.whenComplete(file.close));
+      _inFlightPaths.add(_pathKey(_filePath!));
+    }
   }
 
+  static String _pathKey(String path) =>
+      Platform.isWindows || Platform.isMacOS ? path.toLowerCase() : path;
+
+  Future<void> _drain() async {
+    final pending = [..._inFlight, ?_write];
+    _inFlight.clear();
+    _inFlightPaths.clear();
+    _write = null;
+    await Future.wait(pending);
+  }
+
+  // writeFromSync מחזיק את ה-buffer לכל אורך הכתיבה, וה-GC של כל ה-isolates
+  // ממתין לו; בדיסק עמוס זה תוקע את ה-UI (#3332).
   void _consumeData(Uint8List data, int offset, int length) {
     if (length == 0) return;
     final file = _file;
     if (file != null) {
-      file.writeFromSync(data, offset, offset + length);
+      // writeFrom מעתיק את הנתונים כבר בקריאה; view ולא offset, אחרת כל
+      // ה-buffer נשלח.
+      _write = file.writeFrom(
+        Uint8List.sublistView(data, offset, offset + length),
+      );
       return;
     }
     final meta = _meta;
@@ -93,7 +140,7 @@ class TarStreamExtractor {
     }
   }
 
-  void _onHeader(Uint8List h) {
+  Future<void> _onHeader(Uint8List h) async {
     if (h.every((b) => b == 0)) {
       _ended = true;
       return;
@@ -129,8 +176,13 @@ class TarStreamExtractor {
         _resetPending();
         final target = _resolve(name);
         if (target != null) {
+          if (_inFlight.length >= _maxInFlight ||
+              _inFlightPaths.contains(_pathKey(target))) {
+            await _drain();
+          }
           Directory(p.dirname(target)).createSync(recursive: true);
           _file = File(target).openSync(mode: FileMode.writeOnly);
+          _filePath = target;
           _filesWritten++;
         }
       case 0x35: // תיקייה
@@ -144,6 +196,7 @@ class TarStreamExtractor {
         if (target == null || source == null) {
           throw FormatException('קישור לא תקין בארכיון: $name');
         }
+        await _drain();
         Directory(p.dirname(target)).createSync(recursive: true);
         File(source).copySync(target);
         _filesWritten++;

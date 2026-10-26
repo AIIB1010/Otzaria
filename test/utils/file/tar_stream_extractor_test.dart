@@ -9,17 +9,22 @@ import 'package:path/path.dart' as p;
 import '../../empty_library/library_package_test_support.dart';
 
 /// מזין את [bytes] בנתחים לא מיושרים, כמו פלט של מפענח zstd.
-void feed(TarStreamExtractor tar, Uint8List bytes, {int chunk = 777}) {
+Future<void> feed(
+  TarStreamExtractor tar,
+  Uint8List bytes, {
+  int chunk = 777,
+}) async {
   for (var offset = 0; offset < bytes.length; offset += chunk) {
     final end = (offset + chunk).clamp(0, bytes.length);
-    tar.add(Uint8List.sublistView(bytes, offset, end));
+    await tar.add(Uint8List.sublistView(bytes, offset, end));
   }
 }
 
 /// כותרת ustar ידנית — לרשומות שהמקודד אינו מייצר (pax, נתיב זדוני).
-Uint8List header(String name, int size, {int type = 0x30}) {
+Uint8List header(String name, int size, {int type = 0x30, String link = ''}) {
   final h = Uint8List(512);
   h.setAll(0, utf8.encode(name));
+  h.setAll(157, utf8.encode(link));
   void octal(int offset, int length, int value) => h.setAll(
     offset,
     ascii.encode('${value.toRadixString(8).padLeft(length - 1, '0')}\u0000'),
@@ -41,11 +46,35 @@ Uint8List padded(List<int> data) {
 }
 
 void main() {
+  test(
+    'בנתח אחד: קישור קשיח מעתיק את התוכן הראשון, ורשומה חוזרת דורסת',
+    () async {
+      final dir = Directory.systemTemp.createTempSync('tar_inflight');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final first = List.filled(3 << 20, 1);
+      final second = List.filled(5000, 2);
+      final bytes = BytesBuilder()
+        ..add(header('a.bin', first.length))
+        ..add(padded(first))
+        ..add(header('b.bin', 0, type: 0x31, link: 'a.bin'))
+        ..add(header('a.bin', second.length))
+        ..add(padded(second))
+        ..add(Uint8List(1024));
+      final extractor = TarStreamExtractor(dir.path, rootFolder: null);
+
+      await extractor.add(bytes.takeBytes());
+      extractor.close();
+
+      expect(File(p.join(dir.path, 'b.bin')).readAsBytesSync(), first);
+      expect(File(p.join(dir.path, 'a.bin')).readAsBytesSync(), second);
+    },
+  );
+
   late Directory dir;
   setUp(() => dir = Directory.systemTemp.createTempSync('tar_stream_test'));
   tearDown(() => dir.deleteSync(recursive: true));
 
-  test('פורס שמות בעברית, שם ארוך (GNU) ותיקיות לפי הנתיב', () {
+  test('פורס שמות בעברית, שם ארוך (GNU) ותיקיות לפי הנתיב', () async {
     final longName = 'books/${'תלמוד בבלי/' * 6}ברכות.pdf';
     expect(utf8.encode(longName).length, greaterThan(100));
     final tar = buildTar(
@@ -57,7 +86,7 @@ void main() {
       dirs: ['books/', 'books/תלמוד בבלי/'],
     );
     final extractor = TarStreamExtractor(dir.path, rootFolder: 'books');
-    feed(extractor, tar);
+    await feed(extractor, tar);
     extractor.close();
 
     expect(File(p.join(dir.path, 'books', 'seforim.db')).lengthSync(), 3000);
@@ -74,7 +103,7 @@ void main() {
     expect(extractor.filesWritten, 3);
   });
 
-  test('נתיב מרשומת pax גובר על השם הקצר', () {
+  test('נתיב מרשומת pax גובר על השם הקצר', () async {
     const path = 'books/מילון.db';
     final record = ' path=$path\n';
     var length = utf8.encode(record).length;
@@ -87,7 +116,7 @@ void main() {
       ..add(padded([1, 2]))
       ..add(Uint8List(1024));
     final extractor = TarStreamExtractor(dir.path, rootFolder: 'books');
-    feed(extractor, bytes.takeBytes(), chunk: 100);
+    await feed(extractor, bytes.takeBytes(), chunk: 100);
     extractor.close();
     expect(File(p.join(dir.path, 'books', 'מילון.db')).readAsBytesSync(), [
       1,
@@ -95,36 +124,39 @@ void main() {
     ]);
   });
 
-  test('נתיב שבורח מהיעד נדחה', () {
+  test('נתיב שבורח מהיעד נדחה', () async {
     final bytes = BytesBuilder()
       ..add(header('books/../evil.txt', 1))
       ..add(padded([1]));
     final extractor = TarStreamExtractor(dir.path, rootFolder: 'books');
-    expect(() => feed(extractor, bytes.takeBytes()), throwsFormatException);
+    await expectLater(
+      feed(extractor, bytes.takeBytes()),
+      throwsFormatException,
+    );
     expect(File(p.join(dir.path, 'evil.txt')).existsSync(), isFalse);
   });
 
-  test('רשומה מחוץ לתיקיית השורש נדחית', () {
+  test('רשומה מחוץ לתיקיית השורש נדחית', () async {
     final tar = buildTar({
       'index/meta.json': [1],
     });
     final extractor = TarStreamExtractor(dir.path, rootFolder: 'books');
-    expect(() => feed(extractor, tar), throwsFormatException);
+    await expectLater(feed(extractor, tar), throwsFormatException);
   });
 
-  test('tar שנקטע באמצע קובץ נכשל ב-close', () {
+  test('tar שנקטע באמצע קובץ נכשל ב-close', () async {
     final tar = buildTar({'books/seforim.db': List.filled(5000, 1)});
     final extractor = TarStreamExtractor(dir.path, rootFolder: 'books');
-    feed(extractor, Uint8List.sublistView(tar, 0, 2048));
+    await feed(extractor, Uint8List.sublistView(tar, 0, 2048));
     expect(extractor.close, throwsFormatException);
   });
 
-  test('כותרת פגומה נתפסת ב-checksum', () {
+  test('כותרת פגומה נתפסת ב-checksum', () async {
     final tar = buildTar({
       'books/seforim.db': [1, 2, 3],
     });
     tar[10] ^= 0xFF;
     final extractor = TarStreamExtractor(dir.path, rootFolder: 'books');
-    expect(() => feed(extractor, tar), throwsFormatException);
+    await expectLater(feed(extractor, tar), throwsFormatException);
   });
 }

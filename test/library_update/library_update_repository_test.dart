@@ -104,7 +104,7 @@ void main() {
         nowTimestamp: () => '2026-06-28T00:00:00Z',
         diskSpaceProvider: (_) async => DiskSpaceInfo.unknown,
         fullDbExtractor: (archivePath, outputPath) async {
-          decompressSyncForTest(
+          await decompressForTest(
             archivePath,
             outputPath,
             lib,
@@ -204,7 +204,7 @@ void main() {
         nowTimestamp: () => '2026-06-28T00:00:00Z',
         diskSpaceProvider: (_) async => DiskSpaceInfo.unknown,
         fullDbExtractor: (archivePath, outputPath) async {
-          decompressSyncForTest(archivePath, outputPath, lib);
+          await decompressForTest(archivePath, outputPath, lib);
         },
       );
       final manifestAsset = ReleaseAsset(

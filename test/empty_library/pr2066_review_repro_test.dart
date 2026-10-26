@@ -285,7 +285,7 @@ void main() {
     final input = File(p.join(temp.path, 'seforim.db.zst'))
       ..writeAsBytesSync(archive);
     final output = p.join(temp.path, 'decoded');
-    decompressSyncForTest(input.path, output, lib);
+    await decompressForTest(input.path, output, lib);
     expect(File(output).lengthSync(), first.length + second.length);
     final header = await readZstdArchiveContentSize(
       input.openRead(),

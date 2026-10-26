@@ -39,7 +39,7 @@ import 'package:path/path.dart' as p;
 }
 
 AttachedUpdatePatchDecoder _decodeWith(String lib) =>
-    (patch, base, output, max, cancel) async => decodePatchSyncForTest(
+    (patch, base, output, max, cancel) async => decodePatchForTest(
       patch,
       base,
       output,
@@ -258,8 +258,8 @@ void main() {
     await fixture();
     // A directory in place of the output file makes openSync throw.
     Directory(path('out.db')).createSync();
-    expect(
-      () => decodePatchSyncForTest(
+    await expectLater(
+      () => decodePatchForTest(
         path('patch.zst'),
         path('old.db'),
         path('out.db'),

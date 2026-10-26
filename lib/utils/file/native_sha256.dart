@@ -79,8 +79,15 @@ String _hashFile(String path, NativeSha256 hasher) {
     file = File(path).openSync();
     hasher.init();
     final view = buffer.asTypedList(_chunkBytes);
-    for (var n = file.readIntoSync(view); n > 0; n = file.readIntoSync(view)) {
-      hasher.update(buffer, n);
+    // readIntoSync, כמו writeFromSync, עוצר את ה-GC של כל ה-isolates עד סוף
+    // הקריאה; readSync קורא לחוצץ משלו.
+    for (
+      var chunk = file.readSync(_chunkBytes);
+      chunk.isNotEmpty;
+      chunk = file.readSync(_chunkBytes)
+    ) {
+      view.setRange(0, chunk.length, chunk);
+      hasher.update(buffer, chunk.length);
     }
     hasher.finish(out);
     return out

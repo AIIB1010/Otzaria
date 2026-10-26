@@ -264,7 +264,7 @@ void main() {
       );
       expect(result.manifest.full.parts.length, greaterThan(1));
       final builder = AttachedUpdateArtifactBuilder(
-        decompress: (archive, output, max) async => decompressSyncForTest(
+        decompress: (archive, output, max) async => decompressForTest(
           archive,
           output,
           zstd.lib,

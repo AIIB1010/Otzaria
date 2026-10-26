@@ -1,5 +1,5 @@
 /// מחלץ קבצי `.zst` בזרימה (streaming) דרך [ZstdStreamDecoder] — נתחים
-/// קטנים ישירות לדיסק, כך שצריכת ה-RAM נשארת בכמה מאות KB גם לקבצי ג'יגות.
+/// של כמה MB ישירות לדיסק, כך שצריכת ה-RAM קבועה גם לקבצי ג'יגות.
 library;
 
 import 'dart:ffi';
@@ -12,7 +12,7 @@ import 'package:otzaria/utils/file/zstd_library.dart';
 import 'package:otzaria/utils/file/zstd_stream_decoder.dart';
 import 'package:otzaria/utils/file/zstd_stream_extractor.dart';
 
-const _readChunkSize = 256 * 1024;
+const _readChunkSize = zstdInputChunkBytes;
 
 /// מחלץ את [archivePath] (קובץ `.zst`) אל [outputPath]. רץ ב-isolate נפרד
 /// כדי לא לחסום את ה-UI. [onProgress] מקבל ערך 0.0–1.0.
@@ -75,18 +75,18 @@ Future<void> _runWithProgress(
   }
 }
 
-/// נקודת כניסה לבדיקות בלבד: מריצה את החילוץ סינכרונית עם [lib] מוזרק,
-/// כדי לאמת את לוגיקת ה-FFI גם בלי ה-framework של Flutter (למשל מול
+/// נקודת כניסה לבדיקות בלבד: מריצה את החילוץ ב-isolate הנוכחי עם [lib]
+/// מוזרק, כדי לאמת את לוגיקת ה-FFI גם בלי ה-framework של Flutter (למשל מול
 /// libzstd סטנדרטי במערכת).
-void decompressSyncForTest(
+Future<void> decompressForTest(
   String archivePath,
   String outputPath,
   DynamicLibrary lib, {
   int? maxOutputBytes,
 }) => _decompressWithLib(archivePath, outputPath, lib, null, maxOutputBytes);
 
-/// נקודת כניסה לבדיקות בלבד, כמו [decompressSyncForTest] עבור tar.zst.
-void extractTarSyncForTest(
+/// נקודת כניסה לבדיקות בלבד, כמו [decompressForTest] עבור tar.zst.
+Future<void> extractTarForTest(
   String archivePath,
   String outputDir,
   DynamicLibrary lib,
@@ -94,25 +94,26 @@ void extractTarSyncForTest(
 
 /// בכשל מוחק את קובץ הפלט החלקי, אחרת קובץ חתוך נשאר ומפיל את פתיחת ה-DB
 /// בעלייה הבאה.
-void _decompressWithLib(
+Future<void> _decompressWithLib(
   String archivePath,
   String outputPath,
   DynamicLibrary dylib,
   SendPort? progressPort,
   int? maxOutputBytes,
-) {
+) async {
   final outFile = File(outputPath);
   try {
     if (outFile.existsSync()) outFile.deleteSync();
     final outputRaf = outFile.openSync(mode: FileMode.writeOnly);
     try {
       var totalWritten = 0;
-      _decodeFile(archivePath, dylib, progressPort, (output) {
+      await _decodeFile(archivePath, dylib, progressPort, (output) async {
         totalWritten += output.length;
         if (maxOutputBytes != null && totalWritten > maxOutputBytes) {
           throw ZstdOutputLimitExceeded(maxOutputBytes);
         }
-        outputRaf.writeFromSync(output);
+        // writeFromSync עוצר את ה-GC של כל ה-isolates עד סוף הכתיבה (#3332).
+        await outputRaf.writeFrom(output);
       });
       // flush מפורש כדי לתפוס דיסק מלא (ENOSPC) שנבלע ב-page cache.
       outputRaf.flushSync();
@@ -128,15 +129,15 @@ void _decompressWithLib(
 }
 
 /// פריסה חלקית שנשארת אחרי כשל היא באחריות הקורא, כמו בכל חילוץ לתיקייה.
-void _extractTarWithLib(
+Future<void> _extractTarWithLib(
   String archivePath,
   String outputDir,
   DynamicLibrary dylib,
   SendPort? progressPort,
-) {
+) async {
   final tar = TarStreamExtractor(outputDir, rootFolder: null);
   try {
-    _decodeFile(archivePath, dylib, progressPort, tar.add);
+    await _decodeFile(archivePath, dylib, progressPort, tar.add);
     tar.close();
   } finally {
     tar.abort();
@@ -145,12 +146,12 @@ void _extractTarWithLib(
 
 /// קורא את [archivePath] בנתחים ומעביר את הפלט הפרוס ל-[onOutput]; זורק
 /// אם הקובץ נגמר באמצע frame.
-void _decodeFile(
+Future<void> _decodeFile(
   String archivePath,
   DynamicLibrary dylib,
   SendPort? progressPort,
-  void Function(Uint8List output) onOutput,
-) {
+  Future<void> Function(Uint8List output) onOutput,
+) async {
   final decoder = ZstdStreamDecoder(dylib);
   RandomAccessFile? inputRaf;
   try {
@@ -160,10 +161,10 @@ void _decodeFile(
     var totalRead = 0;
     var lastReported = 0.0;
     while (true) {
-      final bytesRead = inputRaf.readIntoSync(buffer);
+      final bytesRead = await inputRaf.readInto(buffer);
       if (bytesRead == 0) break;
       totalRead += bytesRead;
-      decoder.add(Uint8List.sublistView(buffer, 0, bytesRead), onOutput);
+      await decoder.add(Uint8List.sublistView(buffer, 0, bytesRead), onOutput);
       if (progressPort != null && totalBytes > 0) {
         final progress = totalRead / totalBytes;
         if (progress - lastReported >= 0.01) {

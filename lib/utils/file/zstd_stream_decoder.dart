@@ -6,14 +6,14 @@ import 'package:otzaria/utils/file/zstd_library.dart';
 import 'package:zstandard_native/zstandard_native_bindings.dart';
 
 /// מפענח zstd בזרימה שמוזן בנתחים מכל מקור (חלקים, ערוץ SAF) ומוסר את
-/// הפלט לצרכן סינכרוני, בלי קובץ ביניים.
+/// הפלט לצרכן, בלי קובץ ביניים.
 class ZstdStreamDecoder {
   ZstdStreamDecoder(
     DynamicLibrary lib, {
     this.requireContentChecksum = false,
   }) : _zstd = ZstandardNativeBindings(lib) {
-    _inSize = _zstd.ZSTD_DStreamInSize();
-    _outSize = _zstd.ZSTD_DStreamOutSize();
+    _inSize = zstdInputChunkBytes;
+    _outSize = zstdOutputChunkBytes;
     _stream = _zstd.ZSTD_createDStream();
     if (_stream == nullptr) throw StateError('ZSTD_createDStream נכשל');
     _inNative = malloc.allocate<Uint8>(_inSize);
@@ -53,8 +53,11 @@ class ZstdStreamDecoder {
   }
 
   /// מפענח את [input]. [onOutput] מקבל תצוגה על זיכרון נייטיב שתקפה רק
-  /// בתוך הקריאה — הצרכן חייב לכתוב/להעתיק אותה מיד.
-  void add(List<int> input, void Function(Uint8List output) onOutput) {
+  /// עד שה-Future שלו מסתיים — הצרכן חייב לכתוב/להעתיק אותה עד אז.
+  Future<void> add(
+    List<int> input,
+    Future<void> Function(Uint8List output) onOutput,
+  ) async {
     var offset = 0;
     final inView = _inNative.asTypedList(_inSize);
     while (offset < input.length) {
@@ -87,7 +90,7 @@ class ZstdStreamDecoder {
         // libzstd עוצר בסוף כל frame, גם כשבאותו נתח מתחיל ה-frame הבא.
         if (_lastRet == 0) _frameHead.clear();
         if (_outBuf.ref.pos > 0) {
-          onOutput(_outNative.asTypedList(_outBuf.ref.pos));
+          await onOutput(_outNative.asTypedList(_outBuf.ref.pos));
         }
       }
     }

@@ -25,3 +25,8 @@ DynamicLibrary openZstandardLib() {
 /// גדול מברירת המחדל. ב-32 ביט zstd דוחה 31 — התקרה שם היא 30.
 int zstdWindowLogMax([int? pointerSize]) =>
     (pointerSize ?? sizeOf<IntPtr>()) == 4 ? 30 : 31;
+
+// הפלט נכתב אסינכרונית, וכל כתיבה עולה סבב הלוך-חזור ל-IO; חוצצים גדולים
+// מהמומלץ של zstd (128KB) מצמצמים את מספר הכתיבות.
+const zstdInputChunkBytes = 1 << 20;
+const zstdOutputChunkBytes = 4 << 20;
