@@ -654,6 +654,7 @@ class _PageShapeScreenState extends State<PageShapeScreen> {
           !isPageShapeMultiCommentatorsValue(resolvedSingle) &&
           resolvedSingle != pageShapeMultipleCommentatorsModeValue) {
         return _CommentaryPane(
+          column: 'right',
           commentatorName: resolvedSingle,
           openBookCallback: widget.openBookCallback,
           workspaceId: _activeWorkspaceId,
@@ -733,6 +734,28 @@ class _PageShapeScreenState extends State<PageShapeScreen> {
       columnVisibility: Map.of(_columnVisibility),
     );
     return (workspaceId: workspaceToSave, category: categoryToSave);
+  }
+
+  /// מחליף את המפרש בטור [column] ב-[replacement], ושומר את
+  /// הטורים ליעד שממנו נטענו — גם כשהם מוצגים מברירות המחדל.
+  Future<void> _switchCommentator(String column, String replacement) async {
+    final state = context.read<TextBookBloc>().state;
+    if (state is! TextBookLoaded) return;
+
+    setState(() {
+      switch (column) {
+        case 'left':
+          _leftCommentator = replacement;
+        case 'right':
+          _rightCommentator = replacement;
+        case 'bottom':
+          _bottomCommentator = replacement;
+        case 'bottomRight':
+          _bottomRightCommentator = replacement;
+      }
+    });
+    _refreshLinksForCurrentConfiguration('page-shape commentator switched');
+    await _saveCommentatorConfiguration(state);
   }
 
   void _showColumnAndOpenSettings(String column) {
@@ -1298,6 +1321,7 @@ class _PageShapeScreenState extends State<PageShapeScreen> {
                                                     SizedBox(
                                                       width: leftWidth,
                                                       child: _CommentaryPane(
+                                                        column: 'left',
                                                         commentatorName:
                                                             _leftCommentator!,
                                                         openBookCallback: widget
@@ -1550,6 +1574,8 @@ class _PageShapeScreenState extends State<PageShapeScreen> {
                                                                   width:
                                                                       bottomLeftWidth,
                                                                   child: _CommentaryPane(
+                                                                    column:
+                                                                        'bottom',
                                                                     commentatorName:
                                                                         _bottomCommentator!,
                                                                     openBookCallback:
@@ -1611,6 +1637,8 @@ class _PageShapeScreenState extends State<PageShapeScreen> {
                                                               ],
                                                               Expanded(
                                                                 child: _CommentaryPane(
+                                                                  column:
+                                                                      'bottomRight',
                                                                   commentatorName:
                                                                       _bottomRightCommentator!,
                                                                   openBookCallback:
@@ -1678,6 +1706,8 @@ class _PageShapeScreenState extends State<PageShapeScreen> {
                                                               ),
                                                               Expanded(
                                                                 child: _CommentaryPane(
+                                                                  column:
+                                                                      'bottom',
                                                                   commentatorName:
                                                                       _bottomCommentator!,
                                                                   openBookCallback:
@@ -1770,6 +1800,7 @@ class _PageShapeScreenState extends State<PageShapeScreen> {
 
 /// חלונית מפרש - טוענת ומציגה את הספר של המפרש
 class _CommentaryPane extends StatefulWidget {
+  final String column;
   final String commentatorName;
   final Function(OpenedTab) openBookCallback;
   final String? workspaceId;
@@ -1780,6 +1811,7 @@ class _CommentaryPane extends StatefulWidget {
   onOpenPersonalNote;
 
   const _CommentaryPane({
+    required this.column,
     required this.commentatorName,
     required this.openBookCallback,
     this.workspaceId,
@@ -2773,7 +2805,7 @@ class _CommentaryPaneState extends State<_CommentaryPane> {
                   : _commentaryLabelForIndex,
               reportBook: _reportBook,
               highlightedIndices: _highlightedIndices, // הדגשות מקומיות
-              onCommentatorChanged: _reloadCommentary, // callback לרענון
+              onSwitchCommentator: _switchCommentator,
               onOpenCommentaryPersonalNote: widget.onOpenPersonalNote,
               anchorLinksByLine: _anchorLinksByLine.isEmpty
                   ? null
@@ -2786,17 +2818,10 @@ class _CommentaryPaneState extends State<_CommentaryPane> {
     );
   }
 
-  /// טעינה מחדש של המפרש (אחרי החלפה)
-  void _reloadCommentary() {
-    // נטען מחדש את ההגדרות מה-parent
-    if (mounted) {
-      // נאלץ את ה-parent לטעון מחדש את ההגדרות
-      final parentState = context
-          .findAncestorStateOfType<_PageShapeScreenState>();
-      if (parentState != null) {
-        parentState._loadConfiguration();
-      }
-    }
+  void _switchCommentator(String replacement) {
+    context
+        .findAncestorStateOfType<_PageShapeScreenState>()
+        ?._switchCommentator(widget.column, replacement);
   }
 }
 
