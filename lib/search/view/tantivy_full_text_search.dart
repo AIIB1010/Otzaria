@@ -517,10 +517,7 @@ class _TantivyFullTextSearchState extends State<TantivyFullTextSearch>
       dividerBefore: true,
       widget: SearchResultsLayout.animatedBarControl(
         collapsed: collapseMenus,
-        child: OrderOfResults(
-          widget: TantivySearchResults(tab: widget.tab),
-          iconOnly: collapseMenus,
-        ),
+        child: OrderOfResults(iconOnly: collapseMenus),
       ),
     ),
     AppTopBarItem(
