@@ -1,8 +1,5 @@
 -- Queries for authors
 
-selectByName:
-SELECT * FROM author WHERE name = ? LIMIT 1;
-
 insert:
 INSERT INTO author (name)
 VALUES (?)

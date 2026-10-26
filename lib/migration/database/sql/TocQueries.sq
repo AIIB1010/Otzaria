@@ -16,6 +16,3 @@ ORDER BY COALESCE(l.lineIndex, t.lineIndex, t.lineId) ASC,
 insert:
 INSERT INTO tocEntry (bookId, parentId, textId, level, lineId, lineIndex, isLastChild, hasChildren)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?);
-
-delete:
-DELETE FROM tocEntry WHERE id = ?;

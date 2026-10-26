@@ -1,11 +1,5 @@
 -- Queries for links
 
-selectLinkById:
-SELECT l.*, ct.name AS connectionType
-FROM link l
-JOIN connection_type ct ON l.connectionTypeId = ct.id
-WHERE l.id = ?;
-
 -- הקישורים נספרים לכל ספר יעד לפני הצירוף, כדי שהספר והמחברים לא ייקראו לכל קישור.
 selectCommentatorsByBook:
 SELECT DISTINCT g.targetBookId, b.title AS targetBookTitle, a.name AS author, SUM(g.linkCount) AS linkCount
@@ -153,6 +147,3 @@ ORDER BY dt.position;
 insert:
 INSERT INTO link (sourceBookId, targetBookId, sourceLineId, targetLineId, connectionTypeId)
 VALUES (?, ?, ?, ?, ?);
-
-delete:
-DELETE FROM link WHERE id = ?;

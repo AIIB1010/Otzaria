@@ -43,6 +43,3 @@ ORDER BY lineIndex;
 insert:
 INSERT INTO line (bookId, lineIndex, content, heRef, tocEntryId)
 VALUES (?, ?, ?, ?, ?);
-
-delete:
-DELETE FROM line WHERE id = ?;
