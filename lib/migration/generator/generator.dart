@@ -27,9 +27,6 @@ import 'package:otzaria/utils/file/toc_parser.dart'
 class DatabaseGenerator {
   static final _log = Logger('DatabaseGenerator');
 
-  /// The path to the source directory containing the data files
-  final String sourceDirectory;
-
   /// The repository used to store the generated data
   final SeforimRepository repository;
 
@@ -42,7 +39,7 @@ class DatabaseGenerator {
   /// Overall progress across books
   int _processedBooksCount = 0;
 
-  DatabaseGenerator(this.sourceDirectory, this.repository, {this.onProgress});
+  DatabaseGenerator(this.repository, {this.onProgress});
 
   /// Processes a directory recursively, creating categories and books.
   ///

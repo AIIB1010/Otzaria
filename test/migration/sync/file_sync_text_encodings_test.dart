@@ -50,23 +50,18 @@ void main() {
   late Directory booksDir;
   late MyDatabase database;
   late SeforimRepository repository;
-  late String libraryPath;
   late List<CustomFolder> folders;
 
   setUp(() async {
     tempDir = await Directory.systemTemp.createTemp('otzaria-encodings-sync-');
     booksDir = Directory(path.join(tempDir.path, 'ספרים אישיים'))
       ..createSync(recursive: true);
-    Directory(
-      path.join(tempDir.path, 'library', 'אוצריא'),
-    ).createSync(recursive: true);
 
     FileSyncService.resetSingletonForTesting();
     database = MyDatabase.withPath(path.join(tempDir.path, 'test.db'));
     repository = SeforimRepository(database);
     await repository.ensureInitialized();
 
-    libraryPath = path.join(tempDir.path, 'library');
     folders = [
       CustomFolder(
         path: booksDir.path,
@@ -93,7 +88,6 @@ void main() {
       userBooksRepository: repository,
     );
     return service!.syncCustomFoldersWithInputs(
-      libraryPath: libraryPath,
       customFolders: folders,
     );
   }

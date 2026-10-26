@@ -45,10 +45,7 @@ void main() {
   });
 
   test('סנכרון לא מוחק תיקייה מותאמת חדשה עם ספר ברמת השורש', () async {
-    final libraryPath = path.join(tempDir.path, 'library');
     final customFolderPath = path.join(tempDir.path, 'היברו');
-    await Directory(libraryPath).create(recursive: true);
-    await Directory(path.join(libraryPath, 'אוצריא')).create(recursive: true);
     await Directory(customFolderPath).create(recursive: true);
     await File(
       path.join(customFolderPath, 'ספר חדש.txt'),
@@ -67,7 +64,6 @@ void main() {
       userBooksRepository: repository,
     );
     final result = await service!.syncCustomFoldersWithInputs(
-      libraryPath: libraryPath,
       customFolders: folders,
     );
 
@@ -90,12 +86,10 @@ void main() {
   test(
     'רענון מוחק ספר "קריאה מהקבצים" שקובצו נמחק, ומשאיר "עותק עצמאי"',
     () async {
-      final libraryPath = path.join(tempDir.path, 'library');
       // שתי תיקיות: אחת file-backed (קריאה מהקבצים) ואחת content-in-db
       // (עותק עצמאי), כדי לבדוק את שתי ההתנהגויות הנגדיות באותו רענון.
       final fileBackedDir = path.join(tempDir.path, 'מהקבצים');
       final inDbDir = path.join(tempDir.path, 'בתוכנה');
-      await Directory(path.join(libraryPath, 'אוצריא')).create(recursive: true);
       await Directory(fileBackedDir).create(recursive: true);
       await Directory(inDbDir).create(recursive: true);
       final fileBackedFile = File(path.join(fileBackedDir, 'ספר מקובץ.txt'));
@@ -123,7 +117,6 @@ void main() {
 
       // סריקה ראשונה — שני הספרים נכנסים ל-DB.
       await service!.syncCustomFoldersWithInputs(
-        libraryPath: libraryPath,
         customFolders: folders,
       );
 
@@ -148,7 +141,6 @@ void main() {
       await fileBackedFile.delete();
       await inDbFile.delete();
       await service.syncCustomFoldersWithInputs(
-        libraryPath: libraryPath,
         customFolders: folders,
       );
 
@@ -170,11 +162,9 @@ void main() {
   test(
     'רענון לא פוגע בספרי תיקייה אחרת בעלת אותו basename (זיהוי לפי source)',
     () async {
-      final libraryPath = path.join(tempDir.path, 'library');
       // שתי תיקיות שונות עם אותו basename "shared" — ממוזגות לאותה קטגוריה.
       final alphaShared = path.join(tempDir.path, 'alpha', 'shared');
       final betaShared = path.join(tempDir.path, 'beta', 'shared');
-      await Directory(path.join(libraryPath, 'אוצריא')).create(recursive: true);
       await Directory(alphaShared).create(recursive: true);
       await Directory(betaShared).create(recursive: true);
       final alphaFile = File(path.join(alphaShared, 'ספר אלפא.txt'));
@@ -202,7 +192,6 @@ void main() {
         userBooksRepository: repository,
       );
       await service!.syncCustomFoldersWithInputs(
-        libraryPath: libraryPath,
         customFolders: folders,
       );
 
@@ -220,7 +209,6 @@ void main() {
       // מוחקים את הקובץ של alpha בלבד וסורקים מחדש.
       await alphaFile.delete();
       await service.syncCustomFoldersWithInputs(
-        libraryPath: libraryPath,
         customFolders: folders,
       );
 
@@ -236,10 +224,8 @@ void main() {
   );
 
   test('snapshot ישן לא מוחק ספר ששויך מחדש במהלך אותה סריקה', () async {
-    final libraryPath = path.join(tempDir.path, 'library');
     final alphaShared = path.join(tempDir.path, 'alpha', 'shared');
     final betaShared = path.join(tempDir.path, 'beta', 'shared');
-    await Directory(path.join(libraryPath, 'אוצריא')).create(recursive: true);
     await Directory(alphaShared).create(recursive: true);
     await Directory(betaShared).create(recursive: true);
     final alphaFile = File(path.join(alphaShared, 'ספר זהה.txt'));
@@ -265,7 +251,6 @@ void main() {
       userBooksRepository: repository,
     );
     await service!.syncCustomFoldersWithInputs(
-      libraryPath: libraryPath,
       customFolders: folders,
     );
 
@@ -274,7 +259,6 @@ void main() {
     // את ה-source העדכני ולא למחוק לפי ה-snapshot שנבנה בתחילת הסריקה.
     await betaFile.delete();
     await service.syncCustomFoldersWithInputs(
-      libraryPath: libraryPath,
       customFolders: folders,
     );
 
@@ -451,9 +435,7 @@ void main() {
   test(
     'regression: רענון מוחק ספר file-backed שתויג source="external" (מסלול ההוספה) לפי נתיב',
     () async {
-      final libraryPath = path.join(tempDir.path, 'library');
       final folderPath = path.join(tempDir.path, 'תיקיית-הוספה');
-      await Directory(path.join(libraryPath, 'אוצריא')).create(recursive: true);
       // התיקייה עדיין קיימת, אבל הקובץ נמחק — בדיוק כמו בדיווח.
       await Directory(folderPath).create(recursive: true);
 
@@ -497,7 +479,6 @@ void main() {
         userBooksRepository: repository,
       );
       await service!.syncCustomFoldersWithInputs(
-        libraryPath: libraryPath,
         customFolders: folders,
       );
 

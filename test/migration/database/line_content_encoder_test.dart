@@ -112,7 +112,6 @@ void main() {
       ).writeAsString(lines.join('\n'), flush: true);
       final library = p.join(tempDir.path, 'ספרייה');
       await DatabaseGenerator(
-        library,
         repository,
       ).processDirectory(library, null, 0);
       return (await repository.getAllBooksLean()).single.id;

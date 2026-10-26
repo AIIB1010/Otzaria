@@ -76,7 +76,6 @@ void main() {
         repository: syncedRepository,
         run: () async {
           final result = await service.syncCustomFoldersWithInputs(
-            libraryPath: temp.path,
             customFolders: [
               CustomFolder(
                 path: folder.path,
