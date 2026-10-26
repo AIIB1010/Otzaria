@@ -119,6 +119,17 @@ void main() {
     return (bloc, tab);
   }
 
+  Future<void> dragIntoViewer(WidgetTester tester) async {
+    await tester.dragFrom(
+      tester.getCenter(find.byType(PdfViewer)),
+      const Offset(0, -60),
+    );
+    await settle(tester, rounds: 5);
+    final readerFocus = Focus.of(tester.element(find.byType(PdfViewer)));
+    expect(readerFocus.hasFocus, isTrue);
+    expect(readerFocus.hasPrimaryFocus, isFalse);
+  }
+
   for (final bookView in [false, true]) {
     testWidgets(
       'PageDown לעמוד הבא ו-PageUp לקודם, Alt+PageDown אינו מדפדף: '
@@ -151,11 +162,22 @@ void main() {
           await settle(tester, rounds: 20);
           expect(controller.pageNumber, 1, reason: 'Alt+PageDown שייך לקיצור');
           // גרירה מעבירה את הפוקוס ל-pdfrx; גם שם מדפדפים כמו בחץ (זוג עמודים).
-          await tester.dragFrom(
-            tester.getCenter(find.byType(PdfViewer)),
-            const Offset(0, -4),
-          );
-          await settle(tester, rounds: 5);
+          await dragIntoViewer(tester);
+          for (final modifier in [
+            LogicalKeyboardKey.shiftLeft,
+            LogicalKeyboardKey.controlLeft,
+            LogicalKeyboardKey.altLeft,
+            LogicalKeyboardKey.metaLeft,
+          ]) {
+            await tester.sendKeyDownEvent(modifier);
+            await tester.sendKeyDownEvent(LogicalKeyboardKey.pageDown);
+            await tester.sendKeyRepeatEvent(LogicalKeyboardKey.pageDown);
+            await tester.sendKeyUpEvent(LogicalKeyboardKey.pageDown);
+            await tester.sendKeyEvent(LogicalKeyboardKey.pageUp);
+            await tester.sendKeyUpEvent(modifier);
+            await settle(tester, rounds: 3);
+            expect(controller.pageNumber, 1, reason: '$modifier שייך לקיצורים');
+          }
           for (var i = 0; i < 2; i++) {
             await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
             await settle(tester, rounds: 20);
@@ -168,7 +190,75 @@ void main() {
         }
       },
     );
+    testWidgets(
+      'החזקת PageDown/PageUp אחרי גרירה ממשיכה לדפדף: bookView=$bookView',
+      (tester) async {
+        final (bloc, tab) = await pumpBook(tester);
+        final controller = tab.pdfViewerController;
+        final document = controller.document;
+        try {
+          if (bookView) {
+            bloc.add(const SetLayoutMode(PdfLayoutMode.bookView));
+            await settle(tester, rounds: 30);
+          }
+          await dragIntoViewer(tester);
+          await tester.sendKeyDownEvent(LogicalKeyboardKey.pageDown);
+          await settle(tester, rounds: 20);
+          for (var i = 0; i < 3; i++) {
+            await tester.sendKeyRepeatEvent(LogicalKeyboardKey.pageDown);
+            await settle(tester, rounds: 20);
+          }
+          await tester.sendKeyUpEvent(LogicalKeyboardKey.pageDown);
+          expect(controller.pageNumber, bookView ? 8 : 5);
+
+          await tester.sendKeyDownEvent(LogicalKeyboardKey.pageUp);
+          await settle(tester, rounds: 20);
+          for (var i = 0; i < 3; i++) {
+            await tester.sendKeyRepeatEvent(LogicalKeyboardKey.pageUp);
+            await settle(tester, rounds: 20);
+          }
+          await tester.sendKeyUpEvent(LogicalKeyboardKey.pageUp);
+          expect(controller.pageNumber, 1);
+          expect(tester.takeException(), isNull);
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await disposePdfDocument(tester, document);
+        }
+      },
+    );
   }
+
+  testWidgets('שחרור PageDown אחרי גרירה מבטל דפדופים שממתינים בתצוגת ספר', (
+    tester,
+  ) async {
+    final (bloc, tab) = await pumpBook(tester);
+    final controller = tab.pdfViewerController;
+    final document = controller.document;
+    try {
+      bloc.add(const SetLayoutMode(PdfLayoutMode.bookView));
+      await settle(tester, rounds: 30);
+      await dragIntoViewer(tester);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.pageDown);
+      for (var i = 0; i < 3; i++) {
+        await tester.sendKeyRepeatEvent(LogicalKeyboardKey.pageDown);
+      }
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.pageDown);
+      await settle(tester, rounds: 30);
+      expect(controller.pageNumber, 2);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+      await settle(tester, rounds: 20);
+      expect(controller.pageNumber, 4);
+      await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+      await settle(tester, rounds: 30);
+      expect(controller.pageNumber, 8, reason: 'לחיצות קצרות נשמרות בתור');
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await disposePdfDocument(tester, document);
+    }
+  });
 }
 
 class _TabsRepository implements TabsRepository {

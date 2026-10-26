@@ -1731,19 +1731,24 @@ class _PdfBookScreenState extends State<PdfBookScreen>
         return false;
       },
       onKey: (params, key, isRealKeyPress) {
+        // הפוקוס החיצוני מטפל גם בחזרות ובשחרור, כולל ביטול תור הדפדוף.
+        if (key == LogicalKeyboardKey.pageDown ||
+            key == LogicalKeyboardKey.pageUp) {
+          return false;
+        }
         final keyboard = HardwareKeyboard.instance;
         if (keyboard.isAltPressed ||
             keyboard.isControlPressed ||
             keyboard.isMetaPressed) {
           return false;
         }
-        if (_isNextPageKey(key)) {
+        if (key == LogicalKeyboardKey.arrowLeft) {
           if (isRealKeyPress) {
             _goNextPage();
           }
           return true;
         }
-        if (_isPreviousPageKey(key)) {
+        if (key == LogicalKeyboardKey.arrowRight) {
           if (isRealKeyPress) {
             _goPreviousPage();
           }
@@ -2093,20 +2098,12 @@ class _PdfBookScreenState extends State<PdfBookScreen>
                 _stopContinuousScroll();
                 return KeyEventResult.handled;
               }
-              // Releasing a page-turn key: only drain the queue if the key
-              // was HELD (had at least one KeyRepeatEvent). Short taps must
-              // keep their queued turn so the second click in a fast 1-2
-              // tap doesn't get dropped along with the first click's hold-
-              // less queue clear.
+              // שחרור אחרי החזקה מבטל את התור; לחיצות קצרות שומרות את הדפדוף שלהן.
               if (_isPageTurnKey(event.logicalKey)) {
                 final wasHeld = _heldArrowKeys.remove(event.logicalKey);
                 if (wasHeld) {
                   _pendingPageTurns.clear();
-                  // Snap the "last initiated" intent back to the target of
-                  // the animation that's actually in flight, so the next
-                  // click advances ONE step from where the user is about
-                  // to land — instead of from the discarded held-key
-                  // intent that may be many spreads further ahead.
+                  // הלחיצה הבאה תמשיך מיעד האנימציה הפעילה ולא מהתור שבוטל.
                   _lastInitiatedTargetPage = _inFlightAnimationTarget;
                 }
                 return KeyEventResult.handled;
