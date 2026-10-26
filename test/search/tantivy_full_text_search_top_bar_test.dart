@@ -24,6 +24,7 @@ import 'package:otzaria/search/view/full_text_settings_widgets.dart';
 import 'package:otzaria/search/view/search_navigation_tree.dart';
 import 'package:otzaria/search/view/search_results_layout.dart';
 import 'package:otzaria/search/view/tantivy_search_results.dart';
+import 'package:otzaria/search/view/plugin_search_results_actions.dart';
 import 'package:otzaria/search/view/tantivy_full_text_search.dart';
 import 'package:otzaria/settings/engine/settings_bloc.dart';
 import 'package:otzaria/settings/engine/settings_event.dart';
@@ -68,6 +69,18 @@ class _SearchBloc extends SearchBloc {
     if (event is! LoadMoreResults) super.add(event);
   }
 }
+
+/// כפתורי הסרגל בלבד: גוף המסך (מצב ריק, אחרי התוצאות) מציג את אותו ווידג'ט
+/// בתצוגה inline, גם הוא מופיע בעץ כשהוא ריק.
+final _barActions = find.byWidgetPredicate(
+  (widget) =>
+      widget is PluginSearchResultsActions &&
+      widget.layout == PluginSearchResultsActionsLayout.bar,
+);
+final _barButton = find.descendant(
+  of: _barActions,
+  matching: find.text('המשך בתוסף'),
+);
 
 Future<void> main() async {
   final engineReady = await tryInitSearchEngine();
@@ -384,7 +397,7 @@ Future<void> main() async {
     final registry = PluginSearchDialogRegistry.instance;
     addTearDown(() => registry.removeAll('topbar.test'));
     final searchBloc = await pumpSearch(tester, width: 909);
-    expect(find.byType(PluginSearchResultsActions), findsNothing);
+    expect(_barActions, findsNothing);
     registry.registerPayload('topbar.test', {
       'id': 'continue',
       'type': 'checkbox',
@@ -394,7 +407,7 @@ Future<void> main() async {
       'visibleInModes': ['advanced'],
     });
     await tester.pump();
-    expect(find.text('המשך בתוסף'), findsOneWidget);
+    expect(_barButton, findsOneWidget);
     expect(tester.takeException(), isNull);
     final completed = searchBloc.state;
     for (final hidden in [
@@ -409,13 +422,13 @@ Future<void> main() async {
       searchBloc.publish(hidden);
       await tester.pump();
       await tester.pump();
-      expect(find.byType(PluginSearchResultsActions), findsNothing);
+      expect(_barActions, findsNothing);
       expect(tester.takeException(), isNull);
       searchBloc.publish(completed);
       await tester.pump();
       await tester.pump();
       expect(
-        find.text('המשך בתוסף'),
+        _barButton,
         findsOneWidget,
         reason:
             'return from loading=${hidden.isLoading}, mode=${hidden.configuration.searchMode}, error=${hidden.errorMessage}',
@@ -424,9 +437,63 @@ Future<void> main() async {
     }
     registry.removeAll('topbar.test');
     await tester.pump();
-    expect(find.byType(PluginSearchResultsActions), findsNothing);
+    expect(_barActions, findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'טעינת המשך שומרת את פריט הסרגל, וספירה בעיצומה מסירה אותו',
+    (tester) async {
+      final registry = PluginSearchDialogRegistry.instance;
+      addTearDown(() => registry.removeAll('topbar.loadmore'));
+      registry.registerPayload('topbar.loadmore', {
+        'id': 'continue',
+        'type': 'checkbox',
+        'title': 'המשך',
+        'openPluginOnSubmit': true,
+        'resultsAction': 'המשך בתוסף',
+      });
+      final searchBloc = await pumpSearch(tester, width: 909);
+      final withResults = searchBloc.state.copyWith(
+        results: [
+          SearchResult(
+            id: BigInt.one,
+            title: 'ספר',
+            reference: 'סימן',
+            text: 'טקסט',
+            segment: BigInt.zero,
+            isPdf: false,
+            filePath: 'book.txt',
+            mergedCount: 1,
+            merged: const [],
+            textStatus: TextStatus.ok,
+            continuesToNextLine: false,
+          ),
+        ],
+      );
+      Future<void> publish(SearchState state) async {
+        searchBloc.publish(state);
+        await tester.pump();
+        await tester.pump();
+      }
+
+      await publish(withResults);
+      expect(_barButton, findsOneWidget);
+
+      // עמוד נוסף נטען: תוצאות כבר מוצגות, בלי ספירה. הפריט נשאר במקומו.
+      await publish(withResults.copyWith(isLoading: true));
+      expect(_barButton, findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      // חיפוש ראשוני שהספירה שלו בעיצומה: עדיין אין מה להציג.
+      await publish(withResults.copyWith(isLoading: true, isCounting: true));
+      expect(_barActions, findsNothing);
+      expect(tester.takeException(), isNull);
+
+      await publish(withResults);
+      expect(_barButton, findsOneWidget);
+    },
+  );
 
   testWidgets('סרגל ברוחב 909 בלי ספק חיצוני — שורת מונים אחת ובלי חריגה', (
     tester,

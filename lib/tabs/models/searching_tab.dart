@@ -237,6 +237,27 @@ class SearchingTab extends OpenedTab {
     );
   }
 
+  /// הגדרות החיפוש השמורות בטאב (חיוביות ושליליות), מנורמלות למצב החיפוש
+  /// הנוכחי שלו.
+  (SearchModeScopedParameters, SearchModeScopedParameters)
+  normalizedSearchParameters(String query, String negativeQuery) {
+    final searchMode = searchBloc.state.configuration.searchMode;
+    return (
+      SearchQueryBuilder.normalizeParametersForMode(
+        searchMode,
+        customSpacing: spacingValues,
+        alternativeWords: alternativeWords,
+        searchOptions: effectiveSearchOptions(query: query),
+      ),
+      SearchQueryBuilder.normalizeParametersForMode(
+        searchMode,
+        customSpacing: negativeSpacingValues,
+        alternativeWords: negativeAlternativeWords,
+        searchOptions: effectiveNegativeSearchOptions(query: negativeQuery),
+      ),
+    );
+  }
+
   /// מעתיק הגדרות פר-מילה לעריכה בטאב הזה. המקור עשוי להיות פלט מנורמל
   /// (רשימות באורך קבוע), ועריכה בטאב אינה משנה אותו.
   void copyWordSettingsFrom({

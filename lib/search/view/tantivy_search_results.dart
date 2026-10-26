@@ -32,6 +32,8 @@ import 'package:otzaria/tabs/models/searching_tab.dart';
 import 'package:otzaria/utils/text/copy_utils.dart';
 import 'package:otzaria/utils/text/text_manipulation.dart' as utils;
 import 'package:otzaria/utils/ui/context_menu_utils.dart';
+import 'package:otzaria/plugins/services/plugin_search_dialog_registry.dart';
+import 'package:otzaria/search/view/plugin_search_results_actions.dart';
 import 'package:otzaria/widgets/controls/action_buttons.dart';
 import 'package:otzaria/widgets/misc/app_menu_exports.dart';
 import 'package:otzaria/widgets/misc/middle_click_open.dart';
@@ -137,7 +139,24 @@ class _TantivySearchResultsState extends State<TantivySearchResults> {
     required String title,
     required String message,
     bool showEditButton = false,
+    bool showPluginActions = false,
   }) {
+    final editButton = (showEditButton && widget.onEditSearch != null)
+        ? ActionButton.recommended(
+            text: 'ערוך חיפוש',
+            onPressed: widget.onEditSearch!,
+            icon: FluentIcons.edit_24_regular,
+          )
+        : null;
+    // OtzariaEmptyState מוסיף רווח לכל action שאינו null, גם כשהוא מרנדר
+    // כלום: בלי כפתור עריכה, הווידג'ט מצורף רק כשיש כפתור תוסף להציג.
+    final hasPluginActions =
+        showPluginActions &&
+        editButton == null &&
+        PluginSearchResultsActions.hasActions(
+          PluginSearchDialogRegistry.instance,
+          widget.tab.searchBloc.state,
+        );
     // scrollable: false — הרכיב מוצג בתוך sliver (SliverFillRemaining או
     // SliverToBoxAdapter ב-CustomScrollView), ושם הגלילה מנוהלת מבחוץ. עטיפה
     // ב-SingleChildScrollView/LayoutBuilder הייתה שוברת חישוב intrinsics.
@@ -146,13 +165,13 @@ class _TantivySearchResultsState extends State<TantivySearchResults> {
       icon: icon,
       title: title,
       message: message,
-      action: (showEditButton && widget.onEditSearch != null)
-          ? ActionButton.recommended(
-              text: 'ערוך חיפוש',
-              onPressed: widget.onEditSearch!,
-              icon: FluentIcons.edit_24_regular,
+      action: showPluginActions && (editButton != null || hasPluginActions)
+          ? PluginSearchResultsActions(
+              tab: widget.tab,
+              layout: PluginSearchResultsActionsLayout.inline,
+              leading: [?editButton],
             )
-          : null,
+          : editButton,
     );
   }
 
@@ -815,12 +834,24 @@ class _TantivySearchResultsState extends State<TantivySearchResults> {
             message:
                 'נסה להרחיב קטגוריות, לשנות מצב חיפוש או לעדכן את מילות החיפוש.',
             showEditButton: true,
+            showPluginActions: true,
           ),
           hasExternal: hasExternal,
         ),
       ];
     }
-    return [_buildEngineListSliver(state)];
+    return [
+      _buildEngineListSliver(state),
+      // אחרי התוצאות האחרונות: המשך החיפוש בתוסף שהצהיר resultsAction.
+      if (state.results.length >= state.displayTotal)
+        SliverToBoxAdapter(
+          child: PluginSearchResultsActions(
+            tab: widget.tab,
+            layout: PluginSearchResultsActionsLayout.inline,
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          ),
+        ),
+    ];
   }
 
   Widget _buildEngineListSliver(SearchState state) {
