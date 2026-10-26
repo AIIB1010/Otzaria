@@ -487,22 +487,21 @@ class CalendarWidgetState extends State<CalendarWidget> {
           narrowPaneBuilder: (context, paneContent) => Material(
             color: AppSurfaces.solidPanelBackground(context),
             child: SafeArea(
-              child: Stack(
-                children: [
-                  Padding(
-                    padding: const EdgeInsetsDirectional.fromSTEB(8, 8, 8, 8),
-                    child: paneContent,
-                  ),
-                  PositionedDirectional(
-                    top: 4,
-                    start: 4,
-                    child: BarButton.icon(
+              child: Padding(
+                padding: const EdgeInsetsDirectional.fromSTEB(8, 4, 8, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // בשורה משלו ולא מעל התוכן: בפינה הזאת יושבים הפקדים
+                    // הראשונים של חלוניות הזמנים והאירועים.
+                    BarButton.icon(
                       tooltip: 'סגור חלונית',
                       icon: FluentIcons.dismiss_24_regular,
                       onPressed: _handleSidebarClosedByUser,
                     ),
-                  ),
-                ],
+                    Expanded(child: paneContent),
+                  ],
+                ),
               ),
             ),
           ),
