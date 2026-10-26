@@ -1731,6 +1731,11 @@ class _PdfBookScreenState extends State<PdfBookScreen>
         return false;
       },
       onKey: (params, key, isRealKeyPress) {
+        // הפוקוס החיצוני מטפל גם בחזרות ובשחרור, כולל ביטול תור הדפדוף.
+        if (key == LogicalKeyboardKey.pageDown ||
+            key == LogicalKeyboardKey.pageUp) {
+          return false;
+        }
         final keyboard = HardwareKeyboard.instance;
         if (keyboard.isAltPressed ||
             keyboard.isControlPressed ||
@@ -2058,10 +2063,10 @@ class _PdfBookScreenState extends State<PdfBookScreen>
                 }
                 return KeyEventResult.handled;
               }
-              if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+              if (_isNextPageKey(event.logicalKey)) {
                 _goNextPage();
                 return KeyEventResult.handled;
-              } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+              } else if (_isPreviousPageKey(event.logicalKey)) {
                 _goPreviousPage();
                 return KeyEventResult.handled;
               } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
@@ -2072,11 +2077,11 @@ class _PdfBookScreenState extends State<PdfBookScreen>
                 return KeyEventResult.handled;
               }
             } else if (event is KeyRepeatEvent) {
-              if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+              if (_isNextPageKey(event.logicalKey)) {
                 _heldArrowKeys.add(event.logicalKey);
                 _goNextPage();
                 return KeyEventResult.handled;
-              } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+              } else if (_isPreviousPageKey(event.logicalKey)) {
                 _heldArrowKeys.add(event.logicalKey);
                 _goPreviousPage();
                 return KeyEventResult.handled;
@@ -2093,21 +2098,12 @@ class _PdfBookScreenState extends State<PdfBookScreen>
                 _stopContinuousScroll();
                 return KeyEventResult.handled;
               }
-              // Releasing left/right arrow: only drain the queue if the key
-              // was HELD (had at least one KeyRepeatEvent). Short taps must
-              // keep their queued turn so the second click in a fast 1-2
-              // tap doesn't get dropped along with the first click's hold-
-              // less queue clear.
-              if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
-                  event.logicalKey == LogicalKeyboardKey.arrowRight) {
+              // שחרור אחרי החזקה מבטל את התור; לחיצות קצרות שומרות את הדפדוף שלהן.
+              if (_isPageTurnKey(event.logicalKey)) {
                 final wasHeld = _heldArrowKeys.remove(event.logicalKey);
                 if (wasHeld) {
                   _pendingPageTurns.clear();
-                  // Snap the "last initiated" intent back to the target of
-                  // the animation that's actually in flight, so the next
-                  // click advances ONE step from where the user is about
-                  // to land — instead of from the discarded held-key
-                  // intent that may be many spreads further ahead.
+                  // הלחיצה הבאה תמשיך מיעד האנימציה הפעילה ולא מהתור שבוטל.
                   _lastInitiatedTargetPage = _inFlightAnimationTarget;
                 }
                 return KeyEventResult.handled;
@@ -5097,6 +5093,29 @@ class _PdfBookScreenState extends State<PdfBookScreen>
     final controller = widget.tab.pdfViewerController;
     return _lastInitiatedTargetPage ?? (controller.pageNumber ?? 1);
   }
+
+  static bool _isPageTurnKey(LogicalKeyboardKey key) =>
+      key == LogicalKeyboardKey.arrowLeft ||
+      key == LogicalKeyboardKey.arrowRight ||
+      key == LogicalKeyboardKey.pageDown ||
+      key == LogicalKeyboardKey.pageUp;
+
+  // PageDown/PageUp עם צירוף שייכים לקיצורים (Alt+PageDown לכותרת הבאה).
+  static bool get _noModifiers {
+    final keyboard = HardwareKeyboard.instance;
+    return !keyboard.isShiftPressed &&
+        !keyboard.isControlPressed &&
+        !keyboard.isAltPressed &&
+        !keyboard.isMetaPressed;
+  }
+
+  static bool _isNextPageKey(LogicalKeyboardKey key) =>
+      key == LogicalKeyboardKey.arrowLeft ||
+      (key == LogicalKeyboardKey.pageDown && _noModifiers);
+
+  static bool _isPreviousPageKey(LogicalKeyboardKey key) =>
+      key == LogicalKeyboardKey.arrowRight ||
+      (key == LogicalKeyboardKey.pageUp && _noModifiers);
 
   void _goNextPage() {
     if (!_isPdfVisible || !widget.tab.pdfViewerController.isReady) return;

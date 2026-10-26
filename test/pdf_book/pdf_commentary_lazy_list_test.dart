@@ -373,6 +373,43 @@ void main() {
     );
   }
 
+  testWidgets('PageDown גולל מסך בחלונית המפרשים של PDF (issue #3272)', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final tab = _bigGroupTab(300);
+    addTearDown(tab.dispose);
+    await tester.pumpWidget(_wrap(_panel(tab)));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.textContaining('טָהוֹר').first,
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump(kDoubleTapTimeout);
+    await tester.pumpAndSettle();
+    final position = tester
+        .state<ScrollableState>(
+          find.descendant(
+            of: find.byType(ScrollablePositionedList).first,
+            matching: find.byType(Scrollable),
+          ),
+        )
+        .position;
+    final before = position.pixels;
+    final page = position.viewportDimension * 0.8;
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+    await tester.pumpAndSettle();
+    expect(position.pixels - before, closeTo(page, 1));
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.pageUp);
+    await tester.pumpAndSettle();
+    expect(position.pixels, closeTo(before, 1));
+    await tester.pumpWidget(const SizedBox.shrink());
+    debugDefaultTargetPlatformOverride = null;
+  });
+
   group('רשימת המפרשים של PDF בונה רק את מה שעל המסך (#844)', () {
     testWidgets('קבוצה גדולה ופתוחה אינה בונה את כל הקטעים', (tester) async {
       tester.view.physicalSize = const Size(600, 900);

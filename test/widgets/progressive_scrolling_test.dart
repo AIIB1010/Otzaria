@@ -542,4 +542,166 @@ void main() {
     expect(offsetController.offsets, isEmpty);
     expect(controller.selection.baseOffset, greaterThan(0));
   });
+
+  group('PageDown/PageUp גוללים מסך (issue #3272)', () {
+    final bubbled = <LogicalKeyboardKey>[];
+
+    Widget list(ItemScrollController items, {int count = 100}) =>
+        ScrollablePositionedList.builder(
+          itemScrollController: items,
+          itemCount: count,
+          estimateExtent: (_, width) => 100,
+          itemBuilder: (_, index) =>
+              SizedBox(height: 100, child: Text('פריט $index')),
+        );
+
+    Future<ScrollPosition> pumpList(WidgetTester tester) async {
+      final items = ItemScrollController();
+      final focus = FocusNode();
+      addTearDown(focus.dispose);
+      bubbled.clear();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Focus(
+            onKeyEvent: (_, event) {
+              if (event is KeyDownEvent) bubbled.add(event.logicalKey);
+              return KeyEventResult.ignored;
+            },
+            child: ProgressiveScroll(
+              scrollController: items,
+              focusNode: focus,
+              child: list(items),
+            ),
+          ),
+        ),
+      );
+      focus.requestFocus();
+      await tester.pumpAndSettle();
+      return items.scrollController!.position;
+    }
+
+    Future<void> press(WidgetTester tester, LogicalKeyboardKey key) async {
+      await tester.sendKeyEvent(key);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('PageDown קדימה 80% מהחלון, PageUp חוזר, ובקצוות נעצרים', (
+      tester,
+    ) async {
+      final position = await pumpList(tester);
+      final page = position.viewportDimension * 0.8;
+
+      await press(tester, LogicalKeyboardKey.pageDown);
+      expect(position.pixels, closeTo(page, 0.1));
+      await press(tester, LogicalKeyboardKey.pageUp);
+      expect(position.pixels, closeTo(0, 0.1));
+      await press(tester, LogicalKeyboardKey.pageUp);
+      expect(position.pixels, 0);
+
+      position.jumpTo(position.maxScrollExtent);
+      await press(tester, LogicalKeyboardKey.pageDown);
+      expect(position.pixels, position.maxScrollExtent);
+      expect(bubbled, isEmpty, reason: 'המקש נבלע ואינו גולל גם רשימה שמעל');
+    });
+
+    for (final modifier in [
+      LogicalKeyboardKey.shiftLeft,
+      LogicalKeyboardKey.controlLeft,
+      LogicalKeyboardKey.altLeft,
+      LogicalKeyboardKey.metaLeft,
+    ]) {
+      testWidgets('${modifier.keyLabel}+PageDown עובר לקיצורים ואינו גולל', (
+        tester,
+      ) async {
+        final position = await pumpList(tester);
+
+        await tester.sendKeyDownEvent(modifier);
+        await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+        await tester.sendKeyUpEvent(modifier);
+        await tester.pumpAndSettle();
+
+        expect(position.pixels, 0);
+        expect(bubbled, contains(LogicalKeyboardKey.pageDown));
+      });
+    }
+
+    testWidgets('PageDown בשדה טקסט שבתוך הרשימה שייך לשדה ואינו גולל', (
+      tester,
+    ) async {
+      offsetController = _RecordingItemScrollController();
+      final controller = TextEditingController(text: 'שורה ראשונה\nשורה שנייה');
+      final fieldFocus = FocusNode();
+      addTearDown(controller.dispose);
+      addTearDown(fieldFocus.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ProgressiveScroll(
+              scrollController: offsetController,
+              child: TextField(
+                controller: controller,
+                focusNode: fieldFocus,
+                maxLines: null,
+              ),
+            ),
+          ),
+        ),
+      );
+      fieldFocus.requestFocus();
+      await tester.pump();
+      controller.selection = const TextSelection.collapsed(offset: 0);
+      await tester.pump();
+
+      await press(tester, LogicalKeyboardKey.pageDown);
+
+      expect(offsetController.offsets, isEmpty);
+      expect(controller.selection.baseOffset, greaterThan(0));
+    });
+
+    testWidgets('רשימה מקוננת ממוקדת גוללת לבד, כמו "מפרשים מתחת"', (
+      tester,
+    ) async {
+      final outer = ItemScrollController();
+      final inner = ItemScrollController();
+      final outerFocus = FocusNode();
+      final innerFocus = FocusNode();
+      addTearDown(outerFocus.dispose);
+      addTearDown(innerFocus.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProgressiveScroll(
+            scrollController: outer,
+            focusNode: outerFocus,
+            child: ScrollablePositionedList.builder(
+              itemScrollController: outer,
+              itemCount: 20,
+              estimateExtent: (_, width) => 300,
+              itemBuilder: (_, index) => SizedBox(
+                height: 300,
+                child: index == 0
+                    ? ProgressiveScroll(
+                        scrollController: inner,
+                        focusNode: innerFocus,
+                        child: list(inner),
+                      )
+                    : Text('פסקה $index'),
+              ),
+            ),
+          ),
+        ),
+      );
+      innerFocus.requestFocus();
+      await tester.pumpAndSettle();
+      final outerPosition = outer.scrollController!.position;
+      final innerPosition = inner.scrollController!.position;
+
+      await press(tester, LogicalKeyboardKey.pageDown);
+
+      expect(
+        innerPosition.pixels,
+        closeTo(innerPosition.viewportDimension * 0.8, 0.1),
+      );
+      expect(outerPosition.pixels, 0);
+    });
+  });
 }
