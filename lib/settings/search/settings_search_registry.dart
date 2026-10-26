@@ -9,14 +9,13 @@ class SettingsSearchNavigationRequest {
   final String? cardId;
   final String? expandSection;
   final String entryId;
-  final DateTime requestedAt;
 
   SettingsSearchNavigationRequest({
     required this.tab,
     required this.cardId,
     required this.expandSection,
     required this.entryId,
-  }) : requestedAt = DateTime.now();
+  });
 }
 
 /// רישום מרכזי של אנכורי כרטיסים + ניהול בקשות ניווט והדגשה.

@@ -66,16 +66,19 @@ void main() {
         await file.setLastModified(old);
       }
 
-      final result = await store.sweep({kept});
-      expect(result.deleted, 1);
+      final hex = orphan.substring(BackupStore.hashPrefix.length);
+      final orphanSize = await File(
+        p.join(store.objectsPath, hex.substring(0, 2), hex),
+      ).length();
+
+      expect(await store.sweep({kept}), orphanSize);
       expect(await store.exists(kept), isTrue);
       expect(await store.exists(orphan), isFalse);
     });
 
     test('grace period: blob יתום אך טרי אינו נמחק', () async {
       final orphan = await store.putBytes(utf8.encode('יתום טרי'));
-      final result = await store.sweep(const {});
-      expect(result.deleted, 0);
+      expect(await store.sweep(const {}), 0);
       expect(await store.exists(orphan), isTrue);
     });
   });

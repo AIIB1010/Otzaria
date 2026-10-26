@@ -13,13 +13,11 @@ import 'package:otzaria/settings/services/backup/backup_store.dart';
 class BackupMaintenanceResult {
   final int mergedIntoArchive;
   final int deletedBackups;
-  final int sweptBlobs;
   final int freedBytes;
 
   const BackupMaintenanceResult({
     this.mergedIntoArchive = 0,
     this.deletedBackups = 0,
-    this.sweptBlobs = 0,
     this.freedBytes = 0,
   });
 }
@@ -131,13 +129,12 @@ class BackupMaintenance {
       }
     }
 
-    final sweepResult = await _garbageCollect(backupDir, store);
+    final freedBytes = await _garbageCollect(backupDir, store);
 
     return BackupMaintenanceResult(
       mergedIntoArchive: mergedPaths.length,
       deletedBackups: deleted,
-      sweptBlobs: sweepResult.deleted,
-      freedBytes: sweepResult.freedBytes,
+      freedBytes: freedBytes,
     );
   }
 
@@ -276,8 +273,8 @@ class BackupMaintenance {
   }
 
   /// Mark & Sweep: אוסף הפניות מכל המניפסטים שנותרו (גיבויים + ארכיון)
-  /// ומוחק blobs יתומים שגילם מעל תקופת החסד.
-  static Future<({int deleted, int freedBytes})> _garbageCollect(
+  /// ומוחק blobs יתומים שגילם מעל תקופת החסד. מחזיר את הבייטים שהתפנו.
+  static Future<int> _garbageCollect(
     String backupDir,
     BackupStore store,
   ) async {
@@ -298,7 +295,7 @@ class BackupMaintenance {
         // מניפסט לא קריא: מדלגים על ה-GC כולו — עדיף blobs יתומים ממחיקת
         // blob שאולי עדיין מופנה ממנו.
         _logger.warning('Unreadable manifest $path — skipping GC: $e');
-        return (deleted: 0, freedBytes: 0);
+        return 0;
       }
     }
 
