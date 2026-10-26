@@ -735,6 +735,30 @@ class _PageShapeScreenState extends State<PageShapeScreen> {
     return (workspaceId: workspaceToSave, category: categoryToSave);
   }
 
+  /// מחליף את [current] במפרש [replacement] בטור שבו הוא מוצג, ושומר את
+  /// הטורים ליעד שממנו נטענו — גם כשהם מוצגים מברירות המחדל.
+  Future<void> _switchCommentator(String current, String replacement) async {
+    final state = context.read<TextBookBloc>().state;
+    if (state is! TextBookLoaded) return;
+    final column = _columnForCommentator(current, state);
+    if (column == null) return;
+
+    setState(() {
+      switch (column) {
+        case 'left':
+          _leftCommentator = replacement;
+        case 'right':
+          _rightCommentator = replacement;
+        case 'bottom':
+          _bottomCommentator = replacement;
+        case 'bottomRight':
+          _bottomRightCommentator = replacement;
+      }
+    });
+    _refreshLinksForCurrentConfiguration('page-shape commentator switched');
+    await _saveCommentatorConfiguration(state);
+  }
+
   void _showColumnAndOpenSettings(String column) {
     setState(() {
       _columnVisibility[column] = true;
@@ -2773,7 +2797,7 @@ class _CommentaryPaneState extends State<_CommentaryPane> {
                   : _commentaryLabelForIndex,
               reportBook: _reportBook,
               highlightedIndices: _highlightedIndices, // הדגשות מקומיות
-              onCommentatorChanged: _reloadCommentary, // callback לרענון
+              onSwitchCommentator: _switchCommentator,
               onOpenCommentaryPersonalNote: widget.onOpenPersonalNote,
               anchorLinksByLine: _anchorLinksByLine.isEmpty
                   ? null
@@ -2786,17 +2810,10 @@ class _CommentaryPaneState extends State<_CommentaryPane> {
     );
   }
 
-  /// טעינה מחדש של המפרש (אחרי החלפה)
-  void _reloadCommentary() {
-    // נטען מחדש את ההגדרות מה-parent
-    if (mounted) {
-      // נאלץ את ה-parent לטעון מחדש את ההגדרות
-      final parentState = context
-          .findAncestorStateOfType<_PageShapeScreenState>();
-      if (parentState != null) {
-        parentState._loadConfiguration();
-      }
-    }
+  void _switchCommentator(String replacement) {
+    context
+        .findAncestorStateOfType<_PageShapeScreenState>()
+        ?._switchCommentator(widget.commentatorName, replacement);
   }
 }
 

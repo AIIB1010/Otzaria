@@ -31,9 +31,6 @@ import 'package:otzaria/text_book/utils/reading_segment_navigation.dart';
 import 'package:otzaria/bookmarks/utils/section_bookmark.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/book_common/models/commentator_group.dart';
-import 'package:otzaria/text_book/view/page_shape/utils/page_shape_commentary_selection.dart';
-import 'package:otzaria/text_book/view/page_shape/utils/page_shape_settings_manager.dart';
-import 'package:otzaria/text_book/view/page_shape/utils/page_shape_workspace_scope.dart';
 import 'package:otzaria/tools/dictionary/widgets/laaz_commentary_subblock.dart';
 import 'package:otzaria/utils/navigation/talmud_bavli_open_format.dart';
 import 'package:otzaria/utils/text/text_manipulation.dart' as utils;
@@ -400,7 +397,9 @@ class SimpleTextViewer extends StatefulWidget {
   final String? title; // כותרת (לכותרת עליונה)
   final String? bookTitle; // שם הספר (למפרשים - לפתיחה בטאב נפרד)
   final Set<int>? highlightedIndices; // אינדקסים להדגשה (למפרשים)
-  final VoidCallback? onCommentatorChanged; // callback לרענון אחרי החלפת מפרש
+  /// מחליף את המפרש שבטור הזה במפרש שנבחר; את פריסת הטורים ואת שמירתה
+  /// מחזיק המסך.
+  final ValueChanged<String>? onSwitchCommentator;
   final bool useInternalScroll; // האם להשתמש בגלילה פנימית
   final ValueChanged<int>? onOpenSidebarTab;
   final ValueChanged<String?>?
@@ -459,7 +458,7 @@ class SimpleTextViewer extends StatefulWidget {
     this.title,
     this.bookTitle,
     this.highlightedIndices,
-    this.onCommentatorChanged,
+    this.onSwitchCommentator,
     this.useInternalScroll = true, // ברירת מחדל - עם גלילה פנימית
     this.onOpenSidebarTab,
     this.onOpenSearch,
@@ -3476,7 +3475,7 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
                 icon: c == widget.bookTitle
                     ? FluentIcons.checkmark_24_regular
                     : null,
-                onTap: () => _switchCommentator(c, state),
+                onTap: () => _switchCommentator(c),
               ),
             )
             .toList();
@@ -3522,117 +3521,11 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
   }
 
   /// החלפת מפרש
-  void _switchCommentator(String newCommentator, TextBookLoaded state) {
+  void _switchCommentator(String newCommentator) {
     if (newCommentator == widget.bookTitle) {
       return; // כבר מוצג מפרש זה
     }
-
-    // צריך למצוא באיזה טור המפרש הנוכחי מוצג ולהחליף אותו
-    final workspaceId = activePageShapeWorkspaceId(context);
-    final config = PageShapeSettingsManager.loadConfiguration(
-      state.book.title,
-      heCategories: state.book.heCategories,
-      workspaceId: workspaceId,
-    );
-
-    if (config == null) return;
-
-    // מציאת הטור שבו המפרש הנוכחי מוצג
-    String? columnToUpdate;
-    String? matchedSelection;
-    for (final entry in config.entries) {
-      if (entry.value == null) continue;
-
-      // בדיקה אם המפרש הנוכחי תואם לערך בהגדרה
-      final configValue = entry.value!;
-      final currentTitle = widget.bookTitle!;
-
-      if (isPageShapeMultiCommentatorsValue(configValue)) {
-        for (final selection in decodePageShapeCommentatorsSelection(
-          configValue,
-        )) {
-          if (currentTitle == selection ||
-              currentTitle.startsWith(selection) ||
-              currentTitle.contains(selection) ||
-              selection.startsWith(currentTitle) ||
-              selection.contains(currentTitle)) {
-            columnToUpdate = entry.key;
-            matchedSelection = selection;
-            break;
-          }
-        }
-        if (columnToUpdate != null) {
-          break;
-        }
-      }
-
-      if (configValue == currentTitle ||
-          currentTitle.startsWith(configValue) ||
-          currentTitle.contains(configValue) ||
-          configValue.startsWith(currentTitle) ||
-          configValue.contains(currentTitle)) {
-        columnToUpdate = entry.key;
-        break;
-      }
-    }
-
-    if (columnToUpdate == null) {
-      debugPrint(
-        '⚠️ PageShape: Could not find column for commentator "${widget.bookTitle}"',
-      );
-      return;
-    }
-
-    // עדכון ההגדרה
-    final updatedConfig = Map<String, String?>.from(config);
-    if (matchedSelection != null) {
-      final updatedSelection =
-          decodePageShapeCommentatorsSelection(updatedConfig[columnToUpdate])
-              .map(
-                (selection) =>
-                    selection == matchedSelection ? newCommentator : selection,
-              )
-              .toList();
-      updatedConfig[columnToUpdate] = encodePageShapeCommentatorsSelection(
-        updatedSelection,
-      );
-    } else {
-      updatedConfig[columnToUpdate] = newCommentator;
-    }
-
-    // כששולחן העבודה מחזיק בחירה משלו לספר, ההחלפה נשמרת אליה - אחרת היא
-    // נכתבת לספר/לקטגוריה ונדרסת מיד בטעינה הבאה.
-    final workspaceToSave = PageShapeSettingsManager.commentatorWorkspaceTarget(
-      workspaceId,
-      state.book.title,
-    );
-
-    // בדיקה אם יש הגדרה ספציפית לספר (לא רק הדגל, אלא הגדרה ממשית)
-    final hasActualBookConfig =
-        PageShapeSettingsManager.loadConfiguration(state.book.title) != null;
-
-    // אם יש הגדרה ספציפית לספר - שומרים לספר
-    // אחרת - שומרים לקטגוריה (אם יש)
-    final categoryToSave =
-        workspaceToSave == null &&
-            !hasActualBookConfig &&
-            state.book.heCategories != null &&
-            state.book.heCategories!.isNotEmpty
-        ? PageShapeSettingsManager.getActiveCategory(state.book.heCategories) ??
-              PageShapeSettingsManager.getParentCategory(
-                state.book.heCategories,
-              )
-        : null;
-
-    PageShapeSettingsManager.saveConfiguration(
-      state.book.title,
-      updatedConfig,
-      saveToCategory: categoryToSave,
-      saveToWorkspaceId: workspaceToSave,
-    );
-
-    // קריאה ל-callback לרענון המסך
-    widget.onCommentatorChanged?.call();
+    widget.onSwitchCommentator?.call(newCommentator);
   }
 }
 
