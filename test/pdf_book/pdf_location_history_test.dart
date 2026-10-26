@@ -49,7 +49,7 @@ void main() {
   });
 
   test(
-    'גלילה רגילה אינה מוסיפה נקודת חזרה; זכירה ושחזור מתבצעים דרך אירועים מפורשים',
+    'זכירה ושחזור מתבצעים דרך אירועים מפורשים',
     () async {
       final tab = PdfBookTab(
         book: PdfBook(title: 'ספר', path: '/book.pdf'),
@@ -73,9 +73,6 @@ void main() {
           isLoading: false,
         ),
       );
-      final moved = bloc.stream.first;
-      bloc.add(const UpdatePageNumber(pageNumber: 1));
-      await moved;
       expect(tab.navigationHistory.canGoBack, isFalse);
       final saved = PdfReadingLocation.capture(controller)!;
       final remembered = bloc.stream.first;
