@@ -11,6 +11,7 @@ import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/messages/notes_messages.dart';
 import 'package:otzaria/navigation/view/main_window_screen.dart';
 import 'package:otzaria/library/bloc/library_bloc.dart';
+import 'package:otzaria/library/models/library.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/personal_notes/utils/note_location_ref.dart';
 import 'package:otzaria/personal_notes/utils/personal_notes_book_key.dart';
@@ -95,17 +96,22 @@ class PersonalNotesSidebarState extends State<PersonalNotesSidebar>
   bool _isReaderBook(TextBookLoaded state) =>
       personalNotesBookKey(state.book) == widget.bookId;
 
-  ({String bookId, Future<List<TocEntry>?> toc})? _notesBookToc;
+  ({String bookId, Library? library, Future<List<TocEntry>?> toc})?
+  _notesBookToc;
 
   /// תוכן העניינים של [PersonalNotesSidebar.bookId], כשאינו הספר שבקורא.
-  Future<List<TocEntry>?> _tocOfNotesBook() {
-    final cached = _notesBookToc;
-    if (cached != null && cached.bookId == widget.bookId) return cached.toc;
-    final toc = personalNotesBookToc(
-      context.read<LibraryBloc?>()?.state.library,
-      widget.bookId,
+  Future<List<TocEntry>?> _tocOfNotesBook(BuildContext context) {
+    final library = context.select<LibraryBloc?, Library?>(
+      (bloc) => bloc?.state.library,
     );
-    _notesBookToc = (bookId: widget.bookId, toc: toc);
+    final cached = _notesBookToc;
+    if (cached != null &&
+        cached.bookId == widget.bookId &&
+        identical(cached.library, library)) {
+      return cached.toc;
+    }
+    final toc = personalNotesBookToc(library, widget.bookId);
+    _notesBookToc = (bookId: widget.bookId, library: library, toc: toc);
     return toc;
   }
 
@@ -250,11 +256,7 @@ class PersonalNotesSidebarState extends State<PersonalNotesSidebar>
 
     final child = BlocBuilder<PersonalNotesBloc, PersonalNotesState>(
       buildWhen: (previous, current) {
-        // ה-sidebar הזה צריך rebuild אם הטיוטה הפעילה שייכת אליו —
-        // לפני השינוי או אחריו. זה תופס גם את המקרה של מעבר ישיר
-        // מטיוטה של ספר א' לטיוטה של ספר ב' בלי לעבור דרך
-        // CancelCreatingPersonalNote (isCreatingNewNote נשאר true,
-        // אבל newNoteBookId משתנה).
+        // מעבר ישיר בין טיוטות של ספרים צריך לרענן את שתי החלוניות.
         final wasMyDraft =
             previous.isCreatingNewNote &&
             previous.newNoteBookId == widget.bookId;
@@ -301,13 +303,18 @@ class PersonalNotesSidebarState extends State<PersonalNotesSidebar>
                         builder: (context, textBookState) {
                           if (textBookState is TextBookLoaded &&
                               !_isReaderBook(textBookState)) {
+                            final toc = _tocOfNotesBook(context);
                             return FutureBuilder<List<TocEntry>?>(
-                              future: _tocOfNotesBook(),
-                              builder: (context, toc) => _buildContent(
+                              future: toc,
+                              builder: (context, snapshot) => _buildContent(
                                 context,
                                 state,
                                 visibleLineIndices: visibleLineIndices,
-                                tableOfContents: toc.data,
+                                tableOfContents:
+                                    snapshot.connectionState ==
+                                        ConnectionState.done
+                                    ? snapshot.data
+                                    : null,
                               ),
                             );
                           }
@@ -435,9 +442,7 @@ class PersonalNotesSidebarState extends State<PersonalNotesSidebar>
     final linkableNotes = [...state.locatedNotes, ...state.missingNotes];
     final items = <Widget>[];
 
-    // עורך הערה חדשה — מוצג רק אם הטיוטה שייכת לספר של ה-sidebar הזה.
-    // משתמשים ב-newNoteBookId (ה-bookId שנשמר בטיוטה) ולא ב-state.bookId,
-    // כי state.bookId משקף את הספר האחרון שנטענו עבורו הערות.
+    // הטיוטה מזוהה לפי newNoteBookId; state.bookId הוא הספר האחרון שנטען.
     if (state.isCreatingNewNote && state.newNoteBookId == widget.bookId) {
       items.add(_buildNewNoteEditor(context, state));
     }

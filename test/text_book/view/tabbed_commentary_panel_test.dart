@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
@@ -452,16 +454,23 @@ void main() {
     );
 
     /// ספרייה עם בית יוסף, שתוכן העניינים שלו מגיע מ-[provider].
-    LibraryBloc libraryWithBeitYosef(_TocProvider provider) {
-      final beitYosef = TextBook(title: 'בית יוסף', categoryId: 2);
+    LibraryBloc libraryWithBeitYosef(
+      _TocProvider provider, {
+      List<String> titles = const ['בית יוסף'],
+    }) {
+      final books = [
+        for (final title in titles) TextBook(title: title, categoryId: 2),
+      ];
       LibraryProviderManager.instance.seedMappingsForTesting(
-        mapping: {BookCompositeKey.fromBook(beitYosef)!: provider},
+        mapping: {
+          for (final book in books) BookCompositeKey.fromBook(book)!: provider,
+        },
         providers: [provider],
       );
       addTearDown(LibraryProviderManager.instance.resetForTesting);
       final bloc = _TestLibraryBloc(
         LibraryState(
-          library: Library(categories: [])..books.add(beitYosef),
+          library: Library(categories: [])..books.addAll(books),
           isLoading: false,
           currentCategory: null,
         ),
@@ -513,6 +522,83 @@ void main() {
 
       expect(find.text('בית יוסף, חושן משפט, סימן תכו'), findsNothing);
       expect(find.text('בית יוסף, יורה דעה, סימן צח'), findsOneWidget);
+    });
+
+    testWidgets('מעבר למפרש שנטען אינו מציג תוכן עניינים של מפרש קודם', (
+      tester,
+    ) async {
+      final pendingToc = Completer<List<TocEntry>?>();
+      final libraryBloc = libraryWithBeitYosef(
+        _TocProvider({
+          'בית יוסף': beitYosefToc,
+          'דרכי משה': pendingToc.future,
+        }),
+        titles: ['בית יוסף', 'דרכי משה'],
+      );
+      final reader = _loadedState().copyWith(book: TextBook(title: 'טור'));
+      await pumpNotes(tester, reader: reader, libraryBloc: libraryBloc);
+      expect(find.text('בית יוסף, יורה דעה, סימן צח'), findsOneWidget);
+
+      await pumpNotes(
+        tester,
+        reader: reader,
+        notesBookIdOverride: 'דרכי משה',
+        libraryBloc: libraryBloc,
+      );
+      expect(find.textContaining('יורה דעה'), findsNothing);
+      expect(find.text('הערה בשורה 50'), findsOneWidget);
+
+      pendingToc.complete([TocEntry(text: 'סימן אחר', index: 0, level: 1)]);
+      await tester.pumpAndSettle();
+      expect(find.text('דרכי משה, סימן אחר'), findsOneWidget);
+    });
+
+    testWidgets('תוכן העניינים מתעדכן כשהספרייה נטענת ומתרעננת', (
+      tester,
+    ) async {
+      final provider = _TocProvider({'בית יוסף': beitYosefToc});
+      final loaded = libraryWithBeitYosef(provider).state.library!;
+      final libraryBloc = _TestLibraryBloc(
+        const LibraryState(isLoading: true),
+      );
+      addTearDown(libraryBloc.close);
+      await pumpNotes(
+        tester,
+        reader: _loadedState().copyWith(book: TextBook(title: 'טור')),
+        libraryBloc: libraryBloc,
+      );
+      expect(find.textContaining('יורה דעה'), findsNothing);
+
+      libraryBloc.replaceLibrary(loaded);
+      await tester.pumpAndSettle();
+      expect(find.text('בית יוסף, יורה דעה, סימן צח'), findsOneWidget);
+      await tester.tap(find.byTooltip('פתח'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('סגור'), findsOneWidget);
+
+      provider.tocByTitle['בית יוסף'] = [
+        TocEntry(text: 'כותרת מעודכנת', index: 0, level: 1),
+      ];
+      libraryBloc.replaceLibrary(
+        Library(categories: [])..books.addAll(loaded.books),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('יורה דעה'), findsNothing);
+      expect(find.text('בית יוסף, כותרת מעודכנת'), findsOneWidget);
+      expect(find.byTooltip('סגור'), findsOneWidget);
+
+      final failedToc = Completer<List<TocEntry>?>();
+      provider.tocByTitle['בית יוסף'] = failedToc.future;
+      libraryBloc.replaceLibrary(
+        Library(categories: [])..books.addAll(loaded.books),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('כותרת מעודכנת'), findsNothing);
+      failedToc.completeError(StateError('toc'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.textContaining('כותרת מעודכנת'), findsNothing);
+      expect(find.byTooltip('סגור'), findsOneWidget);
     });
 
     testWidgets('בלי תוכן העניינים של המפרש — ההערה מוצגת בלי כתובת', (
@@ -716,6 +802,8 @@ class _TestLibraryBloc extends Bloc<LibraryEvent, LibraryState>
     on<LibraryEvent>((event, emit) {});
   }
 
+  void replaceLibrary(Library library) => emit(LibraryState(library: library));
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -723,7 +811,7 @@ class _TestLibraryBloc extends Bloc<LibraryEvent, LibraryState>
 class _TocProvider implements LibraryProvider {
   _TocProvider(this.tocByTitle, {this.error});
 
-  final Map<String, List<TocEntry>> tocByTitle;
+  final Map<String, FutureOr<List<TocEntry>?>> tocByTitle;
   final Object? error;
 
   @override
