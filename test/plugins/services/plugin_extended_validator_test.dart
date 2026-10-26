@@ -163,7 +163,7 @@ void main() {
 
       test('כתובת 127.x.x.x כלשהי תקינה עם network.localhost', () {
         final report = run(
-          '0.9.99',
+          '0.9.98.1',
           const ['network.localhost'],
           const ['127.0.0.9', 'http://127.0.0.9:8080'],
         );
@@ -174,9 +174,9 @@ void main() {
         );
       });
 
-      test('מ-0.9.99 כתובת מקומית עם network.access בלבד היא שגיאה', () {
+      test('מ-0.9.98.1 כתובת מקומית עם network.access בלבד היא שגיאה', () {
         final report = run(
-          '0.9.99',
+          '0.9.98.1',
           const ['network.access'],
           const [
             '127.0.0.9',
@@ -188,9 +188,9 @@ void main() {
         );
       });
 
-      test('מ-0.9.99 כתובת אינטרנט עם network.localhost בלבד היא שגיאה', () {
+      test('מ-0.9.98.1 כתובת אינטרנט עם network.localhost בלבד היא שגיאה', () {
         final report = run(
-          '0.9.99',
+          '0.9.98.1',
           const ['network.localhost'],
           const [
             'https://api.example.com',
@@ -199,16 +199,16 @@ void main() {
         expect(report.errors.any((e) => e.contains('network.access')), isTrue);
       });
 
-      test('מ-0.9.99 שתי ההרשאות עם שני סוגי יעדים תקינות', () {
+      test('מ-0.9.98.1 שתי ההרשאות עם שני סוגי יעדים תקינות', () {
         final report = run(
-          '0.9.99',
+          '0.9.98.1',
           const ['network.access', 'network.localhost'],
           const ['127.0.0.9', 'https://api.example.com'],
         );
         expect(report.errors, isEmpty);
       });
 
-      test('לפני 0.9.99 כתובת מקומית עם network.access היא אזהרה בלבד', () {
+      test('לפני 0.9.98.1 כתובת מקומית עם network.access היא אזהרה בלבד', () {
         final report = run(
           '0.9.98',
           const ['network.access'],
@@ -219,20 +219,20 @@ void main() {
         expect(report.errors, isEmpty);
         expect(
           report.warnings.any(
-            (w) => w.contains('network.localhost') && w.contains('0.9.99'),
+            (w) => w.contains('network.localhost') && w.contains('0.9.98.1'),
           ),
           isTrue,
         );
       });
 
-      test('לפני 0.9.99 הצהרה על שתי ההרשאות נקייה מאזהרות הפרדה', () {
+      test('לפני 0.9.98.1 הצהרה על שתי ההרשאות נקייה מאזהרות הפרדה', () {
         final report = run(
           '0.9.98',
           const ['network.access', 'network.localhost'],
           const ['127.0.0.9'],
         );
         expect(report.errors, isEmpty);
-        expect(report.warnings.any((w) => w.contains('0.9.99')), isFalse);
+        expect(report.warnings.any((w) => w.contains('0.9.98.1')), isFalse);
       });
     });
 
@@ -253,7 +253,7 @@ void main() {
 
       test('כתובת מקומית לא קנונית אינה נספרת כאינטרנט', () {
         final report = run(
-          '0.9.99',
+          '0.9.98.1',
           const ['network.localhost'],
           const [
             'http://127.1:11434',
@@ -270,7 +270,7 @@ void main() {
 
       test('שם מארח רגיל שמתחיל ב-localhost או ב-127 הוא אינטרנט', () {
         final report = run(
-          '0.9.99',
+          '0.9.98.1',
           const ['network.localhost'],
           const [
             'https://localhost.example.com',
@@ -293,7 +293,7 @@ void main() {
 
       test('הודעת השגיאה מציינת את הכתובת שגרמה לה', () {
         final report = run(
-          '0.9.99',
+          '0.9.98.1',
           const ['network.access'],
           const [
             'http://127.0.0.9:8080',
@@ -301,11 +301,11 @@ void main() {
         );
         expect(
           report.errors.single,
-          allOf(contains('http://127.0.0.9:8080'), contains('0.9.99')),
+          allOf(contains('http://127.0.0.9:8080'), contains('0.9.98.1')),
         );
       });
 
-      test('לפני 0.9.99 יעד אינטרנט עם network.localhost בלבד הוא אזהרה', () {
+      test('לפני 0.9.98.1 יעד אינטרנט עם network.localhost בלבד הוא אזהרה', () {
         final report = run(
           '0.9.98',
           const ['network.localhost'],
@@ -320,7 +320,7 @@ void main() {
         );
       });
 
-      test('לפני 0.9.99 יעד מקומי בלי אף הרשאת רשת הוא אזהרה', () {
+      test('לפני 0.9.98.1 יעד מקומי בלי אף הרשאת רשת הוא אזהרה', () {
         final report = run('0.9.98', const [], const ['127.0.0.9']);
         expect(report.errors, isEmpty);
         expect(
@@ -329,9 +329,9 @@ void main() {
         );
       });
 
-      test('מ-0.9.99 עם network.enabled כבוי אין שגיאת הפרדה', () {
+      test('מ-0.9.98.1 עם network.enabled כבוי אין שגיאת הפרדה', () {
         final report = run(
-          '0.9.99',
+          '0.9.98.1',
           const ['network.access'],
           const [
             '127.0.0.9',
@@ -343,7 +343,7 @@ void main() {
 
       test('כתובת userinfo מטעה נספרת לפי ה-host האמיתי', () {
         final report = run(
-          '0.9.99',
+          '0.9.98.1',
           const ['network.localhost'],
           const [
             'http://127.0.0.1@evil.example.com',

@@ -64,7 +64,7 @@ void main() {
 
   tearDown(() => PluginNetworkPermissionMode.debugSetAppVersion(null));
 
-  group('יעד מקומי באוצריא ישנה מ-0.9.99 (תקופת מעבר)', () {
+  group('יעד מקומי באוצריא ישנה מ-0.9.98.1 (תקופת מעבר)', () {
     test('network.localhost לבדה מספיקה', () async {
       expect(
         await _decide(
@@ -91,8 +91,8 @@ void main() {
     });
   });
 
-  group('יעד מקומי באוצריא 0.9.99 ומעלה', () {
-    for (final version in ['0.9.99', '0.9.99+99900', '0.10.0']) {
+  group('יעד מקומי באוצריא 0.9.98.1 ומעלה', () {
+    for (final version in ['0.9.98.1', '0.9.98.1+99801', '0.9.99', '0.10.0']) {
       test('network.localhost מספיקה ($version)', () async {
         expect(
           await _decide(
@@ -121,7 +121,7 @@ void main() {
     expect(
       await _decide(
         local,
-        appVersion: '0.9.99',
+        appVersion: '0.9.98.1',
         minAppVersion: '0.9.0',
         granted: {'network.access'},
       ),
@@ -139,7 +139,7 @@ void main() {
   });
 
   group('הצהרת היעד ב-allowlist נשארת תנאי בכל מצב', () {
-    for (final version in ['0.9.98', '0.9.99']) {
+    for (final version in ['0.9.98', '0.9.98.1']) {
       test('כתובת מקומית אחרת שלא הוצהרה נחסמת ($version)', () async {
         expect(
           await _decide(
@@ -154,7 +154,7 @@ void main() {
   });
 
   group('יעד אינטרנט', () {
-    for (final version in ['0.9.98', '0.9.99']) {
+    for (final version in ['0.9.98', '0.9.98.1']) {
       test('network.localhost אינה מתירה אותו ($version)', () async {
         expect(
           await _decide(
@@ -171,7 +171,7 @@ void main() {
   test(
     'כתובת מחוץ ל-127.0.0.x נחשבת אינטרנט וממתינה ל-network.access',
     () async {
-      for (final version in ['0.9.98', '0.9.99']) {
+      for (final version in ['0.9.98', '0.9.98.1']) {
         expect(
           await _decide(
             'http://127.10.10.1:8080/api',

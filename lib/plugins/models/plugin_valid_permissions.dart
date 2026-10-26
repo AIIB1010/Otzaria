@@ -267,7 +267,7 @@ const pluginValidPermissions = <String>[
 
   /// גישה לשירותים מקומיים על המחשב (loopback: localhost, ::1 ו-127.0.0.0 עד
   /// 127.0.0.255), למשל מודל שפה מקומי (Ollama / LM Studio). נפרדת מ-
-  /// network.access — אינה מתירה גישה לאינטרנט, ולהפך. באוצריא ישנה מ-0.9.99
+  /// network.access — אינה מתירה גישה לאינטרנט, ולהפך. באוצריא ישנה מ-0.9.98.1
   /// network.access עדיין מכסה יעד מקומי (ראו plugin_network_permission_mode.dart).
   'network.localhost',
 

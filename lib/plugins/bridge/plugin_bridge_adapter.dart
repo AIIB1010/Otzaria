@@ -7862,7 +7862,7 @@ class PluginBridgeAdapter {
             ? 'network.localhost אינה מכסה אינטרנט.'
             : await PluginNetworkPermissionMode.isStrict()
             ? 'network.access אינה מכסה יעד מקומי.'
-            : 'לפני אוצריא 0.9.99 גם network.access מכסה יעד מקומי, '
+            : 'לפני אוצריא 0.9.98.1 גם network.access מכסה יעד מקומי, '
                   'אך משם תידרש network.localhost.';
         throw Exception(
           'error.permission_denied: '

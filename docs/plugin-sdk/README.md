@@ -406,7 +406,7 @@ Otzaria.on('plugin.boot', (payload) => {
 
 | Method | הרשאה | פרמטרים | החזרה |
 |--------|-------|----------|-------|
-| `network.fetchStream` | `network.access` ליעד אינטרנט, `network.localhost` ליעד מקומי (מאוצריא גרסה 0.9.99 ואילך אחת אינה מחליפה את השנייה) | `{ url, method?, headers?, body?, timeoutMs? }` | `AsyncIterable` של metadata ומקטעי UTF-8 |
+| `network.fetchStream` | `network.access` ליעד אינטרנט, `network.localhost` ליעד מקומי (מאוצריא גרסה 0.9.98.1 ואילך אחת אינה מחליפה את השנייה) | `{ url, method?, headers?, body?, timeoutMs? }` | `AsyncIterable` של metadata ומקטעי UTF-8 |
 | `network.download` | כנ״ל — לפי סוג היעד | `{ url, filename?, destPath?, resume? }` | נתיב הקובץ שנשמר |
 | `network.fetchFile` | כנ״ל — לפי סוג היעד | `{ url, maxBytes?, timeoutMs? }` | `{ token, url, name, size, mime }` — קובץ במטמון זמני, כמו `fs.pickUserFile` |
 
@@ -684,8 +684,8 @@ const { data: keys } = await Otzaria.call('storage.list');
 | `published_data.write` | פרסום נתונים לאפליקציה |
 | `ui.feedback` | הצגת הודעות ודיאלוגים |
 | `ui.create_shortcut` | יצירת קיצור דרך (deep-link) בשולחן העבודה / תפריט ההתחל — דורש אישור משתמש |
-| `network.access` | גישה לאינטרנט בלבד; מאוצריא 0.9.99 לא לשירות מקומי (לפני כן גם יעד מקומי, לתאימות). דורש `network.enabled: true` במניפסט + שה-URL מופיע ב-allowlist הרשמי של אוצריא ב-GitHub) |
-| `network.localhost` | גישה לשירות מקומי על המחשב (`localhost`, `::1`, `127.0.0.0`–`127.0.0.255`), כמו Ollama / LM Studio. נפרדת מ-`network.access` — אינה מתירה אינטרנט, ואינה דורשת allowlist גלובלי. מאוצריא 0.9.99 `network.access` אינה מכסה יעד מקומי — ראו [רשת](#רשת) |
+| `network.access` | גישה לאינטרנט בלבד; מאוצריא 0.9.98.1 לא לשירות מקומי (לפני כן גם יעד מקומי, לתאימות). דורש `network.enabled: true` במניפסט + שה-URL מופיע ב-allowlist הרשמי של אוצריא ב-GitHub) |
+| `network.localhost` | גישה לשירות מקומי על המחשב (`localhost`, `::1`, `127.0.0.0`–`127.0.0.255`), כמו Ollama / LM Studio. נפרדת מ-`network.access` — אינה מתירה אינטרנט, ואינה דורשת allowlist גלובלי. מאוצריא 0.9.98.1 `network.access` אינה מכסה יעד מקומי — ראו [רשת](#רשת) |
 | `fs.user_files.read` | בחירה וקריאה של קובץ אישי (PDF/טקסט) שהמשתמש בוחר בדיאלוג — מוגבל לקובץ שנבחר בלבד |
 | `fs.user_files.write` | שמירה לקובץ שהמשתמש בחר, או יצירת קובץ חדש דרך „שמור בשם”. אין דרך להזין נתיב מה-JS |
 | `fs.folder_access` | בחירת תיקייה בדיאלוג מערכת (`ui.pickFolder`) ועבודה על קבצים בתוכה. מ-0.9.97 — פוצלה מ-`ui.feedback`; הצהרה ותיקה על `ui.feedback` עדיין מכסה אותה. **לקבצי עבודה השתמשו במרחב הפרטי (`fs.writeFile` וחבריו) — הוא אינו דורש הרשאה** |
@@ -909,17 +909,17 @@ Otzaria.on('plugin.boot', async (payload) => {
 > |---|---|---|
 > | **יעד** | אתר או שרת **באינטרנט** (`https://api.example.com/...`) | שירות שרץ **על המחשב של המשתמש**: `localhost`, `::1`, `127.0.0.0` עד `127.0.0.255` (למשל `127.0.0.1` או `127.0.0.9`) — Ollama, LM Studio, יישום מקומי |
 > | **מתירה אינטרנט** | כן | **לא, בשום גרסה** |
-> | **מתירה יעד מקומי** | **לא** מאוצריא 0.9.99 (לפני כן כן, לתאימות) | כן |
+> | **מתירה יעד מקומי** | **לא** מאוצריא 0.9.98.1 (לפני כן כן, לתאימות) | כן |
 > | **allowlist גלובלי (PR לאוצריא)** | נדרש | **לא נדרש** |
 > | **מה המשתמש רואה** | ״גישה לאינטרנט״ | ״גישה לשירותים מקומיים״ |
 >
 > **כלל ההחלטה:** הסתכלו על ה-host שב-URL. `localhost` או `127.0.0.x` ← `network.localhost`. כל דבר אחר ← `network.access`. תוסף שפונה לשני סוגי יעדים מצהיר על **שתיהן**.
 >
-> **מאוצריא 0.9.99 ההפרדה מלאה וחובה, בלי קשר ל-`minAppVersion` של התוסף:**
+> **מאוצריא 0.9.98.1 ההפרדה מלאה וחובה, בלי קשר ל-`minAppVersion` של התוסף:**
 > - תוסף שהצהיר **רק** על `network.access` — **אין לו גישה לשום שירות מקומי**.
 > - תוסף שהצהיר **רק** על `network.localhost` — **אין לו גישה לאינטרנט**.
 >
-> לפני 0.9.99 `network.access` עדיין מכסה גם יעד מקומי, כדי שתוסף קיים לא יישבר לפני שיתעדכן. אל תסתמכו על כך: כתבו נכון כבר עכשיו.
+> לפני 0.9.98.1 `network.access` עדיין מכסה גם יעד מקומי, כדי שתוסף קיים לא יישבר לפני שיתעדכן. אל תסתמכו על כך: כתבו נכון כבר עכשיו.
 
 | התוסף פונה אל… | מצהירים |
 |---|---|
@@ -949,7 +949,7 @@ Otzaria.on('plugin.boot', async (payload) => {
 ```
 
 **טעויות נפוצות**
-- ❌ להצהיר `network.access` כדי לגשת ל-Ollama / שירות מקומי. מאוצריא 0.9.99 זה נחסם — השתמשו ב-`network.localhost`.
+- ❌ להצהיר `network.access` כדי לגשת ל-Ollama / שירות מקומי. מאוצריא 0.9.98.1 זה נחסם — השתמשו ב-`network.localhost`.
 - ❌ להצהיר `network.localhost` כדי להוריד קובץ מ-GitHub או לקרוא ל-API באינטרנט. זה נחסם בכל גרסה — הוסיפו `network.access`.
 - ❌ להניח שכתובת „פנימית" אחרת היא מקומית: `127.0.1.1`, `127.10.10.1`, `0.0.0.0`, `172.x.x.x`, `192.168.x.x`, `10.x.x.x` ושמות מחשב ברשת הם **אינטרנט** מבחינת ההרשאות ודורשים `network.access` ואישור ב-allowlist הגלובלי. רק `localhost`, `::1` ו-`127.0.0.0`–`127.0.0.255` בכתיבה עשרונית מלאה הם מקומיים (`127.1` ו-`127.0.0.01` אינם).
 - ❌ לקרוא ל-`fetch()` ישירות מה-WebView. כל פנייה עוברת דרך `network.fetchStream` (או `network.download` / `network.fetchFile` לקבצים); `fetch()` ישיר נחסם ב-CORS מול שרת מקומי שדוחה `Origin: null`.
@@ -1295,7 +1295,7 @@ dart tool/plugins/package_plugin.dart <path/to/your/plugin/folder> [--force]
      - הרשמה לאירוע לא מוכר (`Otzaria.on('...')` / `.off(...)`).
      - שימוש ב־method שדורש הרשאה שלא הוכרזה ב־`manifest.permissions`.
      - הרשמה לאירוע שדורשת `events.subscribe:X` שלא הוכרזה.
-     - `network.access` או `network.enabled` בלי `network.allowlist` מפורט — אזהרה בלבד. (אי-התאמה בין ה-`network.allowlist` להרשאות שהוצהרו — יעד מקומי בלי `network.localhost` או יעד אינטרנט בלי `network.access` — היא **שגיאה** כש-`minAppVersion` הוא `0.9.99` ומעלה, ואזהרה מתחת לכך.) בפועל ה-URLים חייבים להופיע גם במניפסט וגם במקור אמון רשמי של אוצריא בזמן ריצה.
+     - `network.access` או `network.enabled` בלי `network.allowlist` מפורט — אזהרה בלבד. (אי-התאמה בין ה-`network.allowlist` להרשאות שהוצהרו — יעד מקומי בלי `network.localhost` או יעד אינטרנט בלי `network.access` — היא **שגיאה** כש-`minAppVersion` הוא `0.9.98.1` ומעלה, ואזהרה מתחת לכך.) בפועל ה-URLים חייבים להופיע גם במניפסט וגם במקור אמון רשמי של אוצריא בזמן ריצה.
    - **`design`** — דו"ח תאימות ל־[DESIGN_GUIDE.md](DESIGN_GUIDE.md): דורש `<html lang="he" dir="rtl">`, ניצול CSS variables (`var(--color-*)`, `var(--font-*)`, `var(--radius-*)`), ואיסור hex/rgb/named colors מחוץ להגדרות `:root`. גם זה אינו חוסם אריזה — נועד לעזור למפתח לוודא שהתוסף משתלב באוצריא.
 
 3. **אריזה** — `.otzplugin` (ZIP) עם כל קבצי התיקייה, פרט לתיקיות פיתוח (`.git/`, `node_modules/`, `.idea/`, `.vscode/`, `__pycache__/`, `.claude/`…), לקבצי מטא-דאטה של המאגר (ראו למטה) ולקבצים שהוחרגו ע"י `.otzignore`. אם נתיב הפלט יושב בתוך התיקייה הנארזת, הקובץ מוחרג מהארכיון כדי שלא ייכלל בעצמו.

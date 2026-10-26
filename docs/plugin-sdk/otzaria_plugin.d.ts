@@ -521,7 +521,7 @@ export interface SearchOptionsCatalog {
 /**
  * ההרשאה נקבעת לפי ה-host שב-`url`: `localhost` / `::1` / `127.0.0.0`–`127.0.0.255`
  * דורשים `network.localhost`; כל יעד אחר (אינטרנט) דורש `network.access`.
- * מאוצריא 0.9.99 אחת אינה מחליפה את השנייה; פנייה לשני סוגי יעדים דורשת את שתיהן.
+ * מאוצריא 0.9.98.1 אחת אינה מחליפה את השנייה; פנייה לשני סוגי יעדים דורשת את שתיהן.
  * הכתובת חייבת להופיע גם ב-`network.allowlist` של המניפסט.
  */
 export interface NetworkFetchParams {
@@ -538,7 +538,7 @@ export interface NetworkFetchParams {
 /**
  * ההרשאה נקבעת לפי ה-host שב-`url`: `localhost` / `::1` / `127.0.0.0`–`127.0.0.255`
  * דורשים `network.localhost`; כל יעד אחר (אינטרנט) דורש `network.access`.
- * מאוצריא 0.9.99 אחת אינה מחליפה את השנייה; פנייה לשני סוגי יעדים דורשת את שתיהן.
+ * מאוצריא 0.9.98.1 אחת אינה מחליפה את השנייה; פנייה לשני סוגי יעדים דורשת את שתיהן.
  * הכתובת חייבת להופיע גם ב-`network.allowlist` של המניפסט.
  */
 export interface NetworkFetchFileParams {

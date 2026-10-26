@@ -5,12 +5,14 @@ void main() {
   tearDown(() => PluginNetworkPermissionMode.debugSetAppVersion(null));
 
   group('pluginUsesStrictNetworkPermissions', () {
-    test('הפרדה מלאה רק מ-0.9.99', () {
+    test('הפרדה מלאה רק מ-0.9.98.1', () {
       expect(pluginUsesStrictNetworkPermissions('0.0.0'), isFalse);
       expect(pluginUsesStrictNetworkPermissions('0.9.98'), isFalse);
+      expect(pluginUsesStrictNetworkPermissions('0.9.98.0'), isFalse);
       expect(pluginUsesStrictNetworkPermissions('0.9.98+99800'), isFalse);
+      expect(pluginUsesStrictNetworkPermissions('0.9.98.1'), isTrue);
+      expect(pluginUsesStrictNetworkPermissions('0.9.98.1+99801'), isTrue);
       expect(pluginUsesStrictNetworkPermissions('0.9.99'), isTrue);
-      expect(pluginUsesStrictNetworkPermissions('0.9.99+99900'), isTrue);
       expect(pluginUsesStrictNetworkPermissions('0.10.0'), isTrue);
       expect(pluginUsesStrictNetworkPermissions('1.0.0'), isTrue);
     });
@@ -36,7 +38,7 @@ void main() {
       });
     });
 
-    test('מ-0.9.99 יעד מקומי דורש network.localhost בלבד', () {
+    test('מ-0.9.98.1 יעד מקומי דורש network.localhost בלבד', () {
       expect(acceptedNetworkPermissionsFor(local, strict: true), {
         'network.localhost',
       });
@@ -55,12 +57,12 @@ void main() {
     test('נקבע לפי גרסת האפליקציה', () async {
       PluginNetworkPermissionMode.debugSetAppVersion('0.9.98');
       expect(await PluginNetworkPermissionMode.isStrict(), isFalse);
-      PluginNetworkPermissionMode.debugSetAppVersion('0.9.99');
+      PluginNetworkPermissionMode.debugSetAppVersion('0.9.98.1');
       expect(await PluginNetworkPermissionMode.isStrict(), isTrue);
     });
 
     test('גרסת אפליקציה לא חוקית נחשבת מלאה (כשל סגור)', () async {
-      for (final version in ['', 'unknown', 'v0.9.99']) {
+      for (final version in ['', 'unknown', 'v0.9.98.1']) {
         PluginNetworkPermissionMode.debugSetAppVersion(version);
         expect(
           await PluginNetworkPermissionMode.isStrict(),

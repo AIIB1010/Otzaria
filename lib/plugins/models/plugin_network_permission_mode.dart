@@ -6,7 +6,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 /// מגרסה זו `network.localhost` ו-`network.access` נפרדות לחלוטין: יעד מקומי
 /// דורש `network.localhost` בלבד, ויעד באינטרנט דורש `network.access` בלבד.
-const String pluginStrictNetworkPermissionsVersion = '0.9.99';
+const String pluginStrictNetworkPermissionsVersion = '0.9.98.1';
 
 /// האם [version] היא גרסה שבה ההרשאות נפרדות לחלוטין.
 ///

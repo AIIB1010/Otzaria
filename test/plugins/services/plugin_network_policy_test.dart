@@ -127,11 +127,11 @@ void main() {
       expect(policy.prefixes, ['http://127.0.0.1:11434']);
     });
 
-    test('מ-0.9.99 loopback דורש network.localhost', () async {
+    test('מ-0.9.98.1 loopback דורש network.localhost', () async {
       final policy = await _policy(
         ['127.0.0.1', '127.0.0.9', 'http://localhost:1234'],
         grants: const {'network.access': true},
-        appVersion: '0.9.99',
+        appVersion: '0.9.98.1',
       );
 
       expect(policy.prefixes, isEmpty);
@@ -150,7 +150,7 @@ void main() {
     });
 
     test('network.localhost לבדה לא פותחת יעד מרוחק בשום גרסה', () async {
-      for (final version in ['0.9.98', '0.9.99']) {
+      for (final version in ['0.9.98', '0.9.98.1']) {
         final policy = await _policy(
           ['https://github.com/Otzaria/otzaria-library', '127.0.0.9'],
           grants: const {'network.localhost': true},
@@ -166,7 +166,7 @@ void main() {
       final strictApp = await _policy(
         ['127.0.0.9'],
         grants: const {'network.access': true},
-        appVersion: '0.9.99',
+        appVersion: '0.9.98.1',
         minAppVersion: '0.9.0',
       );
       final legacyApp = await _policy(
