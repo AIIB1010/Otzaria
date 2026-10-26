@@ -1,10 +1,3 @@
-// Card of one sage:
-//  - title: name and honorific; era, generation and dates below it
-//  - the summary is always shown; a tap expands the details and the
-//    "remember" line
-//  - teachers, students and relatives with their own entry are links
-//  - SelectionArea through ToolResultCardShell for free copying
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
@@ -14,6 +7,7 @@ import 'package:otzaria/tools/biographies/models/biographies_bundle.dart';
 import 'package:otzaria/tools/biographies/models/biography.dart';
 import 'package:otzaria/widgets/controls/action_buttons.dart';
 import 'package:otzaria/widgets/layout/tool_result_card_shell.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class BiographyCard extends StatefulWidget {
   final Biography biography;
@@ -77,7 +71,8 @@ class _BiographyCardState extends State<BiographyCard> {
       _bio.students.isNotEmpty ||
       _bio.family.isNotEmpty ||
       _bio.works.isNotEmpty ||
-      _bio.remember != null;
+      _bio.remember != null ||
+      _bio.sources.isNotEmpty;
 
   void _copy() {
     String people(List<RelatedPerson> list) =>
@@ -248,8 +243,8 @@ class _BiographyCardState extends State<BiographyCard> {
         return Text(p.display, style: bodyStyle);
       }
       final prefix = p.relation == null ? '' : '${p.relation}: ';
-      return Row(
-        mainAxisSize: MainAxisSize.min,
+      return Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           if (prefix.isNotEmpty) Text(prefix, style: bodyStyle),
           InkWell(
@@ -284,6 +279,21 @@ class _BiographyCardState extends State<BiographyCard> {
                       style: bodyStyle,
                     ),
                 ],
+              ),
+            ),
+        ]),
+      if (_bio.sources.isNotEmpty)
+        row('מקורות', [
+          for (final source in _bio.sources)
+            InkWell(
+              onTap: () => launchUrl(
+                Uri.parse(source.url),
+                mode: LaunchMode.externalApplication,
+              ),
+              child: Text(
+                source.title ?? source.url,
+                style: linkStyle,
+                textDirection: source.title == null ? TextDirection.ltr : null,
               ),
             ),
         ]),

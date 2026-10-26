@@ -4407,11 +4407,14 @@ const { data } = await Otzaria.call('tools.dictionary', { term: 'רמב״ם' });
 | פרמטר | תיאור |
 |--------|-------|
 | `query` | מחרוזת חיפוש, עד 200 תווים. חסרה או ריקה = כל הערכים |
-| `id` | מזהה ערך יחיד (מחרוזת, למשל `'Q127398'`). גובר על `query` |
+| `id` | מזהה ערך יחיד: מספר תאימות או מחרוזת, למשל `'Q127398'`. גובר על `query` |
+| `formatVersion` | `1` (ברירת מחדל): תאימות למבנה הישן; `2`: המבנה החדש המוצג להלן |
 | `limit` | מספר התוצאות המוחזרות, 1-50. ברירת מחדל: 20 |
 
 ```javascript
-const { data } = await Otzaria.call('tools.biographies', { query: 'הרמב"ם' });
+const { data } = await Otzaria.call('tools.biographies', {
+  query: 'הרמב"ם', formatVersion: 2
+});
 // { total: 1,
 //   results: [{
 //     id: 'Q127398', name: 'רבינו משה בן מימון', honorific: 'זצ"ל',
@@ -4434,39 +4437,22 @@ const { data } = await Otzaria.call('tools.biographies', { query: 'הרמב"ם' 
 **הצגת ערכים מחייבת קרדיט:** תוסף שמציג למשתמש תוכן מהביוגרפיות חייב להציג
 גם את `attribution`, ולצד כל ערך את המקורות שלו (`sources`).
 
-**שינוי בגרסה 0.9.99:** המאגר הוחלף ב"תולדות גדולי ישראל". `id` הוא מחרוזת
-(עד אז מספר), ומזהים ישנים אינם תקפים. `communities` ו-`biographyShort` הוסרו;
-נוספו `honorific`, `era`, `eraLabel`, `buried`, `roles`, `teachers`, `students`,
-`family`, `works`, `mentionedIn`, `remember`, `sources` ו-`attribution`.
-`birth` ו-`death` כוללים עכשיו גם שנה לועזית ומקום.
+**מגרסה 0.9.99:** המאגר הוחלף ב"תולדות גדולי ישראל". ללא `formatVersion: 2`
+נשמרת תאימות למבנה התשובה: `id` מספרי ויציב, `communities` הוא מערך ריק
+ו-`biographyShort` מכיל את `summary`. שדות הטקסט מכבדים את הגדרת שמות הקודש.
+המזהים המספריים החדשים שליליים ובטוחים ל-`Number` של JavaScript. אפשר להעביר
+אותם חזרה ב-`id`. מזהים מהמאגר הקודם אינם ניתנים למיפוי למאגר החדש ומחזירים
+`{ total: 0, results: [] }`, גם אם נשלח `query`; הם אינם משויכים לאדם אחר.
+
+עם `formatVersion: 2`, `id` הוא המזהה המקורי כמחרוזת, ו-`communities`
+ו-`biographyShort` אינם נכללים. בשני המבנים נוספו `honorific`, `era`,
+`eraLabel`, `buried`, `roles`, `teachers`, `students`, `family`, `works`,
+`mentionedIn`, `remember`, `sources` ו-`attribution`. `ref` נשאר מזהה מחרוזת
+בשני המבנים, וניתן להעבירו ב-`id`. `birth` ו-`death` כוללים גם שנה לועזית ומקום.
+לתוספים חדשים מומלץ להשתמש ב-`formatVersion: 2`.
 
 `summary`, `remember` ו-`description` של `works` מגיעים עם שם הוי"ה לפי בחירת
 המשתמש (מ-0.9.98.1); `rawDivineNames: true` מחזיר אותם כפי שנשמרו. ראו
-[שמות הקודש בטקסט שמגיע לתוסף](#שמות-הקודש-בטקסט-שמגיע-לתוסף).
-
-> המאגר ארוז באפליקציה ומתעדכן מהרשת. בהתקנה שבה הנתונים אינם
-> זמינים הקריאה נכשלת ב-`error.not_supported`.
-
---------|-------|
-| `query` | מחרוזת חיפוש, עד 200 תווים. חסרה או ריקה = כל הערכים |
-| `id` | מזהה ערך יחיד. גובר על `query` |
-| `limit` | מספר התוצאות המוחזרות, 1–50. ברירת מחדל: 20 |
-
-```javascript
-const { data } = await Otzaria.call('tools.biographies', { query: 'החתם סופר' });
-// { total: 1,
-//   results: [{
-//     id: 1234, name: 'רבי משה סופר', generation: 'אחרונים',
-//     appelations: ['החתם סופר'], communities: [...], countries: ['הונגריה'],
-//     birth: "ז' תשרי תקל"א", death: "כ"ה תשרי תקצ"ד",
-//     summary: '...', biographyShort: '...'
-//   }] }
-```
-
-`total` הוא מספר ההתאמות לפני ה-`limit`. שדות חסרים במאגר מוחזרים כ-`null`.
-
-`summary` ו-`biographyShort` מגיעים עם שם הוי"ה לפי בחירת המשתמש (מ-0.9.98.1);
-`rawDivineNames: true` מחזיר אותם כפי שנשמרו. ראו
 [שמות הקודש בטקסט שמגיע לתוסף](#שמות-הקודש-בטקסט-שמגיע-לתוסף).
 
 > המאגר ארוז באפליקציה ומתעדכן מהרשת. בהתקנה שבה הנתונים אינם

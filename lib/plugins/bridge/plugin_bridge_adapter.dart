@@ -139,6 +139,7 @@ import 'package:otzaria/plugins/services/plugin_report_service.dart';
 import 'package:otzaria/plugins/services/plugin_book_correction_service.dart';
 import 'package:otzaria/plugins/services/plugin_correction_session_service.dart';
 import 'package:otzaria/plugins/services/plugin_divine_names_filter.dart';
+import 'package:otzaria/plugins/services/plugin_biography_compatibility.dart';
 import 'package:otzaria/divine_names/models/divine_name_spans.dart';
 import 'package:otzaria/divine_names/models/divine_name_forms.dart';
 import 'package:otzaria/services/direct_error_report_service.dart';
@@ -292,6 +293,7 @@ class PluginBridgeDependencies {
   final CalendarCubit calendarCubit;
   final WorkspaceBloc workspaceBloc;
   final SearchRepository searchRepository;
+  final BiographiesRepository? biographiesRepository;
   final PersonalNotesRepository personalNotesRepository;
   final BookOpenCoordinator bookOpenCoordinator;
   final Map<String, dynamic> Function() themePayloadBuilder;
@@ -488,6 +490,7 @@ class PluginBridgeDependencies {
     required this.calendarCubit,
     required this.workspaceBloc,
     required this.searchRepository,
+    this.biographiesRepository,
     required this.personalNotesRepository,
     required this.bookOpenCoordinator,
     required this.themePayloadBuilder,
@@ -6934,8 +6937,19 @@ class PluginBridgeAdapter {
             throw Exception('error.invalid_params: query must be a string');
           }
           final id = args['id'];
-          if (id != null && (id is! String || id.isEmpty || id.length > 50)) {
-            throw Exception('error.invalid_params: id must be a string');
+          if (id != null &&
+              id is! int &&
+              (id is! String || id.isEmpty || id.length > 50)) {
+            throw Exception(
+              'error.invalid_params: id must be a string or integer',
+            );
+          }
+          final formatVersion = args['formatVersion'] ?? 1;
+          if (formatVersion is! int ||
+              (formatVersion != 1 && formatVersion != 2)) {
+            throw Exception(
+              'error.invalid_params: formatVersion must be 1 or 2',
+            );
           }
           final limit = args['limit'];
           if (limit != null && (limit is! int || limit < 1 || limit > 50)) {
@@ -6944,18 +6958,33 @@ class PluginBridgeAdapter {
           final names = await _derivedTextNames(null, args);
           final List<Biography> all;
           try {
-            all = await BiographiesRepository.instance.loadAll();
+            all =
+                await (_dependencies.biographiesRepository ??
+                        BiographiesRepository.instance)
+                    .loadAll();
           } catch (_) {
             throw Exception('error.not_supported: biographies unavailable');
           }
-          final matched = id is String
-              ? all.where((bio) => bio.id == id).toList()
-              : BiographiesRepository.filter(all, (rawQuery as String?) ?? '');
+          final matched = switch (id) {
+            final String id => all.where((bio) => bio.id == id).toList(),
+            final int id =>
+              all
+                  .where(
+                    (bio) =>
+                        id < 0 &&
+                        PluginBiographyCompatibility.legacyId(bio.id) == id,
+                  )
+                  .toList(),
+            _ => BiographiesRepository.filter(all, (rawQuery as String?) ?? ''),
+          };
           return {
             'total': matched.length,
             'results': matched
                 .take((limit as int?) ?? 20)
-                .map((bio) => _biographyToJson(bio, names))
+                .map(
+                  (bio) =>
+                      _biographyToJson(bio, names, legacy: formatVersion == 1),
+                )
                 .toList(),
           };
         }
@@ -6970,8 +6999,9 @@ class PluginBridgeAdapter {
   /// [names] applies to the prose fields only; the rest are names and keys.
   Map<String, dynamic> _biographyToJson(
     Biography bio,
-    PluginDivineNamesDisplay names,
-  ) {
+    PluginDivineNamesDisplay names, {
+    required bool legacy,
+  }) {
     String? prose(String? text) =>
         text == null ? null : filterPluginDivineNamesText(text, names);
     Map<String, dynamic> person(RelatedPerson p) => {
@@ -6980,8 +7010,12 @@ class PluginBridgeAdapter {
       'ref': p.ref,
     };
     return {
-      'id': bio.id,
-      'name': bio.name,
+      'id': legacy ? PluginBiographyCompatibility.legacyId(bio.id) : bio.id,
+      'name': legacy ? bio.fullName : bio.name,
+      if (legacy) ...{
+        'communities': <String>[],
+        'biographyShort': prose(bio.summary),
+      },
       'honorific': bio.honorific,
       'era': bio.era,
       'eraLabel': bio.eraLabel,
