@@ -25,7 +25,6 @@ enum MoladDisplayReason {
 /// - **המולד הנראה (האסטרונומי)** — זמן ה-conjunction האמיתי של הירח והשמש,
 ///   מחושב לפי אלגוריתם Meeus. מוצג בזמן המקומי של העיר הנבחרת.
 class MoladInfo {
-  final int jewishYear;
   final int jewishMonth;
   final String monthName;
   final MoladDisplayReason reason;
@@ -45,7 +44,6 @@ class MoladInfo {
   final String cityName;
 
   const MoladInfo({
-    required this.jewishYear,
     required this.jewishMonth,
     required this.monthName,
     required this.reason,
@@ -214,7 +212,6 @@ MoladInfo _buildMoladInfo(
       _computeVisibleMoladInCity(targetMonthCalendar, tzLocation);
 
   return MoladInfo(
-    jewishYear: targetMonthCalendar.getJewishYear(),
     jewishMonth: targetMonthCalendar.getJewishMonth(),
     monthName: monthName,
     reason: reason,
