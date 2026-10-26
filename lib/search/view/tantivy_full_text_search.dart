@@ -122,6 +122,7 @@ class _TantivyFullTextSearchState extends State<TantivyFullTextSearch>
 
   @override
   void dispose() {
+    PluginSearchDialogRegistry.instance.removeListener(_onPluginActionsChanged);
     _contentFocusNode.dispose();
     super.dispose();
   }
@@ -179,6 +180,7 @@ class _TantivyFullTextSearchState extends State<TantivyFullTextSearch>
   void initState() {
     super.initState();
     _focus = FocusRepository.of(context);
+    PluginSearchDialogRegistry.instance.addListener(_onPluginActionsChanged);
 
     // Request focus on search field when the widget is first created
     _requestSearchFieldFocus();
@@ -278,6 +280,7 @@ class _TantivyFullTextSearchState extends State<TantivyFullTextSearch>
               buildWhen: (previous, current) =>
                   previous.searchQuery != current.searchQuery ||
                   previous.isLoading != current.isLoading ||
+                  previous.errorMessage != current.errorMessage ||
                   !identical(previous.configuration, current.configuration),
               builder: (context, state) => SearchResultsLayout(
                 tab: widget.tab,
@@ -520,6 +523,20 @@ class _TantivyFullTextSearchState extends State<TantivyFullTextSearch>
     );
   }
 
+  void _onPluginActionsChanged() => setState(() {});
+
+  bool get _hasPluginResultsActions {
+    final state = widget.tab.searchBloc.state;
+    return state.searchQuery.isNotEmpty &&
+        !state.isLoading &&
+        state.errorMessage == null &&
+        PluginSearchDialogRegistry.instance.getAll().any(
+          (record) =>
+              record.$2.resultsAction != null &&
+              record.$2.isVisibleIn(state.configuration.searchMode),
+        );
+  }
+
   /// בוררי המיון, האיחוד ומיקום התוצאות החיצוניות שבסוף הסרגל.
   List<AppTopBarItem> _buildTrailingControls(bool collapseMenus) => [
     AppTopBarItem(
@@ -547,13 +564,14 @@ class _TantivyFullTextSearchState extends State<TantivyFullTextSearch>
         ),
       ),
     ),
-    AppTopBarItem(
-      flexible: true,
-      widget: PluginSearchResultsActions(
-        tab: widget.tab,
-        iconOnly: collapseMenus,
+    if (_hasPluginResultsActions)
+      AppTopBarItem(
+        flexible: true,
+        widget: PluginSearchResultsActions(
+          tab: widget.tab,
+          iconOnly: collapseMenus,
+        ),
       ),
-    ),
   ];
 }
 
