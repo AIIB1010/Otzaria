@@ -25,6 +25,10 @@ void Stop();
 // כלים משותפים לגלאי התקיעה בזמן ריצה (hang_monitor). ה-handle של ה-thread
 // הראשי חי עד Stop, ולכן יש לעצור את hang_monitor לפניו.
 bool CaptureMainStack(std::vector<ULONG_PTR>* frames);
+// כמו CaptureMainStack ל-thread אחר; ה-handle צריך SUSPEND_RESUME ו-GET_CONTEXT.
+bool CaptureThreadStack(HANDLE thread, std::vector<ULONG_PTR>* frames);
+// קורא זיכרון ומפת מודולים — רק אחרי שה-thread חודש.
+bool IsDartFrame(ULONG_PTR address);
 // מתרגם לשמות מודולים — רק אחרי ש-CaptureMainStack חידש את ה-thread.
 void AppendStack(const std::vector<ULONG_PTR>& frames, std::string* report);
 // commit הבנייה ו-build-id של app.so — מזהים את קובצי הסמלים לפענוח.

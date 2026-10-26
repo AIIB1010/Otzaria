@@ -755,6 +755,40 @@ void main() {
     DbReadWorker.allowReopen();
   });
 
+  test('worker שלא עונה בזמן נרשם ב-errors.txt (issue #3325)', () async {
+    final dbPath = await seedDb('seforim', bigBookLines: 200000);
+    await DbReadWorker.request('textRange', textRangeArgs(dbPath, 'בראשית'));
+    AppPaths.debugOverrideDataRootPath(path.join(tempDir.path, 'data'));
+    DbReadWorker.logFailuresInDebug = true;
+    DbReadWorker.resetLoggedFailuresForTesting();
+    addTearDown(() {
+      DbReadWorker.logFailuresInDebug = false;
+      DbReadWorker.resetLoggedFailuresForTesting();
+      AppPaths.debugOverrideDataRootPath(null);
+    });
+
+    DbReadWorker.stallTimeout = Duration.zero;
+    await expectLater(
+      DbReadWorker.request('textRange', {
+        ...textRangeArgs(dbPath, 'ספר גדול'),
+        'startLine': 0,
+        'endLine': 199999,
+      }),
+      throwsA(isA<DbReadWorkerUnavailable>()),
+    );
+
+    final file = ErrorLogFile.resolveFile();
+    var log = '';
+    for (var i = 0; i < 100 && !log.contains('stalled'); i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      if (file.existsSync()) log = file.readAsStringSync();
+    }
+    expect(log, contains('DB read worker stalled'));
+    expect(log, contains('Method: textRange'));
+    expect(log, contains('endLine=199999'));
+    expect(log, isNot(contains(dbPath)));
+  });
+
   test('worker שלא עונה בזמן נופל למסלול הישיר עד שיענה', () async {
     final dbPath = await seedDb('seforim', bigBookLines: 200000);
     // חיבור פתוח מראש — כדי שהבקשה האיטית תהיה השאילתה עצמה.

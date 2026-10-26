@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <initializer_list>
 #include <memory>
 #include <string>
 #include <thread>
@@ -27,6 +28,9 @@ constexpr int kMaxCaptures = 6;
 constexpr DWORD kHeartbeatIntervalMs = 250;
 constexpr ULONGLONG kMaxLifetimeMs = 300000;
 constexpr int kMaxFrames = 48;
+constexpr size_t kMaxStackCopyBytes = 256 * 1024;
+// אפסים אחרי העותק: פרישת המסגרת האחרונה קוראת מעבר לקצהו.
+constexpr size_t kStackCopyPaddingBytes = 64 * 1024;
 
 struct ModuleRange {
   ULONG_PTR base = 0;
@@ -216,7 +220,7 @@ std::string DescribeAddress(ULONG_PTR address) {
 #define WD_SP(ctx) ((ctx).Sp)
 #endif
 
-// קריאת מילה מהמחסנית של ה-thread המושהה — כתובת פגומה תפיל את התהליך בלי זה.
+// קריאת מילה מהמחסנית שהועתקה — כתובת פגומה תפיל את התהליך בלי זה.
 bool ReadStackWord(ULONG_PTR address, ULONG_PTR* out) {
   __try {
     *out = *reinterpret_cast<ULONG_PTR*>(address);
@@ -226,18 +230,38 @@ bool ReadStackWord(ULONG_PTR address, ULONG_PTR* out) {
   }
 }
 
-// פורשת את מחסנית הקריאות של ה-thread המושהה. רק RtlVirtualUnwind ומפת מודולים
-// שנקראה מראש — כל קריאה שנוטלת את נעילת ה-loader תיתקע כאן.
-void UnwindSuspendedThread(CONTEXT* context, std::vector<ULONG_PTR>* frames) {
+// עותק שנחתך או מודול שנפרק אחרי החידוש מסתיימים במחסנית קטועה, לא בקריסה.
+bool UnwindFrame(CONTEXT* context, bool* has_function) {
+  __try {
+    DWORD64 image_base = 0;
+    PRUNTIME_FUNCTION function =
+        ::RtlLookupFunctionEntry(WD_PC(*context), &image_base, nullptr);
+    *has_function = function != nullptr;
+    if (function == nullptr) return true;
+    PVOID handler_data = nullptr;
+    DWORD64 establisher_frame = 0;
+    ::RtlVirtualUnwind(UNW_FLAG_NHANDLER, image_base, WD_PC(*context), function,
+                       context, &handler_data, &establisher_frame, nullptr);
+    return true;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return false;
+  }
+}
+
+// פורשת מחסנית שהועתקה; RtlLookupFunctionEntry נוטלת נעילות של ה-loader, ולכן
+// רצה רק אחרי שה-thread חודש.
+void UnwindCopiedStack(CONTEXT* context, ULONG_PTR stack_begin,
+                       ULONG_PTR stack_end, std::vector<ULONG_PTR>* frames) {
   for (int i = 0; i < kMaxFrames; ++i) {
     const ULONG_PTR pc = static_cast<ULONG_PTR>(WD_PC(*context));
     if (pc == 0) break;
     frames->push_back(pc);
+    const ULONG_PTR sp = static_cast<ULONG_PTR>(WD_SP(*context));
+    if (sp < stack_begin || sp >= stack_end) break;
 
-    DWORD64 image_base = 0;
-    PRUNTIME_FUNCTION function =
-        ::RtlLookupFunctionEntry(WD_PC(*context), &image_base, nullptr);
-    if (function == nullptr) {
+    bool has_function = false;
+    if (!UnwindFrame(context, &has_function)) break;
+    if (!has_function) {
 #if defined(_M_X64)
       ULONG_PTR return_address = 0;
       if (!ReadStackWord(static_cast<ULONG_PTR>(WD_SP(*context)),
@@ -252,33 +276,84 @@ void UnwindSuspendedThread(CONTEXT* context, std::vector<ULONG_PTR>* frames) {
 #endif
       continue;
     }
-
-    PVOID handler_data = nullptr;
-    DWORD64 establisher_frame = 0;
-    ::RtlVirtualUnwind(UNW_FLAG_NHANDLER, image_base, WD_PC(*context), function,
-                       context, &handler_data, &establisher_frame, nullptr);
     if (WD_PC(*context) == 0) break;
   }
 }
 
-bool CaptureMainThreadStack(std::vector<ULONG_PTR>* frames) {
-  if (g_main_thread == nullptr) return false;
-  if (::SuspendThread(g_main_thread) == static_cast<DWORD>(-1)) return false;
+bool CopyStackBytes(ULONG_PTR from, void* to, size_t size) {
+  __try {
+    memcpy(to, reinterpret_cast<const void*>(from), size);
+    return true;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return false;
+  }
+}
+
+// מצביע לתוך המחסנית המקורית מצביע אחרי הפרישה לתוך העותק.
+void Relocate(ULONG_PTR* value, ULONG_PTR from, size_t size, ULONG_PTR to) {
+  if (*value >= from && *value - from < size) *value = *value - from + to;
+}
+
+// בזמן ההשהיה רק syscalls ו-memcpy: thread מושהה שמחזיק נעילה שה-watcher
+// צריך היה נשאר מושהה לתמיד.
+bool CaptureSuspendedStack(HANDLE thread, std::vector<ULONG_PTR>* frames) {
+  if (thread == nullptr) return false;
+  std::vector<ULONG_PTR> copy(
+      (kMaxStackCopyBytes + kStackCopyPaddingBytes) / sizeof(ULONG_PTR));
+  if (::SuspendThread(thread) == static_cast<DWORD>(-1)) return false;
 
   CONTEXT context = {};
   context.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER;
-  const bool got_context = ::GetThreadContext(g_main_thread, &context) != FALSE;
-  if (got_context) UnwindSuspendedThread(&context, frames);
+  const bool got_context = ::GetThreadContext(thread, &context) != FALSE;
+  const ULONG_PTR sp = static_cast<ULONG_PTR>(WD_SP(context));
+  size_t copied = 0;
+  MEMORY_BASIC_INFORMATION info = {};
+  if (got_context &&
+      ::VirtualQuery(reinterpret_cast<LPCVOID>(sp), &info, sizeof(info)) != 0 &&
+      info.State == MEM_COMMIT) {
+    const ULONG_PTR end =
+        reinterpret_cast<ULONG_PTR>(info.BaseAddress) + info.RegionSize;
+    copied = (std::min)(static_cast<size_t>(end - sp), kMaxStackCopyBytes) &
+             ~(sizeof(ULONG_PTR) - 1);
+    if (!CopyStackBytes(sp, copy.data(), copied)) copied = 0;
+  }
+  ::ResumeThread(thread);
+  if (!got_context) return false;
+  if (copied == 0) {
+    frames->push_back(static_cast<ULONG_PTR>(WD_PC(context)));
+    return true;
+  }
 
-  ::ResumeThread(g_main_thread);
-  return got_context;
+  const ULONG_PTR to = reinterpret_cast<ULONG_PTR>(copy.data());
+  for (size_t i = 0; i < copied / sizeof(ULONG_PTR); ++i) {
+    Relocate(&copy[i], sp, copied, to);
+  }
+#if defined(_M_X64)
+  for (DWORD64* reg : {&context.Rbp, &context.Rbx, &context.Rsi, &context.Rdi,
+                       &context.R12, &context.R13, &context.R14,
+                       &context.R15}) {
+    Relocate(reinterpret_cast<ULONG_PTR*>(reg), sp, copied, to);
+  }
+#else
+  for (int i = 19; i <= 28; ++i) {
+    Relocate(reinterpret_cast<ULONG_PTR*>(&context.X[i]), sp, copied, to);
+  }
+  Relocate(reinterpret_cast<ULONG_PTR*>(&context.Fp), sp, copied, to);
+#endif
+  WD_SP(context) = to;
+  UnwindCopiedStack(&context, to, to + copied, frames);
+  return true;
 }
 
 #else  // ארכיטקטורה בלי פרישת מחסנית מבוססת-טבלאות (x86)
 
-bool CaptureMainThreadStack(std::vector<ULONG_PTR>*) { return false; }
+bool CaptureSuspendedStack(HANDLE, std::vector<ULONG_PTR>*) { return false; }
 
 #endif
+
+bool CaptureMainThreadStack(std::vector<ULONG_PTR>* frames) {
+  return CaptureSuspendedStack(g_main_thread, frames);
+}
 
 std::wstring ResolveLogPath() {
   wchar_t exe_path[MAX_PATH] = {0};
@@ -407,9 +482,7 @@ void WatcherLoop() {
     if (captures >= kMaxCaptures) continue;
     if (last_capture != 0 && now - last_capture < kCaptureIntervalMs) continue;
 
-    // הקצאה מראש: הקצאה בזמן שה-thread הראשי מושהה עלולה להיתקע על נעילת ה-heap.
     std::vector<ULONG_PTR> frames;
-    frames.reserve(kMaxFrames);
     CaptureMainThreadStack(&frames);
     last_capture = now;
     ++captures;
@@ -422,6 +495,12 @@ void WatcherLoop() {
 bool CaptureMainStack(std::vector<ULONG_PTR>* frames) {
   return CaptureMainThreadStack(frames);
 }
+
+bool CaptureThreadStack(HANDLE thread, std::vector<ULONG_PTR>* frames) {
+  return CaptureSuspendedStack(thread, frames);
+}
+
+bool IsDartFrame(ULONG_PTR address) { return DartImageBase(address) != 0; }
 
 void AppendStack(const std::vector<ULONG_PTR>& frames, std::string* report) {
   AppendStackSection(frames, report);
