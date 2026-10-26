@@ -113,17 +113,7 @@ void main() {
   });
 
   group('ReadingSettingsPanel — זיהוי מצב צורת הדף', () {
-    Widget buildBody({required bool pageShape, _TestTextBookBloc? textBloc}) {
-      textBloc ??= _TestTextBookBloc(_loaded(showPageShapeView: pageShape));
-      final tab = TextBookTab(
-        book: TextBook(title: 'ספר בדיקה'),
-        index: 0,
-        blocOverride: textBloc,
-      );
-      final tabsBloc = _TestTabsBloc(
-        TabsState(tabs: [tab], currentTabIndex: 0),
-      );
-
+    Widget buildPanel(TabsBloc tabsBloc) {
       return MaterialApp(
         home: Scaffold(
           body: MultiBlocProvider(
@@ -136,6 +126,18 @@ void main() {
             child: const ReadingSettingsPanel(),
           ),
         ),
+      );
+    }
+
+    Widget buildBody({required bool pageShape, _TestTextBookBloc? textBloc}) {
+      textBloc ??= _TestTextBookBloc(_loaded(showPageShapeView: pageShape));
+      final tab = TextBookTab(
+        book: TextBook(title: 'ספר בדיקה'),
+        index: 0,
+        blocOverride: textBloc,
+      );
+      return buildPanel(
+        _TestTabsBloc(TabsState(tabs: [tab], currentTabIndex: 0)),
       );
     }
 
@@ -195,6 +197,44 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('גודל גופן מפרשים'), findsOneWidget);
     });
+
+    // הפאנל נשאר חי גם כשהוא סגור; הסליידר תלוי רק במצב הספר הפעיל.
+    testWidgets('מעבר טאב אינו בונה מחדש את ההגדרות, והסליידר לפי הספר הפעיל', (
+      tester,
+    ) async {
+      await setWideSurface(tester);
+      TextBookTab tabOf(String title, {required bool pageShape}) => TextBookTab(
+        book: TextBook(title: title),
+        index: 0,
+        blocOverride: _TestTextBookBloc(
+          _loaded(showPageShapeView: pageShape),
+        ),
+      );
+      final tabs = [
+        tabOf('ספר א', pageShape: false),
+        tabOf('ספר ב', pageShape: false),
+        tabOf('ספר ג', pageShape: true),
+      ];
+      final tabsBloc = _TestTabsBloc(TabsState(tabs: tabs, currentTabIndex: 0));
+      await tester.pumpWidget(buildPanel(tabsBloc));
+      await tester.pump();
+      final before = tester.widget(find.byType(TextSettingsTab));
+
+      tabsBloc.push(TabsState(tabs: tabs, currentTabIndex: 1));
+      await tester.pumpAndSettle();
+      expect(
+        identical(tester.widget(find.byType(TextSettingsTab)), before),
+        isTrue,
+      );
+
+      tabsBloc.push(TabsState(tabs: tabs, currentTabIndex: 2));
+      await tester.pumpAndSettle();
+      expect(find.text('גודל גופן מפרשים'), findsNothing);
+
+      tabsBloc.push(TabsState(tabs: tabs, currentTabIndex: 0));
+      await tester.pumpAndSettle();
+      expect(find.text('גודל גופן מפרשים'), findsOneWidget);
+    });
   });
 }
 
@@ -247,6 +287,8 @@ class _TestTabsBloc extends Bloc<TabsEvent, TabsState> implements TabsBloc {
   _TestTabsBloc(super.initialState) {
     on<TabsEvent>((event, emit) {});
   }
+
+  void push(TabsState state) => emit(state);
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
