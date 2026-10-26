@@ -291,6 +291,18 @@ void main() {
       final previousOwner = DialogOwner.hwnd();
       FilePickerPlatform.instance = _ImportPicker();
       DialogOwner.mainWindowHwnd = 7;
+      if (Platform.isMacOS) {
+        const channel = MethodChannel('miguelruivo.flutter.plugins.filepicker');
+        final messenger =
+            TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+        messenger.setMockMethodCallHandler(channel, (call) async {
+          expect((call.arguments as Map)['viewId'], tester.view.viewId);
+          return [
+            {'path': '/notes.json'},
+          ];
+        });
+        addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      }
       addTearDown(() async {
         FilePickerPlatform.instance = previousPicker;
         DialogOwner.mainWindowHwnd = previousOwner;
