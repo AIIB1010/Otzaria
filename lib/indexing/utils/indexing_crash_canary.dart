@@ -62,6 +62,8 @@ class IndexingCrashCanary {
   /// false לספר שכבר הפיל [maxAttempts] ריצות; החסימה נשמרת עד commit.
   /// עם `save: false` חובה לקרוא ל-[flush] לפני שהספר נכנס לעבודה native.
   bool begin(String key, {bool save = true}) {
+    // אצווה שנכשלה פותחת את הספר שוב ספר-ספר; ניסיון אחד אינו נספר פעמיים.
+    if (_inFlight.contains(key)) return true;
     final attempts = _attempts[key] ?? 0;
     if (attempts >= maxAttempts) {
       _skipped.add(key);

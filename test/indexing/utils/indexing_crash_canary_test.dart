@@ -64,6 +64,26 @@ void main() {
     expect(jsonDecode(file.readAsStringSync()), {'a': 2, 'b': 2});
   });
 
+  test(
+    'ספר שקרס פעם אחת ונפתח שוב באותה ריצה אינו נחסם (issue #3336)',
+    () async {
+      final temp = await Directory.systemTemp.createTemp('canary_reenter_');
+      addTearDown(() => temp.delete(recursive: true));
+      final index = p.join(temp.path, 'index');
+      final file = File('$index.in_flight.json')
+        ..writeAsStringSync(jsonEncode({'a': 1}));
+      IndexingCrashCanary.start(index);
+      final canary = IndexingCrashCanary.current!;
+      addTearDown(canary.finish);
+      // אצווה שנכשלה, ואחריה המסלול ספר-ספר על אותו ספר.
+      expect(canary.begin('a'), isTrue);
+      expect(canary.begin('a'), isTrue);
+      expect(jsonDecode(file.readAsStringSync()), {'a': 2});
+      canary.end('a');
+      expect(jsonDecode(file.readAsStringSync()), isEmpty);
+    },
+  );
+
   test('אצווה נכתבת לדיסק פעם אחת ב-flush ולא לכל ספר (issue #3330)', () async {
     final temp = await Directory.systemTemp.createTemp('canary_save_');
     addTearDown(() => temp.delete(recursive: true));
