@@ -460,11 +460,6 @@ class SeforimRepository {
     }
   }
 
-  /// Gets a category by its title.
-  Future<Category?> getCategoryByTitle(String title) async {
-    return await _database.categoryDao.getCategoryByTitle(title);
-  }
-
   /// Gets a category by its title and parent ID.
   Future<Category?> getCategoryByTitleAndParent(
     String title,
@@ -1942,12 +1937,6 @@ class SeforimRepository {
   /// lastModified), ולכן חוסכים את מעברי היחסים היקרים של [getAllBooks].
   Future<List<Book>> getAllBooksLean() async {
     return _database.bookDao.getAllBooks();
-  }
-
-  /// Closes the database connection.
-  /// Should be called when the repository is no longer needed.
-  Future<void> close() async {
-    _database.close();
   }
 
   /// Executes a raw SQL query.
