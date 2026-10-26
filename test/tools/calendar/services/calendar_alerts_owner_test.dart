@@ -920,6 +920,11 @@ void main() {
     });
 
     test('אין initialize לפני שער החשיפה, ואחריו בדיוק אחד', () async {
+      // השירות האמיתי בודק את שעון המערכת, ולכן גם האירועים יחסיים אליו.
+      now = DateTime.now();
+      CustomEvent event(String id) => futureEvent(id).copyWith(
+        baseGregorianDate: now.add(const Duration(days: 5)),
+      );
       final reveal = Completer<void>();
       NotificationService.startupGate = () => reveal.future;
       final o = CalendarAlertsOwner(
@@ -931,8 +936,8 @@ void main() {
       );
       addTearDown(o.dispose);
 
-      final ack = await o.execute('upsertEvent', eventArgs(futureEvent('a')));
-      await o.execute('upsertEvent', eventArgs(futureEvent('b')));
+      final ack = await o.execute('upsertEvent', eventArgs(event('a')));
+      await o.execute('upsertEvent', eventArgs(event('b')));
       await pumpEventQueue();
       expect(ack['ok'], isTrue);
       expect(calls, isEmpty);
