@@ -169,8 +169,8 @@ class _OutlineViewState extends State<OutlineView>
     final path = _findPath(nodes, targetNode);
     if (path.isEmpty) return;
 
-    // מוצא את הרמה של הצומת היעד
-    int targetLevel = _getNodeLevel(nodes, targetNode);
+    // רמת הצומת היעד היא מספר אבותיו בנתיב.
+    final targetLevel = path.length - 1;
 
     // אם הצומת ברמה 2 ומעלה (שזה רמה 3 ומעלה בספירה רגילה), פתח את כל ההורים
     if (targetLevel >= 2) {
@@ -183,33 +183,13 @@ class _OutlineViewState extends State<OutlineView>
     }
   }
 
-  int _getNodeLevel(
-    List<PdfOutlineNode> nodes,
-    PdfOutlineNode targetNode, [
-    int currentLevel = 0,
-  ]) {
-    for (final node in nodes) {
-      if (node == targetNode) {
-        return currentLevel;
-      }
-
-      final childLevel = _getNodeLevel(
-        node.children,
-        targetNode,
-        currentLevel + 1,
-      );
-      if (childLevel != -1) {
-        return childLevel;
-      }
-    }
-    return -1;
-  }
-
+  // רץ בכל מעבר עמוד על כל העץ: בלי איטרטור ובלי רשימה לכל צומת.
   List<PdfOutlineNode> _findPath(
     List<PdfOutlineNode> nodes,
     PdfOutlineNode targetNode,
   ) {
-    for (final node in nodes) {
+    for (var i = 0; i < nodes.length; i++) {
+      final node = nodes[i];
       if (node == targetNode) {
         return [node];
       }
@@ -219,7 +199,7 @@ class _OutlineViewState extends State<OutlineView>
         return [node, ...subPath];
       }
     }
-    return [];
+    return const [];
   }
 
   void _scrollToActiveItem() {
