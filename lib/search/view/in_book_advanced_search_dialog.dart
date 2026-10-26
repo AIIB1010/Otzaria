@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:otzaria/search/in_book_search_settings.dart';
 import 'package:otzaria/search/models/search_configuration.dart';
 import 'package:otzaria/search/search_query_builder.dart';
 import 'package:otzaria/search/view/search_dialog.dart';
@@ -51,28 +52,23 @@ SearchingTab createInBookSearchDialogTab({
   return tab;
 }
 
-/// פותח חיפוש מתקדם בתוך ספר ומחזיר את ההגדרות שאושרו, או null בביטול.
+/// פותח חיפוש מתקדם בתוך ספר עם [settings] ומחזיר את ההגדרות שאושרו, או
+/// null בביטול. הדיאלוג מציג את המדיניות שנבחרה, לא את זו שהותאמה לשאילתה.
 Future<SearchDialogResult?> showInBookAdvancedSearchDialog(
   BuildContext context, {
   required String? bookTitle,
   required String query,
-  required SearchMode searchMode,
-  required int distance,
-  required SearchMatchPolicy matchPolicy,
-  required Map<String, Map<String, bool>> searchOptions,
-  required Map<int, List<String>> alternativeWords,
-  required Map<String, String> spacingValues,
-  Map<String, bool>? optionsForEveryWord,
+  required InBookSearchSettings settings,
 }) async {
   final tab = createInBookSearchDialogTab(
     query: query,
-    searchMode: searchMode,
-    distance: distance,
-    matchPolicy: matchPolicy,
-    searchOptions: searchOptions,
-    alternativeWords: alternativeWords,
-    spacingValues: spacingValues,
-    optionsForEveryWord: optionsForEveryWord,
+    searchMode: settings.searchMode,
+    distance: settings.distance,
+    matchPolicy: settings.requestedMatchPolicy,
+    searchOptions: settings.searchOptions,
+    alternativeWords: settings.alternativeWords,
+    spacingValues: settings.spacingValues,
+    optionsForEveryWord: settings.optionsForEveryWord,
   );
 
   final result = await showDialog<SearchDialogResult>(
