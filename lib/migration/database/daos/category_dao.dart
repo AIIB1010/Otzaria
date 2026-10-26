@@ -109,15 +109,6 @@ class CategoryDao {
     return db.updatedRows;
   }
 
-  /// Gets a category by its title.
-  Future<Category?> getCategoryByTitle(String title) async {
-    if (!await _hasCategories) return null;
-    final db = await database;
-    final result = db.select(_queries['selectByTitle']!, [title]).toMapList();
-    if (result.isEmpty) return null;
-    return Category.fromJson(result.first);
-  }
-
   /// Gets a category by its title and parent ID.
   Future<Category?> getCategoryByTitleAndParent(
     String title,
