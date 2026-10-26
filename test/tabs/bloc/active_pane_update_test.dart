@@ -24,6 +24,29 @@ void main() {
     pageNumber: 1,
   );
 
+  test('changedBesidesActivePane מתעלם מהחלונית הפעילה ומזהה כל שינוי אחר', () {
+    final second = pdf('ב');
+    final other = pdf('ג');
+    final state = TabsState(
+      tabs: [
+        CombinedTab(rightTab: pdf('א'), leftTab: second),
+        other,
+      ],
+      currentTabIndex: 0,
+    );
+    bool changed(TabsState next) =>
+        TabsState.changedBesidesActivePane(state, next);
+
+    expect(
+      changed(state.copyWith(activePane: ActivePaneUpdate.set(second))),
+      isFalse,
+    );
+    expect(changed(state.copyWith(tabs: [...state.tabs])), isTrue);
+    expect(changed(state.copyWith(currentTabIndex: 1)), isTrue);
+    expect(changed(state.copyWith(forceUpdate: true)), isTrue);
+    expect(changed(state.copyWith(selectedTabs: [other])), isTrue);
+  });
+
   test('unchanged — החלונית הפעילה נשמרת', () {
     final second = pdf('ב');
     final split = CombinedTab(rightTab: pdf('א'), leftTab: second);

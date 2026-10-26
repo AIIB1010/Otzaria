@@ -137,6 +137,14 @@ class TabsState extends Equatable {
     return null;
   }
 
+  /// `buildWhen` למי שאינו מציג את החלונית הפעילה: לחיצה בחלונית אחרת של טאב
+  /// מפוצל משנה רק את [rawActivePane] ו-[lastReadingPane].
+  static bool changedBesidesActivePane(TabsState previous, TabsState current) =>
+      previous.tabs != current.tabs ||
+      previous.currentTabIndex != current.currentTabIndex ||
+      previous.updateCounter != current.updateCounter ||
+      previous.selectedTabs != current.selectedTabs;
+
   bool get hasOpenTabs => tabs.isNotEmpty;
   OpenedTab? get currentTab => hasOpenTabs ? tabs[currentTabIndex] : null;
 

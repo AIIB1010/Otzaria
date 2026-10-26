@@ -804,6 +804,82 @@ void main() {
     );
   });
 
+  testWidgets('החלפת החלונית הפעילה אינה בונה מחדש את העמודה, '
+      'ושינויי הכרטיסיות עצמן מתעדכנים בה', (tester) async {
+    final right = _StubTab('ימין');
+    final left = _StubTab('שמאל');
+    final second = _StubTab('ספר ב');
+    await pumpPanel(
+      tester,
+      withTabs: [
+        CombinedTab(rightTab: right, leftTab: left),
+        second,
+      ],
+    );
+
+    var rebuilds = 0;
+    debugOnRebuildDirtyWidget = (element, _) {
+      var inStrip = element.widget is VerticalReadingTabStrip;
+      element.visitAncestorElements((ancestor) {
+        inStrip = inStrip || ancestor.widget is VerticalReadingTabStrip;
+        return !inStrip;
+      });
+      if (inStrip) rebuilds++;
+    };
+    addTearDown(() => debugOnRebuildDirtyWidget = null);
+    for (final pane in [left, right, left]) {
+      tabsBloc.emitState(
+        tabsBloc.state.copyWith(activePane: ActivePaneUpdate.set(pane)),
+      );
+      await tester.pumpAndSettle();
+    }
+    debugOnRebuildDirtyWidget = null;
+    expect(identical(tabsBloc.state.activePane, left), isTrue);
+    expect(rebuilds, 0, reason: 'שום דבר בעמודה אינו תלוי בחלונית הפעילה');
+
+    Finder row(String title) => find.ancestor(
+      of: find.text(title),
+      matching: find.byWidgetPredicate(
+        (w) => w.runtimeType.toString() == '_VerticalTabRow',
+      ),
+    );
+
+    tabsBloc.emitState(tabsBloc.state.copyWith(currentTabIndex: 1));
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: row('ספר ב'),
+        matching: find.byTooltip('סגור כרטיסיה'),
+      ),
+      findsOneWidget,
+      reason: 'הכרטיסיה הפעילה מציגה X',
+    );
+
+    tabsBloc.emitState(tabsBloc.state.copyWith(selectedTabs: [second]));
+    await tester.pumpAndSettle();
+    final background = tester.widget<DecoratedBox>(
+      find
+          .descendant(of: row('ספר ב'), matching: find.byType(DecoratedBox))
+          .first,
+    );
+    expect(
+      (background.decoration as BoxDecoration).color,
+      Theme.of(tester.element(row('ספר ב'))).colorScheme.secondaryContainer,
+    );
+
+    // שינוי שם והצמדה משנים את הכרטיסיה במקום ומסתמכים על forceUpdate.
+    second.title = 'שם חדש';
+    tabsBloc.emitState(tabsBloc.state.copyWith(forceUpdate: true));
+    await tester.pumpAndSettle();
+    expect(find.text('שם חדש'), findsOneWidget);
+
+    tabsBloc.emitState(
+      tabsBloc.state.copyWith(tabs: [...tabs, _StubTab('ספר נוסף')]),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('ספר נוסף'), findsOneWidget);
+  });
+
   testWidgets('אייקון הכיווץ מתהפך לפי מצב העמודה', (tester) async {
     await pumpPanel(tester);
     expect(find.byTooltip('כווץ את עמודת הכרטיסיות'), findsOneWidget);
