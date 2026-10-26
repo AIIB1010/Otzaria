@@ -17,16 +17,12 @@ class AramaicResultCard extends StatelessWidget {
   final String aramaic;
   final String hebrew;
   final bool isHebrewToAramaic;
-  final bool isFocused;
-  final VoidCallback? onTap;
 
   const AramaicResultCard({
     super.key,
     required this.aramaic,
     required this.hebrew,
     required this.isHebrewToAramaic,
-    this.isFocused = false,
-    this.onTap,
   });
 
   void _copy(BuildContext context) {
@@ -47,8 +43,6 @@ class AramaicResultCard extends StatelessWidget {
     final targetIsHebrewDefinition = !isHebrewToAramaic;
 
     return ToolResultCardShell(
-      isFocused: isFocused,
-      onTap: onTap,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

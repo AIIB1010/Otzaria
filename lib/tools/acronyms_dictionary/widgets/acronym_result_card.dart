@@ -16,15 +16,11 @@ import 'package:otzaria/widgets/layout/tool_result_card_shell.dart';
 class AcronymResultCard extends StatelessWidget {
   final String acronym;
   final List<String> meanings;
-  final bool isFocused;
-  final VoidCallback? onTap;
 
   const AcronymResultCard({
     super.key,
     required this.acronym,
     required this.meanings,
-    this.isFocused = false,
-    this.onTap,
   });
 
   void _copy(BuildContext context) {
@@ -42,8 +38,6 @@ class AcronymResultCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
 
     return ToolResultCardShell(
-      isFocused: isFocused,
-      onTap: onTap,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
