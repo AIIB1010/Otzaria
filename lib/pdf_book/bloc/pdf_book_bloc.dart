@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math';
 import 'dart:ui' show Offset, Rect;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
@@ -16,7 +15,6 @@ import 'package:otzaria/settings/services/per_book_settings_service.dart';
 import 'package:otzaria/tabs/models/pdf_tab.dart';
 import 'package:otzaria/utils/file/file_book_path_resolver.dart';
 import 'package:otzaria/utils/ui/reading_left_pane_policy.dart';
-import 'package:otzaria/utils/text/ref_helper.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 /// סוג לפונקציית אתחול pdfrx — ניתן להחלפה בטסטים.
@@ -83,17 +81,10 @@ class PdfBookBloc extends Bloc<PdfBookEvent, PdfBookState> {
     on<LoadProgressed>(_onLoadProgressed);
     on<LoadWatchdogPaused>(_onLoadWatchdogPaused);
     on<LoadSlow>(_onLoadSlow);
-    on<LoadHeadingsAndLinks>(_onLoadHeadingsAndLinks);
 
     // Navigation events
-    on<UpdatePageNumber>(_onUpdatePageNumber);
     on<RememberPdfLocation>(_onRememberPdfLocation);
     on<ReturnToPreviousPdfLocation>(_onReturnToPreviousPdfLocation);
-    on<GoToPage>(_onGoToPage);
-    on<GoToNextPage>(_onGoToNextPage);
-    on<GoToPreviousPage>(_onGoToPreviousPage);
-    on<GoToFirstPage>(_onGoToFirstPage);
-    on<GoToLastPage>(_onGoToLastPage);
 
     // Zoom events
     on<UpdateZoom>(_onUpdateZoom);
@@ -107,7 +98,6 @@ class PdfBookBloc extends Bloc<PdfBookEvent, PdfBookState> {
     // Left pane events
     on<ToggleLeftPane>(_onToggleLeftPane);
     on<TogglePinLeftPane>(_onTogglePinLeftPane);
-    on<UpdateLeftPaneTab>(_onUpdateLeftPaneTab);
     on<UpdateSidebarWidth>(_onUpdateSidebarWidth);
 
     // Right pane events
@@ -117,9 +107,6 @@ class PdfBookBloc extends Bloc<PdfBookEvent, PdfBookState> {
     // Search events
     on<UpdateSearchText>(_onUpdateSearchText);
     on<UpdateSearchOptions>(_onUpdateSearchOptions);
-    on<UpdateSearchResults>(_onUpdateSearchResults);
-    on<StartSearch>(_onStartSearch);
-    on<ClearSearch>(_onClearSearch);
 
     // Per-book settings events
     on<LoadPerBookSettings>(_onLoadPerBookSettings);
@@ -127,7 +114,6 @@ class PdfBookBloc extends Bloc<PdfBookEvent, PdfBookState> {
     on<ResetPerBookSettings>(_onResetPerBookSettings);
 
     // UI state events
-    on<SetRightPaneHovering>(_onSetRightPaneHovering);
     on<SetLoadingState>(_onSetLoadingState);
   }
 
@@ -432,86 +418,7 @@ class PdfBookBloc extends Bloc<PdfBookEvent, PdfBookState> {
     );
   }
 
-  void _onLoadHeadingsAndLinks(
-    LoadHeadingsAndLinks event,
-    Emitter<PdfBookState> emit,
-  ) {
-    final current = state;
-    // אירוע ללא קישורים (טעינת headings בלבד) לא דורס את חלון הקישורים
-    // ש-PdfBookScreen כבר מילא ב-tab.links.
-    if (current is! PdfBookLoaded) {
-      // Store for later if not loaded yet
-      tab.pdfHeadings = event.headings;
-      if (event.links.isNotEmpty) tab.links = event.links;
-      return;
-    }
-
-    tab.pdfHeadings = event.headings;
-    if (event.links.isNotEmpty) tab.links = event.links;
-
-    emit(
-      current.copyWith(
-        pdfHeadings: event.headings,
-        links: event.links.isEmpty ? null : event.links,
-      ),
-    );
-  }
-
   // ============ Navigation Event Handlers ============
-
-  void _onUpdatePageNumber(
-    UpdatePageNumber event,
-    Emitter<PdfBookState> emit,
-  ) {
-    final current = state;
-    if (current is! PdfBookLoaded) return;
-
-    // Update tab
-    tab.pageNumber = event.pageNumber;
-
-    String title = event.title ?? 'עמוד ${event.pageNumber}';
-    int? textLineNumber = event.textLineNumber;
-
-    // Calculate title from outline if not provided
-    if (event.title == null && current.outline != null) {
-      // סינכרוני בכוונה: `await` כאן היה מאפשר לאירועים אחרים לפלוט מצב
-      // חדש, ואז ה-emit שבהמשך היה דורס אותם עם צילום מיושן.
-      title = referenceFromPageNumber(
-        event.pageNumber,
-        current.outline!,
-        current.book.title,
-      );
-    }
-
-    // Calculate text line number from headings if not provided
-    if (textLineNumber == null &&
-        current.pdfHeadings != null &&
-        title.isNotEmpty) {
-      textLineNumber = current.pdfHeadings!.getLineNumberForHeading(title);
-    }
-
-    // Update tab values
-    tab.currentTitle.value = title;
-    if (textLineNumber != null) {
-      tab.currentTextLineNumber = textLineNumber;
-    }
-
-    emit(
-      current.copyWith(
-        currentPageNumber: event.pageNumber,
-        currentTitle: title,
-        currentTextLineNumber: textLineNumber,
-      ),
-    );
-  }
-
-  void _onGoToPage(
-    GoToPage event,
-    Emitter<PdfBookState> emit,
-  ) {
-    if (!pdfController.isReady) return;
-    pdfController.goToPage(pageNumber: event.pageNumber);
-  }
 
   void _onRememberPdfLocation(
     RememberPdfLocation event,
@@ -549,57 +456,6 @@ class PdfBookBloc extends Bloc<PdfBookEvent, PdfBookState> {
     );
     tab.savedZoom = location.zoom;
     if (!isClosed) add(const SavePerBookSettings());
-  }
-
-  void _onGoToNextPage(
-    GoToNextPage event,
-    Emitter<PdfBookState> emit,
-  ) {
-    if (!pdfController.isReady) {
-      return;
-    }
-    final current = state;
-    if (current is! PdfBookLoaded) {
-      return;
-    }
-
-    final nextPage = min(current.currentPageNumber + 1, current.totalPages);
-    pdfController.goToPage(pageNumber: nextPage);
-  }
-
-  void _onGoToPreviousPage(
-    GoToPreviousPage event,
-    Emitter<PdfBookState> emit,
-  ) {
-    if (!pdfController.isReady) {
-      return;
-    }
-    final current = state;
-    if (current is! PdfBookLoaded) {
-      return;
-    }
-
-    final prevPage = max(current.currentPageNumber - 1, 1);
-    pdfController.goToPage(pageNumber: prevPage);
-  }
-
-  void _onGoToFirstPage(
-    GoToFirstPage event,
-    Emitter<PdfBookState> emit,
-  ) {
-    if (!pdfController.isReady) return;
-    pdfController.goToPage(pageNumber: 1);
-  }
-
-  void _onGoToLastPage(
-    GoToLastPage event,
-    Emitter<PdfBookState> emit,
-  ) {
-    if (!pdfController.isReady) return;
-    final current = state;
-    if (current is! PdfBookLoaded) return;
-
-    pdfController.goToPage(pageNumber: current.totalPages);
   }
 
   // ============ Zoom Event Handlers ============
@@ -759,16 +615,6 @@ class PdfBookBloc extends Bloc<PdfBookEvent, PdfBookState> {
     emit(current.copyWith(pinLeftPane: newPin));
   }
 
-  void _onUpdateLeftPaneTab(
-    UpdateLeftPaneTab event,
-    Emitter<PdfBookState> emit,
-  ) {
-    final current = state;
-    if (current is! PdfBookLoaded) return;
-
-    emit(current.copyWith(leftPaneTabIndex: event.tabIndex));
-  }
-
   void _onUpdateSidebarWidth(
     UpdateSidebarWidth event,
     Emitter<PdfBookState> emit,
@@ -847,60 +693,6 @@ class PdfBookBloc extends Bloc<PdfBookEvent, PdfBookState> {
     tab.searchMode = event.searchMode ?? current.searchMode;
     tab.searchDistance = event.searchDistance ?? current.searchDistance;
     tab.matchPolicy = event.matchPolicy ?? current.matchPolicy;
-  }
-
-  void _onUpdateSearchResults(
-    UpdateSearchResults event,
-    Emitter<PdfBookState> emit,
-  ) {
-    final current = state;
-    if (current is! PdfBookLoaded) return;
-
-    // Update tab values
-    tab.pdfSearchMatches = event.matches;
-    tab.pdfSearchCurrentMatchIndex = event.currentMatchIndex;
-
-    emit(
-      current.copyWith(
-        searchMatches: event.matches,
-        currentSearchMatchIndex: event.currentMatchIndex,
-      ),
-    );
-  }
-
-  void _onStartSearch(
-    StartSearch event,
-    Emitter<PdfBookState> emit,
-  ) {
-    final current = state;
-    if (current is! PdfBookLoaded) return;
-
-    // Update search text
-    tab.searchController.text = event.query;
-    tab.searchText = event.query;
-
-    emit(current.copyWith(searchText: event.query));
-  }
-
-  void _onClearSearch(
-    ClearSearch event,
-    Emitter<PdfBookState> emit,
-  ) {
-    final current = state;
-    if (current is! PdfBookLoaded) return;
-
-    tab.searchController.clear();
-    tab.searchText = '';
-    tab.pdfSearchMatches = null;
-    tab.pdfSearchCurrentMatchIndex = null;
-
-    emit(
-      current.copyWith(
-        searchText: '',
-        clearSearchMatches: true,
-        clearCurrentSearchMatchIndex: true,
-      ),
-    );
   }
 
   // ============ Per-Book Settings Event Handlers ============
@@ -1051,16 +843,6 @@ class PdfBookBloc extends Bloc<PdfBookEvent, PdfBookState> {
   }
 
   // ============ UI State Event Handlers ============
-
-  void _onSetRightPaneHovering(
-    SetRightPaneHovering event,
-    Emitter<PdfBookState> emit,
-  ) {
-    final current = state;
-    if (current is! PdfBookLoaded) return;
-
-    emit(current.copyWith(isRightPaneHovering: event.isHovering));
-  }
 
   void _onSetLoadingState(
     SetLoadingState event,

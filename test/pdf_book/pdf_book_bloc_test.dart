@@ -9,7 +9,6 @@ import 'package:flutter_test/flutter_test.dart';
 import '../helpers/memory_settings_cache.dart';
 import 'package:otzaria/data/constants/database_constants.dart';
 import 'package:otzaria/models/books.dart';
-import 'package:otzaria/models/links.dart';
 import 'package:otzaria/pdf_book/bloc/pdf_book_bloc.dart';
 import 'package:otzaria/pdf_book/bloc/pdf_book_event.dart';
 import 'package:otzaria/pdf_book/bloc/pdf_book_state.dart';
@@ -110,8 +109,6 @@ PdfBookLoaded _loaded({
   PdfLayoutMode layoutMode = PdfLayoutMode.regularView,
   String searchText = '',
   String currentTitle = '',
-  List<PdfTextSearchResult>? searchMatches,
-  int? currentSearchMatchIndex,
 }) => PdfBookLoaded(
   book: book ?? _book(),
   currentPageNumber: currentPageNumber,
@@ -125,8 +122,6 @@ PdfBookLoaded _loaded({
   layoutMode: layoutMode,
   searchText: searchText,
   currentTitle: currentTitle,
-  searchMatches: searchMatches,
-  currentSearchMatchIndex: currentSearchMatchIndex,
   isLoading: false,
 );
 
@@ -366,65 +361,6 @@ void main() {
       act: (b) => b.add(const DocumentLoadFailed('שגיאה')),
       expect: () => [],
     );
-  });
-
-  // ──────────────────────────────────────────────────────────────────────────
-  group('ניווט בדפים', () {
-    blocTest<PdfBookBloc, PdfBookState>(
-      'UpdatePageNumber מעדכן דף נוכחי',
-      build: () => _makeBloc(_tab(page: 1)),
-      seed: () => _loaded(currentPageNumber: 1, totalPages: 10),
-      act: (b) => b.add(const UpdatePageNumber(pageNumber: 5)),
-      expect: () => [
-        isA<PdfBookLoaded>().having((s) => s.currentPageNumber, 'page', 5),
-      ],
-    );
-
-    blocTest<PdfBookBloc, PdfBookState>(
-      'UpdatePageNumber עם title מפורש שומר אותו',
-      build: () => _makeBloc(_tab()),
-      seed: () => _loaded(),
-      act: (b) => b.add(const UpdatePageNumber(pageNumber: 3, title: 'פרק ג')),
-      verify: (b) {
-        final s = b.state as PdfBookLoaded;
-        expect(s.currentTitle, 'פרק ג');
-        expect(s.currentPageNumber, 3);
-      },
-    );
-
-    blocTest<PdfBookBloc, PdfBookState>(
-      'UpdatePageNumber בלי outline משתמש בפורמט ברירת מחדל',
-      build: () => _makeBloc(_tab()),
-      seed: () => _loaded(),
-      act: (b) => b.add(const UpdatePageNumber(pageNumber: 7)),
-      verify: (b) {
-        expect((b.state as PdfBookLoaded).currentTitle, 'עמוד 7');
-      },
-    );
-
-    blocTest<PdfBookBloc, PdfBookState>(
-      'UpdatePageNumber מחוץ למצב Loaded → מוזנח',
-      build: () => _makeBloc(_tab()),
-      act: (b) => b.add(const UpdatePageNumber(pageNumber: 5)),
-      expect: () => [],
-    );
-
-    // שמירה שאין קריסה כשה-controller לא מוכן
-    for (final event in <PdfBookEvent>[
-      const GoToPage(5),
-      const GoToNextPage(),
-      const GoToPreviousPage(),
-      const GoToFirstPage(),
-      const GoToLastPage(),
-    ]) {
-      blocTest<PdfBookBloc, PdfBookState>(
-        '$event לא קורס כשה-controller לא מוכן',
-        build: () => _makeBloc(_tab()),
-        seed: () => _loaded(currentPageNumber: 3, totalPages: 10),
-        act: (b) => b.add(event),
-        expect: () => [], // אין שינוי מצב, רק side effect ב-controller
-      );
-    }
   });
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -771,20 +707,6 @@ void main() {
     );
 
     blocTest<PdfBookBloc, PdfBookState>(
-      'UpdateLeftPaneTab מעדכן אינדקס טאב',
-      build: () => _makeBloc(_tab()),
-      seed: () => _loaded(),
-      act: (b) => b.add(const UpdateLeftPaneTab(2)),
-      expect: () => [
-        isA<PdfBookLoaded>().having(
-          (s) => s.leftPaneTabIndex,
-          'leftPaneTabIndex',
-          2,
-        ),
-      ],
-    );
-
-    blocTest<PdfBookBloc, PdfBookState>(
       'UpdateSidebarWidth מעדכן רוחב',
       build: () => _makeBloc(_tab()),
       seed: () => _loaded(),
@@ -851,20 +773,6 @@ void main() {
           (s) => s.rightPaneWidth,
           'rightPaneWidth',
           500.0,
-        ),
-      ],
-    );
-
-    blocTest<PdfBookBloc, PdfBookState>(
-      'SetRightPaneHovering מעדכן hover',
-      build: () => _makeBloc(_tab()),
-      seed: () => _loaded(isRightPaneHovering: false),
-      act: (b) => b.add(const SetRightPaneHovering(true)),
-      expect: () => [
-        isA<PdfBookLoaded>().having(
-          (s) => s.isRightPaneHovering,
-          'hovering',
-          true,
         ),
       ],
     );
@@ -994,142 +902,10 @@ void main() {
     );
 
     blocTest<PdfBookBloc, PdfBookState>(
-      'StartSearch מעדכן טקסט חיפוש',
-      build: () => _makeBloc(_tab()),
-      seed: () => _loaded(searchText: ''),
-      act: (b) => b.add(const StartSearch('בראשית')),
-      expect: () => [
-        isA<PdfBookLoaded>().having(
-          (s) => s.searchText,
-          'searchText',
-          'בראשית',
-        ),
-      ],
-    );
-
-    blocTest<PdfBookBloc, PdfBookState>(
-      'ClearSearch מנקה טקסט ותוצאות',
-      build: () => _makeBloc(_tab()),
-      seed: () => _loaded(
-        searchText: 'תורה',
-        searchMatches: const [],
-        currentSearchMatchIndex: 0,
-      ),
-      act: (b) => b.add(const ClearSearch()),
-      verify: (b) {
-        final s = b.state as PdfBookLoaded;
-        expect(s.searchText, '');
-        expect(s.searchMatches, isNull);
-        expect(s.currentSearchMatchIndex, isNull);
-      },
-    );
-
-    blocTest<PdfBookBloc, PdfBookState>(
-      'ClearSearch מחוץ ל-Loaded → מוזנח',
-      build: () => _makeBloc(_tab()),
-      act: (b) => b.add(const ClearSearch()),
-      expect: () => [],
-    );
-
-    blocTest<PdfBookBloc, PdfBookState>(
       'UpdateSearchText מחוץ ל-Loaded → מוזנח',
       build: () => _makeBloc(_tab()),
       act: (b) => b.add(const UpdateSearchText('תורה')),
       expect: () => [],
-    );
-  });
-
-  // ──────────────────────────────────────────────────────────────────────────
-  group('LoadHeadingsAndLinks', () {
-    test('כשהמצב אינו Loaded → שומר ב-tab ולא מפעיל emit', () async {
-      final tab = _tab();
-      final bloc = _makeBloc(tab);
-
-      bloc.add(const LoadHeadingsAndLinks(links: []));
-      await Future.delayed(Duration.zero);
-
-      expect(bloc.state, isA<PdfBookInitial>());
-      bloc.close();
-    });
-
-    blocTest<PdfBookBloc, PdfBookState>(
-      'כשהמצב הוא Loaded → שומר ב-tab',
-      build: () => _makeBloc(_tab()),
-      seed: () => _loaded(),
-      act: (b) => b.add(const LoadHeadingsAndLinks(links: [])),
-      verify: (b) {
-        // links שווה לstate הקודם (ריק=ריק) → אין emit
-        expect(b.tab.links, isEmpty);
-      },
-    );
-
-    blocTest<PdfBookBloc, PdfBookState>(
-      'אירוע headings בלבד לא דורס links קיימים ב-tab וב-state',
-      build: () {
-        final tab = _tab();
-        tab.links = [
-          Link(
-            heRef: 'א',
-            index1: 10,
-            path2: 'x.txt',
-            index2: 1,
-            connectionType: 'commentary',
-          ),
-        ];
-        return _makeBloc(tab);
-      },
-      seed: () => _loaded().copyWith(
-        links: [
-          Link(
-            heRef: 'א',
-            index1: 10,
-            path2: 'x.txt',
-            index2: 1,
-            connectionType: 'commentary',
-          ),
-        ],
-      ),
-      act: (b) => b.add(const LoadHeadingsAndLinks(links: [])),
-      verify: (b) {
-        expect(b.tab.links, hasLength(1));
-        expect((b.state as PdfBookLoaded).links, hasLength(1));
-      },
-    );
-
-    blocTest<PdfBookBloc, PdfBookState>(
-      'כשlinks חדשים עם אותו אורך אך תוכן שונה → emit state חדש',
-      build: () => _makeBloc(_tab()),
-      seed: () => _loaded().copyWith(
-        links: [
-          Link(
-            heRef: 'א',
-            index1: 10,
-            path2: 'x.txt',
-            index2: 1,
-            connectionType: 'commentary',
-          ),
-        ],
-      ),
-      act: (b) => b.add(
-        LoadHeadingsAndLinks(
-          links: [
-            Link(
-              heRef: 'ב',
-              index1: 20,
-              path2: 'y.txt',
-              index2: 2,
-              connectionType: 'commentary',
-            ),
-          ],
-        ),
-      ),
-      expect: () => [
-        isA<PdfBookLoaded>().having(
-          (s) => s.links.first.index1,
-          'index1',
-          20,
-        ),
-      ],
     );
   });
 

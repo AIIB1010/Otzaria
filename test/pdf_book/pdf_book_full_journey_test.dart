@@ -1,7 +1,7 @@
 /// טסט אינטגרציה מקיף לקריאת PDF
 ///
 /// מדמה מסע קריאה שלם ברמת ה-BLoC:
-/// פתיחה → ניווט → חיפוש → מפרשים → זום → הגדרות → סגירה
+/// פתיחה → חיפוש → חלוניות → זום → הגדרות → סגירה
 /// ומעבר בין טאבים דרך TabsBloc.
 ///
 /// הערה: PdfViewer (pdfrx) דורש rendering פיזי ולא ניתן ל-widget test ישיר.
@@ -14,8 +14,6 @@ import 'package:flutter_bloc/flutter_bloc.dart' show BlocBase;
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/models/books.dart';
-import 'package:otzaria/models/links.dart';
-import 'package:otzaria/models/pdf_headings.dart';
 import 'package:otzaria/pdf_book/bloc/pdf_book_bloc.dart';
 import 'package:otzaria/pdf_book/bloc/pdf_book_event.dart';
 import 'package:otzaria/pdf_book/bloc/pdf_book_state.dart';
@@ -33,8 +31,6 @@ import '../helpers/memory_settings_cache.dart';
 // ─── fakes ───────────────────────────────────────────────────────────────────
 
 class _FakeDocumentRef extends Fake implements PdfDocumentRef {}
-
-class _FakePdfTextSearchResult extends Fake implements PdfTextSearchResult {}
 
 class _FakeTabsRepository extends TabsRepository {
   @override
@@ -102,47 +98,6 @@ Future<PdfBookLoaded> _readyDoc(
   return _waitFor<PdfBookLoaded>(bloc);
 }
 
-// ─── data fixtures ───────────────────────────────────────────────────────────
-
-List<Link> _sampleLinks() => [
-  Link(
-    heRef: 'רש"י על בראשית א:א',
-    index1: 1,
-    path2: '/books/rashi_bereshit.txt',
-    index2: 0,
-    connectionType: 'COMMENTARY',
-  ),
-  Link(
-    heRef: 'רמב"ן על בראשית א:א',
-    index1: 1,
-    path2: '/books/ramban_bereshit.txt',
-    index2: 0,
-    connectionType: 'COMMENTARY',
-  ),
-  Link(
-    heRef: 'תרגום אונקלוס בראשית א:א',
-    index1: 5,
-    path2: '/books/targum_onkelos.txt',
-    index2: 0,
-    connectionType: 'TARGUM',
-  ),
-];
-
-PdfHeadings _sampleHeadings() => PdfHeadings(
-  bookTitle: 'ספר בדיקה',
-  headingsMap: {
-    'פרק א': 1,
-    'פרק ב': 10,
-    'פרק ג': 25,
-    'פרק ד': 40,
-    'פרק ה': 60,
-    'סיום': 99,
-  },
-);
-
-List<PdfTextSearchResult> _fakeMatches(int count) =>
-    List.generate(count, (_) => _FakePdfTextSearchResult());
-
 // ─────────────────────────────────────────────────────────────────────────────
 
 void main() {
@@ -153,7 +108,7 @@ void main() {
 
   // ══════════════════════════════════════════════════════════════════════════
   group('מסע קריאה שלם', () {
-    test('פתיחת PDF, ניווט, קישורים, חיפוש, זום, תצוגה, הגדרות, סגירה', () async {
+    test('פתיחת PDF, חיפוש, חלוניות, זום, תצוגה, הגדרות, סגירה', () async {
       final tab = _tab(page: 1);
       final bloc = _makeBloc(tab);
       addTearDown(bloc.close);
@@ -175,64 +130,13 @@ void main() {
       expect(loaded.currentPageNumber, 1);
       expect(loaded.isLoading, isFalse);
 
-      // ── שלב 4: טעינת headings ו-links (מפרשים וקישורים) ──────────────────
-      bloc.add(
-        LoadHeadingsAndLinks(
-          headings: _sampleHeadings(),
-          links: _sampleLinks(),
-        ),
-      );
-      await Future.delayed(Duration.zero);
-
-      expect(tab.links, hasLength(3));
-      expect(tab.pdfHeadings?.headingsMap['פרק א'], 1);
-      expect(tab.pdfHeadings?.headingsMap['פרק ה'], 60);
-      expect(
-        tab.links.map((l) => l.connectionType),
-        containsAll(['COMMENTARY', 'TARGUM']),
-      );
-
-      // ── שלב 5: ניווט בין עמודים ───────────────────────────────────────────
-      // 5a: עמוד 10
-      bloc.add(const UpdatePageNumber(pageNumber: 10));
-      await Future.delayed(Duration.zero);
-      expect((bloc.state as PdfBookLoaded).currentPageNumber, 10);
-      expect(tab.pageNumber, 10);
-
-      // 5b: עמוד 25 עם כותרת
-      bloc.add(const UpdatePageNumber(pageNumber: 25, title: 'פרק ג'));
-      await Future.delayed(Duration.zero);
-      expect((bloc.state as PdfBookLoaded).currentPageNumber, 25);
-      expect((bloc.state as PdfBookLoaded).currentTitle, 'פרק ג');
-      expect(tab.currentTitle.value, 'פרק ג');
-
-      // 5c: עמוד 60
-      bloc.add(const UpdatePageNumber(pageNumber: 60));
-      await Future.delayed(Duration.zero);
-      expect((bloc.state as PdfBookLoaded).currentPageNumber, 60);
-
-      // 5d: GoToPage/Next/Prev/First/Last - side effects על controller בלבד
-      bloc.add(const GoToPage(5));
-      bloc.add(const GoToNextPage());
-      bloc.add(const GoToPreviousPage());
-      bloc.add(const GoToFirstPage());
-      bloc.add(const GoToLastPage());
-      await Future.delayed(Duration.zero);
-      // state לא השתנה (controller לא מחובר)
-      expect((bloc.state as PdfBookLoaded).currentPageNumber, 60);
-
-      // ── שלב 6: חיפוש ──────────────────────────────────────────────────────
-      // 6a: StartSearch
-      bloc.add(const StartSearch('בראשית ברא'));
-      await Future.delayed(Duration.zero);
-      expect((bloc.state as PdfBookLoaded).searchText, 'בראשית ברא');
-
-      // 6b: UpdateSearchText
+      // ── שלב 4: חיפוש ──────────────────────────────────────────────────────
+      // 4a: UpdateSearchText
       bloc.add(const UpdateSearchText('אלהים'));
       await Future.delayed(Duration.zero);
       expect((bloc.state as PdfBookLoaded).searchText, 'אלהים');
 
-      // 6c: אפשרויות חיפוש מתקדמות
+      // 4b: אפשרויות חיפוש מתקדמות
       bloc.add(
         const UpdateSearchOptions(
           searchMode: SearchMode.fuzzy,
@@ -248,64 +152,34 @@ void main() {
         contains('השם'),
       );
 
-      // 6d: תוצאות חיפוש
-      bloc.add(
-        UpdateSearchResults(matches: _fakeMatches(3), currentMatchIndex: 0),
-      );
-      await Future.delayed(Duration.zero);
-      expect((bloc.state as PdfBookLoaded).searchMatches, hasLength(3));
-      expect((bloc.state as PdfBookLoaded).currentSearchMatchIndex, 0);
-
-      // 6e: מעבר לתוצאה הבאה
-      bloc.add(
-        UpdateSearchResults(matches: _fakeMatches(3), currentMatchIndex: 1),
-      );
-      await Future.delayed(Duration.zero);
-      expect((bloc.state as PdfBookLoaded).currentSearchMatchIndex, 1);
-
-      // 6f: ניקוי חיפוש
-      bloc.add(const ClearSearch());
-      await Future.delayed(Duration.zero);
-      expect((bloc.state as PdfBookLoaded).searchText, '');
-      expect((bloc.state as PdfBookLoaded).searchMatches, isNull);
-      expect((bloc.state as PdfBookLoaded).currentSearchMatchIndex, isNull);
-
-      // ── שלב 7: חלוניות ────────────────────────────────────────────────────
-      // 7a: חלונית שמאל (תוכן עניינים)
+      // ── שלב 5: חלוניות ────────────────────────────────────────────────────
+      // 5a: חלונית שמאל (תוכן עניינים)
       bloc.add(const ToggleLeftPane(true));
       await Future.delayed(Duration.zero);
       expect((bloc.state as PdfBookLoaded).showLeftPane, isTrue);
 
-      // 7b: החלפת טאב בחלונית שמאל
-      bloc.add(const UpdateLeftPaneTab(1));
-      await Future.delayed(Duration.zero);
-      expect((bloc.state as PdfBookLoaded).leftPaneTabIndex, 1);
-
-      // 7c: עדכון רוחב sidebar
+      // 5b: עדכון רוחב sidebar
       bloc.add(const UpdateSidebarWidth(400.0));
       await Future.delayed(Duration.zero);
       expect((bloc.state as PdfBookLoaded).sidebarWidth, 400.0);
 
-      // 7d: חלונית ימין (מפרשים)
+      // 5c: חלונית ימין (מפרשים)
       bloc.add(const ToggleRightPane(show: true, initialTabIndex: 0));
       await Future.delayed(Duration.zero);
       expect((bloc.state as PdfBookLoaded).showRightPane, isTrue);
       expect((bloc.state as PdfBookLoaded).rightPaneInitialTabIndex, 0);
 
-      // 7e: סגירת חלונית ימין → מנקה isRightPaneHovering
-      bloc.add(const SetRightPaneHovering(true));
-      await Future.delayed(Duration.zero);
+      // 5d: סגירת חלונית ימין
       bloc.add(const ToggleRightPane(show: false));
       await Future.delayed(Duration.zero);
       expect((bloc.state as PdfBookLoaded).showRightPane, isFalse);
-      expect((bloc.state as PdfBookLoaded).isRightPaneHovering, isFalse);
 
-      // 7f: סגירת חלונית שמאל
+      // 5e: סגירת חלונית שמאל
       bloc.add(const ToggleLeftPane(false));
       await Future.delayed(Duration.zero);
       expect((bloc.state as PdfBookLoaded).showLeftPane, isFalse);
 
-      // ── שלב 8: זום ────────────────────────────────────────────────────────
+      // ── שלב 6: זום ────────────────────────────────────────────────────────
       bloc.add(const UpdateZoom(2.0));
       await Future.delayed(Duration.zero);
       expect((bloc.state as PdfBookLoaded).zoom, 2.0);
@@ -324,7 +198,7 @@ void main() {
       await Future.delayed(Duration.zero);
       expect((bloc.state as PdfBookLoaded).showZoomBar, isFalse);
 
-      // ── שלב 9: מצבי תצוגה ─────────────────────────────────────────────────
+      // ── שלב 7: מצבי תצוגה ─────────────────────────────────────────────────
       bloc.add(const SetLayoutMode(PdfLayoutMode.bookView));
       await Future.delayed(Duration.zero);
       expect((bloc.state as PdfBookLoaded).layoutMode, PdfLayoutMode.bookView);
@@ -342,13 +216,13 @@ void main() {
       await Future.delayed(Duration.zero);
       expect(identical(bloc.state, beforeRepeat), isTrue);
 
-      // ── שלב 10: הגדרות per-book ────────────────────────────────────────────
+      // ── שלב 8: הגדרות per-book ─────────────────────────────────────────────
       bloc.add(const LoadPerBookSettings());
       bloc.add(const SavePerBookSettings());
       bloc.add(const ResetPerBookSettings());
       await Future.delayed(Duration.zero);
 
-      // ── שלב 11: pin חלונית ────────────────────────────────────────────────
+      // ── שלב 9: pin חלונית ─────────────────────────────────────────────────
       bloc.add(const TogglePinLeftPane());
       await Future.delayed(Duration.zero);
       expect((bloc.state as PdfBookLoaded).pinLeftPane, isTrue);
@@ -357,7 +231,7 @@ void main() {
       await Future.delayed(Duration.zero);
       expect((bloc.state as PdfBookLoaded).pinLeftPane, isFalse);
 
-      // ── שלב 12: מצב טעינה ─────────────────────────────────────────────────
+      // ── שלב 10: מצב טעינה ─────────────────────────────────────────────────
       bloc.add(const SetLoadingState(isLoading: true));
       await Future.delayed(Duration.zero);
       expect((bloc.state as PdfBookLoaded).isLoading, isTrue);
@@ -367,7 +241,7 @@ void main() {
       expect((bloc.state as PdfBookLoaded).isLoading, isFalse);
       expect((bloc.state as PdfBookLoaded).loadSucceeded, isFalse);
 
-      // ── שלב 13: סגירה ─────────────────────────────────────────────────────
+      // ── שלב 11: סגירה ─────────────────────────────────────────────────────
       await bloc.close();
       expect(bloc.isClosed, isTrue);
     });
@@ -392,144 +266,16 @@ void main() {
       final bloc = _makeBloc(tab);
       addTearDown(bloc.close);
 
-      bloc.add(const UpdatePageNumber(pageNumber: 5));
-      bloc.add(const StartSearch('תורה'));
       bloc.add(const ToggleLeftPane());
       bloc.add(const UpdateZoom(3.0));
       await Future.delayed(Duration.zero);
 
       expect(bloc.state, isA<PdfBookInitial>());
     });
-
-    test('LoadHeadingsAndLinks עם ריק - אפס links ואפס headings', () async {
-      final tab = _tab();
-      final bloc = _makeBloc(tab);
-      addTearDown(bloc.close);
-
-      await _readyDoc(bloc);
-      bloc.add(const LoadHeadingsAndLinks(links: []));
-      await Future.delayed(Duration.zero);
-
-      expect(tab.links, isEmpty);
-      expect(tab.pdfHeadings, isNull);
-    });
-
-    test(
-      'LoadHeadingsAndLinks מלאים - headings ו-links נשמרים ב-tab',
-      () async {
-        final tab = _tab();
-        final bloc = _makeBloc(tab);
-        addTearDown(bloc.close);
-
-        await _readyDoc(bloc, totalPages: 50);
-        bloc.add(
-          LoadHeadingsAndLinks(
-            headings: _sampleHeadings(),
-            links: _sampleLinks(),
-          ),
-        );
-        await Future.delayed(Duration.zero);
-
-        expect(tab.pdfHeadings!.headingsMap, hasLength(6));
-        expect(tab.links, hasLength(3));
-      },
-    );
-
-    test('ניווט לגבולות - עמוד 1 ועמוד אחרון', () async {
-      final tab = _tab();
-      final bloc = _makeBloc(tab);
-      addTearDown(bloc.close);
-
-      await _readyDoc(bloc, totalPages: 200);
-
-      bloc.add(const UpdatePageNumber(pageNumber: 1));
-      await Future.delayed(Duration.zero);
-      expect((bloc.state as PdfBookLoaded).currentPageNumber, 1);
-
-      bloc.add(const UpdatePageNumber(pageNumber: 200));
-      await Future.delayed(Duration.zero);
-      expect((bloc.state as PdfBookLoaded).currentPageNumber, 200);
-    });
-
-    test('UpdatePageNumber עם title מפורש → title נשמר ב-tab', () async {
-      final tab = _tab();
-      final bloc = _makeBloc(tab);
-      addTearDown(bloc.close);
-
-      await _readyDoc(bloc, totalPages: 50);
-      bloc.add(const UpdatePageNumber(pageNumber: 10, title: 'פרק ב'));
-      await Future.delayed(Duration.zero);
-
-      expect(tab.currentTitle.value, 'פרק ב');
-    });
-
-    test('UpdatePageNumber ללא outline → כותרת "עמוד N"', () async {
-      final tab = _tab();
-      final bloc = _makeBloc(tab);
-      addTearDown(bloc.close);
-
-      // מעבירים outline: null כדי שה-bloc לא ינסה לחלץ כותרת מה-outline
-      bloc.seed(PdfBookLoading(book: tab.book));
-      bloc.add(
-        DocumentReady(
-          documentRef: _FakeDocumentRef(),
-          totalPages: 50,
-          outline: null,
-        ),
-      );
-      await _waitFor<PdfBookLoaded>(bloc);
-
-      bloc.add(const UpdatePageNumber(pageNumber: 7));
-      await Future.delayed(Duration.zero);
-
-      expect((bloc.state as PdfBookLoaded).currentTitle, 'עמוד 7');
-    });
-
-    test('StartSearch עם שאילתא ריקה', () async {
-      final tab = _tab();
-      final bloc = _makeBloc(tab);
-      addTearDown(bloc.close);
-
-      await _readyDoc(bloc);
-      bloc.add(const StartSearch(''));
-      await Future.delayed(Duration.zero);
-      expect((bloc.state as PdfBookLoaded).searchText, '');
-    });
   });
 
   // ══════════════════════════════════════════════════════════════════════════
   group('חיפוש מתקדם', () {
-    blocTest<PdfBookBloc, PdfBookState>(
-      'מחזור חיפוש מלא: start → options → results → next → clear',
-      build: () {
-        final tab = _tab();
-        final bloc = _makeBloc(tab);
-        bloc.seed(PdfBookLoading(book: tab.book));
-        bloc.add(
-          DocumentReady(documentRef: _FakeDocumentRef(), totalPages: 50),
-        );
-        return bloc;
-      },
-      act: (b) async {
-        await Future.delayed(Duration.zero); // DocumentReady
-        b.add(const StartSearch('תנ"ך'));
-        b.add(const UpdateSearchOptions(searchMode: SearchMode.advanced));
-        b.add(
-          UpdateSearchResults(matches: _fakeMatches(2), currentMatchIndex: 0),
-        );
-        b.add(
-          UpdateSearchResults(matches: _fakeMatches(2), currentMatchIndex: 1),
-        );
-        b.add(const ClearSearch());
-      },
-      verify: (b) {
-        final s = b.state as PdfBookLoaded;
-        expect(s.searchText, '');
-        expect(s.searchMatches, isNull);
-        expect(s.currentSearchMatchIndex, isNull);
-      },
-    );
-
     blocTest<PdfBookBloc, PdfBookState>(
       'spacingValues מעדכן מרווחים בין מילים',
       build: () {

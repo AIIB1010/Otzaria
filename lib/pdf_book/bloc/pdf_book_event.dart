@@ -1,8 +1,6 @@
 import 'dart:ui' show Offset;
 
 import 'package:equatable/equatable.dart';
-import 'package:otzaria/models/pdf_headings.dart';
-import 'package:otzaria/models/links.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:otzaria/pdf_book/models/pdf_reading_location.dart';
 import 'package:otzaria/search/models/search_configuration.dart';
@@ -89,20 +87,6 @@ class LoadWatchdogPaused extends PdfBookEvent {
   const LoadWatchdogPaused();
 }
 
-/// Load PDF headings and links for commentary
-class LoadHeadingsAndLinks extends PdfBookEvent {
-  final PdfHeadings? headings;
-  final List<Link> links;
-
-  const LoadHeadingsAndLinks({
-    this.headings,
-    this.links = const [],
-  });
-
-  @override
-  List<Object?> get props => [headings?.headingsMap.length, links.length];
-}
-
 // ============ Navigation Events ============
 
 /// שומר את העוגן שנלכד לפני תחילת קפיצה מפורשת.
@@ -117,52 +101,6 @@ class RememberPdfLocation extends PdfBookEvent {
 /// חוזר לעוגן הקודם בלי להוסיף את החזרה להיסטוריה.
 class ReturnToPreviousPdfLocation extends PdfBookEvent {
   const ReturnToPreviousPdfLocation();
-}
-
-/// Update the current page number
-class UpdatePageNumber extends PdfBookEvent {
-  final int pageNumber;
-  final String? title;
-  final int? textLineNumber;
-
-  const UpdatePageNumber({
-    required this.pageNumber,
-    this.title,
-    this.textLineNumber,
-  });
-
-  @override
-  List<Object?> get props => [pageNumber, title, textLineNumber];
-}
-
-/// Go to a specific page
-class GoToPage extends PdfBookEvent {
-  final int pageNumber;
-
-  const GoToPage(this.pageNumber);
-
-  @override
-  List<Object?> get props => [pageNumber];
-}
-
-/// Go to next page
-class GoToNextPage extends PdfBookEvent {
-  const GoToNextPage();
-}
-
-/// Go to previous page
-class GoToPreviousPage extends PdfBookEvent {
-  const GoToPreviousPage();
-}
-
-/// Go to first page
-class GoToFirstPage extends PdfBookEvent {
-  const GoToFirstPage();
-}
-
-/// Go to last page
-class GoToLastPage extends PdfBookEvent {
-  const GoToLastPage();
 }
 
 // ============ Zoom Events ============
@@ -245,16 +183,6 @@ class TogglePinLeftPane extends PdfBookEvent {
   List<Object?> get props => [pin];
 }
 
-/// Update left pane tab index
-class UpdateLeftPaneTab extends PdfBookEvent {
-  final int tabIndex;
-
-  const UpdateLeftPaneTab(this.tabIndex);
-
-  @override
-  List<Object?> get props => [tabIndex];
-}
-
 /// Update sidebar width
 class UpdateSidebarWidth extends PdfBookEvent {
   final double width;
@@ -329,35 +257,6 @@ class UpdateSearchOptions extends PdfBookEvent {
   ];
 }
 
-/// Update search results
-class UpdateSearchResults extends PdfBookEvent {
-  final List<PdfTextSearchResult>? matches;
-  final int? currentMatchIndex;
-
-  const UpdateSearchResults({
-    this.matches,
-    this.currentMatchIndex,
-  });
-
-  @override
-  List<Object?> get props => [matches?.length, currentMatchIndex];
-}
-
-/// Start search
-class StartSearch extends PdfBookEvent {
-  final String query;
-
-  const StartSearch(this.query);
-
-  @override
-  List<Object?> get props => [query];
-}
-
-/// Clear search results
-class ClearSearch extends PdfBookEvent {
-  const ClearSearch();
-}
-
 // ============ Per-Book Settings Events ============
 
 /// Load per-book settings
@@ -376,16 +275,6 @@ class ResetPerBookSettings extends PdfBookEvent {
 }
 
 // ============ UI State Events ============
-
-/// Update right pane hovering state
-class SetRightPaneHovering extends PdfBookEvent {
-  final bool isHovering;
-
-  const SetRightPaneHovering(this.isHovering);
-
-  @override
-  List<Object?> get props => [isHovering];
-}
 
 /// Update loading state
 class SetLoadingState extends PdfBookEvent {
