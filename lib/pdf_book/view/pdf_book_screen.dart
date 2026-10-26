@@ -1737,13 +1737,13 @@ class _PdfBookScreenState extends State<PdfBookScreen>
             keyboard.isMetaPressed) {
           return false;
         }
-        if (key == LogicalKeyboardKey.arrowLeft) {
+        if (_isNextPageKey(key)) {
           if (isRealKeyPress) {
             _goNextPage();
           }
           return true;
         }
-        if (key == LogicalKeyboardKey.arrowRight) {
+        if (_isPreviousPageKey(key)) {
           if (isRealKeyPress) {
             _goPreviousPage();
           }
@@ -2058,10 +2058,10 @@ class _PdfBookScreenState extends State<PdfBookScreen>
                 }
                 return KeyEventResult.handled;
               }
-              if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+              if (_isNextPageKey(event.logicalKey)) {
                 _goNextPage();
                 return KeyEventResult.handled;
-              } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+              } else if (_isPreviousPageKey(event.logicalKey)) {
                 _goPreviousPage();
                 return KeyEventResult.handled;
               } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
@@ -2072,11 +2072,11 @@ class _PdfBookScreenState extends State<PdfBookScreen>
                 return KeyEventResult.handled;
               }
             } else if (event is KeyRepeatEvent) {
-              if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+              if (_isNextPageKey(event.logicalKey)) {
                 _heldArrowKeys.add(event.logicalKey);
                 _goNextPage();
                 return KeyEventResult.handled;
-              } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+              } else if (_isPreviousPageKey(event.logicalKey)) {
                 _heldArrowKeys.add(event.logicalKey);
                 _goPreviousPage();
                 return KeyEventResult.handled;
@@ -2093,13 +2093,12 @@ class _PdfBookScreenState extends State<PdfBookScreen>
                 _stopContinuousScroll();
                 return KeyEventResult.handled;
               }
-              // Releasing left/right arrow: only drain the queue if the key
+              // Releasing a page-turn key: only drain the queue if the key
               // was HELD (had at least one KeyRepeatEvent). Short taps must
               // keep their queued turn so the second click in a fast 1-2
               // tap doesn't get dropped along with the first click's hold-
               // less queue clear.
-              if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
-                  event.logicalKey == LogicalKeyboardKey.arrowRight) {
+              if (_isPageTurnKey(event.logicalKey)) {
                 final wasHeld = _heldArrowKeys.remove(event.logicalKey);
                 if (wasHeld) {
                   _pendingPageTurns.clear();
@@ -5097,6 +5096,29 @@ class _PdfBookScreenState extends State<PdfBookScreen>
     final controller = widget.tab.pdfViewerController;
     return _lastInitiatedTargetPage ?? (controller.pageNumber ?? 1);
   }
+
+  static bool _isPageTurnKey(LogicalKeyboardKey key) =>
+      key == LogicalKeyboardKey.arrowLeft ||
+      key == LogicalKeyboardKey.arrowRight ||
+      key == LogicalKeyboardKey.pageDown ||
+      key == LogicalKeyboardKey.pageUp;
+
+  // PageDown/PageUp עם צירוף שייכים לקיצורים (Alt+PageDown לכותרת הבאה).
+  static bool get _noModifiers {
+    final keyboard = HardwareKeyboard.instance;
+    return !keyboard.isShiftPressed &&
+        !keyboard.isControlPressed &&
+        !keyboard.isAltPressed &&
+        !keyboard.isMetaPressed;
+  }
+
+  static bool _isNextPageKey(LogicalKeyboardKey key) =>
+      key == LogicalKeyboardKey.arrowLeft ||
+      (key == LogicalKeyboardKey.pageDown && _noModifiers);
+
+  static bool _isPreviousPageKey(LogicalKeyboardKey key) =>
+      key == LogicalKeyboardKey.arrowRight ||
+      (key == LogicalKeyboardKey.pageUp && _noModifiers);
 
   void _goNextPage() {
     if (!_isPdfVisible || !widget.tab.pdfViewerController.isReady) return;

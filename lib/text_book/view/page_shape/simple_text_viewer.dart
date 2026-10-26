@@ -67,6 +67,7 @@ import 'package:otzaria/widgets/smart_text/smart_text.dart';
 import 'package:otzaria/text_book/view/error_report_dialog.dart';
 import 'package:otzaria/widgets/misc/direct_link_menu_entries.dart';
 import 'package:otzaria/widgets/misc/smooth_wheel_scroll.dart';
+import 'package:otzaria/widgets/misc/progressive_scrolling.dart';
 import 'package:otzaria/text_book/view/selection/enhanced_gesture_detector.dart';
 import 'package:otzaria/text_book/view/selection/selection_persistence.dart';
 import 'package:otzaria/book_common/selection/selection_hit_test.dart';
@@ -1885,19 +1886,8 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
         !scroll.position.hasContentDimensions) {
       return false;
     }
-    final position = scroll.position;
-    final delta = position.viewportDimension * 0.8 * (forward ? 1 : -1);
     _lines?.beginUserNavigation();
-    unawaited(
-      position.animateTo(
-        (position.pixels + delta).clamp(
-          position.minScrollExtent,
-          position.maxScrollExtent,
-        ),
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-      ),
-    );
+    animatePageScroll(scroll.position, forward: forward);
     return true;
   }
 

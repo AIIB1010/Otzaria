@@ -7,6 +7,21 @@ import 'package:flutter/services.dart';
 
 import 'package:positioned_sliver_list/positioned_list.dart';
 
+/// PageDown/PageUp: מסך אחד, 80% מהחלון כמו `ScrollAction` של Flutter.
+void animatePageScroll(ScrollPosition position, {required bool forward}) {
+  final delta = position.viewportDimension * 0.8 * (forward ? 1 : -1);
+  unawaited(
+    position.animateTo(
+      (position.pixels + delta).clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      ),
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+    ),
+  );
+}
+
 class ProgressiveScroll extends StatefulWidget {
   final Widget child;
   final ItemScrollController scrollController;
@@ -234,6 +249,11 @@ class _ProgressiveScrollState extends State<ProgressiveScroll>
         HardwareKeyboard.instance.isMetaPressed;
     if (modified) _stopScrolling();
 
+    final isPageDown = event.logicalKey == LogicalKeyboardKey.pageDown;
+    if (isPageDown || event.logicalKey == LogicalKeyboardKey.pageUp) {
+      return _handlePageKey(event, forward: isPageDown, modified: modified);
+    }
+
     final isArrowDown = event.logicalKey == LogicalKeyboardKey.arrowDown;
     final isArrowUp = event.logicalKey == LogicalKeyboardKey.arrowUp;
     if (!isArrowDown && !isArrowUp) return KeyEventResult.ignored;
@@ -281,6 +301,26 @@ class _ProgressiveScrollState extends State<ProgressiveScroll>
     }
     // בולעים את החץ כדי שלא יגלול גם Scrollable שמעל — כש"מפרשים מתחת"
     // מקונן בתוך גלילת גוף הטקסט הראשי, אחרת שניהם היו גוללים יחד.
+    return KeyEventResult.handled;
+  }
+
+  /// ה-`ScrollAction` של Flutter מחפש Scrollable מעל הפוקוס, והפוקוס כאן
+  /// יושב מעל הרשימה — לכן PageDown/PageUp מטופלים כאן.
+  KeyEventResult _handlePageKey(
+    KeyEvent event, {
+    required bool forward,
+    required bool modified,
+  }) {
+    // צירופים (Alt+PageDown לכותרת הבאה) הם קיצורים, ובשדה טקסט המקש לסמן.
+    if (modified || _isEditingText) return KeyEventResult.ignored;
+    if (event is! KeyUpEvent) {
+      final position = _position;
+      if (position == null) return KeyEventResult.ignored;
+      _stopScrolling();
+      widget.onNavigationStart?.call();
+      widget.scrollController.listController?.cancelPositioning();
+      animatePageScroll(position, forward: forward);
+    }
     return KeyEventResult.handled;
   }
 
