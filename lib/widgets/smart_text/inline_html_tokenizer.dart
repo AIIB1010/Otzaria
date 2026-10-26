@@ -76,8 +76,15 @@ List<dom.Node>? parseWellFormedInlineHtml(String html) {
       continue;
     }
     if (c != 0x3C) {
-      text.writeCharCode(c);
-      i++;
+      // רצף הטקסט עד התו המיוחד הבא נכתב בהעתקה אחת.
+      var end = i + 1;
+      while (end < length) {
+        final d = html.codeUnitAt(end);
+        if (d == 0x3C || d == 0x26 || d == 0x0D || d == 0x00) break;
+        end++;
+      }
+      text.write(html.substring(i, end));
+      i = end;
       continue;
     }
     // תג.
