@@ -2545,16 +2545,20 @@ void main() {
   });
 
   group('ריחוף על כרטיסיה', () {
+    late _TestTabsBloc tabsBloc;
+
     /// שורת כותרת עם [count] כרטיסיות; ככל שיש יותר הן צרות יותר.
     Future<List<OpenedTab>> pumpTabs(
       WidgetTester tester,
       int count, {
       Size size = const Size(900, 800),
+      OpenedTab Function(int index)? makeTab,
     }) async {
-      final tabs = List.generate(count, (i) => _makeTextTab('ספר מספר $i'));
-      final tabsBloc = _TestTabsBloc(
-        TabsState(tabs: tabs, currentTabIndex: 0),
+      final tabs = List.generate(
+        count,
+        makeTab ?? (i) => _makeTextTab('ספר מספר $i'),
       );
+      tabsBloc = _TestTabsBloc(TabsState(tabs: tabs, currentTabIndex: 0));
       final navigationBloc = _TestNavigationBloc(
         const NavigationState(currentScreen: Screen.reading),
       );
@@ -2618,6 +2622,87 @@ void main() {
         findsOneWidget,
         reason: 'ה-X מצטמצם לרוחב שנותר במקום להיעלם',
       );
+    });
+
+    // issue #3276: ה-X של כרטיסיה צרה בריחוף תפס את רוב רוחבה, ולחיצה עליה
+    // כדי לעבור אליה סגרה אותה.
+    group('לחיצה על כרטיסיה צרה בריחוף בוחרת ולא סוגרת (issue #3276)', () {
+      /// מרחף מעל הכרטיסיה השישית, מוודא שה-X שלה מוצג, ולוחץ ב-[clickAt].
+      Future<void> hoverAndClick(
+        WidgetTester tester, {
+        required int closeButtonCount,
+        required Offset Function(Rect tabRect, List<Rect> closeRects) clickAt,
+      }) async {
+        final tab = find.byType(Tab).at(5);
+        final tabRect = tester.getRect(tab);
+        final gesture = await hoverAt(tester, tabRect.center);
+        final closeButtons = find.descendant(
+          of: tab,
+          matching: find.byType(IconButton),
+        );
+        expect(
+          closeButtons,
+          findsNWidgets(closeButtonCount),
+          reason: 'ה-X עדיין מופיע בריחוף על כרטיסיה צרה (issue #1133)',
+        );
+
+        final closeRects = [
+          for (final e in closeButtons.evaluate())
+            tester.getRect(find.byWidget(e.widget)),
+        ];
+        await gesture.down(clickAt(tabRect, closeRects));
+        await tester.pump();
+        await gesture.up();
+        await tester.pump();
+
+        expect(
+          tabsBloc.addedEvents.whereType<SetCurrentTab>().map((e) => e.index),
+          contains(5),
+          reason: 'הלחיצה עוברת לכרטיסיה',
+        );
+        expect(tabsBloc.addedEvents.whereType<RemoveTab>(), isEmpty);
+        expect(tabsBloc.addedEvents.whereType<ClosePane>(), isEmpty);
+
+        expect(
+          closeRects.fold<double>(0, (sum, r) => sum + r.width),
+          lessThan(tabRect.width / 2),
+          reason: 'רוב הכרטיסיה נשאר אזור בחירה ולא אזור סגירה',
+        );
+      }
+
+      // 10 כרטיסיות ← כרטיסיה של כ-50px; 14 ← כ-36px.
+      for (final count in [10, 14]) {
+        testWidgets('כרטיסיה רגילה ($count כרטיסיות)', (tester) async {
+          await pumpTabs(tester, count);
+          await hoverAndClick(
+            tester,
+            closeButtonCount: 1,
+            clickAt: (tabRect, _) => tabRect.center,
+          );
+        });
+      }
+
+      testWidgets('לשונית מפוצלת', (tester) async {
+        await pumpTabs(
+          tester,
+          10,
+          makeTab: (i) => i == 5
+              ? CombinedTab(
+                  rightTab: _makeTextTab('ימין'),
+                  leftTab: _makeTextTab('שמאל'),
+                )
+              : _makeTextTab('ספר מספר $i'),
+        );
+        await hoverAndClick(
+          tester,
+          closeButtonCount: 2,
+          // בין שני ה-X נמצאת כותרת של אחת החלוניות, בכל כיוון פריסה.
+          clickAt: (tabRect, closeRects) => Offset(
+            (closeRects.first.center.dx + closeRects.last.center.dx) / 2,
+            tabRect.center.dy,
+          ),
+        );
+      });
     });
 
     testWidgets('ה-tooltip מוצג בריחוף על כל שטח הכרטיסיה', (tester) async {
