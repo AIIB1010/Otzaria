@@ -44,7 +44,11 @@ void main() {
         contains('LIBRARY_DB_RELEASE_TAG: $tagOutput'),
         reason: name,
       );
-      expect(body, contains('needs: [bump_version]'), reason: name);
+      expect(
+        body,
+        contains('needs: [bump_version, prepare_release]'),
+        reason: name,
+      );
     }
     expect('LIBRARY_DB_RELEASE_TAG: $tagOutput'.allMatches(workflow).length, 5);
   });
@@ -59,7 +63,10 @@ void main() {
       final full = job('build_android_full', 'build_macos');
       expect(
         full,
-        contains('needs: [bump_version, build_android, build_library_assets]'),
+        contains(
+          'needs: [bump_version, prepare_release, build_android, '
+          'build_library_assets]',
+        ),
       );
       expect(full, contains('name: otzaria-library-parts'));
     },

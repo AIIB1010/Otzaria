@@ -491,12 +491,17 @@ const Set<String> kInstalledByRequiredTypes = {'library', kLibraryIndexType};
 ///
 /// [externalComponents] הם רכיבים המתארים נכסים במאגרים אחרים בארגון Otzaria
 /// (לדוגמה Otzaria/SeforimLibrary) שאינם יושבים בתיקייה המקומית.
+///
+/// [measuredAssets] הם נכסים שכבר נמדדו ועלו ל-release בלי להיות בתיקייה —
+/// ב-CI כל job מעלה את קבציו ומדווח שם, גודל ו-sha256. מניפסטי פיצול נקראים
+/// תמיד מהתיקייה.
 Map<String, Object?> buildReleaseManifest({
   required String releaseTag,
   required String releaseVersion,
   required Directory directory,
   List<ComponentSpec> specs = kKnownComponents,
   List<Map<String, Object?>> externalComponents = const [],
+  Map<String, MeasuredAsset> measuredAssets = const {},
 }) {
   if (releaseTag.trim().isEmpty) {
     throw ReleaseManifestException('release tag is empty');
@@ -516,6 +521,7 @@ Map<String, Object?> buildReleaseManifest({
     if (entity is File) files[_basename(entity.path)] = entity;
   }
 
+  final names = {...files.keys, ...measuredAssets.keys};
   final provenance = _readProvenance(files);
   final components = <Map<String, Object?>>[];
 
@@ -523,7 +529,7 @@ Map<String, Object?> buildReleaseManifest({
     final assets = <Map<String, Object?>>[];
     for (final assetSpec in spec.assets) {
       final pattern = RegExp(assetSpec.pattern);
-      final matches = files.keys.where(pattern.hasMatch).toList()..sort();
+      final matches = names.where(pattern.hasMatch).toList()..sort();
       if (matches.isEmpty) continue;
       if (matches.length > 1) {
         throw ReleaseManifestException(
@@ -534,14 +540,18 @@ Map<String, Object?> buildReleaseManifest({
       assets.add(
         assetSpec.split
             ? _splitAsset(
-                manifestFile: files[matches.single]!,
+                manifestName: matches.single,
                 files: files,
+                measuredAssets: measuredAssets,
                 repository: assetSpec.repository,
                 releaseTag: releaseTag,
                 componentId: spec.id,
               )
             : _singleAsset(
-                file: files[matches.single]!,
+                name: matches.single,
+                measured:
+                    measuredAssets[matches.single] ??
+                    measureAsset(files[matches.single]!),
                 repository: assetSpec.repository,
                 releaseTag: releaseTag,
               ),
@@ -633,16 +643,16 @@ int _downloadSizeOf(Map<String, Object?> asset) {
 }
 
 Map<String, Object?> _singleAsset({
-  required File file,
+  required String name,
+  required MeasuredAsset measured,
   required String repository,
   required String releaseTag,
 }) {
-  final measured = measureAsset(file);
   return {
     'kind': 'single',
     'repository': repository,
     'releaseTag': releaseTag,
-    'name': _basename(file.path),
+    'name': name,
     'size': measured.size,
     'sha256': measured.sha256,
   };
@@ -693,13 +703,19 @@ class _DigestSink implements Sink<Digest> {
 /// נכס מפוצל — משקף את מניפסט הפיצול של `split_release_asset.sh` כלשונו,
 /// כדי שלא תיווצר צורה שנייה לאותו מידע.
 Map<String, Object?> _splitAsset({
-  required File manifestFile,
+  required String manifestName,
   required Map<String, File> files,
+  required Map<String, MeasuredAsset> measuredAssets,
   required String repository,
   required String releaseTag,
   required String componentId,
 }) {
-  final manifestName = _basename(manifestFile.path);
+  final manifestFile = files[manifestName];
+  if (manifestFile == null) {
+    throw ReleaseManifestException(
+      'component $componentId: $manifestName is not in the release directory',
+    );
+  }
   Object? decoded;
   try {
     decoded = jsonDecode(manifestFile.readAsStringSync());
@@ -756,16 +772,16 @@ Map<String, Object?> _splitAsset({
         'invalid hash',
       );
     }
-    final partFile = files[name];
-    if (partFile == null) {
+    final actualSize = measuredAssets[name]?.size ?? files[name]?.lengthSync();
+    if (actualSize == null) {
       throw ReleaseManifestException(
         'component $componentId: part $name listed in $manifestName is not in '
         'the release directory',
       );
     }
-    if (partFile.lengthSync() != partSize) {
+    if (actualSize != partSize) {
       throw ReleaseManifestException(
-        'component $componentId: part $name is ${partFile.lengthSync()} bytes '
+        'component $componentId: part $name is $actualSize bytes '
         'but $manifestName records $partSize',
       );
     }
@@ -1108,11 +1124,42 @@ String? _optionalOption(List<String> args, String name) {
   return args[index + 1];
 }
 
+/// קורא את רשימת הנכסים שה-jobs העלו (`[{name, size, sha256}]`, כפי ש-
+/// `upload_release_assets.sh` כותב) לפי שם.
+Map<String, MeasuredAsset> readMeasuredAssets(File file) {
+  final Object? decoded;
+  try {
+    decoded = jsonDecode(file.readAsStringSync());
+  } on FormatException catch (error) {
+    throw ReleaseManifestException('${file.path} is not valid JSON: $error');
+  }
+  if (decoded is! List) {
+    throw ReleaseManifestException('${file.path} must be a JSON list');
+  }
+  final measured = <String, MeasuredAsset>{};
+  for (final entry in decoded) {
+    final name = entry is Map ? entry['name'] : null;
+    final size = entry is Map ? entry['size'] : null;
+    final sha = entry is Map ? entry['sha256'] : null;
+    if (name is! String || name.isEmpty || name != _basename(name)) {
+      throw ReleaseManifestException('${file.path} has an unsafe asset name');
+    }
+    if (size is! int || size < 0) {
+      throw ReleaseManifestException('${file.path}: $name has an invalid size');
+    }
+    if (sha is! String || !_sha256Pattern.hasMatch(sha)) {
+      throw ReleaseManifestException('${file.path}: $name has an invalid hash');
+    }
+    measured[name] = MeasuredAsset(size: size, sha256: sha);
+  }
+  return measured;
+}
+
 void main(List<String> args) {
   const usage =
       'usage: dart run tool/release/generate_release_manifest.dart '
       '--tag <release-tag> --version <version> --dir <release-files> '
-      '[--out <file>] [--external <components.json>]';
+      '[--out <file>] [--external <components.json>] [--assets <assets.json>]';
   try {
     final tag = _option(args, 'tag');
     final version = _option(args, 'version');
@@ -1137,11 +1184,17 @@ void main(List<String> args) {
       }).toList();
     }
 
+    final assetsPath = _optionalOption(args, 'assets');
+    final measured = assetsPath == null
+        ? const <String, MeasuredAsset>{}
+        : readMeasuredAssets(File(assetsPath));
+
     final manifest = buildReleaseManifest(
       releaseTag: tag,
       releaseVersion: version,
       directory: Directory(dir),
       externalComponents: external,
+      measuredAssets: measured,
     );
     File(out).writeAsStringSync(
       '${const JsonEncoder.withIndent('  ').convert(manifest)}\n',

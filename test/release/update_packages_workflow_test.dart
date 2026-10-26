@@ -184,10 +184,11 @@ void main() {
           r'manifest_asset="otzaria-app-files-${platform}-${arch}.json"',
         ),
       );
+      // ב-Linux השם נבנה מהארכיטקטורה של המטריצה ($ARCH / $arch).
       for (final (platform, arch) in [
         ('macos', 'universal'),
-        ('linux', 'x64'),
-        ('linux', 'arm64'),
+        ('linux', r'$ARCH'),
+        ('linux', r'$arch'),
       ]) {
         final name = appFileManifestAssetName(
           platform: platform,
@@ -197,20 +198,57 @@ void main() {
       }
     });
 
-    test('המניפסטים מוכנסים ל-release-files לפני יצירת השחרור', () {
-      final stage = indexOfStep('Stage application file manifests');
-      expect(stage, greaterThan(indexOfStep('Organize release files')));
-      expect(stage, lessThan(indexOfStep('Generate release manifest')));
-      expect(stage, lessThan(indexOfStep('Create Release')));
+    test('המניפסטים עולים לטיוטה מה-job שבנה אותם, רק כשנוצרו', () {
+      for (final (manifest, outcome) in [
+        ('otzaria-app-files-windows-x64.json', 'app_file_manifest'),
+        ('otzaria-app-files-windows-arm64.json', 'app_file_manifest_arm64'),
+        ('otzaria-app-files-macos-universal.json', 'app_file_manifest_macos'),
+      ]) {
+        expect(
+          workflow,
+          contains(
+            '[ "\$APP_FILE_MANIFEST" != success ] || optional+=($manifest)',
+          ),
+        );
+        expect(
+          workflow,
+          contains('APP_FILE_MANIFEST: \${{ steps.$outcome.outcome }}'),
+        );
+      }
+      expect(
+        workflow,
+        contains(
+          r'[ "$APP_FILE_MANIFEST" != success ] || '
+          r'optional+=("otzaria-app-files-linux-$ARCH.json")',
+        ),
+      );
     });
 
-    test('חבילות העדכון נבנות אחרי יצירת השחרור ואינן יכולות להפיל אותו', () {
+    test('חבילות העדכון נבנות ב-job משלהן ואינן יכולות להפיל את השחרור', () {
       final publish = indexOfStep('Publish differential update packages');
-      expect(publish, greaterThan(indexOfStep('Create Release')));
       expect(
         workflow.substring(publish, publish + 400),
         contains('continue-on-error: true'),
       );
+      final job = workflow.substring(
+        workflow.indexOf('\n  update_packages_windows:\n'),
+        publish,
+      );
+      expect(
+        job,
+        contains(
+          'needs: [bump_version, prepare_release, build_windows, '
+          'build_windows_arm64]',
+        ),
+      );
+      // create_release מחכה להן, אך תנאי ההרצה שלו אינו דורש שיצליחו.
+      final createStart = workflow.indexOf('\n  create_release:\n');
+      final create = workflow.substring(
+        createStart,
+        workflow.indexOf('    steps:', createStart),
+      );
+      expect(create, contains('update_packages_windows'));
+      expect(create, isNot(contains('needs.update_packages')));
     });
 
     test('כל שלב חדש אינו פטאלי', () {
@@ -385,7 +423,8 @@ void main() {
         'Stamp installed release (Linux FULL)',
         'Generate application file manifest (Linux)',
         'Upload application file manifest (Linux)',
-        'Publish differential update packages (macOS, Linux)',
+        'Publish differential update packages (macOS)',
+        'Publish differential update packages (Linux)',
       ]) {
         expect(
           step(name, 400),
@@ -395,36 +434,52 @@ void main() {
       }
     });
 
-    test('חבילות העץ נבנות בשלב נפרד אחרי השחרור, עם מגבלת זמן', () {
-      final publish = indexOfStep(
-        'Publish differential update packages (macOS, Linux)',
-      );
-      expect(publish, greaterThan(indexOfStep('Create Release')));
-      expect(
-        publish,
-        greaterThan(indexOfStep('Publish differential update packages')),
-      );
-      final body = step(
-        'Publish differential update packages (macOS, Linux)',
-        2400,
-      );
-      expect(body, contains('timeout-minutes:'));
-      expect(body, contains('UPDATE_PACKAGES_PLATFORM=macos'));
-      expect(body, contains('UPDATE_PACKAGES_PLATFORM=linux'));
-      expect(body, contains('release-files/otzaria-macos.zip'));
-      expect(body, contains('otzaria-linux-full-\$arch.tar.zst'));
-      expect(body, contains('$kUpdateBaseReleaseCount || true'));
-      expect(body, contains('gh release upload'));
-    });
+    test(
+      'חבילות העץ נבנות ב-job לכל פלטפורמה, עם מגבלת זמן, ועולות לטיוטה',
+      () {
+        final macos = step(
+          'Publish differential update packages (macOS)',
+          2400,
+        );
+        final linux = step(
+          'Publish differential update packages (Linux)',
+          2400,
+        );
+        for (final body in [macos, linux]) {
+          expect(body, contains('timeout-minutes:'));
+          expect(body, contains('$kUpdateBaseReleaseCount || true'));
+          expect(
+            body,
+            contains(
+              r'bash tool/release/upload_release_assets.sh "$RELEASE_ID" '
+              'release-record tree-update-packages/*',
+            ),
+          );
+        }
+        expect(macos, contains('UPDATE_PACKAGES_PLATFORM=macos'));
+        expect(macos, contains('release-files/otzaria-macos.zip'));
+        expect(linux, contains('UPDATE_PACKAGES_PLATFORM=linux'));
+        expect(linux, contains('otzaria-linux-full-\$arch.tar.zst'));
+        // Linux אינו מחכה ל-macOS, שמסיים אחרון.
+        final linuxJob = workflow.indexOf('\n  update_packages_linux:\n');
+        expect(
+          workflow.substring(linuxJob, linuxJob + 400),
+          contains('needs: [bump_version, prepare_release, build_linux]\n'),
+        );
+      },
+    );
 
-    test('המניפסטים של macOS ו-Linux עולים עם השחרור', () {
-      final body = step('Stage application file manifests', 1600);
+    test('המניפסטים של macOS ו-Linux מגיעים ל-jobs של חבילות העץ', () {
+      expect(workflow, contains('name: otzaria-app-file-manifest-macos\n'));
+      expect(
+        workflow,
+        contains('pattern: otzaria-app-file-manifest-linux-*\n'),
+      );
       for (final name in [
-        'otzaria-app-files-macos-universal.json',
-        'otzaria-app-files-linux-x64.json',
-        'otzaria-app-files-linux-arm64.json',
+        'release-files/otzaria-app-files-macos-universal.json',
+        r'"release-files/otzaria-app-files-linux-$arch.json"',
       ]) {
-        expect(body, contains(name));
+        expect(workflow, contains(name));
       }
     });
 

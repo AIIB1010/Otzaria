@@ -1027,15 +1027,15 @@ void main() {
       ).readAsStringSync().replaceAll('\r\n', '\n');
       final job = workflow.substring(
         workflow.indexOf('\n  build_windows_installer:\n'),
-        workflow.indexOf('\n  create_release:\n'),
+        workflow.indexOf('\n  update_packages_windows:\n'),
       );
       final prepare = _workflowStep('Prepare regular installer inputs');
 
       expect(
         job,
         contains(
-          'needs: [bump_version, build_windows, build_windows_arm64, '
-          'build_library_assets]',
+          'needs: [bump_version, prepare_release, build_windows, '
+          'build_windows_arm64, build_library_assets]',
         ),
       );
       expect(job, contains("needs.build_windows.result == 'success'"));
@@ -4494,7 +4494,7 @@ void main() {
       expect(step, contains(r'$env:OTZARIA_ASSISTANT_RELEASE_TAG = $tag'));
       expect(step, contains(r'& "$env:ISCC" installer\download_assistant.iss'));
       expect(step, isNot(contains('/DAssistantReleaseTag=')));
-      // אותו כלל תג שבו create_release משתמש.
+      // אותו כלל תג שבו prepare_release משתמש.
       expect(
         step,
         contains(
