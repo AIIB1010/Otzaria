@@ -378,6 +378,24 @@ packages:
       volumesDigest: 'e' * 64,
     );
     expect(otherTalmud.exitCode, 0, reason: '${otherTalmud.stderr}');
+
+    // אינדקס שנכנס בנכס אחד מתפרסם שלם, בלי חלקים ובלי מניפסט.
+    for (final entity in dist.listSync()) {
+      if (p.basename(entity.path).startsWith('otzaria-library-index.tar.zst')) {
+        entity.deleteSync();
+      }
+    }
+    File(archive).copySync(p.join(dist.path, 'otzaria-library-index.tar.zst'));
+    final wholeArchive = await fetch(
+      databaseSha256: await sha256Of(database.path),
+      engineVersion: '0.8.4',
+      indexDirectory: p.join(temp.path, 'whole', 'index'),
+    );
+    expect(wholeArchive.exitCode, 0, reason: '${wholeArchive.stderr}');
+    expect(
+      File(p.join(temp.path, 'whole', 'index', 'meta.json')).existsSync(),
+      isTrue,
+    );
   });
 
   test('ה-workflow שומר את ה-SHA שנבחר ותומך בתיקון חירום', () {

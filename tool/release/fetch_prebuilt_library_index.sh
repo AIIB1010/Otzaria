@@ -87,19 +87,22 @@ required_schema=$(engine_const INDEX_SCHEMA_VERSION)
 
 echo "Prebuilt index: release $library_tag, engine $expected_engine, $(jq -r '.catalogueBooks // "an unreported number of"' "$work/$provenance_name") books in the catalogue"
 
-fetch "$manifest_name"
-parts=$(jq -er '.parts[].name' "$work/$manifest_name") \
-  || fail "$manifest_name lists no parts"
-[ -n "$parts" ] || fail "$manifest_name lists no parts"
-while IFS= read -r part; do
-  [ "$part" = "$(basename "$part")" ] || fail "unsafe part name in manifest: $part"
-  fetch "$part"
-done <<< "$parts"
+# שלם כשהוא נכנס בנכס אחד; חלקים ומניפסט רק מעל המגבלה של GitHub.
+if ! curl -fsSL --retry 3 --retry-delay 5 -o "$work/$archive_name" "$base_url/$archive_name" 2>/dev/null; then
+  rm -f "$work/$archive_name"
+  fetch "$manifest_name"
+  parts=$(jq -er '.parts[].name' "$work/$manifest_name") \
+    || fail "$manifest_name lists no parts"
+  [ -n "$parts" ] || fail "$manifest_name lists no parts"
+  while IFS= read -r part; do
+    [ "$part" = "$(basename "$part")" ] || fail "unsafe part name in manifest: $part"
+    fetch "$part"
+  done <<< "$parts"
 
-# assemble_split_asset.sh verifies every part and the reassembled archive
-# against the manifest; this only pins the manifest itself to the provenance,
-# so a manifest swapped for another release cannot pass.
-bash "$(dirname "$0")/assemble_split_asset.sh" "$work/$manifest_name"
+  # assemble_split_asset.sh verifies every part and the reassembled archive
+  # against the manifest; the provenance check below pins the manifest itself.
+  bash "$(dirname "$0")/assemble_split_asset.sh" "$work/$manifest_name"
+fi
 expected_archive=$(read_provenance '.indexArchiveSha256')
 actual_archive=$(hash_file "$work/$archive_name")
 [ "$expected_archive" = "$actual_archive" ] || fail \
