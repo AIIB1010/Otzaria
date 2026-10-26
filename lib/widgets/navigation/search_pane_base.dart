@@ -177,7 +177,7 @@ class _SearchPaneBaseState extends State<SearchPaneBase> {
               isCompact: true,
               icon: widget.errorMessage != null
                   ? FluentIcons.error_circle_24_regular
-                  : FluentIcons.document_search_24_regular,
+                  : OtzariaIcons.search_not_found_24_regular,
               title: widget.errorMessage ?? 'אין תוצאות',
             )
           : widget.resultsWidget,

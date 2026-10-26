@@ -329,9 +329,9 @@ class MainFlutterWindow: OtzariaWindow {
     }
   }
 
-  // טוען את iconnew.png מתוך flutter_assets (ב-macOS הם ב-App.framework/Resources).
+  // טוען את icon.png מתוך flutter_assets (ב-macOS הם ב-App.framework/Resources).
   private func loadSplashIcon() -> NSImage? {
-    let assetPath = "flutter_assets/assets/icon/iconnew.png"
+    let assetPath = "flutter_assets/assets/icon/icon.png"
     if let frameworksURL = Bundle.main.privateFrameworksURL,
       let appBundle = Bundle(
         url: frameworksURL.appendingPathComponent("App.framework")),

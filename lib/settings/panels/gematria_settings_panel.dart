@@ -201,7 +201,7 @@ class _GematriaSettingsTabState extends State<GematriaSettingsTab> {
           title: context.settingsText('שיטת חישוב גימטריה'),
           children: [
             SettingsActionTile.switchTile(
-              icon: OtzariaIcons.alef_1_24_filled,
+              icon: OtzariaIcons.text_font_size_hebrew_24_filled,
               title: context.settingsText('גימטריה קטנה'),
               subtitle: context.settingsText('כל אות מחושבת לפי ספרה אחת'),
               value: useSmallGematria,
@@ -242,7 +242,7 @@ class _GematriaSettingsTabState extends State<GematriaSettingsTab> {
               },
             ),
             SettingsActionTile.switchTile(
-              icon: OtzariaIcons.alef_3_24_filled,
+              icon: OtzariaIcons.text_font_number_hebrew_24_filled,
               title: context.settingsText('עם הכולל'),
               subtitle: context.settingsText('הוספת מספר האותיות לסכום'),
               value: useWithKolel,

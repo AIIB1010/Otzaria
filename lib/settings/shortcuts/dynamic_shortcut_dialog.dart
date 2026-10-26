@@ -278,7 +278,7 @@ class _DynamicShortcutForm extends StatelessWidget {
               ),
             if (value.target == TextTarget.body && isDisplay)
               SettingsActionTile.segmentedTile<DynamicMarkChange?>(
-                icon: OtzariaIcons.alef_1_24_filled,
+                icon: OtzariaIcons.text_font_hebrew_24_filled,
                 title: t('ציוני המפרשים'),
                 options: markOptions,
                 currentValue: change.anchorMarkers,

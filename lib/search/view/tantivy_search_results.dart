@@ -829,7 +829,7 @@ class _TantivySearchResultsState extends State<TantivySearchResults> {
       return [
         _engineStateSliver(
           _buildInformativeEmptyState(
-            icon: FluentIcons.document_search_24_regular,
+            icon: OtzariaIcons.search_not_found_24_regular,
             title: 'אין תוצאות',
             message:
                 'נסה להרחיב קטגוריות, לשנות מצב חיפוש או לעדכן את מילות החיפוש.',

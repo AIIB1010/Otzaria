@@ -262,8 +262,11 @@ class _VerticalTabRow extends StatelessWidget {
                         Expanded(
                           child: TabTitleTooltip(
                             message: tooltipMessage,
-                            title: displayTitle,
-                            child: buildFadedTabTitle(context, displayTitle),
+                            title: tabTitleBesideContentIcon(tab, displayTitle),
+                            child: buildFadedTabTitle(
+                              context,
+                              tabTitleBesideContentIcon(tab, displayTitle),
+                            ),
                           ),
                         ),
                         if (showClose) _buildCloseButton(context, extent: 24),

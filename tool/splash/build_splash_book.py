@@ -17,7 +17,7 @@ from PIL import Image
 
 FRAMES = 24
 # Logical frame size that keeps the open book at the size of the old static icon (160px for the
-# whole 1024px iconnew.png): the logo is 176 of the frame's 220 units.
+# whole 1024px icon.png): the logo is 176 of the frame's 220 units.
 LOGICAL = 177
 SCALES = {100: 1.0, 150: 1.5, 200: 2.0}
 OUT = Path(__file__).resolve().parents[2] / "native" / "splash"

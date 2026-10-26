@@ -92,7 +92,6 @@ import 'package:otzaria/shortcuts/shortcut_helper.dart';
 import 'package:otzaria/shortcuts/shortcut_validator.dart';
 import 'package:otzaria/settings/services/safer_mode_guard.dart';
 import 'package:otzaria/utils/ui/fullscreen_helper.dart';
-import 'package:otzaria/utils/ui/image_decode_size.dart';
 
 import 'package:otzaria/widgets/navigation/responsive_action_bar.dart';
 import 'package:otzaria/widgets/navigation/book_view_actions.dart';
@@ -2476,22 +2475,13 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
   Widget _buildShamorZachorButton(BuildContext context, TextBookLoaded state) {
     final isTracked = _isBookTrackedInShamorZachor(state.book);
     final isCompact = context.read<SettingsBloc>().state.compactMenuMode;
-    final iconSize = isCompact ? 16.0 : 20.0;
     return BarButton.icon(
       tooltip: isTracked
           ? 'סמן קטע פתוח כנלמד בשמור וזכור'
           : 'הוסף למעקב לימוד בשמור וזכור',
       icon: isTracked
-          ? FluentIcons.checkmark_circle_24_regular
+          ? OtzariaIcons.shamor_vezachor_24_filled
           : FluentIcons.add_circle_24_regular,
-      iconWidget: isTracked
-          ? Image.asset(
-              'assets/icon/shamor_zachor_with_v.png',
-              width: iconSize,
-              height: iconSize,
-              cacheWidth: imageDecodeSize(context, iconSize),
-            )
-          : null,
       compact: isCompact,
       onPressed: () {
         if (isTracked) {

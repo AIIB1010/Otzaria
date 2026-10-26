@@ -9,6 +9,7 @@ import 'package:otzaria/tools/tikkun_korim/models/tikkun_models.dart';
 import 'package:otzaria/tools/tikkun_korim/settings/tikkun_settings.dart';
 import 'package:otzaria/widgets/misc/app_popup_menu.dart';
 import 'package:otzaria/widgets/widgets_exports.dart';
+import 'package:otzaria_icons/otzaria_icons.dart';
 
 /// גופני אוצריא המוצעים בשני הטורים.
 const List<AppMenuEntry<String>> _kOtzariaFontEntries = [
@@ -63,7 +64,7 @@ class TikkunSettingsPanel extends StatelessWidget {
           title: 'תצוגה',
           children: [
             SettingsActionTile.dropdownTile<String>(
-              icon: FluentIcons.text_font_24_regular,
+              icon: OtzariaIcons.text_font_hebrew_24_filled,
               title: 'גופן סת"ם',
               value: settings.stamFont,
               entries: tikkunStamFontEntries(),
@@ -71,7 +72,7 @@ class TikkunSettingsPanel extends StatelessWidget {
                   _emit(settings.copyWith(stamFont: value ?? 'Ashurit')),
             ),
             SettingsActionTile.dropdownTile<String>(
-              icon: FluentIcons.text_font_24_regular,
+              icon: OtzariaIcons.alef_niqqud_24_filled,
               title: 'גופן ניקוד',
               value: settings.nikudFont,
               entries: tikkunNikudFontEntries(),
@@ -164,7 +165,7 @@ class TikkunSettingsPanel extends StatelessWidget {
                   _emit(settings.copyWith(startupMode: value)),
             ),
             SettingsActionTile.segmentedTile<String>(
-              icon: FluentIcons.book_24_regular,
+              icon: OtzariaIcons.book_24_regular,
               title: 'נוסח',
               options: const [
                 SegmentOption(value: 'ashkenaz', label: 'אשכנז'),
@@ -174,7 +175,7 @@ class TikkunSettingsPanel extends StatelessWidget {
               onChanged: (value) => _emit(settings.copyWith(nusach: value)),
             ),
             SettingsActionTile.segmentedTile<String>(
-              icon: FluentIcons.globe_24_regular,
+              icon: OtzariaIcons.shabbat_candles_24_regular,
               title: 'מנהג לקריאות חגים ומועדים',
               options: const [
                 SegmentOption(value: 'israel', label: 'ארץ ישראל'),
@@ -184,7 +185,7 @@ class TikkunSettingsPanel extends StatelessWidget {
               onChanged: (value) => _emit(settings.copyWith(nusachLand: value)),
             ),
             SettingsActionTile.segmentedTile<TikkunDecalogueTaam>(
-              icon: FluentIcons.text_font_info_24_regular,
+              icon: OtzariaIcons.luchot_habrit_24_regular,
               title: 'טעמי עשרת הדברות',
               subtitle: switch (settings.decalogueTaam) {
                 TikkunDecalogueTaam.merged =>
@@ -211,7 +212,7 @@ class TikkunSettingsPanel extends StatelessWidget {
                   _emit(settings.copyWith(decalogueTaam: value)),
             ),
             SettingsActionTile.switchTile(
-              icon: FluentIcons.shield_24_regular,
+              icon: OtzariaIcons.alef_lock_24_filled,
               title: 'הסתרת שם השם',
               subtitle: settings.hideDivineName
                   ? 'י-ה-ו-ה יוצג כ-י-ק-ו-ק'

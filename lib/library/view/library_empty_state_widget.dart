@@ -66,7 +66,7 @@ class LibraryEmptyStateWidget extends StatelessWidget {
           Icon(
             _isDeepLink
                 ? OtzariaIcons.link_24_regular
-                : FluentIcons.document_search_24_regular,
+                : OtzariaIcons.search_not_found_24_regular,
             size: 64,
             color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),

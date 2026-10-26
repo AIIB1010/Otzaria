@@ -474,7 +474,7 @@ DWORD WINAPI SplashThreadProc(LPVOID) {
     animate = false;
     const int disp = MulDiv(kIconLogicalSize, static_cast<int>(g_dpi), 96);
     const std::wstring icon_path =
-        ExecutableDir() + L"\\data\\flutter_assets\\assets\\icon\\iconnew.png";
+        ExecutableDir() + L"\\data\\flutter_assets\\assets\\icon\\icon.png";
     hwnd = decoder.OpenFile(factory, icon_path, disp)
                ? CreateSplashWindow(&decoder, &band_ms)
                : nullptr;

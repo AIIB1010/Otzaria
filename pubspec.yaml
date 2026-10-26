@@ -9,7 +9,7 @@ msix_config:
   identity_name: F8854998.otzaria
   description: "ספריית ספרים יהודיים עם אפשרויות חיפוש חכם"
   msix_version: 0.9.98.0
-  logo_path: assets/icon/iconnew.png
+  logo_path: assets/icon/icon.png
   publisher: CN=B3B520D1-500C-4859-986C-448583CC927B
   capabilities: "internetClient"
   sign_msix: false
@@ -65,7 +65,7 @@ dependencies:
   otzaria_icons:
     git:
       url: https://github.com/Otzaria/otzaria_icons
-      ref: 5225cd36c59097fe1f24a39fb60f9c2c0e15e47c
+      ref: 483fec355339f54f9e094994a106dad9a63b82e3
   file_picker_darwin: ^2.4.0
   file_picker: ^13.1.0
   # FilePickerWindowsOptions: בעלים מפורש לדיאלוג (חלון Dart ולא החלון שבחזית).
@@ -230,18 +230,18 @@ flutter_launcher_icons:
   ios: true
   macos:
     generate: true
-    image_path: "assets/icon/iconnew.png"
+    image_path: "assets/icon/icon.png"
   web:
     generate: true
-    image_path: "assets/icon/iconnew.png"
+    image_path: "assets/icon/icon.png"
     background_color: "#0175C2"
     theme_color: "#0175C2"
   remove_alpha_ios: true
-  image_path: "assets/icon/iconnew.png"
+  image_path: "assets/icon/icon.png"
   min_sdk_android: 21 # android min sdk min:16, default 21
   windows:
     generate: true
-    image_path: "assets/icon/iconnew.png"
+    image_path: "assets/icon/icon.png"
     icon_size: 256 # min:48, max:256, default: 48
 
 dev_dependencies:
@@ -280,11 +280,8 @@ flutter:
     - assets/bio/
     - assets/logos/
     - assets/ca/
-    - assets/icon/shamor_zachor.png
-    - assets/icon/shamor_zachor_with_v.png
-    - assets/icon/iconnew.png
-    - assets/icon/iconnew_256.png
-    - assets/icon/mount_sinai_tablets.svg
+    - assets/icon/icon.png
+    - assets/icon/icon_256.png
     - assets/icon/otzplugin_file_icon.png
     - assets/logo_books/
     # ארכיוני התוספים המצורפים למובייל — מאוכלסת רק ב-CI (docs/bundled_plugins.md)

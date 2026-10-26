@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:otzaria_icons/otzaria_icons.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kosher_dart/kosher_dart.dart';
 import 'package:otzaria/core/messages/tools_messages.dart';
@@ -580,11 +579,10 @@ class _CalendarTimesPanelState extends State<CalendarTimesPanel> {
 
     final iconWidget = existingAlert != null
         ? Icon(FluentIcons.alert_24_filled)
-        : SvgPicture.asset(
-            'assets/icon/mount_sinai_tablets.svg',
-            width: 20,
-            height: 20,
-            colorFilter: ColorFilter.mode(cs.onPrimary, BlendMode.srcIn),
+        : Icon(
+            OtzariaIcons.mount_sinai_24_regular,
+            size: 20,
+            color: cs.onPrimary,
           );
 
     return ActionButton.recommended(

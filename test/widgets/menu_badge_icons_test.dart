@@ -8,7 +8,7 @@ bool _isLetterOrLinkName(String name) =>
     name.startsWith('alef_') ||
     name.startsWith('beit') ||
     name.startsWith('tet') ||
-    name.startsWith('link');
+    (name.startsWith('link') && !name.startsWith('links_'));
 
 void main() {
   test('כל אייקון אות וקישור של הספרייה נמצא ברשימה', () {
@@ -43,6 +43,17 @@ void main() {
     );
     expect(tester.getSize(find.byType(AppMenuIcon)), const Size(18, 18));
     expect(tester.widget<Icon>(find.byType(Icon)).size, 24);
+  });
+
+  testWidgets('אייקון links נשאר בגודל הרגיל', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Center(
+          child: AppMenuIcon(OtzariaIcons.links_24_regular, size: 18),
+        ),
+      ),
+    );
+    expect(tester.widget<Icon>(find.byType(Icon)).size, 18);
   });
 
   testWidgets('אייקון רגיל נשאר בגודלו', (tester) async {

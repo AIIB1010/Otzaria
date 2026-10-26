@@ -184,7 +184,7 @@ class _CalendarSettingsTabState extends State<CalendarSettingsTab> {
                     SegmentOption(
                       value: CalendarType.hebrew,
                       label: context.settingsText('עברי'),
-                      icon: FluentIcons.calendar_rtl_24_regular,
+                      icon: OtzariaIcons.calendar_alef_24_regular,
                       subtitle: context.settingsText(
                         'יוצג לוח השנה העברי בלבד',
                       ),
@@ -212,7 +212,7 @@ class _CalendarSettingsTabState extends State<CalendarSettingsTab> {
                   },
                 ),
                 SettingsActionTile.dropdownTile<CalendarDayTransition>(
-                  icon: FluentIcons.weather_sunny_low_24_regular,
+                  icon: OtzariaIcons.sunset_24_regular,
                   title: context.settingsText('מעבר יום'),
                   value: state.dayTransition,
                   entries: [

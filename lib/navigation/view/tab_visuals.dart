@@ -6,11 +6,42 @@ import 'package:otzaria/plugins/bloc/plugin_system_bloc.dart';
 import 'package:otzaria/tabs/models/combined_tab.dart';
 import 'package:otzaria/tabs/models/pdf_commentators_tab.dart';
 import 'package:otzaria/tabs/models/pdf_tab.dart';
+import 'package:otzaria/search_feedback/semantic_search_strings.dart';
 import 'package:otzaria/tabs/models/searching_tab.dart';
+import 'package:otzaria/tabs/models/semantic_search_tab.dart';
 import 'package:otzaria/tabs/models/tab.dart';
 import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/tabs/models/tool_tab.dart';
 import 'package:otzaria/tools/tool_catalog_entry.dart';
+import 'package:otzaria/utils/ui/book_format_icon.dart';
+import 'package:otzaria_icons/otzaria_icons.dart';
+
+/// אייקון הראש של כרטיסיות שתוכנן מזוהה בו — תוצאות חיפוש ומסמכי Word,
+/// HTML ו-Markdown — או `null` לכל כרטיסיה אחרת. מקור יחיד לשורה העליונה,
+/// לעמודה האנכית, לחלונית חיפוש הכרטיסיות ולמוק הגרירה.
+IconData? tabContentIconData(OpenedTab tab) {
+  if (tab is SemanticSearchTab) return OtzariaIcons.search_in_star_24_regular;
+  if (tab is SearchingTab) return OtzariaIcons.search_24_regular;
+  if (tab is TextBookTab) return documentFormatIcon(tab.book);
+  return null;
+}
+
+/// הכותרת שמוצגת לצד אייקון הראש. אייקון החיפוש מחליף את המילה "חיפוש:"
+/// בכותרת של כרטיסיית חיפוש, ולא מתווסף אליה: נשארת רק השאילתה.
+///
+/// ⚠️ כשאין שאילתה הכותרת היא המילה "חיפוש" בלבד, והיא נשארת — כרטיסיה בלי
+/// טקסט כלל אינה ניתנת לזיהוי. מי שמציג את האייקון רק ברוחב מסוים קורא לכאן
+/// רק כשהאייקון מוצג, אחרת המילה נעלמת בלי תחליף.
+String tabTitleBesideContentIcon(OpenedTab tab, String title) {
+  if (tab is! SearchingTab) return title;
+  final prefix = tab is SemanticSearchTab
+      ? '$kSemanticSearchModeName: '
+      : 'חיפוש: ';
+  if (!title.startsWith(prefix) || title.trim().length <= prefix.trim().length) {
+    return title;
+  }
+  return title.substring(prefix.length);
+}
 
 /// אייקון סוג הכרטיסיה — משותף לעמודה האנכית ולחלונית חיפוש הכרטיסיות.
 ///
@@ -22,15 +53,16 @@ Widget? buildTabTypeIcon(
   Color? color,
 }) {
   final resolved = color ?? Theme.of(context).colorScheme.onSurface;
+  final contentIcon = tabContentIconData(tab);
+  if (contentIcon != null) {
+    return Icon(contentIcon, size: size, color: resolved);
+  }
   if (tab is PdfBookTab) {
     return Icon(
       FluentIcons.document_pdf_16_regular,
       size: size,
       color: resolved,
     );
-  }
-  if (tab is SearchingTab) {
-    return Icon(FluentIcons.search_24_regular, size: size, color: resolved);
   }
   if (tab is CombinedTab) {
     return Icon(
@@ -63,8 +95,9 @@ Widget? buildTabTypeIcon(
 /// גליף, ולתמונה אין `codePoint`. זה מוק גרירה של רגע אחד, והנאמנות הזו
 /// אינה שווה מסלול ציור שני.
 IconData tabTypeIconData(OpenedTab tab) {
+  final contentIcon = tabContentIconData(tab);
+  if (contentIcon != null) return contentIcon;
   if (tab is PdfBookTab) return FluentIcons.document_pdf_16_regular;
-  if (tab is SearchingTab) return FluentIcons.search_24_regular;
   if (tab is CombinedTab) return FluentIcons.split_horizontal_24_regular;
   if (tab is ToolTab) return FluentIcons.toolbox_24_regular;
   return FluentIcons.document_24_regular;

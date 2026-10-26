@@ -289,7 +289,7 @@ class SemanticModePanel extends StatelessWidget {
               'תארו במילים שלכם את העניין שאתם מחפשים',
             ),
             prefixIcon: const Icon(
-              OtzariaIcons.search_in_library_24_regular,
+              OtzariaIcons.search_in_star_24_regular,
             ),
             suffixIcon: Padding(
               padding: const EdgeInsetsDirectional.only(end: 8),

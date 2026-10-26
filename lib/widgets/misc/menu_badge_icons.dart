@@ -1,4 +1,5 @@
 // אייקוני משפחות אלף (אותיות) וקישור של otzaria_icons, שמוגדלים בשורות תפריט.
+// `links` (שני קישורים) אינו נכלל: הוא מצויר בגודל רגיל, כמו שאר האייקונים.
 //
 // הרשימה מפורשת ולא נגזרת מ-`OtzariaIcons.allIcons`: הבדיקה
 // plugin_icon_resolver_usage_test אוסרת התייחסות אליה מחוץ למפענחי האייקונים.
@@ -8,7 +9,7 @@ import 'package:flutter/widgets.dart';
 import 'package:otzaria_icons/otzaria_icons.dart';
 
 /// האם [icon] שייך למשפחת האותיות (`alef_*`, `beit*`, `tet*`) או הקישורים
-/// (`link*`) של otzaria_icons.
+/// (`link*`, למעט `links`) של otzaria_icons.
 bool isLetterOrLinkIcon(IconData icon) => _letterAndLinkIcons.contains(icon);
 
 // IconData מגדיר ==, ולכן זה חייב להיות static final ולא const.
@@ -33,12 +34,18 @@ final Set<IconData> _letterAndLinkIcons = <IconData>{
   OtzariaIcons.alef_behind_alef_24_regular,
   OtzariaIcons.alef_check_24_filled,
   OtzariaIcons.alef_check_24_regular,
+  OtzariaIcons.alef_clock_24_filled,
+  OtzariaIcons.alef_clock_24_regular,
   OtzariaIcons.alef_copy_24_filled,
   OtzariaIcons.alef_copy_24_regular,
   OtzariaIcons.alef_crown_24_filled,
   OtzariaIcons.alef_crown_24_regular,
   OtzariaIcons.alef_delete_24_filled,
   OtzariaIcons.alef_delete_24_regular,
+  OtzariaIcons.alef_download_24_filled,
+  OtzariaIcons.alef_download_24_regular,
+  OtzariaIcons.alef_edit_24_filled,
+  OtzariaIcons.alef_edit_24_regular,
   OtzariaIcons.alef_eraser_24_filled,
   OtzariaIcons.alef_eraser_24_regular,
   OtzariaIcons.alef_exclamation_24_filled,
@@ -73,8 +80,18 @@ final Set<IconData> _letterAndLinkIcons = <IconData>{
   OtzariaIcons.alef_rashi_24_regular,
   OtzariaIcons.alef_scissors_24_filled,
   OtzariaIcons.alef_scissors_24_regular,
+  OtzariaIcons.alef_search_24_filled,
+  OtzariaIcons.alef_search_24_regular,
+  OtzariaIcons.alef_settings_24_filled,
+  OtzariaIcons.alef_settings_24_regular,
   OtzariaIcons.alef_stam_24_filled,
   OtzariaIcons.alef_stam_24_regular,
+  OtzariaIcons.alef_star_24_filled,
+  OtzariaIcons.alef_star_24_regular,
+  OtzariaIcons.alef_tag_24_filled,
+  OtzariaIcons.alef_tag_24_regular,
+  OtzariaIcons.alef_upload_24_filled,
+  OtzariaIcons.alef_upload_24_regular,
   OtzariaIcons.alef_writing_24_filled,
   OtzariaIcons.alef_writing_24_regular,
   OtzariaIcons.beit_24_filled,
@@ -93,12 +110,18 @@ final Set<IconData> _letterAndLinkIcons = <IconData>{
   OtzariaIcons.link_book_24_regular,
   OtzariaIcons.link_check_24_filled,
   OtzariaIcons.link_check_24_regular,
+  OtzariaIcons.link_clock_24_filled,
+  OtzariaIcons.link_clock_24_regular,
   OtzariaIcons.link_copy_24_filled,
   OtzariaIcons.link_copy_24_regular,
   OtzariaIcons.link_delete_24_filled,
   OtzariaIcons.link_delete_24_regular,
   OtzariaIcons.link_document_24_filled,
   OtzariaIcons.link_document_24_regular,
+  OtzariaIcons.link_download_24_filled,
+  OtzariaIcons.link_download_24_regular,
+  OtzariaIcons.link_edit_24_filled,
+  OtzariaIcons.link_edit_24_regular,
   OtzariaIcons.link_eraser_24_filled,
   OtzariaIcons.link_eraser_24_regular,
   OtzariaIcons.link_exclamation_24_filled,
@@ -107,14 +130,24 @@ final Set<IconData> _letterAndLinkIcons = <IconData>{
   OtzariaIcons.link_eye_24_regular,
   OtzariaIcons.link_information_24_filled,
   OtzariaIcons.link_information_24_regular,
+  OtzariaIcons.link_lock_24_filled,
+  OtzariaIcons.link_lock_24_regular,
   OtzariaIcons.link_marker_24_filled,
   OtzariaIcons.link_marker_24_regular,
   OtzariaIcons.link_quote_24_filled,
   OtzariaIcons.link_quote_24_regular,
   OtzariaIcons.link_scissors_24_filled,
   OtzariaIcons.link_scissors_24_regular,
-  OtzariaIcons.links_24_filled,
-  OtzariaIcons.links_24_regular,
+  OtzariaIcons.link_search_24_filled,
+  OtzariaIcons.link_search_24_regular,
+  OtzariaIcons.link_settings_24_filled,
+  OtzariaIcons.link_settings_24_regular,
+  OtzariaIcons.link_star_24_filled,
+  OtzariaIcons.link_star_24_regular,
+  OtzariaIcons.link_tag_24_filled,
+  OtzariaIcons.link_tag_24_regular,
+  OtzariaIcons.link_upload_24_filled,
+  OtzariaIcons.link_upload_24_regular,
   OtzariaIcons.tet_24_filled,
   OtzariaIcons.tet_24_regular,
   OtzariaIcons.tet_behind_tet_24_filled,

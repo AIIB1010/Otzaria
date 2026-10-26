@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:otzaria_icons/otzaria_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otzaria/settings/settings_exports.dart';
@@ -574,13 +575,11 @@ class _MeasurementConverterScreenState
                                 ),
                             // panel_right_expand הוא ה"Pane Open" של
                             // פלואנט — הפאנל עם חץ שפותח אותו, ולא פאנל
-                            // סתום שאינו אומר מה הלחיצה תעשה. הוא קיים
-                            // בחבילה רק בגודל 20; הגליף נמתח ל-24 כמו כל
-                            // גופן, ולכן הוא מוצג באותו גודל כמו זוגו.
+                            // סתום שאינו אומר מה הלחיצה תעשה.
                             child: Icon(
                               sidebarOpen
-                                  ? FluentIcons.panel_right_contract_24_regular
-                                  : FluentIcons.panel_right_expand_20_regular,
+                                  ? OtzariaIcons.panel_right_contract_24_regular
+                                  : OtzariaIcons.panel_right_expand_24_regular,
                               key: ValueKey(sidebarOpen),
                               size: 24,
                             ),

@@ -290,9 +290,9 @@ IconData _iconForTab(SettingsTab tab) {
     case SettingsTab.design:
       return FluentIcons.paint_brush_24_regular;
     case SettingsTab.text:
-      return OtzariaIcons.book_24_regular;
+      return OtzariaIcons.text_font_hebrew_24_regular;
     case SettingsTab.library:
-      return FluentIcons.library_24_regular;
+      return OtzariaIcons.library_settings_24_regular;
     case SettingsTab.tools:
       return FluentIcons.wrench_24_regular;
     case SettingsTab.shortcuts:
@@ -300,7 +300,7 @@ IconData _iconForTab(SettingsTab tab) {
     case SettingsTab.system:
       return FluentIcons.settings_24_regular;
     case SettingsTab.about:
-      return FluentIcons.people_team_24_regular;
+      return OtzariaIcons.book_information_24_regular;
   }
 }
 

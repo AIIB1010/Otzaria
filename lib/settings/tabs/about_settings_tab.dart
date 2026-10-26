@@ -243,13 +243,13 @@ class AboutSettingsTab extends StatelessWidget {
                       _InfoChipSection(
                         label: aboutTopEditorsLabel,
                         items: aboutTopEditors,
-                        icon: OtzariaIcons.person_24_filled,
+                        icon: OtzariaIcons.person_portrait_24_filled,
                       ),
                       const SizedBox(height: 20),
                       _InfoChipSection(
                         label: aboutRegularEditorsLabel,
                         items: aboutRegularEditors,
-                        icon: OtzariaIcons.person_24_filled,
+                        icon: OtzariaIcons.person_portrait_24_filled,
                       ),
                       const SizedBox(height: 16),
                       _SubtitleText(
@@ -282,7 +282,7 @@ class AboutSettingsTab extends StatelessWidget {
       child: Row(
         children: [
           Image.asset(
-            'assets/icon/iconnew_256.png',
+            'assets/icon/icon_256.png',
             width: 60,
             height: 60,
             errorBuilder: (_, _, _) =>
