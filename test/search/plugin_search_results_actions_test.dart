@@ -9,10 +9,10 @@ import 'package:otzaria/search/bloc/search_bloc.dart';
 import 'package:otzaria/search/bloc/search_event.dart';
 import 'package:otzaria/search/bloc/search_state.dart';
 import 'package:otzaria/search/models/search_configuration.dart';
-import 'package:otzaria/search/view/tantivy_full_text_search.dart';
+import 'package:otzaria/search/view/plugin_search_results_actions.dart';
 import 'package:otzaria/tabs/models/searching_tab.dart';
 import 'package:otzaria_search_engine/otzaria_search_engine.dart'
-    show ResultsOrder, SearchScope, WordMatchMode;
+    show ResultsOrder, SearchResult, SearchScope, TextStatus, WordMatchMode;
 
 import '../support/search_engine_test_init.dart';
 
@@ -33,6 +33,20 @@ class _StaticSearchBloc extends SearchBloc {
 
 /// כפתור `resultsAction` בטאב החיפוש: מוצג רק אחרי שהחיפוש הסתיים, ולחיצה
 /// מעבירה לתוסף את אותו חיפוש באותו חוזה של שליחת הדיאלוג.
+SearchResult _result() => SearchResult(
+  id: BigInt.one,
+  title: 'ספר',
+  reference: 'סימן',
+  text: 'טקסט',
+  segment: BigInt.zero,
+  isPdf: false,
+  filePath: 'book.txt',
+  mergedCount: 1,
+  merged: const [],
+  textStatus: TextStatus.ok,
+  continuesToNextLine: false,
+);
+
 Future<void> main() async {
   final engineReady = await tryInitSearchEngine();
 
@@ -74,13 +88,21 @@ Future<void> main() async {
     await searchBloc.close();
   });
 
-  Future<void> pump(WidgetTester tester, {bool iconOnly = false}) async {
+  Future<void> pump(
+    WidgetTester tester, {
+    bool iconOnly = false,
+    PluginSearchResultsActionsLayout layout =
+        PluginSearchResultsActionsLayout.bar,
+    List<Widget> leading = const [],
+  }) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: PluginSearchResultsActions(
             tab: tab,
+            layout: layout,
             iconOnly: iconOnly,
+            leading: leading,
             registry: registry,
             launcher: (pluginId, payload) => launches.add((pluginId, payload)),
           ),
@@ -138,6 +160,137 @@ Future<void> main() async {
     await pump(tester, iconOnly: true);
     expect(find.text('המשך במקור החיצוני'), findsNothing);
     expect(find.byTooltip('המשך במקור החיצוני'), findsOneWidget);
+  });
+
+  testWidgets('טעינת המשך אינה מסתירה את הכפתור, חיפוש ראשוני כן', (
+    tester,
+  ) async {
+    final button = find.text('המשך במקור החיצוני');
+    await pump(tester);
+
+    // תוצאות כבר מוצגות והמנוע טוען עוד: הכפתור נשאר (בלי הבהוב בסרגל).
+    searchBloc.set(finished.copyWith(isLoading: true, results: [_result()]));
+    await tester.pumpAndSettle();
+    expect(button, findsOneWidget);
+
+    // ספירה בעיצומה: החיפוש טרם הסתיים.
+    searchBloc.set(
+      finished.copyWith(
+        isLoading: true,
+        isCounting: true,
+        results: [_result()],
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(button, findsNothing);
+  });
+
+  testWidgets('מצבים שהגוף מציג בהם הודעה: אין כפתור', (tester) async {
+    final button = find.text('המשך במקור החיצוני');
+    await pump(tester);
+    expect(button, findsOneWidget);
+
+    searchBloc.set(
+      finished.copyWith(
+        configuration: finished.configuration.copyWith(searchScopeFacets: []),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(button, findsNothing, reason: 'לא נבחרו קטגוריות');
+
+    searchBloc.set(finished.copyWith(resultsTruncated: true));
+    await tester.pumpAndSettle();
+    expect(button, findsNothing, reason: 'מגבלת אפשרויות בלי תוצאות');
+
+    searchBloc.set(
+      finished.copyWith(resultsTruncated: true, results: [_result()]),
+    );
+    await tester.pumpAndSettle();
+    expect(button, findsOneWidget, reason: 'תוצאות חלקיות כן מוצגות');
+  });
+
+  group('תצוגה בגוף המסך (inline)', () {
+    const inline = PluginSearchResultsActionsLayout.inline;
+    const editLabel = 'ערוך חיפוש';
+    const actionLabel = 'המשך במקור החיצוני';
+
+    Widget editButton() =>
+        TextButton(onPressed: () {}, child: const Text(editLabel));
+
+    testWidgets('כפתור התוסף מוצג עם הכיתוב המלא גם כש-iconOnly', (
+      tester,
+    ) async {
+      await pump(tester, layout: inline, iconOnly: true);
+      expect(find.text(actionLabel), findsOneWidget);
+    });
+
+    testWidgets('leading מוצג לצד כפתור התוסף ונשאר כשהחיפוש בטעינה', (
+      tester,
+    ) async {
+      await pump(tester, layout: inline, leading: [editButton()]);
+      expect(find.text(editLabel), findsOneWidget);
+      expect(find.text(actionLabel), findsOneWidget);
+
+      searchBloc.set(finished.copyWith(isLoading: true));
+      await tester.pumpAndSettle();
+      expect(find.text(actionLabel), findsNothing);
+      expect(find.text(editLabel), findsOneWidget);
+    });
+
+    testWidgets('בלי תוסף ובלי leading אין כלום בעץ', (tester) async {
+      registry.removeAll('test.plugin');
+      await pump(tester, layout: inline);
+      expect(find.byType(Wrap), findsNothing);
+    });
+
+    testWidgets('בלי תוסף רשום מוצג רק leading', (tester) async {
+      registry.removeAll('test.plugin');
+      await pump(tester, layout: inline, leading: [editButton()]);
+      expect(find.text(editLabel), findsOneWidget);
+      expect(find.text(actionLabel), findsNothing);
+    });
+
+    testWidgets(
+      'לחיצה שולחת את אותו חוזה כמו הסרגל, ושלילה רק במצב מתקדם',
+      (tester) async {
+        registry.registerPayload('b.plugin', {
+          'id': 'second',
+          'type': 'checkbox',
+          'title': 'מקור שני',
+          'openPluginOnSubmit': true,
+          'resultsAction': 'המשך במקור שני',
+        });
+        await pump(tester, layout: inline);
+        await tester.tap(find.text(actionLabel));
+        await tester.pump();
+        expect(launches.single.$1, 'test.plugin');
+        expect(launches.single.$2['itemId'], 'external');
+        final request = launches.single.$2['request'] as Map<String, dynamic>;
+        expect(request['query'], 'שבת');
+        expect(request['facets'], ['/הלכה']);
+        expect(request.containsKey('negativeQuery'), isTrue);
+
+        // מצב מדויק: רק השורה בלי visibleInModes נשארת, ובלי negativeQuery.
+        launches.clear();
+        searchBloc.set(
+          finished.copyWith(
+            configuration: finished.configuration.copyWith(
+              searchMode: SearchMode.exact,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text(actionLabel), findsNothing);
+        await tester.tap(find.text('המשך במקור שני'));
+        await tester.pump();
+        expect(launches.single.$1, 'b.plugin');
+        expect(
+          (launches.single.$2['request'] as Map).containsKey('negativeQuery'),
+          isFalse,
+        );
+      },
+      skip: !engineReady,
+    );
   });
 
   testWidgets('כמה כפתורי תוצאות חוקיים נשארים בתוך רוחב הסרגל', (
