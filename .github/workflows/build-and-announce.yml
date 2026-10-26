@@ -354,7 +354,7 @@ jobs:
           # קובץ הסמלים מפענח את פריימי ה-Dart (app.so+0x…) בדוחות התקיעה.
           New-Item -ItemType Directory -Force -Path build\dart-symbols | Out-Null
           $symbols = Join-Path $PWD 'build\dart-symbols\otzaria-dart-symbols-windows-x64.debug'
-          flutter build windows --release --verbose --dart-define=BIO_OBF_KEY=${{ secrets.BIO_OBF_KEY }} "--dart-define=OTZARIA_BUILD_COMMIT=$(git rev-parse --short=12 HEAD)" "--extra-gen-snapshot-options=--save-debugging-info=$symbols"
+          flutter build windows --release --verbose "--dart-define=OTZARIA_BUILD_COMMIT=$(git rev-parse --short=12 HEAD)" "--extra-gen-snapshot-options=--save-debugging-info=$symbols"
 
       # המעדכן העצמאי נכנס לתיקיית הבנייה לפני האריזה, ולכן הוא נארז ל-ZIP,
       # למתקין ולמניפסט קובצי ההתקנה בלי שינוי ב-otzaria.iss.
@@ -717,7 +717,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path build\dart-symbols | Out-Null
           $symbols = Join-Path $PWD 'build\dart-symbols\otzaria-dart-symbols-windows-arm64.debug'
-          flutter build windows --release --verbose --dart-define=BIO_OBF_KEY=${{ secrets.BIO_OBF_KEY }} "--dart-define=OTZARIA_BUILD_COMMIT=$(git rev-parse --short=12 HEAD)" "--extra-gen-snapshot-options=--save-debugging-info=$symbols"
+          flutter build windows --release --verbose "--dart-define=OTZARIA_BUILD_COMMIT=$(git rev-parse --short=12 HEAD)" "--extra-gen-snapshot-options=--save-debugging-info=$symbols"
           if (-not (Test-Path 'build\windows\arm64\runner\Release\otzaria.exe')) {
             throw 'Expected an arm64 build output — the tool built a different architecture'
           }
@@ -1246,7 +1246,7 @@ jobs:
           : > "$GITHUB_WORKSPACE/build_linux.log"
           until [ $tries -ge 3 ]
           do
-            if flutter build linux --verbose --dart-define=BIO_OBF_KEY=${{ secrets.BIO_OBF_KEY }} "--dart-define=OTZARIA_BUILD_COMMIT=$(git rev-parse --short=12 HEAD)" 2>&1 | tee -a "$GITHUB_WORKSPACE/build_linux.log"; then
+            if flutter build linux --verbose "--dart-define=OTZARIA_BUILD_COMMIT=$(git rev-parse --short=12 HEAD)" 2>&1 | tee -a "$GITHUB_WORKSPACE/build_linux.log"; then
               break
             fi
             tries=$((tries+1))
@@ -2015,7 +2015,7 @@ jobs:
           # Generate the settings .g.dart files: search index + translation catalog.
           dart run tool/generate_search_index.dart
           dart run tool/generate_settings_l10n.dart
-          flutter build apk --verbose --dart-define=BIO_OBF_KEY=${{ secrets.BIO_OBF_KEY }} "--dart-define=OTZARIA_BUILD_COMMIT=$(git rev-parse --short=12 HEAD)"
+          flutter build apk --verbose "--dart-define=OTZARIA_BUILD_COMMIT=$(git rev-parse --short=12 HEAD)"
           # ניקוי מיידי של קבצים מיותרים מהבנייה (לא ה-APK הסופי)
           rm -rf build/app/intermediates || true
           rm -rf build/app/.transforms || true
@@ -2202,7 +2202,7 @@ jobs:
           tries=0
           until [ $tries -ge 3 ]
           do
-            if flutter build macos --release --verbose --dart-define=BIO_OBF_KEY=${{ secrets.BIO_OBF_KEY }} "--dart-define=OTZARIA_BUILD_COMMIT=$(git rev-parse --short=12 HEAD)"; then
+            if flutter build macos --release --verbose "--dart-define=OTZARIA_BUILD_COMMIT=$(git rev-parse --short=12 HEAD)"; then
               break
             fi
             tries=$((tries+1))

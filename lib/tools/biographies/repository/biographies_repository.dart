@@ -4,24 +4,26 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:otzaria/core/app_paths.dart';
 import 'package:otzaria/tools/biographies/data/biographies_codec.dart';
+import 'package:otzaria/tools/biographies/models/biographies_bundle.dart';
 import 'package:otzaria/tools/biographies/models/biography.dart';
 
-/// שכבת הנתונים של אזור הביוגרפיות.
+/// Data layer of the biographies tool.
 ///
-/// הקובץ מגיע משני מקורות, לפי סדר עדיפות: העותק שמערכת העדכונים הורידה
-/// לשורש תיקיית הנתונים, ואם אין — הקובץ הארוז באפליקציה עצמה (מוזרק
-/// לחבילה בזמן בנייה, ולכן כלול בכל מתקין ועובד מיד גם ללא רשת).
+/// The bundle comes from the copy the library update downloaded to the data
+/// root, or else from the copy packed into the app at build time, so it works
+/// offline right after installation. A downloaded copy that cannot be read
+/// (corrupt, or a newer format) falls back to the packed one.
 class BiographiesRepository {
-  /// כמו `DictionaryLookupRepository`: singleton שנצרך ישירות מהמסכים,
-  /// עם constructor להזרקת מקורות חלופיים בבדיקות.
+  /// Like `DictionaryLookupRepository`: a singleton used by the screens, with
+  /// a constructor for injecting other sources in tests.
   static final BiographiesRepository instance = BiographiesRepository();
 
-  static const String bundledAssetKey = 'assets/bio/biographies.tsb';
+  static const String bundledAssetKey = 'assets/bio/biographies-app.json.gz';
 
   final Future<String> Function() _updatedPathProvider;
   final Future<ByteData> Function(String key) _loadAsset;
 
-  Future<List<Biography>>? _loading;
+  Future<BiographiesBundle>? _loading;
 
   BiographiesRepository({
     Future<String> Function()? updatedPathProvider,
@@ -30,55 +32,65 @@ class BiographiesRepository {
            updatedPathProvider ?? AppPaths.getBiographiesPath,
        _loadAsset = loadAsset ?? rootBundle.load;
 
-  /// טוען את כל הביוגרפיות, ממוינות לפי שם. הטעינה מתבצעת פעם אחת;
-  /// קריאות חוזרות (גם מקבילות) מקבלות את אותו Future.
+  /// Loads the bundle once; repeated (also concurrent) calls share the Future.
   ///
-  /// זורק [StateError] כשאין קובץ בשום מקור.
-  Future<List<Biography>> loadAll() => _loading ??= _load();
+  /// Throws [StateError] when no source has a readable bundle.
+  Future<BiographiesBundle> loadBundle() => _loading ??= _load();
 
-  Future<List<Biography>> _load() async {
+  /// All entries, in the bundle's order (by era, then by year).
+  Future<List<Biography>> loadAll() async => (await loadBundle()).entries;
+
+  Future<BiographiesBundle> _load() async {
     try {
-      final bytes = await _readBytes();
-      // הפענוח (XOR + gzip + JSON של ~2.3MB) רץ ב-isolate כדי לא לחסום את ה-UI.
-      final entries = await compute(_decodeAndParse, bytes);
-      entries.sort((a, b) => a.name.compareTo(b.name));
-      return entries;
+      final updated = File(await _updatedPathProvider());
+      if (await updated.exists()) {
+        try {
+          return await compute(
+            BiographiesCodec.decode,
+            await updated.readAsBytes(),
+          );
+        } catch (e) {
+          debugPrint('[Biographies] downloaded bundle unreadable: $e');
+        }
+      }
+      final ByteData data;
+      try {
+        data = await _loadAsset(bundledAssetKey);
+      } catch (_) {
+        throw StateError('נתוני הביוגרפיות אינם זמינים');
+      }
+      return await compute(
+        BiographiesCodec.decode,
+        data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+      );
     } catch (_) {
-      // כישלון לא ננעל: פתיחה הבאה תנסה שוב (למשל אחרי שהעדכון הוריד).
+      // A failure is not cached: the next attempt retries (for example after
+      // the update downloaded the file).
       _loading = null;
       rethrow;
     }
   }
 
-  Future<Uint8List> _readBytes() async {
-    final updated = File(await _updatedPathProvider());
-    if (await updated.exists()) return updated.readAsBytes();
-    try {
-      final data = await _loadAsset(bundledAssetKey);
-      return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
-    } catch (_) {
-      throw StateError('נתוני הביוגרפיות אינם זמינים');
-    }
-  }
-
-  /// מסננת וממיינת ערכים לפי שם או כינוי. מקור יחיד למסך הביוגרפיות
-  /// ול-API של התוספים, כדי ששניהם יציגו את אותה תוצאה באותו סדר.
+  /// Filters and ranks entries by name or by another name they are known by.
+  /// Shared by the screen and the plugin API, so both return the same order.
   static List<Biography> filter(List<Biography> entries, String query) {
-    query = query.trim();
+    query = _normalize(query.trim());
     if (query.isEmpty) return entries;
 
-    // ביטוי "מילה שלמה" נבנה פעם אחת לכל קריאה — לא בכל השוואה בתוך
-    // המיון — כדי לא לקמפל RegExp מחדש O(n log n) פעמים על אלפי הערכים.
+    // Built once per call, not in every comparison of the sort.
     final wholeWordPattern = RegExp('(^|\\s)${RegExp.escape(query)}(\$|\\s)');
 
     final ranked = <_RankedBiography>[];
     for (final bio in entries) {
-      if (bio.name.contains(query) ||
-          bio.appelations.any((a) => a.contains(query))) {
-        ranked.add(
-          _RankedBiography(bio, _matchRank(bio.name, query, wholeWordPattern)),
-        );
+      // A match on the name ranks before an equal match on another name, but
+      // an exact other name ("הרמב"ם") ranks before a partial match on a name.
+      var rank = _matchRank(_normalize(bio.name), query, wholeWordPattern) * 2;
+      for (final alias in bio.knownAs) {
+        final aliasRank =
+            _matchRank(_normalize(alias), query, wholeWordPattern) * 2 + 1;
+        if (aliasRank < rank) rank = aliasRank;
       }
+      if (rank < _noMatch * 2) ranked.add(_RankedBiography(bio, rank));
     }
 
     ranked.sort((a, b) {
@@ -90,26 +102,23 @@ class BiographiesRepository {
     return ranked.map((r) => r.bio).toList();
   }
 
-  /// דירוג התאמת שם לשאילתה: נמוך = דומה יותר.
-  /// מדויק < מתחיל ב- < מילה שלמה < מכיל < רק בכינוי.
+  static const int _noMatch = 4;
+
+  /// Lower is closer: exact < starts with < whole word < contains.
   static int _matchRank(String name, String query, RegExp wholeWordPattern) {
     if (name == query) return 0;
     if (name.startsWith(query)) return 1;
     if (wholeWordPattern.hasMatch(name)) return 2;
     if (name.contains(query)) return 3;
-    return 4;
+    return _noMatch;
   }
 
-  static List<Biography> _decodeAndParse(Uint8List bytes) {
-    final payload = BiographiesCodec.decode(bytes);
-    return ((payload['entries'] as List?) ?? const [])
-        .whereType<Map<String, dynamic>>()
-        .map(Biography.fromEntry)
-        .toList();
-  }
+  /// Hebrew geresh and gershayim match their ASCII look-alikes.
+  static String _normalize(String text) =>
+      text.replaceAll('״', '"').replaceAll('׳', "'");
 }
 
-/// ביוגרפיה עם דירוג ההתאמה שלה, מחושב פעם אחת לפני המיון.
+/// An entry with its match rank, computed once before sorting.
 class _RankedBiography {
   final Biography bio;
   final int rank;

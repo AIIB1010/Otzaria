@@ -3,31 +3,74 @@ library;
 
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:otzaria/plugins/services/plugin_biography_compatibility.dart';
+import 'package:otzaria/tools/biographies/widgets/biography_card.dart';
 import 'package:otzaria/tools/biographies/data/biographies_codec.dart';
-import 'package:otzaria/tools/biographies/models/biography.dart';
 
-/// אימות מול קובץ רילייס אמיתי. ידני בלבד — דורש קובץ מקומי ומפתח:
-/// `flutter test test/tools/biographies_real_file_test.dart --tags manual`
-/// `--dart-define=BIO_OBF_KEY=<המפתח> --dart-define=BIO_FILE=<נתיב הקובץ>`
+/// בדיקות נתוני אמת: `--tags manual --dart-define=BIO_FILE=<path>`
 void main() {
   const path = String.fromEnvironment('BIO_FILE');
 
-  test('מפענח קובץ רילייס אמיתי', () {
-    final bytes = File(path).readAsBytesSync();
-    final payload = BiographiesCodec.decode(bytes);
-    final entries = (payload['entries'] as List)
-        .whereType<Map<String, dynamic>>()
-        .map(Biography.fromEntry)
-        .toList();
+  test('decodes a real release file', () {
+    final bundle = BiographiesCodec.decode(File(path).readAsBytesSync());
+    final entries = bundle.entries;
 
-    expect(entries.length, greaterThan(3000));
+    expect(entries.length, greaterThan(4000));
     expect(entries.every((b) => b.name.trim().isNotEmpty), isTrue);
+    expect(entries.every((b) => b.eraLabel != null), isTrue);
     expect(entries.where((b) => b.summary != null), isNotEmpty);
-    expect(entries.where((b) => b.biographyShort != null), isNotEmpty);
-    expect(entries.where((b) => b.deathHebrew != null), isNotEmpty);
-
-    // כל ערך חייב שם תצוגה — כולל ערכים שיש להם רק כינוי ולא שם פרטי.
+    expect(entries.where((b) => b.died != null), isNotEmpty);
     expect(entries.map((b) => b.id).toSet().length, entries.length);
+    final legacyIds = entries.map(
+      (b) => PluginBiographyCompatibility.legacyId(b.id),
+    );
+    expect(legacyIds.toSet().length, entries.length);
+    expect(
+      legacyIds.every((id) => id < 0 && id.abs() <= 9007199254740991),
+      isTrue,
+    );
+    expect(bundle.credits, isNotEmpty);
+    expect(
+      entries
+          .expand((b) => b.sources)
+          .every((s) => bundle.credits.containsKey(s.credit)),
+      isTrue,
+    );
   }, skip: path.isEmpty ? 'BIO_FILE not provided' : false);
+
+  testWidgets('הנצי״ב: כל פרטי המשפחה והתלמידים נכנסים במסך טלפון', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final bundle = BiographiesCodec.decode(File(path).readAsBytesSync());
+    final bio = bundle.entries.firstWhere((b) => b.id == 'Q1861531');
+    final ids = bundle.entries.map((b) => b.id).toSet();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Directionality(
+          textDirection: TextDirection.rtl,
+          child: Scaffold(
+            body: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                BiographyCard(
+                  biography: bio,
+                  initiallyExpanded: true,
+                  canOpen: ids.contains,
+                  onOpen: (_) {},
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  }, skip: path.isEmpty);
 }

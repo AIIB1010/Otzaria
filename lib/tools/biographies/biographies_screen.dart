@@ -1,14 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:otzaria/core/messages/tools_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/theme/theme_exports.dart';
+import 'package:otzaria/tools/biographies/models/biographies_bundle.dart';
 import 'package:otzaria/tools/biographies/models/biography.dart';
 import 'package:otzaria/tools/biographies/repository/biographies_repository.dart';
+import 'package:otzaria/tools/biographies/widgets/biographies_credit_line.dart';
 import 'package:otzaria/tools/biographies/widgets/biography_card.dart';
 import 'package:otzaria/tools/tool_query.dart';
 import 'package:otzaria/widgets/navigation/app_top_bar.dart';
 import 'package:otzaria/widgets/text/otzaria_search_field.dart';
+import 'package:otzaria/widgets/controls/action_buttons.dart';
+import 'package:otzaria/widgets/feedback/otzaria_empty_state.dart';
 import 'package:otzaria/widgets/feedback/tool_empty_state.dart';
+import 'package:otzaria/widgets/misc/rtl_icon.dart';
 import 'package:otzaria/widgets/misc/tool_ui_helpers.dart';
 import 'package:otzaria_icons/otzaria_icons.dart';
 
@@ -28,9 +34,17 @@ class _BiographiesScreenState extends State<BiographiesScreen>
   final FocusNode _searchFocusNode = FocusNode();
   late final BiographiesRepository _repository =
       widget.repository ?? BiographiesRepository.instance;
-  List<Biography> _allBiographies = [];
+  final ScrollController _scrollController = ScrollController();
+  BiographiesBundle? _bundle;
+  Map<String, Biography> _byId = const {};
   List<Biography> _filteredResults = [];
+  String? _era;
   bool _isLoading = true;
+
+  /// Entries opened through links, the last one shown over the list.
+  final List<Biography> _opened = [];
+
+  List<Biography> get _allBiographies => _bundle?.entries ?? const [];
 
   @override
   ToolQueryInbox? get toolQueryInbox => widget.queryInbox;
@@ -57,16 +71,18 @@ class _BiographiesScreenState extends State<BiographiesScreen>
   void dispose() {
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
   Future<void> _loadBiographies() async {
     try {
-      final entries = await _repository.loadAll();
+      final bundle = await _repository.loadBundle();
       if (!mounted) return;
       setState(() {
-        _allBiographies = entries;
-        _filteredResults = entries;
+        _bundle = bundle;
+        _byId = {for (final bio in bundle.entries) bio.id: bio};
+        _filteredResults = bundle.entries;
         _isLoading = false;
       });
     } catch (e) {
@@ -78,10 +94,32 @@ class _BiographiesScreenState extends State<BiographiesScreen>
   }
 
   void _performSearch(String query) {
+    final inEra = _era == null
+        ? _allBiographies
+        : _allBiographies.where((bio) => bio.era == _era).toList();
     setState(() {
-      _filteredResults = BiographiesRepository.filter(_allBiographies, query);
+      _opened.clear();
+      _filteredResults = BiographiesRepository.filter(inEra, query);
     });
   }
+
+  void _resetFilters() {
+    _searchController.clear();
+    _era = null;
+    _performSearch('');
+  }
+
+  void _selectEra(String? era) {
+    _era = era;
+    _performSearch(_searchController.text);
+  }
+
+  void _openEntry(String id) {
+    final bio = _byId[id];
+    if (bio != null) setState(() => _opened.add(bio));
+  }
+
+  void _closeEntry() => setState(_opened.removeLast);
 
   @override
   Widget build(BuildContext context) {
@@ -105,12 +143,28 @@ class _BiographiesScreenState extends State<BiographiesScreen>
               icon: OtzariaIcons.search_in_person_24_regular,
               autofocus: true,
               onChanged: _performSearch,
-              onClear: () => setState(() => _filteredResults = _allBiographies),
+              onClear: () => _performSearch(''),
             ),
           ),
+          if (_bundle case final bundle? when bundle.entries.isNotEmpty)
+            _buildEraChips(bundle),
           Expanded(
-            child: ToolPanelWrapper(child: _buildResultsList()),
+            child: ToolPanelWrapper(
+              // The list stays mounted under an opened entry, so going back
+              // keeps its scroll position.
+              child: Stack(
+                children: [
+                  Offstage(
+                    offstage: _opened.isNotEmpty,
+                    child: _buildResultsList(),
+                  ),
+                  if (_opened.isNotEmpty) _buildOpenedEntry(),
+                ],
+              ),
+            ),
           ),
+          if (_bundle case final bundle? when bundle.entries.isNotEmpty)
+            BiographiesCreditLine(bundle: bundle),
         ],
       ),
     );
@@ -124,20 +178,112 @@ class _BiographiesScreenState extends State<BiographiesScreen>
       );
     }
 
-    if (_filteredResults.isEmpty) {
+    if (_filteredResults.isEmpty) return _buildNoResults();
+
+    return ListView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.all(AppTokens.spaceMD),
+      itemCount: _filteredResults.length,
+      itemBuilder: (context, index) {
+        final bio = _filteredResults[index];
+        return BiographyCard(
+          key: ValueKey(bio.id),
+          biography: bio,
+          canOpen: _byId.containsKey,
+          onOpen: _openEntry,
+        );
+      },
+    );
+  }
+
+  Widget _buildOpenedEntry() {
+    final bio = _opened.last;
+    final previous = _opened.length > 1 ? _opened[_opened.length - 2] : null;
+    return ListView(
+      padding: const EdgeInsets.all(AppTokens.spaceMD),
+      children: [
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: ActionButton.ghost(
+            text: previous == null ? 'חזרה לרשימה' : 'חזרה אל ${previous.name}',
+            iconWidget: const RtlIcon(FluentIcons.arrow_left_24_regular),
+            onPressed: _closeEntry,
+          ),
+        ),
+        const SizedBox(height: AppTokens.spaceXS),
+        BiographyCard(
+          key: ValueKey('opened-${_opened.length}-${bio.id}'),
+          biography: bio,
+          canOpen: _byId.containsKey,
+          onOpen: _openEntry,
+          initiallyExpanded: true,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNoResults() {
+    final query = _searchController.text.trim();
+    final eraLabel = _era == null
+        ? null
+        : _bundle?.eras.where((e) => e.key == _era).firstOrNull?.label;
+    if (query.isEmpty && eraLabel == null) {
       return const ToolEmptyState(
         icon: OtzariaIcons.person_24_regular,
         message: 'לא נמצאו תוצאות',
       );
     }
+    final both = query.isNotEmpty && eraLabel != null;
+    final message = [
+      query.isEmpty ? 'אין ערכים' : 'אין ערכים שמתאימים לחיפוש "$query"',
+      if (eraLabel != null) 'בתקופת "$eraLabel"',
+    ].join(' ');
+    return OtzariaEmptyState(
+      icon: OtzariaIcons.person_24_regular,
+      title: 'לא נמצאו תוצאות',
+      message: '$message.',
+      actions: [
+        if (both)
+          ActionButton.neutral(
+            text: 'חיפוש בכל התקופות',
+            onPressed: () => _selectEra(null),
+          ),
+        ActionButton.recommended(
+          text: both
+              ? 'איפוס החיפוש והמסננים'
+              : query.isNotEmpty
+              ? 'ניקוי החיפוש'
+              : 'הצגת כל התקופות',
+          icon: FluentIcons.arrow_reset_24_regular,
+          onPressed: _resetFilters,
+        ),
+      ],
+    );
+  }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(AppTokens.spaceMD),
-      itemCount: _filteredResults.length,
-      itemBuilder: (context, index) {
-        final bio = _filteredResults[index];
-        return BiographyCard(key: ValueKey(bio.id), biography: bio);
-      },
+  Widget _buildEraChips(BiographiesBundle bundle) {
+    Widget chip(String label, String? era) => Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppTokens.spaceXS / 2),
+      child: ChoiceChip(
+        label: Text(label),
+        selected: _era == era,
+        onSelected: (_) => _selectEra(era),
+        visualDensity: VisualDensity.compact,
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+    );
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTokens.spaceMD,
+        vertical: AppTokens.spaceXS,
+      ),
+      child: Row(
+        children: [
+          chip('הכל', null),
+          for (final era in bundle.presentEras) chip(era.label, era.key),
+        ],
+      ),
     );
   }
 }

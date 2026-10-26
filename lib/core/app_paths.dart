@@ -712,7 +712,7 @@ class AppPaths {
   /// נתיב העותק המעודכן של קובץ הביוגרפיות, שמערכת העדכונים מורידה בזמן
   /// ריצה. גובר על הקובץ הארוז באפליקציה, שאינו בר-כתיבה.
   static Future<String> getBiographiesPath() async {
-    return p.join(await getDataRootPath(), 'biographies.tsb');
+    return p.join(await getDataRootPath(), 'biographies-app.json.gz');
   }
 
   /// מחזיר רשימת נתיבי ברירת מחדל לאינדקס שאינם הנתיב הפעיל כעת.

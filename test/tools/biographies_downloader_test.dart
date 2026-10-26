@@ -12,7 +12,7 @@ void main() {
 
   setUp(() async {
     tempDir = await Directory.systemTemp.createTemp('bio_dl_test_');
-    dest = '${tempDir.path}${Platform.pathSeparator}biographies.tsb';
+    dest = '${tempDir.path}${Platform.pathSeparator}biographies-app.json.gz';
   });
 
   tearDown(() async {
@@ -22,7 +22,7 @@ void main() {
   final releaseJson = jsonEncode({
     'tag_name': 'bio-1',
     'assets': [
-      {'browser_download_url': 'https://example.com/a/biographies.tsb'},
+      {'browser_download_url': 'https://example.com/a/biographies-app.json.gz'},
     ],
   });
 
@@ -38,11 +38,13 @@ void main() {
           200,
         );
       }
-      if (url == 'https://example.com/a/biographies.tsb') {
+      if (url == 'https://example.com/a/biographies-app.json.gz') {
         return http.StreamedResponse(
           const Stream.empty(),
           302,
-          headers: {'location': 'https://cdn.example.com/biographies.tsb'},
+          headers: {
+            'location': 'https://cdn.example.com/biographies-app.json.gz',
+          },
         );
       }
       return http.StreamedResponse(assetBody(), 200);
@@ -61,6 +63,20 @@ void main() {
     expect(await File(dest).readAsBytes(), [1, 2, 3]);
     expect(await File('$dest.version').readAsString(), 'bio-1');
     expect(await File('$dest.part').exists(), isFalse);
+  });
+
+  test('removes the Ta Shma file of earlier versions once installed', () async {
+    final legacy = File(
+      '${tempDir.path}${Platform.pathSeparator}biographies.tsb',
+    );
+    await legacy.writeAsBytes([9]);
+    await File('${legacy.path}.version').writeAsString('bio-0');
+
+    final ok = await downloader(() => Stream.value([1])).ensureLatest();
+
+    expect(ok, isTrue);
+    expect(await legacy.exists(), isFalse);
+    expect(await File('${legacy.path}.version').exists(), isFalse);
   });
 
   test('a body that fails midway leaves no .part and no file', () async {

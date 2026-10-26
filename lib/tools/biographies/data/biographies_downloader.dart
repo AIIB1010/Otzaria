@@ -4,30 +4,35 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:otzaria/core/app_paths.dart';
 import 'package:otzaria/utils/http_redirect_download.dart';
+import 'package:path/path.dart' as p;
 
-/// מידע על ה-release האחרון של קובץ הביוגרפיות.
+/// The latest release of the biographies bundle.
 class BiographiesRelease {
-  /// תג ה-release (למשל `bio-20260831-113627`) — משמש לזיהוי גרסה מותקנת.
+  /// Release tag (for example `v0.3.0`), stored to tell the installed version.
   final String tag;
 
-  /// כתובת ההורדה הישירה של נכס `biographies.tsb`.
+  /// Direct download URL of the `biographies-app.json.gz` asset.
   final Uri downloadUrl;
 
   const BiographiesRelease({required this.tag, required this.downloadUrl});
 }
 
-/// מוריד את קובץ הביוגרפיות (`biographies.tsb`) מ-GitHub Releases של
-/// `ta-shma-to-otzaria` אל תיקיית מסדי הנתונים, ומעדכן רק כשיש release חדש —
-/// אותה תבנית כמו מילון המורפולוגיה (`lexical.db`).
+/// Downloads the "Toldot Gedolei Yisrael" bundle (`biographies-app.json.gz`)
+/// from the GitHub releases of `Otzaria/toldot-gedolei-yisrael` to the data
+/// root, only when there is a new release; the same pattern as the morphology
+/// dictionary (`lexical.db`).
 ///
 /// כל הפעולות best-effort: בכשל רשת האזור ממשיך לעבוד עם הקובץ הקיים,
 /// ובהיעדרו מוצגת הודעת "אין נתונים".
 class BiographiesDownloader {
   /// נקודת ה-API של ה-release האחרון.
   static const String latestReleaseApi =
-      'https://api.github.com/repos/Otzaria/ta-shma-to-otzaria/releases/latest';
+      'https://api.github.com/repos/Otzaria/toldot-gedolei-yisrael/releases/latest';
 
-  static const String _assetSuffix = '/biographies.tsb';
+  static const String _assetSuffix = '/biographies-app.json.gz';
+
+  /// The Ta Shma file of earlier versions, removed once the new one is in.
+  static const String _legacyFileName = 'biographies.tsb';
 
   static const Duration _apiTimeout = Duration(seconds: 15);
 
@@ -61,6 +66,7 @@ class BiographiesDownloader {
       if (!force && hasFile && installed == release.tag) return true;
       await _download(release, dest);
       await File(_versionPath(dest)).writeAsString(release.tag);
+      await _deleteLegacyFile(dest);
       return true;
     } catch (_) {
       return File(dest).exists();
@@ -91,7 +97,7 @@ class BiographiesDownloader {
       }
     }
     if (tag == null || tag.isEmpty || url == null) {
-      throw Exception('לא נמצא נכס biographies.tsb ב-release האחרון');
+      throw Exception('לא נמצא נכס biographies-app.json.gz ב-release האחרון');
     }
     return BiographiesRelease(tag: tag, downloadUrl: Uri.parse(url));
   }
@@ -132,4 +138,14 @@ class BiographiesDownloader {
   }
 
   static String _versionPath(String dest) => '$dest.version';
+
+  static Future<void> _deleteLegacyFile(String dest) async {
+    final legacy = p.join(p.dirname(dest), _legacyFileName);
+    for (final path in [legacy, _versionPath(legacy)]) {
+      try {
+        final file = File(path);
+        if (await file.exists()) await file.delete();
+      } catch (_) {}
+    }
+  }
 }

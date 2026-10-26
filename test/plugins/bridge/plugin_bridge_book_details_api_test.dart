@@ -23,7 +23,23 @@ import 'package:otzaria/tools/calendar/bloc/calendar_cubit.dart';
 import 'package:otzaria/utils/navigation/book_open_coordinator.dart';
 import 'package:otzaria/workspaces/bloc/workspace_bloc.dart';
 
+import 'package:otzaria/tools/biographies/models/biography.dart';
+import 'package:otzaria/tools/biographies/repository/biographies_repository.dart';
+
 import '../../test_helpers/memory_cache_provider.dart';
+
+class _BiographiesRepository extends BiographiesRepository {
+  @override
+  Future<List<Biography>> loadAll() async => const [
+    Biography(
+      id: 'Q127398',
+      name: 'רבי משה',
+      honorific: 'זצ״ל',
+      summary: 'יהוה אחד',
+    ),
+    Biography(id: 'sh-b10', name: 'רבי ישראל'),
+  ];
+}
 
 class _MockHistoryBloc extends Mock implements HistoryBloc {}
 
@@ -119,6 +135,7 @@ void main() {
         calendarCubit: _MockCalendarCubit(),
         workspaceBloc: _MockWorkspaceBloc(),
         searchRepository: _MockSearchRepository(),
+        biographiesRepository: _BiographiesRepository(),
         personalNotesRepository: _MockPersonalNotesRepository(),
         bookOpenCoordinator: _MockBookOpenCoordinator(),
         themePayloadBuilder: () => <String, dynamic>{},
@@ -243,7 +260,93 @@ void main() {
   });
 
   group('tools.biographies', () {
+    test('ברירת המחדל שומרת מזהה מספרי ושדות של תוספים קיימים', () async {
+      final result =
+          await adapter.execute('tools', 'biographies', {'limit': 1})
+              as Map<String, dynamic>;
+      expect(result['total'], 2);
+      final bio = (result['results'] as List).single as Map<String, dynamic>;
+      expect(bio['id'], isA<int>());
+      expect(bio['id'], isNegative);
+      expect(bio['name'], 'רבי משה זצ״ל');
+      expect(bio['communities'], isEmpty);
+      expect(bio['biographyShort'], bio['summary']);
+      expect(bio['sources'], isA<List>());
+      expect(bio['attribution'], isNotEmpty);
+      final repeated =
+          await adapter.execute('tools', 'biographies', {
+                'id': bio['id'],
+                'query': 'לא קיים',
+              })
+              as Map<String, dynamic>;
+      expect((repeated['results'] as List).single, bio);
+    });
+
+    test('מבנה חדש נבחר במפורש ומזהים ישנים אינם משויכים לאדם אחר', () async {
+      final result =
+          await adapter.execute('tools', 'biographies', {
+                'formatVersion': 2,
+                'id': 'Q127398',
+              })
+              as Map<String, dynamic>;
+      final bio = (result['results'] as List).single as Map<String, dynamic>;
+      expect(bio['id'], 'Q127398');
+      expect(bio['name'], 'רבי משה');
+      expect(bio.containsKey('communities'), isFalse);
+      expect(bio.containsKey('biographyShort'), isFalse);
+      for (final id in [123, 0, 'לא קיים', -1]) {
+        final missing =
+            await adapter.execute('tools', 'biographies', {
+                  'id': id,
+                  'query': 'רבי',
+                })
+                as Map<String, dynamic>;
+        expect(missing, {'total': 0, 'results': []});
+      }
+    });
+
+    test('גם תקציר התאימות מכבד את הגדרת שמות הקודש', () async {
+      await Settings.setValue<String>(
+        SettingsRepository.keyTextDisplayPolicy,
+        jsonEncode(
+          TextDisplayPolicy(
+            general: TextDisplayLayer({
+              TextDisplaySlot.root: const TextDisplayPatch(
+                holyName: HolyNameDisplay.hehApostrophe,
+              ),
+            }),
+            tanach: TextDisplayLayer.empty,
+          ).toJson(),
+        ),
+      );
+      addTearDown(
+        () => Settings.setValue<String>(
+          SettingsRepository.keyTextDisplayPolicy,
+          '',
+        ),
+      );
+      for (final raw in [false, true]) {
+        final result =
+            await adapter.execute('tools', 'biographies', {
+                  'id': 'Q127398',
+                  'rawDivineNames': raw,
+                })
+                as Map<String, dynamic>;
+        final bio = (result['results'] as List).single as Map<String, dynamic>;
+        expect(bio['summary'], raw ? 'יהוה אחד' : "ה' אחד");
+        expect(bio['biographyShort'], bio['summary']);
+      }
+    });
+
     test('פרמטרים פסולים נדחים לפני טעינת המאגר', () async {
+      for (final version in [0, 3, '2', 1.0, true]) {
+        expect(
+          () => adapter.execute('tools', 'biographies', {
+            'formatVersion': version,
+          }),
+          _codedError('error.invalid_params'),
+        );
+      }
       expect(
         () => adapter.execute('tools', 'biographies', {'limit': 0}),
         _codedError('error.invalid_params'),
@@ -253,7 +356,11 @@ void main() {
         _codedError('error.invalid_params'),
       );
       expect(
-        () => adapter.execute('tools', 'biographies', {'id': 'abc'}),
+        () => adapter.execute('tools', 'biographies', {'id': 1.5}),
+        _codedError('error.invalid_params'),
+      );
+      expect(
+        () => adapter.execute('tools', 'biographies', {'id': ''}),
         _codedError('error.invalid_params'),
       );
       expect(

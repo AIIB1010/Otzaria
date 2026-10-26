@@ -103,7 +103,7 @@ jobs:
       - name: Build Flutter iOS (unsigned)
         run: |
           IOS_BUILD_NAME=$(python3 tool/version/app_store_build_name.py pubspec.yaml tool/version/version.json)
-          flutter build ios --release --no-codesign --build-name="$IOS_BUILD_NAME" --dart-define=BIO_OBF_KEY=${{ secrets.BIO_OBF_KEY }}
+          flutter build ios --release --no-codesign --build-name="$IOS_BUILD_NAME"
 
       # שלב "Remove synced zstd" של zstandard_ios מוחק את המקורות בסוף הבנייה הראשונה
       - name: Restore zstd sources for archive

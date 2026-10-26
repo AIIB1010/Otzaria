@@ -3,7 +3,7 @@ import 'package:otzaria/tools/biographies/models/biography.dart';
 import 'package:otzaria/tools/biographies/repository/biographies_repository.dart';
 
 Biography _bio(String name, {List<String> appelations = const []}) =>
-    Biography(id: name.hashCode, name: name, appelations: appelations);
+    Biography(id: name, name: name, knownAs: appelations);
 
 void main() {
   group('BiographiesRepository.filter', () {
@@ -22,9 +22,8 @@ void main() {
       );
     });
 
-    test('מדויק < מתחיל ב- < מילה שלמה < מכיל < רק בכינוי', () {
+    test('מדויק < מתחיל ב- < מילה שלמה < מכיל', () {
       final entries = [
-        _bio('פלוני', appelations: ['רש״י']),
         _bio('שמעון רש״יא'),
         _bio('רבי רש״י הגדול'),
         _bio('רש״י הקדוש'),
@@ -33,8 +32,42 @@ void main() {
 
       expect(
         BiographiesRepository.filter(entries, 'רש״י').map((b) => b.name),
-        ['רש״י', 'רש״י הקדוש', 'רבי רש״י הגדול', 'שמעון רש״יא', 'פלוני'],
+        ['רש״י', 'רש״י הקדוש', 'רבי רש״י הגדול', 'שמעון רש״יא'],
       );
+    });
+
+    test('a name match ranks before an equal match on another name', () {
+      final entries = [
+        _bio('פלוני', appelations: ['רש״י']),
+        _bio('רש״י'),
+        _bio('אלמוני', appelations: ['רש״י הקדוש']),
+        _bio('רש״י הקדוש'),
+      ];
+
+      expect(
+        BiographiesRepository.filter(entries, 'רש״י').map((b) => b.name),
+        ['רש״י', 'פלוני', 'רש״י הקדוש', 'אלמוני'],
+      );
+    });
+
+    test('an exact other name ranks before a partial match on a name', () {
+      final entries = [
+        _bio('רבי משה בן מימון', appelations: ['הרמב"ם']),
+        _bio('בנו של הרמב"ם הגדול'),
+      ];
+
+      expect(
+        BiographiesRepository.filter(entries, 'הרמב"ם').first.name,
+        'רבי משה בן מימון',
+      );
+    });
+
+    test('Hebrew gershayim match ASCII quotes both ways', () {
+      final ascii = [_bio('הרמב"ם')];
+      final hebrew = [_bio('הרמב״ם')];
+
+      expect(BiographiesRepository.filter(ascii, 'הרמב״ם'), ascii);
+      expect(BiographiesRepository.filter(hebrew, 'הרמב"ם'), hebrew);
     });
 
     test('בדירוג שווה ממוין לפי שם', () {
@@ -69,7 +102,7 @@ void main() {
           default:
             name = 'יוסף הכהן $suffix';
         }
-        entries.add(Biography(id: i, name: name, appelations: appelations));
+        entries.add(Biography(id: '$i', name: name, knownAs: appelations));
       }
       return entries;
     }
@@ -86,19 +119,24 @@ void main() {
       return 4;
     }
 
+    // The rank of an entry over its name and other names, with the
+    // RegExp compiled again in every call, as the naive version would.
+    int legacyRank(Biography bio, String query) {
+      var rank = legacyMatchRank(bio.name, query) * 2;
+      for (final alias in bio.knownAs) {
+        final aliasRank = legacyMatchRank(alias, query) * 2 + 1;
+        if (aliasRank < rank) rank = aliasRank;
+      }
+      return rank;
+    }
+
     List<Biography> filterLegacy(List<Biography> entries, String query) {
-      return entries
-          .where(
-            (bio) =>
-                bio.name.contains(query) ||
-                bio.appelations.any((a) => a.contains(query)),
-          )
-          .toList()
+      return entries.where((bio) => legacyRank(bio, query) < 8).toList()
         ..sort((a, b) {
-          final rankCompare = legacyMatchRank(
-            a.name,
+          final rankCompare = legacyRank(
+            a,
             query,
-          ).compareTo(legacyMatchRank(b.name, query));
+          ).compareTo(legacyRank(b, query));
           if (rankCompare != 0) return rankCompare;
           return a.name.compareTo(b.name);
         });
