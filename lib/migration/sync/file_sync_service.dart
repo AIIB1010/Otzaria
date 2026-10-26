@@ -730,15 +730,12 @@ class FileSyncService {
 
   /// Pure sync logic — receives all inputs, touches no Settings.
   /// Suitable for running inside a background worker isolate.
-  /// [syncFolders] — לעבד את התיקיות המותאמות (כתיבה ל-user_books.db בלבד).
   /// [onlyFolderPath] — כשמסופק, נסרקת רק התיקייה בעלת נתיב זה (למשל אחרי
   /// ייבוא לתיקיית הספרים האישיים). ה-prune של תיקיות שהוסרו עדיין רץ מול
   /// הרשימה המלאה, כך שספרי תיקיות אחרות לא נפגעים.
   Future<FileSyncResult> syncCustomFoldersWithInputs({
-    required String libraryPath,
     required List<CustomFolder> customFolders,
     void Function(double progress, String message)? onProgress,
-    bool syncFolders = true,
     String? onlyFolderPath,
   }) async {
     if (_isSyncing) {
@@ -758,105 +755,102 @@ class FileSyncService {
     final updatedBookIds = <int>[];
 
     try {
-      if (syncFolders) {
-        // Generator לתיקיות מותאמות אישית — כותב ל-user_books.db.
-        final customFoldersGenerator = DatabaseGenerator(
-          libraryPath,
-          _customFoldersRepo,
-          onProgress: onProgress,
-        );
+      // Generator לתיקיות מותאמות אישית — כותב ל-user_books.db.
+      final customFoldersGenerator = DatabaseGenerator(
+        _customFoldersRepo,
+        onProgress: onProgress,
+      );
 
-        _reportProgress(0.4, 'סורק תיקיות מותאמות אישית...');
+      _reportProgress(0.4, 'סורק תיקיות מותאמות אישית...');
 
-        if (customFolders.isNotEmpty) {
-          _log.info('Found ${customFolders.length} custom folders to sync');
+      if (customFolders.isNotEmpty) {
+        _log.info('Found ${customFolders.length} custom folders to sync');
 
-          // קריאה רזה אחת של כל ספרי user_books.db (ללא טעינת יחסים) מזינה
-          // גם את קאש הסריקה וגם את תמונת עץ ה-prune.
-          final leanBooks = await _customFoldersRepo.getAllBooksLean();
-          // תמונת-מצב לכל התיקיות — נבנית פעם אחת, מתעדכנת נקודתית אחרי כל
-          // כתיבה, ונבנית מחדש רק אם prune מחק ספרים.
-          _FolderScanCaches? sharedCaches = _FolderScanCaches(leanBooks);
-          final pruneSnapshot = await _buildPersonalBooksSnapshot(leanBooks);
+        // קריאה רזה אחת של כל ספרי user_books.db (ללא טעינת יחסים) מזינה
+        // גם את קאש הסריקה וגם את תמונת עץ ה-prune.
+        final leanBooks = await _customFoldersRepo.getAllBooksLean();
+        // תמונת-מצב לכל התיקיות — נבנית פעם אחת, מתעדכנת נקודתית אחרי כל
+        // כתיבה, ונבנית מחדש רק אם prune מחק ספרים.
+        _FolderScanCaches? sharedCaches = _FolderScanCaches(leanBooks);
+        final pruneSnapshot = await _buildPersonalBooksSnapshot(leanBooks);
 
-          for (final folder in customFolders) {
-            if (onlyFolderPath != null &&
-                _normalizeFolderPath(folder.path) !=
-                    _normalizeFolderPath(onlyFolderPath)) {
-              continue;
-            }
-            final folderDir = Directory(folder.path);
-            if (!await folderDir.exists()) {
-              _log.warning('Custom folder does not exist: ${folder.path}');
-              errors.add('תיקייה לא קיימת: ${folder.name}');
-              continue;
-            }
+        for (final folder in customFolders) {
+          if (onlyFolderPath != null &&
+              _normalizeFolderPath(folder.path) !=
+                  _normalizeFolderPath(onlyFolderPath)) {
+            continue;
+          }
+          final folderDir = Directory(folder.path);
+          if (!await folderDir.exists()) {
+            _log.warning('Custom folder does not exist: ${folder.path}');
+            errors.add('תיקייה לא קיימת: ${folder.name}');
+            continue;
+          }
 
-            _log.info(
-              'Scanning custom folder: ${folder.path} (addToDatabase: ${folder.addToDatabase})',
+          _log.info(
+            'Scanning custom folder: ${folder.path} (addToDatabase: ${folder.addToDatabase})',
+          );
+
+          // אחרי prune שמחק ספרים הקאש אופס — נטען מחדש בקריאה רזה.
+          sharedCaches ??= _FolderScanCaches(
+            await _customFoldersRepo.getAllBooksLean(),
+          );
+
+          final folderValidKeys = <String>{};
+          final result = await _scanAndImportPath(
+            rootPath: folder.path,
+            categoryPrefix: ['ספרים אישיים', folder.name],
+            insertContent: folder.addToDatabase,
+            customSourceName: _buildCustomFolderSourceName(folder.path),
+            generator: customFoldersGenerator,
+            validBookKeys: folderValidKeys,
+            caches: sharedCaches,
+          );
+
+          addedBooks += result.addedBooks;
+          updatedBooks += result.updatedBooks;
+          addedCategories += result.addedCategories;
+          skippedFiles += result.skippedFiles;
+          errors.addAll(result.errors);
+          updatedBookIds.addAll(result.updatedBookIds);
+
+          // קובצי הכותרות והגרסאות של התיקייה — אחרי שספריה כבר ב-DB.
+          errors.addAll(
+            await UserSidecarSync.applyForFolder(
+              userDb: _customFoldersRepo.database,
+              folderPath: folder.path,
+              officialRepository: _repository,
+            ),
+          );
+
+          // הסרת ספרים שקובצם נמחק רק אם הסריקה הושלמה (לא בוטלה) — אחרת
+          // folderValidKeys חלקי ונמחקים ספרים שקבציהם עדיין קיימים.
+          if (_isSyncing) {
+            final removed = await _pruneDeletedBooksInFolder(
+              folder,
+              folderValidKeys,
+              otherConfiguredFolderPaths: [
+                for (final other in customFolders)
+                  if (!identical(other, folder)) other.path,
+              ],
+              snapshot: pruneSnapshot,
             );
-
-            // אחרי prune שמחק ספרים הקאש אופס — נטען מחדש בקריאה רזה.
-            sharedCaches ??= _FolderScanCaches(
-              await _customFoldersRepo.getAllBooksLean(),
-            );
-
-            final folderValidKeys = <String>{};
-            final result = await _scanAndImportPath(
-              rootPath: folder.path,
-              categoryPrefix: ['ספרים אישיים', folder.name],
-              insertContent: folder.addToDatabase,
-              customSourceName: _buildCustomFolderSourceName(folder.path),
-              generator: customFoldersGenerator,
-              validBookKeys: folderValidKeys,
-              caches: sharedCaches,
-            );
-
-            addedBooks += result.addedBooks;
-            updatedBooks += result.updatedBooks;
-            addedCategories += result.addedCategories;
-            skippedFiles += result.skippedFiles;
-            errors.addAll(result.errors);
-            updatedBookIds.addAll(result.updatedBookIds);
-
-            // קובצי הכותרות והגרסאות של התיקייה — אחרי שספריה כבר ב-DB.
-            errors.addAll(
-              await UserSidecarSync.applyForFolder(
-                userDb: _customFoldersRepo.database,
-                folderPath: folder.path,
-                officialRepository: _repository,
-              ),
-            );
-
-            // הסרת ספרים שקובצם נמחק רק אם הסריקה הושלמה (לא בוטלה) — אחרת
-            // folderValidKeys חלקי ונמחקים ספרים שקבציהם עדיין קיימים.
-            if (_isSyncing) {
-              final removed = await _pruneDeletedBooksInFolder(
-                folder,
-                folderValidKeys,
-                otherConfiguredFolderPaths: [
-                  for (final other in customFolders)
-                    if (!identical(other, folder)) other.path,
-                ],
-                snapshot: pruneSnapshot,
-              );
-              if (removed > 0) sharedCaches = null;
-            }
+            if (removed > 0) sharedCaches = null;
           }
         }
-
-        // category_closure מתעדכן אינקרמנטלית בכל insertCategory, אז אין צורך
-        // ב-rebuild גלובלי כאן גם כשהוספו קטגוריות חדשות.
-
-        // בסריקה ממוקדת רשימת התיקיות לא השתנתה — אין תיקיות שהוסרו לנקות.
-        if (onlyFolderPath == null) {
-          await pruneRemovedCustomFoldersFromDatabase(customFolders);
-        }
-
-        // כיבוי "הוסף למסד הנתונים" ומחיקת ספרים משחררים דפים ב-user_books.db
-        // אך לא מקטינים את הקובץ. הכיווץ מדלג על עצמו כשאין מספיק פנוי.
-        await _compactCustomFoldersDb();
       }
+
+      // category_closure מתעדכן אינקרמנטלית בכל insertCategory, אז אין צורך
+      // ב-rebuild גלובלי כאן גם כשהוספו קטגוריות חדשות.
+
+      // בסריקה ממוקדת רשימת התיקיות לא השתנתה — אין תיקיות שהוסרו לנקות.
+      if (onlyFolderPath == null) {
+        await pruneRemovedCustomFoldersFromDatabase(customFolders);
+      }
+
+      // כיבוי "הוסף למסד הנתונים" ומחיקת ספרים משחררים דפים ב-user_books.db
+      // אך לא מקטינים את הקובץ. הכיווץ מדלג על עצמו כשאין מספיק פנוי.
+      await _compactCustomFoldersDb();
 
       _reportProgress(1.0, 'הסנכרון הושלם');
     } catch (e, stackTrace) {

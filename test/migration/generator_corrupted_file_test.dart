@@ -50,7 +50,7 @@ void main() {
     await writeText('בית.docx', 'זה בכלל לא ZIP — קובץ פגום');
     await writeText('גימל.txt', '<h1>ספר שלישי</h1>\nתוכן');
 
-    final generator = DatabaseGenerator(library.path, repository);
+    final generator = DatabaseGenerator(repository);
     await generator.processDirectory(library.path, null, 0);
 
     final titles = (await repository.getAllBooksLean())
@@ -72,7 +72,7 @@ void main() {
     await writeText('גימל.doc', 'לא CFB');
     await writeText('דלת.txt', '<h1>שורד</h1>\nתוכן');
 
-    final generator = DatabaseGenerator(library.path, repository);
+    final generator = DatabaseGenerator(repository);
     await generator.processDirectory(library.path, null, 0);
 
     final titles = (await repository.getAllBooksLean())

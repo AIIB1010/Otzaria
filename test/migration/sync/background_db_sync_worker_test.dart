@@ -46,14 +46,10 @@ void main() {
 
   // ── helpers ───────────────────────────────────────────────────────────────
 
-  /// Returns the library path used in all sync calls.
-  String libPath() => p.join(tempDir.path, 'library');
-
-  /// Creates library/אוצריא and a custom folder containing one txt file.
+  /// Creates a custom folder containing one txt file.
   /// Returns the folder path.
   Future<String> makeFolder(String folderName, String bookTitle) async {
     final folderPath = p.join(tempDir.path, folderName);
-    await Directory(p.join(libPath(), 'אוצריא')).create(recursive: true);
     await Directory(folderPath).create(recursive: true);
     await File(p.join(folderPath, '$bookTitle.txt')).writeAsString(
       '\n<h1>פרק א</h1>\nשורת תוכן ראשונה\n',
@@ -71,7 +67,6 @@ void main() {
       final result = await runCustomFoldersDbSyncInIsolate(
         dbPath: dbPath,
         userBooksDbPath: userBooksDbPath,
-        libraryPath: libPath(),
         customFolders: [
           CustomFolder(
             path: folderPath,
@@ -112,7 +107,6 @@ void main() {
       final result = await runCustomFoldersDbSyncInIsolate(
         dbPath: dbPath,
         userBooksDbPath: userBooksDbPath,
-        libraryPath: libPath(),
         customFolders: [
           CustomFolder(
             path: folderPath,
@@ -153,7 +147,6 @@ void main() {
       await runCustomFoldersDbSyncInIsolate(
         dbPath: dbPath,
         userBooksDbPath: userBooksDbPath,
-        libraryPath: libPath(),
         customFolders: folders,
       );
       // סנכרון שני: ה-existence check חייב למצוא את הספר ב-user_books ולא
@@ -161,7 +154,6 @@ void main() {
       await runCustomFoldersDbSyncInIsolate(
         dbPath: dbPath,
         userBooksDbPath: userBooksDbPath,
-        libraryPath: libPath(),
         customFolders: folders,
       );
 
@@ -186,7 +178,6 @@ void main() {
       final result = await runCustomFoldersDbSyncInIsolate(
         dbPath: dbPath,
         userBooksDbPath: userBooksDbPath,
-        libraryPath: libPath(),
         customFolders: [
           CustomFolder(
             path: f1,
@@ -226,7 +217,6 @@ void main() {
       await runCustomFoldersDbSyncInIsolate(
         dbPath: dbPath,
         userBooksDbPath: userBooksDbPath,
-        libraryPath: libPath(),
         customFolders: folders,
       );
 
@@ -237,7 +227,6 @@ void main() {
       final scoped = await runCustomFoldersDbSyncInIsolate(
         dbPath: dbPath,
         userBooksDbPath: userBooksDbPath,
-        libraryPath: libPath(),
         customFolders: folders,
         onlyFolderPath: f1,
       );
@@ -271,7 +260,6 @@ void main() {
             'nonexistent-dir',
             'broken_user.db',
           ),
-          libraryPath: libPath(),
           customFolders: const [],
         ),
         throwsA(anything),
@@ -434,7 +422,6 @@ void main() {
       final future = runCustomFoldersDbSyncInIsolate(
         dbPath: dbPath,
         userBooksDbPath: userBooksDbPath,
-        libraryPath: libPath(),
         customFolders: [
           CustomFolder(
             path: folderPath,
@@ -468,7 +455,6 @@ void main() {
       final future1 = runCustomFoldersDbSyncInIsolate(
         dbPath: dbPath,
         userBooksDbPath: userBooksDbPath,
-        libraryPath: libPath(),
         customFolders: [
           CustomFolder(
             path: f1,
@@ -480,7 +466,6 @@ void main() {
       final future2 = runCustomFoldersDbSyncInIsolate(
         dbPath: dbPath,
         userBooksDbPath: userBooksDbPath,
-        libraryPath: libPath(),
         customFolders: [
           CustomFolder(
             path: f2,

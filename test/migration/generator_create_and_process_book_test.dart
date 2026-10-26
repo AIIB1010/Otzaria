@@ -60,7 +60,6 @@ void main() {
   }
 
   DatabaseGenerator buildGenerator(List<String> log) => DatabaseGenerator(
-    tempDir.path,
     repository,
     onProgress: (_, msg) => log.add(msg),
   );

@@ -117,7 +117,6 @@ class BackgroundSyncInitializer {
       final result = await runCustomFoldersDbSyncInIsolate(
         dbPath: dbPath,
         userBooksDbPath: userBooksDbPath,
-        libraryPath: libraryPath,
         customFolders: customFolders,
       );
 

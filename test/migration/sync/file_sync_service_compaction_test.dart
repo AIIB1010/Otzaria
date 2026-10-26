@@ -16,7 +16,6 @@ void main() {
   late MyDatabase database;
   late SeforimRepository repository;
   late String customFolderPath;
-  late String libraryPath;
   late List<CustomFolder> folders;
 
   setUp(() async {
@@ -28,9 +27,7 @@ void main() {
     repository = SeforimRepository(database);
     await repository.ensureInitialized();
 
-    libraryPath = path.join(tempDir.path, 'library');
     customFolderPath = path.join(tempDir.path, 'ספרים אישיים');
-    await Directory(path.join(libraryPath, 'אוצריא')).create(recursive: true);
     await Directory(customFolderPath).create(recursive: true);
 
     // ספר גדול דיו כדי לחצות את סף הכיווץ (1MB פנוי ולפחות רבע מהקובץ).
@@ -63,7 +60,6 @@ void main() {
       userBooksRepository: repository,
     );
     final result = await service!.syncCustomFoldersWithInputs(
-      libraryPath: libraryPath,
       customFolders: folders,
     );
     expect(result.errors, isEmpty);

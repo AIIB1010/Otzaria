@@ -591,7 +591,6 @@ class CustomFoldersBloc extends Bloc<CustomFoldersEvent, CustomFoldersState> {
     return await runCustomFoldersDbSyncInIsolate(
       dbPath: dbPath,
       userBooksDbPath: userBooksDbPath,
-      libraryPath: libraryPath,
       customFolders: folders,
       onlyFolderPath: onlyFolderPath,
     );

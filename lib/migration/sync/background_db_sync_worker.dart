@@ -39,29 +39,22 @@ const String _workerHeartbeat = 'otzaria.sync.progress';
 Future<FileSyncResult> runCustomFoldersDbSyncInIsolate({
   required String dbPath,
   required String userBooksDbPath,
-  required String libraryPath,
   required List<CustomFolder> customFolders,
   String? onlyFolderPath,
 }) async {
-  Map<String, Object?> buildPayload({required bool syncFolders}) =>
-      <String, Object?>{
-        'queryCache': QueryLoader.cacheSnapshot,
-        'dbPath': dbPath,
-        'userBooksDbPath': userBooksDbPath,
-        'libraryPath': libraryPath,
-        'customFolders': customFolders.map((f) => f.toJson()).toList(),
-        'syncFolders': syncFolders,
-        'onlyFolderPath': onlyFolderPath,
-      };
+  Map<String, Object?> buildPayload() => <String, Object?>{
+    'queryCache': QueryLoader.cacheSnapshot,
+    'dbPath': dbPath,
+    'userBooksDbPath': userBooksDbPath,
+    'customFolders': customFolders.map((f) => f.toJson()).toList(),
+    'onlyFolderPath': onlyFolderPath,
+  };
 
   // כתיבת הספרים האישיים ל-user_books.db בלבד. seforim.db נפתח read-only
   // (קריאות dedup בלבד), ולכן החיבור הראשי אינו נסגר.
   return DatabaseLibraryProvider.operationQueue.enqueue(() async {
     await QueryLoader.initialize();
-    final resultMap = await _runWorkerIsolate(
-      buildPayload(syncFolders: true),
-      isDelete: false,
-    );
+    final resultMap = await _runWorkerIsolate(buildPayload(), isDelete: false);
     return _resultFromMap(resultMap);
   });
 }
@@ -228,8 +221,6 @@ Future<Map<String, Object?>> _syncWorkerEntryPoint(
   Map<String, Object?> payload, {
   void Function()? onProgress,
 }) async {
-  final libraryPath = payload['libraryPath'] as String;
-  final syncFolders = (payload['syncFolders'] as bool?) ?? true;
   final onlyFolderPath = payload['onlyFolderPath'] as String?;
   final rawFolders = (payload['customFolders'] as List)
       .cast<Map<String, dynamic>>();
@@ -237,9 +228,7 @@ Future<Map<String, Object?>> _syncWorkerEntryPoint(
 
   return _withWorkerSyncService(payload, (service) async {
     final result = await service.syncCustomFoldersWithInputs(
-      libraryPath: libraryPath,
       customFolders: customFolders,
-      syncFolders: syncFolders,
       onlyFolderPath: onlyFolderPath,
       onProgress: onProgress == null ? null : (_, _) => onProgress(),
     );
