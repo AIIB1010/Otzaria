@@ -754,7 +754,7 @@ class _SystemSettingsTabState extends State<SystemSettingsTab> {
       title: context.settingsText('מערכת אוצריא'),
       children: [
         SettingsActionTile.text(
-          icon: FluentIcons.info_24_regular,
+          icon: OtzariaIcons.otzaria_icon_24_regular,
           title: context.settingsText('גרסת תוכנה'),
           subtitle: _appVersion ?? context.settingsText('טוען...'),
           subtitleLtr: _appVersion != null,
@@ -767,7 +767,7 @@ class _SystemSettingsTabState extends State<SystemSettingsTab> {
           ],
         ),
         SettingsActionTile.text(
-          icon: FluentIcons.library_24_regular,
+          icon: OtzariaIcons.library_info_24_regular,
           title: context.settingsText(
             'גרסת ספרייה {version}',
             args: {'version': _libraryVersionLabel(context)},

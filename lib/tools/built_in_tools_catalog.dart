@@ -99,8 +99,8 @@ const List<BuiltInToolMeta> kBuiltInToolsCatalog = [
     toolId: 'builtin.biographies',
     label: 'ביוגרפיות',
     order: 80,
-    icon: FluentIcons.people_24_regular,
-    iconFilled: FluentIcons.people_24_filled,
+    icon: OtzariaIcons.person_portrait_24_regular,
+    iconFilled: OtzariaIcons.person_portrait_24_filled,
   ),
 ];
 

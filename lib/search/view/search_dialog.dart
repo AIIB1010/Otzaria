@@ -1629,7 +1629,7 @@ class _SearchDialogState extends State<SearchDialog> {
             },
             borderRadius: AppTokens.borderRadiusAll,
             child: segmentBody(
-              FluentIcons.lightbulb_24_regular,
+              OtzariaIcons.search_in_star_24_regular,
               context.settingsText(kSemanticSearchModeLabel),
               semanticActive,
             ),

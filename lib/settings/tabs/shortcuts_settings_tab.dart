@@ -665,6 +665,7 @@ class ShortcutsSettingsTab extends StatelessWidget {
               settingKey: ShortcutValidator.openAdvancedSearchKey,
               label: context.settingsText('חיפוש מתקדם'),
               icon: FluentIcons.search_info_24_regular,
+              iconScale: 1.2,
               allShortcuts: _shortcutsList,
             ),
             _ShortcutTile(
@@ -743,7 +744,7 @@ class ShortcutsSettingsTab extends StatelessWidget {
             _ShortcutTile(
               settingKey: 'key-shortcut-add-note',
               label: context.settingsText('הוספת הערה'),
-              icon: FluentIcons.note_24_regular,
+              icon: FluentIcons.note_add_24_regular,
               allShortcuts: _shortcutsList,
             ),
             _ShortcutTile(
@@ -1157,6 +1158,11 @@ class _ShortcutTile extends StatelessWidget {
   final String label;
   final String? subtitle;
   final IconData icon;
+
+  /// הגדלת האייקון בתוך תא של 24px. אייקוני החיפוש של פלואנט מציירים עדשה
+  /// קטנה מזו של אייקוני החיפוש של אוצריא, ולכן מוגדלים כדי שכל משפחת
+  /// החיפוש תיראה בגודל של "איתור".
+  final double iconScale;
   final Map<String, String> allShortcuts;
   final Map<String, String?>? currentValues;
 
@@ -1165,6 +1171,7 @@ class _ShortcutTile extends StatelessWidget {
     required this.label,
     this.subtitle,
     required this.icon,
+    this.iconScale = 1,
     required this.allShortcuts,
     this.currentValues,
   });
@@ -1175,6 +1182,7 @@ class _ShortcutTile extends StatelessWidget {
         label: label,
         subtitle: subtitle,
         icon: icon,
+        iconScale: iconScale,
         allShortcuts: allShortcuts,
         currentValues: values,
       );
@@ -1190,7 +1198,18 @@ class _ShortcutTile extends StatelessWidget {
         selected: ShortcutValidator.defaultShortcuts[settingKey] ?? '',
         allShortcuts: allShortcuts,
         currentValues: currentValues,
-        leading: RtlIcon(icon),
+        leading: iconScale == 1
+            ? RtlIcon(icon)
+            : SizedBox.square(
+                dimension: 24,
+                child: OverflowBox(
+                  minWidth: 24 * iconScale,
+                  maxWidth: 24 * iconScale,
+                  minHeight: 24 * iconScale,
+                  maxHeight: 24 * iconScale,
+                  child: RtlIcon(icon, size: 24 * iconScale),
+                ),
+              ),
       ),
     );
   }
