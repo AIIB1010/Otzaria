@@ -90,7 +90,7 @@ final RegExp _whitespaceRun = RegExp(r'\s+');
 String cleanLineForSearch(String rawLine) => utils
     .collapseWhitespace(
       utils.removeVolwels(
-        utils.stripHtmlIfNeeded(notes.stripInlineNotesForSearch(rawLine)),
+        utils.stripHtmlForSearch(notes.stripInlineNotesForSearch(rawLine)),
       ),
     )
     .trim();
@@ -278,12 +278,12 @@ bool queryMatchesInlineNoteOnly(
     ...dbNotes.map(BookNotes.toInlineHtml),
   ].join(' ');
   final cleanNote = utils
-      .removeVolwels(utils.stripHtmlIfNeeded(noteBody))
+      .removeVolwels(utils.stripHtmlForSearch(noteBody))
       .replaceAll(_whitespaceRun, ' ');
   if (!regExp.hasMatch(cleanNote)) return false;
 
   final cleanMain = utils
-      .removeVolwels(utils.stripHtmlIfNeeded(notes.stripInlineNotes(rawLine)))
+      .removeVolwels(utils.stripHtmlForSearch(notes.stripInlineNotes(rawLine)))
       .replaceAll(_whitespaceRun, ' ');
   return !regExp.hasMatch(cleanMain);
 }

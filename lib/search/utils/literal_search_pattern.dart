@@ -23,8 +23,9 @@ class LiteralSearchPattern {
 /// מנרמל ניקוד, מפרידים ורווחים בדיוק כמו ניקוי התוכן לחיפוש.
 String normalizeLiteralQuery(String query) => _collapse(query).trim();
 
-String _collapse(String query) =>
-    utils.removeVolwels(query).replaceAll(_whitespaceRun, ' ');
+String _collapse(String query) => utils
+    .removeVolwels(utils.removeSearchInvisibles(query))
+    .replaceAll(_whitespaceRun, ' ');
 
 /// רווח בתחילת/בסוף [query]: בהתאמה חלקית הוא מעגן את ההתאמה לתחילת/סוף מילה.
 ({bool start, bool end}) literalQueryWordEdges(String query) {
@@ -82,7 +83,9 @@ LiteralEdgeCheck? _buildEdgeCheck(String query) {
 
 // גבולות נבדקים בטקסט הגלוי; ההדגשה עדיין צריכה offsets של ה-HTML המקורי.
 ({String text, List<int> offsets}) _visibleEdgeContext(String text) {
-  if (!text.contains('<') && !text.contains('&')) {
+  if (!text.contains('<') &&
+      !text.contains('&') &&
+      utils.removeSearchInvisibles(text) == text) {
     return (text: text, offsets: const []);
   }
   final out = StringBuffer();
@@ -90,15 +93,23 @@ LiteralEdgeCheck? _buildEdgeCheck(String query) {
   var raw = 0;
   var visible = 0;
   void copyUntil(int end) {
-    out.write(text.substring(raw, end));
     while (raw < end) {
-      offsets[raw++] = visible++;
+      offsets[raw] = visible;
+      final c = text.codeUnitAt(raw++);
+      if (!utils.isSearchInvisibleUnit(c)) {
+        out.writeCharCode(c);
+        visible++;
+      }
     }
   }
 
   for (final token in _htmlContextTokens.allMatches(text)) {
     copyUntil(token.start);
-    final replacement = utils.stripHtmlIfNeeded(token.group(0)!);
+    final replacement = token.group(0)!.startsWith('<')
+        ? (utils.isSearchBreakingTag(text, token.start) ? ' ' : '')
+        : utils.removeSearchInvisibles(
+            utils.decodeHtmlEntities(token.group(0)!),
+          );
     offsets.fillRange(token.start, token.end, visible);
     out.write(replacement);
     visible += replacement.length;
