@@ -536,11 +536,6 @@ class _CommentatorsTabScreenState extends State<CommentatorsTabScreen>
             break;
           }
         }
-        if (bestVerseIdx == _kAllChapter &&
-            _isHeadingOnlyParagraphOffset(ch, 0, chapters, content) &&
-            lineIndex == ch.index) {
-          bestVerseIdx = _kAllChapter;
-        }
       } else {
         break;
       }
