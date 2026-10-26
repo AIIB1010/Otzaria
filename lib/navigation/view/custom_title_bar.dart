@@ -82,11 +82,15 @@ const double _kTabMaxWidth = 140.0;
 /// מתחת לרוחב הזה כפתור ה-X מוסתר ומופיע רק ב-hover/בטאב הנבחר (כמו כרום).
 const double _kTabCloseHideBelowWidth = 80.0;
 
-/// רוחב כפתור ה-X בכרטיסיה. בכרטיסיה צרה הוא מצטמצם לרוחב שנותר בה.
+/// רוחב כפתור ה-X בכרטיסיה. בכרטיסיה צרה הוא מצטמצם (ראו [_kTabCloseMaxShare]).
 const double _kTabCloseExtent = 25.0;
 
 /// רוחב אייקון ה-X עצמו — מתחת לזה הוא נחתך, ולכן אינו מוצג גם בריחוף.
 const double _kTabCloseMinExtent = 10.0;
+
+/// החלק המרבי של ה-X מרוחב התוכן (בלשונית מפוצלת — מחצי שלה), כדי שלחיצה על
+/// כרטיסיה צרה תבחר אותה ולא תסגור. לא פחות מ-[_kTabCloseMinExtent].
+const double _kTabCloseMaxShare = 1 / 3;
 
 /// מידות האייקונים שלצד הכותרת — הנעץ ואייקון סוג הכרטיסיה, כולל הרווח שאחריהם.
 const double _kTabPinExtent = 18.0;
@@ -1031,17 +1035,19 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
       final isCombined = tab is CombinedTab;
       final closeVisibleByState =
           tabWidth >= _kTabCloseHideBelowWidth || isSelected || isTabHovered;
-      // ה-X מצטמצם לרוחב שנותר במקום להיעלם, כדי שבריחוף הוא יהיה שם תמיד.
-      final closeExtent = math.min(_kTabCloseExtent, contentWidth);
-      final paneCloseExtent = math.min(_kTabCloseExtent, contentWidth / 2);
+      // ה-X מצטמצם עם הכרטיסיה במקום להיעלם, כדי שבריחוף הוא יהיה שם תמיד;
+      // הוא מוסתר רק כשאין מקום לאייקון עצמו.
+      double closeExtentBeside(double width) => (width * _kTabCloseMaxShare)
+          .clamp(_kTabCloseMinExtent, _kTabCloseExtent);
+      final paneWidth = contentWidth / 2;
+      final closeExtent = closeExtentBeside(contentWidth);
+      final paneCloseExtent = closeExtentBeside(paneWidth);
       final showClose =
           !isCombined &&
           closeVisibleByState &&
-          closeExtent >= _kTabCloseMinExtent;
+          contentWidth >= _kTabCloseMinExtent;
       final showPaneClose =
-          isCombined &&
-          closeVisibleByState &&
-          paneCloseExtent >= _kTabCloseMinExtent;
+          isCombined && closeVisibleByState && paneWidth >= _kTabCloseMinExtent;
       final closeBudget = showClose
           ? closeExtent
           : (showPaneClose ? 2 * paneCloseExtent : 0);
