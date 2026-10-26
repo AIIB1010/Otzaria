@@ -50,11 +50,24 @@ const Set<String> _githubReleaseCdnHosts = <String>{
   'release-assets.githubusercontent.com',
 };
 
-/// כתובות loopback מקומיות — שירותי AI מקומיים (Ollama / LM Studio) ועוד.
-const Set<String> _loopbackHosts = <String>{'localhost', '127.0.0.1', '::1'};
+/// שמות loopback מקומיים — שירותי AI מקומיים (Ollama / LM Studio) ועוד.
+const Set<String> _loopbackHosts = <String>{'localhost', '::1'};
+
+/// הטווח `127.0.0.0`–`127.0.0.255` הוא loopback, לא רק `127.0.0.1`: יישומים
+/// מקומיים נקשרים לעיתים לכתובת סמוכה כמו `127.0.0.9`. הטווח צר בכוונה —
+/// שאר `127.0.0.0/8` אינו בשימוש ולכן נשאר אינטרנט (נכשל סגור). הרכיב האחרון
+/// עשרוני וללא אפסים מובילים: צורות כמו `127.0.0.01` או `127.1` נפרשות אחרת
+/// על ידי מערכת ההפעלה, ולכן אינן נחשבות מקומיות.
+final RegExp _ipv4LoopbackPattern = RegExp(
+  r'^127\.0\.0\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$',
+);
 
 /// בודקת האם [host] הוא כתובת loopback מקומית.
-bool isLoopbackHost(String host) => _loopbackHosts.contains(host.toLowerCase());
+bool isLoopbackHost(String host) {
+  final normalized = host.toLowerCase();
+  return _loopbackHosts.contains(normalized) ||
+      _ipv4LoopbackPattern.hasMatch(normalized);
+}
 
 /// מחזירה את שם ההרשאה הנדרשת לגישת רשת אל [uri]:
 /// `network.localhost` ליעד loopback מקומי, אחרת `network.access`.

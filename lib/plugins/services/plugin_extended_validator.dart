@@ -10,6 +10,7 @@ import 'package:otzaria/plugins/declarative/models/declarative_program.dart';
 import 'package:otzaria/plugins/models/plugin_library_book_provider.dart';
 import 'package:otzaria/plugins/models/plugin_manifest.dart';
 import 'package:otzaria/plugins/models/plugin_network_allowlist.dart';
+import 'package:otzaria/plugins/models/plugin_network_permission_mode.dart';
 import 'package:otzaria/plugins/models/plugin_search_dialog_item.dart';
 import 'package:otzaria/plugins/models/plugin_search_field_action.dart';
 import 'package:otzaria/plugins/models/plugin_startup_contributions.dart';
@@ -1167,6 +1168,10 @@ class PluginExtendedValidator {
   /// הרשמי `network.allowlist` הוא "שדה הצהרתי בלבד" (ברירת מחדל `[]`)
   /// וההרשאה בפועל מנוהלת ע"י אוצריא בקוד. אריזה לא תיחסם, אך נציין למפתח
   /// שאם הוא מצהיר על שימוש ברשת — כדאי להצהיר במפורש לאן.
+  ///
+  /// החריג הוא תוסף שדורש [pluginStrictNetworkPermissionsVersion] ומעלה:
+  /// שם `network.localhost` ו-`network.access` נפרדות לחלוטין, ויעד בלי ההרשאה
+  /// שלו ייחסם בכל מקרה — לכן חוסר התאמה בין ה-allowlist להרשאות הוא שגיאה.
   static void _validateNetwork(
     Map<String, dynamic> manifestJson,
     Set<String> declaredPermissions,
@@ -1188,7 +1193,21 @@ class PluginExtendedValidator {
       );
       return;
     }
+    final minAppVersion = manifestJson['minAppVersion'];
+    final strictVersion =
+        minAppVersion is String &&
+        pluginUsesStrictNetworkPermissions(minAppVersion);
+    final localEntries = <String>[];
+    final remoteEntries = <String>[];
     final urlPattern = RegExp(r'^https?://', caseSensitive: false);
+    // כתובת שנראית מקומית אך אינה בצורה הקנונית (127.1, 127.10.10.1,
+    // localhost.) אינה מזוהה כמקומית — ולכן אין לספור אותה כיעד אינטרנט.
+    // שם מארח רגיל שמתחיל ב-localhost או ב-127 (localhost.example.com) הוא
+    // יעד אינטרנט לכל דבר.
+    final localLooking = RegExp(
+      r'^(localhost\.|127(\.\d+){1,3}\.?)$',
+      caseSensitive: false,
+    );
     for (final raw in allowlistRaw) {
       if (raw is! String) {
         warnings.add(
@@ -1199,13 +1218,70 @@ class PluginExtendedValidator {
       final trimmed = raw.trim();
       // host חשוף ל-loopback (127.0.0.1 / localhost) תקין — מתיר כל פורט
       // על אותו host עבור שירות מקומי (network.localhost).
-      if (isLoopbackHost(trimmed)) continue;
+      if (isLoopbackHost(trimmed)) {
+        localEntries.add(trimmed);
+        continue;
+      }
       if (!urlPattern.hasMatch(trimmed)) {
         warnings.add(
           'כתובת לא תקינה ב-network.allowlist: ${jsonEncode(raw)} (מומלץ http(s) URL מלא, או שם host מקומי כמו 127.0.0.1)',
         );
-      } else if (trimmed.contains('*')) {
+        continue;
+      }
+      if (trimmed.contains('*')) {
         warnings.add('network.allowlist אינו תומך ב-wildcard: $trimmed');
+      }
+      final host = Uri.tryParse(trimmed)?.host ?? '';
+      if (host.isEmpty) continue;
+      if (isLoopbackHost(host)) {
+        localEntries.add(trimmed);
+      } else if (localLooking.hasMatch(host)) {
+        warnings.add(
+          'הכתובת $trimmed אינה מזוהה כמקומית — לשירות מקומי יש לכתוב '
+          'localhost או 127.0.0.x בכתיבה עשרונית מלאה (למשל 127.0.0.1)',
+        );
+      } else {
+        remoteEntries.add(trimmed);
+      }
+    }
+
+    // תוסף ש-network.enabled שלו כבוי חסום ממילא; אין טעם להתריע על הרשאות.
+    if (strictVersion && !networkEnabled) return;
+    final declaresLocal = declaredPermissions.contains('network.localhost');
+    final declaresRemote = declaredPermissions.contains('network.access');
+    const strictVersionLabel = pluginStrictNetworkPermissionsVersion;
+    if (localEntries.isNotEmpty && !declaresLocal) {
+      final what =
+          'ה-network.allowlist כולל יעד מקומי (${localEntries.join(', ')}) '
+          'אך ההרשאה "network.localhost" לא הוצהרה';
+      if (strictVersion) {
+        errors.add(
+          '$what. בתוסף שדורש אוצריא $strictVersionLabel ומעלה '
+          '"network.access" היא גישה לאינטרנט בלבד ואינה מכסה יעד מקומי',
+        );
+      } else if (declaresRemote) {
+        warnings.add(
+          '$what. כרגע "network.access" מכסה אותו, אך מאוצריא '
+          '$strictVersionLabel הוא ייחסם — הצהר גם על "network.localhost"',
+        );
+      } else {
+        warnings.add('$what, ולכן היעד המקומי ייחסם');
+      }
+    }
+    if (remoteEntries.isNotEmpty && !declaresRemote) {
+      final what =
+          'ה-network.allowlist כולל יעד אינטרנט (${remoteEntries.join(', ')}) '
+          'אך ההרשאה "network.access" לא הוצהרה';
+      if (strictVersion) {
+        errors.add(
+          '$what. "network.localhost" היא גישה למחשב המקומי בלבד ואינה '
+          'מתירה גישה לאינטרנט',
+        );
+      } else {
+        warnings.add(
+          '$what. "network.localhost" אינה מתירה גישה לאינטרנט, ולכן '
+          'היעד ייחסם',
+        );
       }
     }
   }
