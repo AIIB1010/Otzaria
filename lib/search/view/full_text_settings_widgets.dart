@@ -805,7 +805,6 @@ class OrderOfResults extends StatelessWidget {
               value: state.sortBy,
               decoration: const InputDecoration(
                 labelText: 'מיון',
-                border: OutlineInputBorder(),
               ),
               entries: _entries,
               onSelected: (value) {
@@ -870,7 +869,6 @@ class GroupingOfResults extends StatelessWidget {
                 value: state.resultGrouping,
                 decoration: const InputDecoration(
                   labelText: 'איחוד תוצאות',
-                  border: OutlineInputBorder(),
                 ),
                 entries: _entries,
                 onSelected: (value) {
@@ -982,7 +980,6 @@ class ExternalResultsPositionControl extends StatelessWidget {
                   value: settings.externalResultsFirst,
                   decoration: InputDecoration(
                     labelText: 'מיקום תוצאות ${status.sourceTitle}',
-                    border: const OutlineInputBorder(),
                   ),
                   entries: entries,
                   onSelected: (value) {

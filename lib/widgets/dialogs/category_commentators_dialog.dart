@@ -49,7 +49,6 @@ Future<void> showCategoryCommentatorsDialog({
                 value: selectedCategory,
                 decoration: const InputDecoration(
                   labelText: 'בחר קטגוריה',
-                  border: OutlineInputBorder(),
                 ),
                 entries: categories
                     .map(

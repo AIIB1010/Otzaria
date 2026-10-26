@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:otzaria/widgets/controls/action_buttons.dart';
-import 'package:otzaria/widgets/layout/centered_scrollable_state.dart';
+import 'package:otzaria/theme/app_tokens.dart';
+import 'package:otzaria/widgets/feedback/otzaria_empty_state.dart';
 import 'package:otzaria_icons/otzaria_icons.dart';
 
 /// ווידג'ט המוצג כאשר אין תוצאות בספרייה.
@@ -47,7 +48,7 @@ class LibraryEmptyStateWidget extends StatelessWidget {
           icon: FluentIcons.arrow_up_24_regular,
           text: 'חזור',
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: AppTokens.spaceSM),
         ActionButton.neutral(
           onPressed: onHome,
           icon: FluentIcons.home_24_regular,
@@ -59,63 +60,45 @@ class LibraryEmptyStateWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CenteredScrollableState(
-      child: Column(
+    return OtzariaEmptyState(
+      icon: _isDeepLink
+          ? OtzariaIcons.link_24_regular
+          : OtzariaIcons.search_not_found_24_regular,
+      title: message,
+      message: _isDeepLink
+          ? 'נראה שהכנסתם קישור ישיר'
+          : showSearchElsewhereHint
+          ? 'ניתן לנסות לחפש בתיקייה אחרת'
+          : null,
+      body: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            _isDeepLink
-                ? OtzariaIcons.link_24_regular
-                : OtzariaIcons.search_not_found_24_regular,
-            size: 64,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            message,
-            style: Theme.of(context).textTheme.titleMedium,
-            textAlign: TextAlign.center,
-          ),
           if (_isDeepLink) ...[
-            const SizedBox(height: 8),
-            Text(
-              'נראה שהכנסתם קישור ישיר',
-              style: Theme.of(context).textTheme.bodyMedium,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
             ActionButton.recommended(
               onPressed: onOpenLink,
               icon: OtzariaIcons.link_24_regular,
               text: 'פתיחת קישור',
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppTokens.spaceSM),
             _buildNavButtons(),
           ] else ...[
-            if (showSearchElsewhereHint) ...[
-              const SizedBox(height: 12),
-              Text(
-                'ניתן לנסות לחפש בתיקייה אחרת',
-                style: Theme.of(context).textTheme.bodyMedium,
-                textAlign: TextAlign.center,
-              ),
-            ],
-            const SizedBox(height: 16),
             _buildNavButtons(),
             if (showSearchElsewhereHint && onSearchWholeLibrary != null) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: AppTokens.spaceSM),
               ActionButton.recommended(
                 onPressed: onSearchWholeLibrary,
                 icon: FluentIcons.library_24_regular,
                 text: 'חפש בתיקייה הראשית',
               ),
             ],
-            const SizedBox(height: 12),
+            const SizedBox(height: AppTokens.spaceMD),
             Text(
               'ניתן לחפש גם טקסט ספציפי במאגר',
-              style: Theme.of(context).textTheme.bodyMedium,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppTokens.spaceSM),
             ActionButton.recommended(
               onPressed: onOpenSearch,
               icon: FluentIcons.search_24_regular,

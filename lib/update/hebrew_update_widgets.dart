@@ -8,6 +8,7 @@ import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:otzaria/core/messages/library_messages.dart';
 import 'updat_compat.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:otzaria/widgets/dialogs/app_dialogs.dart';
 
 /// עוטף את צ'יפ העדכון בצבע פעולה בולט, בלי לצאת מצבעי התמה.
 Widget _updateChipSurface(BuildContext context, Widget child) {
@@ -155,63 +156,60 @@ void hebrewDefaultDialog({
 }) {
   final changelogText = changelog?.trim() ?? '';
 
-  showDialog(
+  showDialog<bool>(
     context: context,
-    builder: (context) => AlertDialog(
-      scrollable: true,
-      title: Flex(
-        direction: Theme.of(context).useMaterial3
-            ? Axis.vertical
-            : Axis.horizontal,
-        children: const [
-          Icon(FluentIcons.arrow_sync_24_regular),
-          Text('עדכון זמין'),
-        ],
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('גרסה חדשה של האפליקציה זמינה.'),
-          const SizedBox(width: 10),
-          Text('גרסה חדשה: ${latestVersion!.toString()}'),
-          const SizedBox(height: 10),
-          if (status == UpdatStatus.availableWithChangelog) ...[
-            Text(
-              'יומן שינויים:',
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+    builder: (context) {
+      final theme = Theme.of(context);
+      return AppDialog.twoActions(
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              FluentIcons.arrow_sync_24_regular,
+              color: theme.colorScheme.primary,
             ),
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: changelogText.isEmpty
-                  ? const Text('לא נמצאו פריטי יומן שינויים לעדכון זה.')
-                  : MarkdownBody(
-                      data: changelogText,
-                      onTapLink: (text, href, title) {
-                        if (href != null) launchUrl(Uri.parse(href));
-                      },
-                    ),
-            ),
+            const SizedBox(width: AppTokens.spaceSM),
+            const Text('עדכון זמין'),
           ],
-        ],
-      ),
-      actions: <Widget>[
-        TextButton(
-          child: const Text('מאוחר יותר'),
-          onPressed: () {
-            Navigator.pop(context);
-          },
         ),
-        TextButton(
-          onPressed: () {
-            Navigator.pop(context);
-            startUpdate();
-          },
-          child: const Text('עדכן כעת'),
+        content: '',
+        cancelText: 'מאוחר יותר',
+        confirmText: 'עדכן כעת',
+        customContent: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('גרסה חדשה של האפליקציה זמינה.'),
+                const SizedBox(height: AppTokens.spaceXS),
+                Text('גרסה חדשה: ${latestVersion!.toString()}'),
+                if (status == UpdatStatus.availableWithChangelog) ...[
+                  const SizedBox(height: AppTokens.spaceMD),
+                  Text(
+                    'יומן שינויים:',
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: AppTokens.spaceSM),
+                  changelogText.isEmpty
+                      ? const Text('לא נמצאו פריטי יומן שינויים לעדכון זה.')
+                      : MarkdownBody(
+                          data: changelogText,
+                          onTapLink: (text, href, title) {
+                            if (href != null) launchUrl(Uri.parse(href));
+                          },
+                        ),
+                ],
+              ],
+            ),
+          ),
         ),
-      ],
-    ),
-  );
+      );
+    },
+  ).then((confirmed) {
+    if (confirmed == true) startUpdate();
+  });
 }

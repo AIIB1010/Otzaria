@@ -29,6 +29,10 @@ class ActionButton extends StatelessWidget {
   final FocusNode? focusNode;
   final bool autofocus;
 
+  /// טקסט אדום על כפתור [ActionButton.neutral] — לפעולה הרסנית שצריכה להישאר
+  /// באותו מבנה כפתורים של הדיאלוג (למשל "בטל התראה" לצד "ביטול").
+  final bool errorText;
+
   /// הודעת tooltip לכפתור. עדיף על עטיפה חיצונית ב-[Tooltip]: הבלון מקבל
   /// צומת סמנטיקה משלו ([ContainedTooltip]), ולכן אפשר להציב את הכפתור בתוך
   /// עוגן overlay אחר — למשל `MenuAnchor.builder`.
@@ -45,7 +49,8 @@ class ActionButton extends StatelessWidget {
     this.focusNode,
     this.autofocus = false,
     this.tooltip,
-  }) : _variant = _Variant.recommended;
+  }) : errorText = false,
+       _variant = _Variant.recommended;
 
   const ActionButton.neutral({
     super.key,
@@ -58,6 +63,7 @@ class ActionButton extends StatelessWidget {
     this.focusNode,
     this.autofocus = false,
     this.tooltip,
+    this.errorText = false,
   }) : _variant = _Variant.neutral;
 
   const ActionButton.ghost({
@@ -71,7 +77,8 @@ class ActionButton extends StatelessWidget {
     this.focusNode,
     this.autofocus = false,
     this.tooltip,
-  }) : _variant = _Variant.ghost;
+  }) : errorText = false,
+       _variant = _Variant.ghost;
 
   const ActionButton.warning({
     super.key,
@@ -84,7 +91,8 @@ class ActionButton extends StatelessWidget {
     this.focusNode,
     this.autofocus = false,
     this.tooltip,
-  }) : _variant = _Variant.warning;
+  }) : errorText = false,
+       _variant = _Variant.warning;
 
   Color _loadingColor(ColorScheme cs) => switch (_variant) {
     _Variant.recommended => cs.onPrimary,
@@ -93,9 +101,13 @@ class ActionButton extends StatelessWidget {
     _Variant.warning => cs.error,
   };
 
-  ButtonStyle? _buttonStyle(ColorScheme cs) => _variant == _Variant.warning
-      ? TextButton.styleFrom(foregroundColor: cs.error)
-      : null;
+  ButtonStyle? _buttonStyle(ColorScheme cs) => switch (_variant) {
+    _Variant.warning => TextButton.styleFrom(foregroundColor: cs.error),
+    _Variant.neutral when errorText => FilledButton.styleFrom(
+      foregroundColor: cs.error,
+    ),
+    _ => null,
+  };
 
   Widget _plain({
     required VoidCallback? onPressed,
@@ -110,6 +122,7 @@ class ActionButton extends StatelessWidget {
     ),
     _Variant.neutral => FilledButton.tonal(
       onPressed: onPressed,
+      style: style,
       focusNode: focusNode,
       autofocus: autofocus,
       child: child,
@@ -135,6 +148,7 @@ class ActionButton extends StatelessWidget {
       ),
       _Variant.neutral => FilledButton.tonalIcon(
         onPressed: onPressed,
+        style: style,
         focusNode: focusNode,
         autofocus: autofocus,
         icon: leading,

@@ -1016,7 +1016,11 @@ class _PdfCommentatorsTabScreenState extends State<PdfCommentatorsTabScreen>
   Widget _buildNavPanel() {
     final headings = _sortedHeadings;
     if (headings == null || headings.isEmpty) {
-      return const Center(child: Text('אין ניווט'));
+      return const OtzariaEmptyState(
+        isCompact: true,
+        icon: OtzariaIcons.text_bullet_list_tree_24_regular,
+        title: 'אין ניווט',
+      );
     }
 
     return ValueListenableBuilder<TextEditingValue>(

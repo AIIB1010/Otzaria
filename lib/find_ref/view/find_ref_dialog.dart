@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:otzaria/plugins/models/plugin_search_field_action.dart';
 import 'package:otzaria/plugins/services/plugin_search_field_actions_registry.dart';
 import 'package:otzaria/plugins/view/plugin_search_field_actions.dart';
+import 'package:otzaria/widgets/feedback/otzaria_empty_state.dart';
 import 'package:otzaria/theme/app_surfaces.dart';
 import 'package:otzaria/theme/app_tokens.dart';
 import 'package:flutter/services.dart';
@@ -49,6 +50,7 @@ import 'package:otzaria/tabs/models/searching_tab.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/navigation/view/main_window_screen.dart';
 import 'package:otzaria/widgets/controls/action_buttons.dart';
+import 'package:otzaria/widgets/controls/custom_switch.dart';
 import 'package:otzaria/widgets/layout/centered_scrollable_state.dart';
 import 'package:otzaria/widgets/misc/rtl_icon.dart';
 
@@ -1242,7 +1244,6 @@ class _FindRefDialogState extends State<FindRefDialog> {
         decoration: InputDecoration(
           filled: true,
           fillColor: colorScheme.surfaceContainerHigh,
-          border: const OutlineInputBorder(),
           labelText: context.settingsText('מקור'),
           hintText: context.settingsText('לדוגמה: בראשית פרק א'),
           prefixIcon: const Icon(FluentIcons.search_24_regular),
@@ -1357,7 +1358,7 @@ class _FindRefDialogState extends State<FindRefDialog> {
             const SizedBox(width: 4),
             Transform.scale(
               scale: 0.75,
-              child: Switch(
+              child: CustomSwitch(
                 value: _includePersonalBooks,
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 onChanged: (v) {
@@ -1826,32 +1827,12 @@ class _FindRefDialogState extends State<FindRefDialog> {
     required String message,
     Widget? action,
   }) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return CenteredScrollableState(
+    return OtzariaEmptyState(
+      customIcon: Icon(icon, size: 56, color: iconColor),
+      title: title,
+      message: message,
+      action: action,
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 52, color: iconColor),
-          const SizedBox(height: 16),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: colorScheme.onSurface,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            message,
-            style: TextStyle(fontSize: 14, color: colorScheme.onSurfaceVariant),
-            textAlign: TextAlign.center,
-          ),
-          if (action != null) ...[const SizedBox(height: 20), action],
-        ],
-      ),
     );
   }
 

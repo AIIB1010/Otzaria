@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:otzaria/theme/app_fonts.dart';
 import 'package:otzaria/theme/app_tokens.dart';
+import 'package:otzaria/widgets/controls/action_buttons.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:otzaria/models/phone_report_data.dart';
@@ -313,9 +314,9 @@ class _PhoneReportTabState extends State<PhoneReportTab> {
                         borderRadius:
                             AppTokens.borderRadiusAll, // עיגול כמו כפתור רגיל
                       ),
-                      child: TextButton(
+                      child: ActionButton.ghost(
                         onPressed: widget.onCancel,
-                        child: const Text('ביטול הדיווח'),
+                        text: 'ביטול הדיווח',
                       ),
                     ),
                   ],
@@ -338,9 +339,9 @@ class _PhoneReportTabState extends State<PhoneReportTab> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        TextButton(
+        ActionButton.ghost(
           onPressed: widget.onCancel,
-          child: const Text('ביטול הדיווח'),
+          text: 'ביטול הדיווח',
         ),
       ],
     );

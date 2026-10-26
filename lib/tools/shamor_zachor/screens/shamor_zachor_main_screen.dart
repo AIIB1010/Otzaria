@@ -451,6 +451,7 @@ class _ShamorZachorMainScreenState extends State<ShamorZachorMainScreen>
                 }
 
                 return Scaffold(
+                  backgroundColor: Colors.transparent,
                   body: Builder(
                     builder: (context) {
                       final screenWidth = MediaQuery.sizeOf(context).width;

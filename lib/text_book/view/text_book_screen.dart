@@ -1,3 +1,4 @@
+import 'package:otzaria/core/messages/common_messages.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'dart:io';
 
@@ -1379,7 +1380,11 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
             }
 
             if (state is TextBookError) {
-              return Center(child: Text('Error: ${(state).message}'));
+              return OtzariaErrorState(
+                title: CommonMessages.loadFailed,
+                details: state.message,
+                icon: OtzariaIcons.book_exclamation_24_regular,
+              );
             }
 
             if (state is TextBookLoaded) {
@@ -1461,7 +1466,9 @@ class _TextBookViewerBlocState extends State<TextBookViewerBloc>
             }
 
             // Fallback
-            return const Center(child: Text('Unknown state'));
+            return const OtzariaErrorState(
+              title: CommonMessages.unexpectedState,
+            );
           },
         );
       },

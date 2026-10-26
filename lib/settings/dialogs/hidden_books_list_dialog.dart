@@ -4,6 +4,7 @@ import 'package:otzaria_icons/otzaria_icons.dart';
 import 'package:otzaria/library/hidden/hidden_library_selection.dart';
 import 'package:otzaria/settings/dialogs/list_dialog_frame.dart';
 import 'package:otzaria/settings/l10n/settings_l10n_exports.dart';
+import 'package:otzaria/theme/app_tokens.dart';
 import 'package:otzaria/widgets/widgets_exports.dart';
 
 /// חלון הספרים והקטגוריות המוסתרים, עם ביטול הסתרה (issue #1448).
@@ -110,7 +111,7 @@ class _HiddenBooksListDialogState extends State<_HiddenBooksListDialog> {
       maxWidth: 640,
       heightFactor: 0.8,
       children: [
-        const SizedBox(height: 8),
+        const SizedBox(height: AppTokens.spaceSM),
         Text(
           context.settingsText(
             'הרשימה מציגה בחירות ישירות. להסרת הסתרה בירושה, בטלו את הסתרת קטגוריית האב.',
@@ -119,7 +120,7 @@ class _HiddenBooksListDialogState extends State<_HiddenBooksListDialog> {
             color: cs.onSurfaceVariant,
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppTokens.spaceMD),
         Flexible(
           child: entries.isEmpty
               ? Padding(
@@ -144,7 +145,7 @@ class _HiddenBooksListDialogState extends State<_HiddenBooksListDialog> {
                   itemBuilder: (_, i) => row(entries[i]),
                 ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppTokens.spaceMD),
         Row(
           children: [
             ActionButton.recommended(
@@ -152,7 +153,7 @@ class _HiddenBooksListDialogState extends State<_HiddenBooksListDialog> {
               onPressed: () =>
                   Navigator.of(context).pop(_changed ? _selection : null),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: AppTokens.spaceSM),
             if (entries.isNotEmpty)
               ActionButton.warning(
                 text: context.settingsText('בטל הכול'),

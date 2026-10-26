@@ -10,6 +10,7 @@ import 'package:otzaria/core/info/view/info_section_fields.dart';
 import 'package:otzaria/core/messages/messages_exports.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/theme/app_surfaces.dart';
+import 'package:otzaria/theme/app_tokens.dart';
 import 'package:otzaria/widgets/widgets_exports.dart';
 import 'package:otzaria/widgets/misc/app_selection_area.dart';
 
@@ -87,14 +88,14 @@ class _AppInfoDialogContentState extends State<AppInfoDialogContent> {
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: AppSurfaces.panelSection(context),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: AppTokens.borderRadiusAll,
                   ),
                   child: Text(
                     _prettyJson,
                     textDirection: TextDirection.ltr,
                     style: const TextStyle(
                       fontFamily: 'monospace',
-                      fontSize: 11,
+                      fontSize: AppTokens.fontSM,
                       height: 1.4,
                     ),
                   ),
@@ -116,7 +117,10 @@ class _AppInfoDialogContentState extends State<AppInfoDialogContent> {
             InfoValueFormat.dateTime(widget.report.generatedAt),
             textDirection: TextDirection.ltr,
             textAlign: TextAlign.end,
-            style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+            style: TextStyle(
+              fontSize: AppTokens.fontSM,
+              color: cs.onSurfaceVariant,
+            ),
           ),
         ),
         IconButton(
@@ -146,7 +150,7 @@ class _InfoSectionCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: AppSurfaces.panelSection(context),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppTokens.borderRadiusAll,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -243,7 +247,7 @@ class _SubHeader extends StatelessWidget {
       child: Text(
         text,
         style: TextStyle(
-          fontSize: 12,
+          fontSize: AppTokens.fontSM,
           fontWeight: FontWeight.bold,
           color: Theme.of(context).colorScheme.onSurfaceVariant,
         ),
@@ -272,7 +276,10 @@ class _InfoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final labelStyle = TextStyle(fontSize: 12, color: cs.onSurfaceVariant);
+    final labelStyle = TextStyle(
+      fontSize: AppTokens.fontSM,
+      color: cs.onSurfaceVariant,
+    );
 
     if (isBlock) {
       return Padding(
@@ -284,7 +291,7 @@ class _InfoRow extends StatelessWidget {
             Text(
               value,
               textDirection: isLtr ? TextDirection.ltr : null,
-              style: const TextStyle(fontSize: 12),
+              style: const TextStyle(fontSize: AppTokens.fontSM),
             ),
           ],
         ),
@@ -313,7 +320,7 @@ class _InfoRow extends StatelessWidget {
               value,
               textAlign: TextAlign.end,
               textDirection: isLtr ? TextDirection.ltr : null,
-              style: const TextStyle(fontSize: 12),
+              style: const TextStyle(fontSize: AppTokens.fontSM),
             ),
           ),
         ],
@@ -349,7 +356,7 @@ class _FolderEntryTile extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
         color: AppSurfaces.card(context),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: AppTokens.borderRadiusAll,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -357,29 +364,38 @@ class _FolderEntryTile extends StatelessWidget {
           Text(
             '${folder['path']}',
             textDirection: TextDirection.ltr,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+            style: const TextStyle(
+              fontSize: AppTokens.fontSM,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           Text(
             InfoValueFormat.folderSummary(folder),
-            style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+            style: TextStyle(
+              fontSize: AppTokens.fontSM,
+              color: cs.onSurfaceVariant,
+            ),
           ),
           if (types.isNotEmpty)
             Text(
               types,
               textDirection: TextDirection.ltr,
-              style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+              style: TextStyle(
+                fontSize: AppTokens.fontSM,
+                color: cs.onSurfaceVariant,
+              ),
             ),
           if (scanError != null)
             Text(
               'שגיאת סריקה: $scanError',
-              style: TextStyle(fontSize: 11, color: cs.error),
+              style: TextStyle(fontSize: AppTokens.fontSM, color: cs.error),
             ),
           for (final file in shown)
             Padding(
               padding: const EdgeInsetsDirectional.only(top: 2, start: 8),
               child: Text(
                 '${file['name']}',
-                style: const TextStyle(fontSize: 11),
+                style: const TextStyle(fontSize: AppTokens.fontSM),
               ),
             ),
           if (remaining > 0)
@@ -387,7 +403,10 @@ class _FolderEntryTile extends StatelessWidget {
               padding: const EdgeInsetsDirectional.only(top: 2, start: 8),
               child: Text(
                 'ועוד ${InfoValueFormat.count(remaining)}…',
-                style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+                style: TextStyle(
+                  fontSize: AppTokens.fontSM,
+                  color: cs.onSurfaceVariant,
+                ),
               ),
             ),
         ],
@@ -413,7 +432,7 @@ class _ErrorEntryTile extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
         color: AppSurfaces.card(context),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: AppTokens.borderRadiusAll,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -424,15 +443,19 @@ class _ErrorEntryTile extends StatelessWidget {
                 child: Text(
                   '${entry['title']}',
                   style: const TextStyle(
-                    fontSize: 12,
+                    fontSize: AppTokens.fontSM,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
+              // 11 ולא fontSM: בשורה הזו ברוחב 360 נשאר מקום בדיוק.
               Text(
                 timestamp,
                 textDirection: TextDirection.ltr,
-                style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: cs.onSurfaceVariant,
+                ),
               ),
             ],
           ),
@@ -443,7 +466,7 @@ class _ErrorEntryTile extends StatelessWidget {
                 message,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 11, color: cs.error),
+                style: TextStyle(fontSize: AppTokens.fontSM, color: cs.error),
               ),
             ),
         ],

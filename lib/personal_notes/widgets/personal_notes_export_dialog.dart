@@ -1,6 +1,9 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:otzaria/personal_notes/models/personal_note.dart';
 import 'package:otzaria/personal_notes/utils/personal_notes_book_key.dart';
+import 'package:otzaria/theme/app_tokens.dart';
 import 'package:otzaria/utils/calendar_days.dart';
 import 'package:otzaria/widgets/misc/app_menu_exports.dart';
 import 'package:otzaria/widgets/widgets_exports.dart';
@@ -105,23 +108,23 @@ class _PersonalNotesExportDialogState extends State<PersonalNotesExportDialog> {
 
     return AlertDialog(
       title: Text(widget.title),
+      // רוחב קבוע ולא ConstrainedBox: AlertDialog מודד intrinsic, ורשימה
+      // גוללת בתוכו לא תומכת בכך. במסך צר הרוחב מצטמצם.
       content: SizedBox(
-        width: 540,
+        width: math.min(540.0, MediaQuery.sizeOf(context).width - 112),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: NotesExportMode.values.map((mode) {
-                return ChoiceChip(
-                  label: Text(_labelForMode(mode)),
-                  selected: _mode == mode,
-                  onSelected: (_) => setState(() => _mode = mode),
-                );
-              }).toList(),
+            AppSegmentedControl<NotesExportMode>(
+              options: [
+                for (final mode in NotesExportMode.values)
+                  SegmentOption(value: mode, label: _labelForMode(mode)),
+              ],
+              currentValue: _mode,
+              expandToFillWidth: true,
+              onChanged: (mode) => setState(() => _mode = mode),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppTokens.spaceMD),
             if (_mode == NotesExportMode.byBook)
               AppDropdownField<String>(
                 value: _selectedBookId,
@@ -136,7 +139,6 @@ class _PersonalNotesExportDialogState extends State<PersonalNotesExportDialog> {
                 onSelected: (value) => setState(() => _selectedBookId = value),
                 decoration: const InputDecoration(
                   labelText: 'בחר ספר',
-                  border: OutlineInputBorder(),
                 ),
               ),
             if (_mode == NotesExportMode.byDateRange)
@@ -164,11 +166,10 @@ class _PersonalNotesExportDialogState extends State<PersonalNotesExportDialog> {
                 controller: _searchController,
                 decoration: const InputDecoration(
                   labelText: 'חיפוש הערות',
-                  border: OutlineInputBorder(),
                 ),
                 onChanged: (_) => setState(() {}),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppTokens.spaceSM),
               SizedBox(
                 height: 240,
                 child: ListView.builder(

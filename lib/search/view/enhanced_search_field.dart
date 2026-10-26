@@ -209,7 +209,6 @@ class _EnhancedSearchFieldState extends State<EnhancedSearchField> {
                       decoration: InputDecoration(
                         filled: true,
                         fillColor: colorScheme.surfaceContainerHigh,
-                        border: const OutlineInputBorder(),
                         hintText: context.settingsText(
                           'הקלד מילות חיפוש · לצמצום: מצה@רשי/פסחים',
                         ),

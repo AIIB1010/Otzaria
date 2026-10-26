@@ -1,3 +1,4 @@
+import 'package:otzaria/theme/app_tokens.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:otzaria/library/models/library.dart';
@@ -102,7 +103,7 @@ class LibraryBreadcrumbBar extends StatelessWidget {
     );
     if (onTap == null) return content;
     final button = InkWell(
-      borderRadius: BorderRadius.circular(6),
+      borderRadius: AppTokens.borderRadiusAll,
       onTap: onTap,
       child: content,
     );

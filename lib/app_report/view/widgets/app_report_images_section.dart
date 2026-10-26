@@ -183,7 +183,7 @@ class _AppReportImagesSectionState extends State<AppReportImagesSection>
               ? AppSurfaces.paneDropPreview(colorScheme)
               : colorScheme.surfaceContainerLow,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: AppTokens.borderRadiusAll,
             side: BorderSide(
               color: _isHovering
                   ? AppSurfaces.paneDropPreviewBorder(colorScheme)

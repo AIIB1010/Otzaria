@@ -784,15 +784,10 @@ Future<void> openNoteLink(
       }
       await showDialog<void>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('הערה מקושרת'),
-          content: PersonalNoteContentView(note: note!),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('סגור'),
-            ),
-          ],
+        builder: (context) => AppDialog.singleAction(
+          title: 'הערה מקושרת',
+          confirmText: 'סגור',
+          customContent: PersonalNoteContentView(note: note!),
         ),
       );
       return;

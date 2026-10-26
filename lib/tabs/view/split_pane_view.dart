@@ -23,9 +23,6 @@ const double _kDividerHandleThickness = 4;
 /// אורך ידית המפריד לאורך הרצועה.
 const double _kDividerHandleLength = 40;
 
-/// עיגול פינות כרטיס החלונית.
-const double kPaneCardRadius = 10;
-
 /// כמה זז המפריד בכל הקשה על חץ.
 const double _kKeyboardNudge = 24;
 
@@ -114,7 +111,7 @@ class PaneCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final radius = BorderRadius.circular(isSplit ? kPaneCardRadius : 0);
+    final radius = BorderRadius.circular(isSplit ? AppTokens.radius : 0);
     final border = isSplit
         ? Border.all(color: AppSurfaces.paneCardBorder(cs, isActive: isActive))
         : null;

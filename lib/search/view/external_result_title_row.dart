@@ -1,5 +1,6 @@
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
+import 'package:otzaria/theme/app_tokens.dart';
 import 'package:flutter/services.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/search/view/search_result_source_tag.dart';
@@ -119,7 +120,7 @@ class ExternalResultTitleRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         decoration: BoxDecoration(
           color: cs.secondaryContainer,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: AppTokens.borderRadiusAll,
         ),
         child: Text(
           compact ? '$hitCount' : label,

@@ -1,3 +1,4 @@
+import 'package:otzaria/core/messages/common_messages.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -300,10 +301,7 @@ class _PersonalNotesManagerScreenState
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
-            FilledButton(
-              onPressed: _loadBooks,
-              child: const Text('נסה שוב'),
-            ),
+            ActionButton.recommended(text: 'נסה שוב', onPressed: _loadBooks),
           ],
         ),
       );
@@ -635,26 +633,27 @@ class _PersonalNotesManagerScreenState
         title: const Text('ייבוא הערות - טיפול בהתנגשויות'),
         content: const Text('כיצד לטפל בהערות קיימות עם אותו מזהה?'),
         actions: [
-          TextButton(
+          ActionButton.neutral(
+            text: 'מזג',
             onPressed: () =>
                 Navigator.of(context).pop(NotesImportConflictStrategy.merge),
-            child: const Text('מזג'),
           ),
-          TextButton(
+          ActionButton.neutral(
+            text: 'דלג על כפולים',
             onPressed: () =>
                 Navigator.of(context).pop(NotesImportConflictStrategy.skip),
-            child: const Text('דלג על כפולים'),
           ),
-          TextButton(
-            onPressed: () =>
-                Navigator.of(context).pop(NotesImportConflictStrategy.keepBoth),
-            child: const Text('שמור גם וגם'),
+          ActionButton.neutral(
+            text: 'שמור גם וגם',
+            onPressed: () => Navigator.of(
+              context,
+            ).pop(NotesImportConflictStrategy.keepBoth),
           ),
-          FilledButton(
+          ActionButton.warning(
+            text: 'דרוס',
             onPressed: () => Navigator.of(
               context,
             ).pop(NotesImportConflictStrategy.overwrite),
-            child: const Text('דרוס'),
           ),
         ],
       ),
@@ -695,11 +694,17 @@ class _PersonalNotesManagerScreenState
         }
 
         if (libraryState.error != null) {
-          return Center(child: Text('Error: ${libraryState.error}'));
+          return OtzariaErrorState(
+            title: CommonMessages.loadFailed,
+            details: libraryState.error,
+          );
         }
 
         if (libraryState.library == null) {
-          return const Center(child: Text('No library data available'));
+          return const OtzariaErrorState(
+            title: CommonMessages.noLibraryData,
+            icon: OtzariaIcons.library_exclamation_24_regular,
+          );
         }
 
         final rootCategory = libraryState.library!;

@@ -1,3 +1,4 @@
+import 'package:otzaria/theme/app_tokens.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -58,12 +59,12 @@ class _PluginUpdateChipState extends State<PluginUpdateChip> {
       child: Material(
         color: cs.primaryContainer,
         elevation: 3,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: AppTokens.borderRadiusAll,
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             InkWell(
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: AppTokens.borderRadiusAll,
               onTap: _updating
                   ? null
                   : () {

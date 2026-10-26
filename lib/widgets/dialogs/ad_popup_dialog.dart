@@ -172,8 +172,12 @@ class _AdPopupDialogState extends State<AdPopupDialog>
                     icon: const Icon(FluentIcons.dismiss_24_regular),
                     tooltip: 'סגור',
                     style: IconButton.styleFrom(
-                      backgroundColor: Colors.black.withValues(alpha: 0.1),
-                      foregroundColor: Colors.black54,
+                      backgroundColor: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withValues(alpha: 0.08),
+                      foregroundColor: Theme.of(
+                        context,
+                      ).colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ),
@@ -258,7 +262,7 @@ class _AdPopupDialogState extends State<AdPopupDialog>
                               style: TextStyle(
                                 fontSize: fontSize,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.black,
+                                color: Theme.of(context).colorScheme.onSurface,
                               ),
                               textAlign: TextAlign.center,
                               softWrap: false,
@@ -349,7 +353,7 @@ class _AdPopupDialogState extends State<AdPopupDialog>
                   horizontal: 16,
                   vertical: 12,
                 ),
-                side: BorderSide(color: Colors.grey.shade400),
+                side: BorderSide(color: Theme.of(context).colorScheme.outline),
               ),
               icon: const Icon(FluentIcons.dismiss_24_regular, size: 18),
               label: const Text('אל תציג שוב'),
@@ -369,17 +373,18 @@ class _OrganizationsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // קווי חירום
-        _buildSectionTitle('קווי חירום', Colors.red),
+        _buildSectionTitle('קווי חירום', cs.error),
         ...organizations.emergencyLines.map(
           (org) => _ExpandableOrgCard(org: org, isEmergency: true),
         ),
         const SizedBox(height: 20),
         // ארגוני סיוע
-        _buildSectionTitle('ארגוני סיוע', Colors.blue),
+        _buildSectionTitle('ארגוני סיוע', cs.primary),
         ...organizations.supportOrgs.map(
           (org) => _ExpandableOrgCard(org: org, isEmergency: false),
         ),
@@ -431,20 +436,19 @@ class _ExpandableOrgCard extends StatefulWidget {
 class _ExpandableOrgCardState extends State<_ExpandableOrgCard> {
   bool _isExpanded = false;
 
-  static final _defaultDetailsStyle = TextStyle(
-    fontSize: 13,
-    height: 1.6,
-    color: Colors.grey[800],
-  );
-
-  static final _boldDetailsStyle = _defaultDetailsStyle.copyWith(
-    color: Colors.red[700],
-    fontWeight: FontWeight.bold,
-  );
-
   static final _detailsRegex = RegExp(r'\*\*(.*?)\*\*');
 
   Widget _buildDetailsText(String details) {
+    final cs = Theme.of(context).colorScheme;
+    final defaultStyle = TextStyle(
+      fontSize: 13,
+      height: 1.6,
+      color: cs.onSurface,
+    );
+    final boldStyle = defaultStyle.copyWith(
+      color: cs.error,
+      fontWeight: FontWeight.bold,
+    );
     final spans = <TextSpan>[];
     int lastIndex = 0;
 
@@ -454,13 +458,13 @@ class _ExpandableOrgCardState extends State<_ExpandableOrgCard> {
         spans.add(
           TextSpan(
             text: details.substring(lastIndex, match.start),
-            style: _defaultDetailsStyle,
+            style: defaultStyle,
           ),
         );
       }
 
       // טקסט מודגש (ללא הכוכביות)
-      spans.add(TextSpan(text: match.group(1), style: _boldDetailsStyle));
+      spans.add(TextSpan(text: match.group(1), style: boldStyle));
 
       lastIndex = match.end;
     }
@@ -470,7 +474,7 @@ class _ExpandableOrgCardState extends State<_ExpandableOrgCard> {
       spans.add(
         TextSpan(
           text: details.substring(lastIndex),
-          style: _defaultDetailsStyle,
+          style: defaultStyle,
         ),
       );
     }
@@ -489,9 +493,8 @@ class _ExpandableOrgCardState extends State<_ExpandableOrgCard> {
       shape: RoundedRectangleBorder(
         borderRadius: AppTokens.borderRadiusAll,
         side: BorderSide(
-          color: widget.isEmergency
-              ? Colors.red.withValues(alpha: 0.15)
-              : Colors.blue.withValues(alpha: 0.15),
+          color: (widget.isEmergency ? colorScheme.error : colorScheme.primary)
+              .withValues(alpha: 0.15),
           width: 1.5,
         ),
       ),
@@ -508,7 +511,7 @@ class _ExpandableOrgCardState extends State<_ExpandableOrgCard> {
                     width: 50,
                     height: 50,
                     decoration: BoxDecoration(
-                      color: Colors.grey[200],
+                      color: colorScheme.surfaceContainerHigh,
                       borderRadius: AppTokens.borderRadiusAll,
                     ),
                     child: ClipRRect(
@@ -543,9 +546,11 @@ class _ExpandableOrgCardState extends State<_ExpandableOrgCard> {
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: widget.isEmergency
-                          ? Colors.red.withValues(alpha: 0.8)
-                          : Colors.blue.withValues(alpha: 0.8),
+                      color:
+                          (widget.isEmergency
+                                  ? colorScheme.error
+                                  : colorScheme.primary)
+                              .withValues(alpha: 0.8),
                       letterSpacing: 1.2,
                     ),
                     textDirection: TextDirection.ltr,
@@ -554,7 +559,7 @@ class _ExpandableOrgCardState extends State<_ExpandableOrgCard> {
                     _isExpanded
                         ? FluentIcons.chevron_up_24_regular
                         : FluentIcons.chevron_down_24_regular,
-                    color: Colors.grey[600],
+                    color: colorScheme.onSurfaceVariant,
                   );
 
                   // הסף 400 הוא הרוחב המינימלי לפריסה השורתית בלי שהשם

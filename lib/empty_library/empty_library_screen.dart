@@ -1,3 +1,4 @@
+import 'package:otzaria/theme/app_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:otzaria/core/app_paths.dart';
@@ -111,7 +112,7 @@ class _LibrarySetupViewState extends State<LibrarySetupView> {
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: cs.errorContainer,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: AppTokens.borderRadiusAll,
                 ),
                 child: Text(
                   'הספרייה שהייתה שמורה על כרטיס ה-SD נמחקה — ככל הנראה '

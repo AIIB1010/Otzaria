@@ -6,6 +6,7 @@
 
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
+import 'package:otzaria/theme/app_tokens.dart';
 import 'package:kosher_dart/kosher_dart.dart';
 import 'package:otzaria/tools/calendar/helpers/calendar_date_helpers.dart';
 import 'package:otzaria/tools/calendar/bloc/calendar_cubit.dart'
@@ -203,7 +204,7 @@ class _DateCell extends StatelessWidget {
       child: Material(
         color: isSelected ? cs.primary : Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: AppTokens.borderRadiusAll,
           side: isToday && !isSelected
               ? BorderSide(color: cs.primary)
               : BorderSide.none,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:otzaria/theme/app_surfaces.dart';
 import 'package:otzaria/theme/app_tokens.dart';
+import 'package:otzaria/widgets/layout/floating_panel.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
 class PdfZoomBar extends StatelessWidget {
@@ -22,9 +23,8 @@ class PdfZoomBar extends StatelessWidget {
     final zoomPercentage = (currentZoom * 100).round();
     final divider = Theme.of(context).colorScheme.outlineVariant;
 
-    return Material(
-      elevation: 4,
-      borderRadius: AppTokens.borderRadiusAll,
+    return FloatingPanel(
+      elevation: AppTokens.elevation2,
       color: AppSurfaces.card(context),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),

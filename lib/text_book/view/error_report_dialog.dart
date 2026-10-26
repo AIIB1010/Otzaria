@@ -24,6 +24,7 @@ import 'package:otzaria/services/data_collection_service.dart';
 import 'package:otzaria/services/direct_error_report_service.dart';
 import 'package:otzaria/services/book_details_service.dart';
 import 'package:otzaria/widgets/controls/action_buttons.dart';
+import 'package:otzaria_icons/otzaria_icons.dart';
 import 'package:otzaria/widgets/dialogs/dialogs_exports.dart';
 import 'package:otzaria/widgets/dialogs/error_report_sender_email_dialog.dart';
 import 'package:otzaria/widgets/misc/app_selection_area.dart';
@@ -1117,10 +1118,10 @@ class TabbedReportDialog extends StatefulWidget {
 }
 
 /// הגובה שבו טופס הצעת התיקון נכנס כמעט בלי גלילה.
-const double _comfortableReportDialogHeight = 640;
+const double _comfortableReportDialogHeight = 660;
 
 /// טופס בלי עורך תיקון קצר; הגובה קבוע כדי שלא ישתנה בזמן הקלדה.
-const double _freeTextReportDialogHeight = 540;
+const double _freeTextReportDialogHeight = 560;
 
 class _TabbedReportDialogState extends State<TabbedReportDialog>
     with SingleTickerProviderStateMixin {
@@ -1214,13 +1215,8 @@ class _TabbedReportDialogState extends State<TabbedReportDialog>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-              child: Text(
-                'דיווח על טעות בספר',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-            ),
+            _buildHeader(context),
+            const Divider(height: 1),
             TabBar(
               controller: _tabController,
               splashBorderRadius: AppTokens.borderRadiusAll,
@@ -1241,6 +1237,18 @@ class _TabbedReportDialogState extends State<TabbedReportDialog>
           ],
         ),
       ),
+    );
+  }
+
+  /// כותרת בצורת כותרת [AppReportDialog]: אייקון מסומל, שם הטופס ואיפה
+  /// מדווחים.
+  Widget _buildHeader(BuildContext context) {
+    return AppDialogHeader(
+      icon: OtzariaIcons.book_exclamation_24_regular,
+      title: 'דיווח על טעות בספר',
+      subtitle: widget.bookTitle,
+      subtitleMaxLines: 1,
+      compact: true,
     );
   }
 
@@ -1299,9 +1307,9 @@ class _TabbedReportDialogState extends State<TabbedReportDialog>
               ),
             ),
             const SizedBox(height: 24),
-            ElevatedButton(
+            ActionButton.neutral(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('סגור'),
+              text: 'סגור',
             ),
           ],
         ),
@@ -1569,7 +1577,6 @@ class _RegularReportTabState extends State<RegularReportTab> {
                     autofocus: !_isCorrection,
                     decoration: InputDecoration(
                       isDense: true,
-                      border: const OutlineInputBorder(),
                       labelText: _isCorrection
                           ? 'הסבר לתיקון (רשות)'
                           : 'פירוט הטעות (חובה)',

@@ -71,6 +71,12 @@ abstract class CommonMessages {
   // ── ניווט ───────────────────────────────────────────────────────────────
   static const String pressBackAgainToExit = 'לחץ שוב על חזרה ליציאה';
 
+  // ── מצבי תצוגה (שגיאה / אין נתונים) ─────────────────────────────────────
+  static const String loadFailed = 'אירעה שגיאה בטעינה';
+  static const String noLibraryData = 'אין נתוני ספרייה להצגה';
+  static const String unexpectedState = 'התרחש מצב לא צפוי';
+  static const String pdfLoadFailed = 'טעינת קובץ ה-PDF נכשלה';
+
   // ── קיצורי מקשים ────────────────────────────────────────────────────────
   static const String shortcutRequired = 'יש לבחור קיצור';
 

@@ -1,3 +1,5 @@
+import 'package:otzaria/core/messages/common_messages.dart';
+import 'package:otzaria/widgets/feedback/otzaria_error_state.dart';
 import 'package:flutter/material.dart';
 import 'package:otzaria_icons/otzaria_icons.dart';
 import 'package:otzaria/search/search_query_builder.dart';
@@ -220,7 +222,10 @@ class _HistoryViewState extends State<HistoryView> {
         }
 
         if (state is HistoryError) {
-          return Center(child: Text('Error: ${state.message}'));
+          return OtzariaErrorState(
+            title: CommonMessages.loadFailed,
+            details: state.message,
+          );
         }
 
         final workspaceNames = _workspaceNames(state.history);
@@ -243,32 +248,16 @@ class _HistoryViewState extends State<HistoryView> {
                     spacing: 6,
                     children: workspaceNames.map((name) {
                       final selected = effectiveSelectedWorkspace == name;
-                      final cs = Theme.of(context).colorScheme;
                       return FilterChip(
-                        label: Text(
-                          name,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: selected
-                                ? cs.onPrimary
-                                : cs.onSurfaceVariant,
-                          ),
-                        ),
+                        label: Text(name),
                         selected: selected,
+                        visualDensity: VisualDensity.compact,
                         onSelected: (_) {
                           setState(() {
                             _selectedWorkspace = selected ? null : name;
                           });
                           _searchFocusNode.requestFocus();
                         },
-                        selectedColor: cs.primary,
-                        backgroundColor: cs.surfaceContainerHighest,
-                        checkmarkColor: cs.onPrimary,
-                        side: BorderSide.none,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 0,
-                        ),
                       );
                     }).toList(),
                   ),

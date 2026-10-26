@@ -107,7 +107,6 @@ class FontDropdownField extends StatelessWidget {
       decoration:
           decoration ??
           const InputDecoration(
-            border: OutlineInputBorder(),
           ),
       entries: fontEntries,
       filterLabels: [context.settingsText('הכל'), 'Serif', 'Sans'],

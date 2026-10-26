@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:otzaria/widgets/controls/action_buttons.dart';
 import 'package:otzaria/theme/app_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
@@ -95,10 +96,10 @@ class _ErrorBoundaryState extends State<ErrorBoundary> {
                 mainAxisAlignment: MainAxisAlignment.center, // ממורכז אנכית
                 crossAxisAlignment: CrossAxisAlignment.center, // ממורכז אופקית
                 children: [
-                  const Icon(
+                  Icon(
                     FluentIcons.error_circle_24_regular,
                     size: 64,
-                    color: Colors.redAccent,
+                    color: Theme.of(context).colorScheme.error,
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -121,16 +122,13 @@ class _ErrorBoundaryState extends State<ErrorBoundary> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       if (error.isRecoverable)
-                        ElevatedButton.icon(
-                          icon: const Icon(FluentIcons.arrow_sync_24_regular),
+                        ActionButton.recommended(
+                          icon: FluentIcons.arrow_sync_24_regular,
                           onPressed: _retry,
-                          label: const Text('נסה שוב'),
+                          text: 'נסה שוב',
                         ),
                       if (error.isRecoverable) const SizedBox(width: 16),
-                      OutlinedButton(
-                        onPressed: _reset,
-                        child: const Text('איפוס'),
-                      ),
+                      ActionButton.neutral(onPressed: _reset, text: 'איפוס'),
                     ],
                   ),
                   const SizedBox(height: 16),

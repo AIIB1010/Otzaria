@@ -131,6 +131,11 @@ class AppThemeData {
         backgroundColor: cs.surfaceContainerHigh,
         shape: AppTokens.roundedShape,
       ),
+      // שדות טקסט: מסגרת מלאה בכל האפליקציה (בלי זה שדה ללא border מפורש
+      // מצויר כקו תחתון), ובאותו רדיוס כמו שאר הרכיבים.
+      inputDecorationTheme: const InputDecorationTheme(
+        border: OutlineInputBorder(borderRadius: AppTokens.borderRadiusAll),
+      ),
     );
   }
 
@@ -214,7 +219,7 @@ class AppThemeData {
         color: cs.onSurface,
       ),
       inputDecorationTheme: const InputDecorationTheme(
-        border: OutlineInputBorder(),
+        border: OutlineInputBorder(borderRadius: AppTokens.borderRadiusAll),
         isDense: true,
       ),
       menuStyle: _menuStyle(_menuBackground(cs), metrics),

@@ -16,6 +16,9 @@ class OtzariaEmptyState extends StatelessWidget {
   final Widget? customIcon;
   final String title;
   final String? message;
+
+  /// תוכן חופשי בין ההודעה לכפתורים (למשל תיבת פירוט או רשימת צעדים).
+  final Widget? body;
   final Widget? action;
   final List<Widget>? actions;
   final bool isCompact;
@@ -33,6 +36,7 @@ class OtzariaEmptyState extends StatelessWidget {
     this.customIcon,
     required this.title,
     this.message,
+    this.body,
     this.action,
     this.actions,
     this.isCompact = false,
@@ -119,6 +123,10 @@ class OtzariaEmptyState extends StatelessWidget {
             style: messageStyle,
             textAlign: TextAlign.center,
           ),
+        ],
+        if (body != null) ...[
+          SizedBox(height: isCompact ? AppTokens.spaceSM : AppTokens.spaceMD),
+          body!,
         ],
         if (effectiveActions != null && effectiveActions.isNotEmpty) ...[
           SizedBox(height: isCompact ? AppTokens.spaceMD : AppTokens.spaceLG),

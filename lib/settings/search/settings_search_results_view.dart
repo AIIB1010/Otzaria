@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:otzaria/theme/app_surfaces.dart';
 import 'package:otzaria/theme/app_tokens.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:otzaria_icons/otzaria_icons.dart';
@@ -87,13 +88,9 @@ class _SearchResultTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
-    final cardColor = isDark
-        ? colorScheme.surfaceContainer
-        : colorScheme.surface;
 
     return Material(
-      color: cardColor,
+      color: AppSurfaces.card(context),
       borderRadius: AppTokens.borderRadiusAll,
       clipBehavior: Clip.antiAlias,
       child: InkWell(

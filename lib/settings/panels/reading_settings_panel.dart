@@ -8,6 +8,7 @@ import 'package:otzaria/tabs/bloc/tabs_state.dart';
 import 'package:otzaria/tabs/models/text_tab.dart';
 import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
+import 'package:otzaria/widgets/dialogs/app_dialogs.dart';
 
 /// פאנל הגדרות תצוגת הספרים — משמש גם כ-overlay צף וגם כתוכן הדיאלוג
 /// ([showReadingSettingsDialog]). הגלילה מטופלת בתוך [TextSettingsTab].
@@ -59,24 +60,14 @@ void showReadingSettingsDialog() {
     context: dialogContext,
     builder: settingsDialogBuilder(
       dialogContext,
-      (context) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh,
-        title: Text(
-          context.settingsText('הגדרות תצוגת הספרים'),
-          style: const TextStyle(fontWeight: FontWeight.bold),
-          textAlign: TextAlign.center,
-        ),
-        content: SizedBox(
+      (context) => AppDialog.singleAction(
+        title: context.settingsText('הגדרות תצוגת הספרים'),
+        confirmText: context.settingsText('סגור'),
+        customContent: SizedBox(
           width: 650,
           height: MediaQuery.of(context).size.height * 0.7,
           child: const ReadingSettingsPanel(),
         ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(context.settingsText('סגור')),
-          ),
-        ],
       ),
     ),
   );

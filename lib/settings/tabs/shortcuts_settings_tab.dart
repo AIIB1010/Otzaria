@@ -1013,7 +1013,7 @@ class ShortcutsSettingsTab extends StatelessWidget {
                     text: context.settingsText('ערוך'),
                     onPressed: () => _editDynamicShortcut(context, shortcut),
                   ),
-                  ActionButton.ghost(
+                  ActionButton.warning(
                     text: context.settingsText('מחק'),
                     onPressed: () =>
                         DynamicShortcutRegistry.instance.remove(shortcut.id),
@@ -1223,7 +1223,7 @@ class _ShortcutTile extends StatelessWidget {
 /// הקומפוננטות הקנוניות ב-`app_dialogs.dart` (SingleActionDialog וכו') בנויות
 /// סביב כפתור confirm/cancel — לא מתאימות ל-picker שבו כל פריט הוא הפעולה
 /// עצמה. במקום זאת אנחנו מיישרים קו עם אותו AlertDialog + צבעי המשטח
-/// (`surfaceContainerHigh`) ואותם סגנונות לכפתורי הביטול (FilledButton.tonal).
+/// (`surfaceContainerHigh`) ואותו כפתור ביטול ([ActionButton.neutral]).
 class _PickActionDialog extends StatelessWidget {
   final List<String> actionKeys;
 
@@ -1253,13 +1253,9 @@ class _PickActionDialog extends StatelessWidget {
         ),
       ),
       actions: [
-        FilledButton.tonal(
+        ActionButton.neutral(
+          text: context.settingsText('ביטול'),
           onPressed: () => Navigator.of(context).pop(),
-          style: FilledButton.styleFrom(
-            backgroundColor: cs.secondaryContainer,
-            foregroundColor: cs.onSecondaryContainer,
-          ),
-          child: Text(context.settingsText('ביטול')),
         ),
       ],
     );

@@ -142,7 +142,6 @@ class _PageNumberDisplayState extends State<PageNumberDisplay> {
                   ),
                   isDense: true,
                   hintText: '1-$pageCount',
-                  border: const OutlineInputBorder(),
                 ),
                 onSubmitted: _handleSubmitted,
               ),

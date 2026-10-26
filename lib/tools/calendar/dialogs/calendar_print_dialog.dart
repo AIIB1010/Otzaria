@@ -1,4 +1,7 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:otzaria/theme/app_tokens.dart';
 import 'package:otzaria/tools/calendar/bloc/calendar_cubit.dart';
 import 'package:otzaria/widgets/controls/action_buttons.dart';
 import 'package:otzaria/widgets/misc/keyboard_dialog_navigation.dart';
@@ -41,13 +44,13 @@ class _CalendarPrintDialogState extends State<CalendarPrintDialog>
       backgroundColor: cs.surfaceContainerHigh,
       title: const Text('הגדרות הדפסה'),
       content: SizedBox(
-        width: 400,
+        width: math.min(400.0, MediaQuery.sizeOf(context).width - 112),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('בחר כמה $periodNamePlural להדפיס:'),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppTokens.spaceMD),
             Row(
               children: [
                 Expanded(
@@ -61,7 +64,7 @@ class _CalendarPrintDialogState extends State<CalendarPrintDialog>
                     onChanged: (v) => setState(() => _count = v.round()),
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: AppTokens.spaceMD),
                 SizedBox(
                   width: 100,
                   child: Text(
@@ -73,11 +76,11 @@ class _CalendarPrintDialogState extends State<CalendarPrintDialog>
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppTokens.spaceSM),
             Text(
               'טווח: ${_count == 1 ? periodName : '$_count $periodNamePlural'} החל מהתאריך הנוכחי',
               style: TextStyle(
-                fontSize: 12,
+                fontSize: AppTokens.fontSM,
                 color: cs.onSurfaceVariant,
               ),
             ),
