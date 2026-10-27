@@ -3530,7 +3530,7 @@ class DatabaseLibraryProvider implements LibraryProvider, LinkLinesProvider {
 
       final repo = await UserBooksDatabaseHolder.instance.repository;
 
-      late final List<Map<String, dynamic>> userBooks;
+      late List<Map<String, dynamic>> userBooks;
       late final List<Map<String, dynamic>> userCats;
       late final Map<int, String> userAuthors;
       late final List<UserBookVersionRecord> userVersions;
@@ -3556,6 +3556,7 @@ class DatabaseLibraryProvider implements LibraryProvider, LinkLinesProvider {
             ?_userBookVersionFromRow(row),
         ];
       });
+      userBooks = await resolveMovedFilePathsInBackground(userBooks);
 
       // הקריאה הצליחה — עכשיו בטוח לנקות ולבנות מחדש. מכאן והלאה הבנייה
       // פועלת על נתונים שכבר בזיכרון ואינה ניגשת ל-DB, כך שאם תיכשל בכל
@@ -3680,6 +3681,7 @@ class DatabaseLibraryProvider implements LibraryProvider, LinkLinesProvider {
           source: BookSource.user,
           idOverride: dbBook['id'] as int? ?? 0,
           categoryIdOverride: personalRootId,
+          remapMovedPath: false,
         );
         if (book == null) continue;
         _registerUserBook(book, directBooksParent);
@@ -3754,6 +3756,7 @@ class DatabaseLibraryProvider implements LibraryProvider, LinkLinesProvider {
             source: BookSource.user,
             idOverride: dbBook['id'] as int? ?? 0,
             categoryIdOverride: pickedFolder.id,
+            remapMovedPath: false,
           );
           if (book == null) continue;
           looseBooksParent.books.add(book);
@@ -4232,6 +4235,7 @@ class DatabaseLibraryProvider implements LibraryProvider, LinkLinesProvider {
         source: BookSource.user,
         idOverride: dbBook['id'] as int? ?? 0,
         categoryIdOverride: nativeCategoryId,
+        remapMovedPath: false,
       );
       if (book == null) continue;
       _registerUserBook(book, category);
@@ -4368,6 +4372,36 @@ class DatabaseLibraryProvider implements LibraryProvider, LinkLinesProvider {
           .join(', ');
     }
     return (categoryPath: categoryPath, topics: topics);
+  }
+
+  /// [resolveMovedFileBookPath] לכל שורה, ב-isolate: בדיקת קובץ סינכרונית לכל
+  /// ספר אישי חסמה את ה-UI בבניית העץ (#3380).
+  @visibleForTesting
+  static Future<List<Map<String, dynamic>>> resolveMovedFilePathsInBackground(
+    List<Map<String, dynamic>> rows,
+  ) async {
+    final paths = [
+      for (final row in rows)
+        if (row['filePath'] case final String path) path,
+    ];
+    if (paths.isEmpty) return rows;
+    final libraryPath =
+        Settings.getValue<String>(SettingsRepository.keyLibraryPath) ?? '';
+    final resolved = await Isolate.run(
+      () => [
+        for (final path in paths)
+          resolveMovedFileBookPath(path, activeLibraryPath: libraryPath),
+      ],
+      debugName: 'resolveMovedFilePaths',
+    );
+    var next = 0;
+    return [
+      for (final row in rows)
+        if (row['filePath'] is String)
+          {...row, 'filePath': resolved[next++]}
+        else
+          row,
+    ];
   }
 
   @visibleForTesting

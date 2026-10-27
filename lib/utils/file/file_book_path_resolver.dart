@@ -5,11 +5,14 @@ import 'package:otzaria/data/constants/database_constants.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
 import 'package:path/path.dart' as p;
 
-String resolveMovedFileBookPath(String filePath) {
+/// [activeLibraryPath] נדרש מחוץ ל-isolate הראשי, שם אין גישה להגדרות.
+String resolveMovedFileBookPath(String filePath, {String? activeLibraryPath}) {
   if (File(filePath).existsSync()) return filePath;
 
   final libraryPath =
-      Settings.getValue<String>(SettingsRepository.keyLibraryPath) ?? '';
+      activeLibraryPath ??
+      Settings.getValue<String>(SettingsRepository.keyLibraryPath) ??
+      '';
   if (libraryPath.isEmpty) return filePath;
 
   final candidates = <String>{};
