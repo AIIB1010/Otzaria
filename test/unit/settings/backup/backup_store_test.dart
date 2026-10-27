@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/settings/services/backup/backup_maintenance.dart';
@@ -43,6 +45,28 @@ void main() {
     final ref2 = await store.putBytes(bytes);
     expect(ref1, ref2);
     expect(await blobFiles(), hasLength(1));
+  });
+
+  test('blob גדול אינו חוסם את לולאת האירועים (issue #3367)', () async {
+    // כמו readAsBytes של user_books.db; List<int> רגיל יקר להעתקה בין isolates.
+    final bytes = Uint8List(48 << 20);
+    for (var i = 0; i < bytes.length; i++) {
+      bytes[i] = (i * 2654435761) >> 13;
+    }
+    var longestGap = Duration.zero;
+    var last = DateTime.now();
+    final ticker = Timer.periodic(const Duration(milliseconds: 5), (_) {
+      final now = DateTime.now();
+      final gap = now.difference(last);
+      if (gap > longestGap) longestGap = gap;
+      last = now;
+    });
+    addTearDown(ticker.cancel);
+
+    final ref = await store.putBytes(bytes);
+    expect((await store.getBytes(ref))!.length, bytes.length);
+    ticker.cancel();
+    expect(longestGap, lessThan(const Duration(milliseconds: 400)));
   });
 
   test('getBytes מחזיר null על blob חסר או פגום', () async {
