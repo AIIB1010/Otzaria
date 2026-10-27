@@ -209,15 +209,16 @@ class AppFonts {
   /// רשימת כל הגופנים הזמינים לבחירה ב-UI.
   /// בדסקטופ: מתווספים גם גופנים שמותקנים במערכת.
   /// בשאר הפלטפורמות: נשארים עם הרשימה המובנית.
-  static List<FontInfo> get availableFonts {
-    final fonts = <FontInfo>[..._bundledFonts];
+  /// גופני המערכת מצטרפים רק אחרי [warmUpSystemFontsCache] — סריקה כאן חסמה
+  /// את ה-UI עשרות שניות בדיסק איטי (#3379).
+  static List<FontInfo> get availableFonts => [
+    ..._bundledFonts,
+    if (_supportsSystemFonts) ...?_systemFontsHebrewCache,
+  ];
 
-    if (_supportsSystemFonts) {
-      fonts.addAll(_getSystemFontsHebrewOnly());
-    }
-
-    return fonts;
-  }
+  /// האם [availableFonts] כבר כולל את גופני המערכת (או שאין כאלה בפלטפורמה).
+  static bool get systemFontsReady =>
+      !_supportsSystemFonts || _systemFontsHebrewCache != null;
 
   /// טעמי המקרא בטקסט המרונדר. תווי הניקוד (מ-U+05B0) אינם בטווח — גופן
   /// שאין בו טעמים בלבד ממשיך לשמש לטקסט מנוקד.
@@ -268,9 +269,7 @@ class AppFonts {
         : style.copyWith(fontFamily: family);
   }
 
-  /// טוען מראש לקאש את גופני המערכת התומכים בעברית, ברקע (compute isolate).
-  /// נועד למניעת קפיאת UI בכניסה הראשונה לטאב הגדרות "כתב",
-  /// שבו `availableFonts` נקרא ומריץ סריקת בינארי על מאות קבצי גופן.
+  /// סורק ברקע (compute isolate) את גופני המערכת התומכים בעברית לקאש.
   /// בטוח לקריאה מרובה — אם הקאש כבר חם או שכבר רצה משימת חימום, חוזר מיידית.
   static Future<void> warmUpSystemFontsCache() {
     if (_systemFontsHebrewCache != null) {
@@ -285,7 +284,7 @@ class AppFonts {
       final result = await compute(_scanSystemFonts, null);
       await Future.wait(_storeScan(result));
     } catch (_) {
-      // בלי תוצאת סריקה, availableFonts ינסה שוב במסלול הסינכרוני.
+      _warmUpFuture = null;
     }
   }
 
@@ -309,15 +308,6 @@ class AppFonts {
     }
     _earlySystemFamilies.clear();
     return completions;
-  }
-
-  static List<FontInfo> _getSystemFontsHebrewOnly() {
-    if (_systemFontsHebrewCache != null) {
-      return _systemFontsHebrewCache!;
-    }
-
-    _storeScan(_scanSystemFonts());
-    return _systemFontsHebrewCache!;
   }
 
   /// רץ גם ב-isolate נפרד דרך `compute`. עם [family]: רק הקבצים שמזכירים אותה.
