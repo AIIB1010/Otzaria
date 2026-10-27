@@ -202,7 +202,8 @@ class WebViewEnvironmentHolder {
   static bool get _isWindows => debugIsWindowsOverride ?? Platform.isWindows;
 
   static Future<void>? _prewarmInFlight;
-  static const Duration _prewarmWaitLimit = Duration(seconds: 30);
+  @visibleForTesting
+  static Duration prewarmWaitLimit = const Duration(seconds: 30);
 
   /// טוען את WebView2 לתהליך ב-thread רקע, כדי שיצירת הסביבה הראשונה לא תחסום
   /// את ה-UI (#3375). מחזיר false כשדולג: הסביבה כבר קיימת או שאין תוסף מופעל.
@@ -249,7 +250,13 @@ class WebViewEnvironmentHolder {
     final prewarm = _prewarmInFlight;
     if (prewarm == null) return;
     final waited = Stopwatch()..start();
-    await prewarm.timeout(_prewarmWaitLimit, onTimeout: () {});
+    await prewarm.timeout(
+      prewarmWaitLimit,
+      // תשובה נייטיבית שלא הגיעה לא תעכב שוב כל ניסיון אתחול.
+      onTimeout: () {
+        if (identical(_prewarmInFlight, prewarm)) _prewarmInFlight = null;
+      },
+    );
     WebView2CreationDiagnostics.prewarmOutcome =
         '${WebView2CreationDiagnostics.prewarmOutcome ?? 'pending'}; '
         'initialize waited ${waited.elapsedMilliseconds}ms';

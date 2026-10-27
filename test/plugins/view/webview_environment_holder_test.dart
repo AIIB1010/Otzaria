@@ -68,6 +68,7 @@ void main() {
       WebViewEnvironmentHolder.debugIsWindowsOverride = null;
       WebViewEnvironmentHolder.debugClearUnwritableDataFolder();
       WebViewEnvironmentHolder.debugOverridePrewarm(null);
+      WebViewEnvironmentHolder.prewarmWaitLimit = const Duration(seconds: 30);
       WebView2CreationDiagnostics.debugReset();
       AppPaths.debugOverrideDataRootPath(null);
       await dataRoot.delete(recursive: true);
@@ -135,6 +136,35 @@ void main() {
         WebView2CreationDiagnostics.prewarmOutcome,
         contains('initialize waited'),
       );
+    });
+
+    test('a prewarm that never answers delays only one initialize', () async {
+      pendingPrewarm = Completer();
+      WebViewEnvironmentHolder.prewarmWaitLimit = const Duration(
+        milliseconds: 20,
+      );
+      unawaited(
+        WebViewEnvironmentHolder.prewarm(hasEnabledPlugin: () async => true),
+      );
+      await pumpEventQueue();
+      expect(calls, hasLength(1));
+
+      await WebViewEnvironmentHolder.initialize();
+      expect(fakeEnvironment.creates, 1);
+      await WebViewEnvironmentHolder.disposeForAppRestart();
+
+      WebViewEnvironmentHolder.prewarmWaitLimit = const Duration(seconds: 30);
+      await WebViewEnvironmentHolder.initialize().timeout(
+        const Duration(seconds: 5),
+      );
+      expect(fakeEnvironment.creates, 2);
+      expect(
+        'initialize waited'
+            .allMatches(WebView2CreationDiagnostics.prewarmOutcome!)
+            .length,
+        1,
+      );
+      pendingPrewarm!.complete(_okResult);
     });
   });
 
