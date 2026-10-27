@@ -12,6 +12,10 @@ import 'package:otzaria/widgets/widgets_exports.dart';
 import 'package:otzaria/widgets/misc/app_menu_exports.dart';
 import 'package:otzaria/widgets/misc/app_selection_area.dart';
 
+/// כמה צירופים ארמיים שרק *מכילים* את המילה המסומנת מוצגים בתפריט. מילה שכיחה
+/// ("ליה", "לא") מופיעה במאות צירופים, ותפריט כזה אינו שמיש.
+const int _maxContainingAramaicMatches = 8;
+
 /// בונה פריטי תפריט הקשר למילונים על סמך הטקסט המסומן.
 List<AppContextMenuEntry> buildDictionaryContextMenuEntries({
   required BuildContext context,
@@ -42,7 +46,10 @@ List<AppContextMenuEntry> buildDictionaryContextMenuEntries({
   }
 
   if (repository.areAramaicLoaded) {
-    final aramaicMatches = repository.findAramaicMatches(trimmed);
+    final aramaicMatches = repository.findAramaicMatches(
+      trimmed,
+      maxContainingMatches: _maxContainingAramaicMatches,
+    );
     if (aramaicMatches.isNotEmpty) {
       entries.add(
         AppContextMenuEntry(
