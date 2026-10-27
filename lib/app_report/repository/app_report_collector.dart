@@ -16,6 +16,7 @@ import 'package:otzaria/core/info/info_topic.dart';
 import 'package:otzaria/core/info/os_version.dart';
 import 'package:otzaria/core/startup_timeline.dart';
 import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
+import 'package:otzaria/plugins/services/webview2_creation_diagnostics.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
 import 'package:otzaria_report_contract/otzaria_report_contract.dart';
 import 'package:path/path.dart' as p;
@@ -235,6 +236,7 @@ class AppReportCollector {
   Map<String, dynamic> _stateInfo() {
     return {
       'portable': AppPaths.isPortable,
+      'webview2Prewarm': ?WebView2CreationDiagnostics.prewarmOutcome,
       if (Settings.isInitialized) ...{
         'offlineMode':
             Settings.getValue<bool>(SettingsRepository.keyOfflineMode) ?? false,
