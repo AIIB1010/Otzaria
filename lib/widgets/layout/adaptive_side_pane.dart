@@ -120,7 +120,11 @@ class _AdaptiveSidePaneState extends State<AdaptiveSidePane> {
   /// (גלילה, ענפים פתוחים ושדה חיפוש פתוח נשמרים).
   Widget get _paneContent => KeyedSubtree(
     key: _paneContentKey,
-    child: Focus(focusNode: _paneFocusNode, child: widget.paneContent),
+    child: Focus(
+      focusNode: _paneFocusNode,
+      includeSemantics: false,
+      child: widget.paneContent,
+    ),
   );
 
   static const double _kWideTopGap = 14;
@@ -326,9 +330,12 @@ class _AdaptiveSidePaneState extends State<AdaptiveSidePane> {
 
   @override
   Widget build(BuildContext context) {
+    // שני ה-Focus בקובץ בלי סמנטיקה: צומת עוטף שנוצר ומתמזג לפי התוכן מקריס
+    // את גשר הנגישות של Windows ב-reparent מקונן (issue #3336).
     return Focus(
       canRequestFocus: false,
       skipTraversal: true,
+      includeSemantics: false,
       onKeyEvent: _handleKey,
       child: _buildLayout(context),
     );
