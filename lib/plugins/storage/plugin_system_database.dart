@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:otzaria/data/sqlite/sqlite3_api.dart';
@@ -22,7 +23,20 @@ class PluginSystemDatabase {
   String? _storageMoveRequestId;
   Completer<void>? _storageMoveReleased;
 
+  final List<_KvWrite> _kvQueue = [];
+  Future<void>? _kvDrain;
+  Future<void>? _kvBatch;
+  String? _dbPath;
+
   Future<Database> get database async {
+    // קריאה וכתיבה על חיבור ה-UI רואות כל כתיבת KV שקדמה להן.
+    while (_kvDrain != null) {
+      await _kvDrain;
+    }
+    return _connection();
+  }
+
+  Future<Database> _connection() async {
     while (true) {
       final released = _storageMoveReleased;
       if (released != null) await released.future;
@@ -53,7 +67,7 @@ class PluginSystemDatabase {
   Database? get openDatabase => _database;
 
   Future<Database> _initDatabase() async {
-    final dbPath = await AppPaths.resolvePluginsDbPath();
+    final dbPath = _dbPath = await AppPaths.resolvePluginsDbPath();
     final db = openWritableDatabase(dbPath, 'PluginSystemDatabase');
     _createSchema(db);
     ensureSchemaUpgrades(db);
@@ -571,8 +585,7 @@ class PluginSystemDatabase {
     String key,
     String valueJson,
   ) async {
-    final db = await database;
-    db.execute(
+    return _enqueueKvWrite(
       'INSERT OR REPLACE INTO plugin_kv_store (plugin_id, namespace, key, value_json, updated_at) VALUES (?, ?, ?, ?, ?)',
       [pluginId, namespace, key, valueJson, DateTime.now().toIso8601String()],
     );
@@ -640,11 +653,74 @@ class PluginSystemDatabase {
     String namespace,
     String key,
   ) async {
-    final db = await database;
-    db.execute(
+    return _enqueueKvWrite(
       'DELETE FROM plugin_kv_store WHERE plugin_id = ? AND namespace = ? AND key = ?',
       [pluginId, namespace, key],
     );
+  }
+
+  /// כתיבת KV רצה ב-isolate עם חיבור משלו: SQLite סינכרוני, ונעילה של חלון
+  /// אחר או דיסק עמוס חסמו את ה-UI עד `busy_timeout` ויותר (#3378).
+  Future<void> _enqueueKvWrite(String sql, List<Object?> args) {
+    final write = _KvWrite(sql, args);
+    _kvQueue.add(write);
+    _kvDrain ??= _drainKvWrites();
+    return write.done.future;
+  }
+
+  Future<void> _drainKvWrites() async {
+    while (_kvQueue.isNotEmpty) {
+      final batch = List<_KvWrite>.of(_kvQueue);
+      _kvQueue.clear();
+      final batchDone = Completer<void>();
+      try {
+        await _connection();
+        _kvBatch = batchDone.future;
+        final path = _dbPath!;
+        final statements = [for (final w in batch) (w.sql, w.args)];
+        final errors = await Isolate.run(
+          () => _runKvWrites(path, statements),
+          debugName: 'PluginKvWrite',
+        );
+        for (var i = 0; i < batch.length; i++) {
+          final error = errors[i];
+          if (error == null) {
+            batch[i].done.complete();
+          } else {
+            batch[i].done.completeError(StateError(error));
+          }
+        }
+      } catch (error, stackTrace) {
+        for (final w in batch) {
+          if (!w.done.isCompleted) w.done.completeError(error, stackTrace);
+        }
+      } finally {
+        batchDone.complete();
+      }
+    }
+    _kvDrain = null;
+  }
+
+  static List<String?> _runKvWrites(
+    String path,
+    List<(String, List<Object?>)> statements,
+  ) {
+    final db = openSecondaryWritableConnection(path, 'PluginKvWrite');
+    try {
+      return [
+        for (final (sql, args) in statements)
+          () {
+            try {
+              db.execute(sql, args);
+              return null;
+            } catch (error) {
+              return '$error';
+            }
+          }(),
+      ];
+    } finally {
+      db.close();
+    }
   }
 
   Future<List<String>> listPluginKVKeys(
@@ -909,6 +985,8 @@ class PluginSystemDatabase {
 
   /// סוגר ומאפס את חיבור ה-DB כדי לאפשר החלפת תיקיית נתונים בזמן ריצה.
   Future<void> close() async {
+    // רק האצווה שבריצה: הבאה ממתינה לשחרור העברת האחסון ב-_connection.
+    await _kvBatch;
     final db = _database;
     if (db != null) closeWithCheckpoint(db);
     _database = null;
@@ -945,10 +1023,21 @@ class PluginSystemDatabase {
   /// מאפס סינכרונית את ה-singleton עבור בדיקות קיימות.
   @visibleForTesting
   void resetForTests() {
+    _kvQueue.clear();
+    _kvDrain = null;
+    _kvBatch = null;
     _database?.close();
     _database = null;
     _opening = null;
     _storageMoveRequestId = null;
     _storageMoveReleased = null;
   }
+}
+
+class _KvWrite {
+  _KvWrite(this.sql, this.args);
+
+  final String sql;
+  final List<Object?> args;
+  final Completer<void> done = Completer<void>();
 }
