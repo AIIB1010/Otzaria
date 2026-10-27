@@ -46,6 +46,7 @@ void main() {
     await Settings.init(cacheProvider: MemorySettingsCache());
     dir = Directory.systemTemp.createTempSync('workspace_integration_');
     database = UserStateDatabase.openAt('${dir.path}/state.db');
+    UserStateDatabase.debugWriteInline = true;
     store = UserStateListStore(database: database);
     repository = _ControlledWorkspaceRepository(
       store: store,
@@ -57,6 +58,7 @@ void main() {
   tearDown(() {
     store.dispose();
     database.close();
+    UserStateDatabase.debugWriteInline = false;
     dir.deleteSync(recursive: true);
   });
 

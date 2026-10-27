@@ -62,8 +62,8 @@ class TabsRepository {
   TabsRepository({this.sessions, WindowTabsSession? window})
     : window = window ?? WindowTabsSession.current;
 
-  /// השהיית הכתיבה של האינדקס הפעיל. זו הפעולה השכיחה ביותר, וכתיבת
-  /// SQLite סינכרונית על ה-UI — מעבר מהיר בין כרטיסיות מתמזג לכתיבה אחת.
+  /// השהיית הכתיבה של האינדקס הפעיל. זו הפעולה השכיחה ביותר — מעבר מהיר
+  /// בין כרטיסיות מתמזג לכתיבה אחת.
   static const Duration _indexDebounce = Duration(milliseconds: 300);
 
   /// מאגר הסשנים שכל המופעים ייפלו אליו; לבדיקות בלבד.

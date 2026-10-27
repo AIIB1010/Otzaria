@@ -1,3 +1,5 @@
+import 'dart:isolate';
+
 import 'package:flutter/foundation.dart';
 import 'package:otzaria/core/app_paths.dart';
 import 'package:otzaria/data/sqlite/sqlite3_api.dart';
@@ -7,7 +9,7 @@ import 'package:otzaria/migration/database/sqlite3_utils.dart';
 /// חלונות ותורי דיווח.
 ///
 /// חיבור אחד ב-isolate לכל החלונות (WAL); הנעילה של SQLite חשובה רק מול
-/// תהליך אחר (גיבוי, checkpoint).
+/// תהליך אחר (גיבוי, checkpoint) ומול [enqueueWrite], שכותב מחיבור משני.
 class UserStateDatabase {
   UserStateDatabase._();
 
@@ -16,8 +18,16 @@ class UserStateDatabase {
   /// גרסת הסכמה — מקודמים ב-[_migrateSchema] בכל שינוי.
   static const int _schemaVersion = 1;
 
+  /// כתיבה ב-isolate הנוכחי: FakeAsync של `testWidgets` אינו מקבל את התשובה
+  /// מ-`Isolate.run`, ובדיקות שמריצות את האפליקציה כולה היו נתקעות.
+  @visibleForTesting
+  static bool debugWriteInline = false;
+
   Database? _database;
   String? _pathOverride;
+  String? _path;
+  List<(String, List<Object?>)>? _openWriteBatch;
+  Future<void>? _writeTail;
 
   /// הפתיחה האחרונה יצרה את הקובץ — אין בו עדיין גרסת סכמה.
   bool get createdOnOpen => _createdOnOpen;
@@ -47,6 +57,7 @@ class UserStateDatabase {
   Database? get openDatabase => _database;
 
   Database _open(String path) {
+    _path = path;
     // ההמתנה חוסמת את ה-thread המשותף לכל החלונות, ולכן קצרה: היא עוזרת
     // רק מול תהליך אחר (גיבוי, checkpoint).
     final db = openWritableDatabase(
@@ -99,6 +110,67 @@ class UserStateDatabase {
     db.execute('PRAGMA user_version = $_schemaVersion');
   }
 
+  /// מריץ את [statements] בטרנזקציה ב-isolate, אחרי כל הכתיבות שקדמו להן.
+  /// כתיבה על ה-UI נתקעה עד 24 שניות בדיסק איטי (#3412). מה שמצטבר בינתיים —
+  /// באצווה אחת.
+  Future<void> enqueueWrite(List<(String, List<Object?>)> statements) {
+    if (_openWriteBatch case final open?) {
+      open.addAll(statements);
+      return _writeTail!;
+    }
+    final batch = _openWriteBatch = [...statements];
+    final tail = _writeTail = _runWriteBatch(_writeTail, batch);
+    _settled(tail).then((_) {
+      if (identical(_writeTail, tail)) _writeTail = null;
+    });
+    return tail;
+  }
+
+  /// מסתיים אחרי הכתיבות שכבר בתור, ולא ממתין לכתיבות שיתווספו אחריו.
+  Future<void> writesQueuedSoFar() async {
+    if (_writeTail case final tail?) await _settled(tail);
+  }
+
+  /// מנקז את כל הכתיבות, גם אלה שנכנסו בזמן הניקוז.
+  Future<void> flushWrites() async {
+    for (var tail = _writeTail; tail != null; tail = _writeTail) {
+      await _settled(tail);
+    }
+  }
+
+  Future<void> _runWriteBatch(
+    Future<void>? previous,
+    List<(String, List<Object?>)> batch,
+  ) async {
+    if (previous != null) await _settled(previous);
+    _openWriteBatch = null;
+    await database;
+    if (debugWriteInline) return _runWrites(_path!, batch);
+    await _writeInIsolate(_path!, batch);
+  }
+
+  // static: closure בתוך מתודת מופע הייתה לוכדת את this ונכשלת בשליחה.
+  static Future<void> _writeInIsolate(
+    String path,
+    List<(String, List<Object?>)> batch,
+  ) => Isolate.run(() => _runWrites(path, batch), debugName: 'UserStateWrite');
+
+  static void _runWrites(String path, List<(String, List<Object?>)> batch) {
+    final db = openSecondaryWritableConnection(path, 'UserStateWrite');
+    try {
+      withTransaction(db, () {
+        for (final (sql, args) in batch) {
+          db.execute(sql, args);
+        }
+      });
+    } finally {
+      db.close();
+    }
+  }
+
+  static Future<void> _settled(Future<void> future) =>
+      future.then((_) {}, onError: (_) {});
+
   /// סוגר את החיבור; הפתיחה הבאה דרך [database] תפתח מחדש.
   void close() {
     final db = _database;
@@ -111,6 +183,7 @@ class UserStateDatabase {
   /// ⚠️ פותח מיד ולא בעצלות: `TabsRepository.loadTabs` קורא סינכרונית
   /// מהמסד הפתוח, ואחרי `RestartWidget` הוא רץ לפני כל `await` אחר.
   Future<void> reopen() async {
+    await flushWrites();
     close();
     await database;
   }

@@ -34,14 +34,21 @@ class WindowSessionStore {
 
   final UserStateDatabase _database;
 
+  /// הכתיבות רצות ב-isolate ([UserStateDatabase.enqueueWrite]); כל קורא כאן
+  /// ממתין קודם לכתיבות שכבר בתור, כדי לא לראות מצב ישן ולא להידרס על ידן.
+  Future<Database> _afterQueuedWrites() async {
+    await _database.writesQueuedSoFar();
+    return _database.database;
+  }
+
   Future<void> save(
     int slot, {
     required String tabsJson,
     required int currentIndex,
-  }) async {
-    final db = await _database.database;
-    db.execute(
-      '''
+  }) {
+    return _database.enqueueWrite([
+      (
+        '''
       INSERT INTO window_sessions
         (slot, tabs_json, current_index, updated_at)
       VALUES (?, ?, ?, ?)
@@ -50,49 +57,54 @@ class WindowSessionStore {
         current_index = excluded.current_index,
         updated_at = excluded.updated_at
       ''',
-      [slot, tabsJson, currentIndex, _now()],
-    );
+        [slot, tabsJson, currentIndex, _now()],
+      ),
+    ]);
   }
 
   /// מעדכן רק את הכרטיסיה הנוכחית; אין שורה — אין מה לעדכן.
-  Future<void> saveCurrentIndex(int slot, int currentIndex) async {
-    final db = await _database.database;
-    db.execute(
-      'UPDATE window_sessions SET current_index = ?, updated_at = ? '
-      'WHERE slot = ?',
-      [currentIndex, _now(), slot],
-    );
+  Future<void> saveCurrentIndex(int slot, int currentIndex) {
+    return _database.enqueueWrite([
+      (
+        'UPDATE window_sessions SET current_index = ?, updated_at = ? '
+            'WHERE slot = ?',
+        [currentIndex, _now(), slot],
+      ),
+    ]);
   }
 
-  Future<void> saveActiveWorkspace(int slot, String? workspaceId) async {
-    final db = await _database.database;
-    _ensureRow(db, slot);
-    db.execute(
-      'UPDATE window_sessions SET active_workspace_id = ?, updated_at = ? '
-      'WHERE slot = ?',
-      [workspaceId, _now(), slot],
-    );
+  Future<void> saveActiveWorkspace(int slot, String? workspaceId) {
+    return _database.enqueueWrite([
+      _ensureRow(slot),
+      (
+        'UPDATE window_sessions SET active_workspace_id = ?, updated_at = ? '
+            'WHERE slot = ?',
+        [workspaceId, _now(), slot],
+      ),
+    ]);
   }
 
-  Future<void> saveBounds(int slot, String? boundsJson) async {
-    final db = await _database.database;
-    _ensureRow(db, slot);
-    db.execute(
-      'UPDATE window_sessions SET bounds_json = ?, updated_at = ? '
-      'WHERE slot = ?',
-      [boundsJson, _now(), slot],
-    );
+  Future<void> saveBounds(int slot, String? boundsJson) {
+    return _database.enqueueWrite([
+      _ensureRow(slot),
+      (
+        'UPDATE window_sessions SET bounds_json = ?, updated_at = ? '
+            'WHERE slot = ?',
+        [boundsJson, _now(), slot],
+      ),
+    ]);
   }
 
   Future<WindowSession?> load(int slot) async {
-    final db = await _database.database;
+    final db = await _afterQueuedWrites();
     return _loadIn(db, slot);
   }
 
   /// הסשן מהמסד **שכבר פתוח**, בלי await, ו-null כשטרם נפתח.
   ///
   /// ⚠️ קיים בשביל `TabsRepository.loadTabs`, שנקרא מבנאי של bloc ואינו
-  /// יכול להיות אסינכרוני. מחייב שהאתחול פתח את המסד לפני בניית ה-blocs.
+  /// יכול להיות אסינכרוני. מחייב שהאתחול פתח את המסד לפני בניית ה-blocs,
+  /// ושהכותב למשבצת המתין לכתיבה שלו (אין כאן המתנה לתור).
   WindowSession? loadOpened(int slot) {
     final db = _database.openDatabase;
     return db == null ? null : _loadIn(db, slot);
@@ -106,7 +118,7 @@ class WindowSessionStore {
   }
 
   Future<List<WindowSession>> loadAll() async {
-    final db = await _database.database;
+    final db = await _afterQueuedWrites();
     return db
         .select('SELECT * FROM window_sessions WHERE slot > 0 ORDER BY slot')
         .map(_fromRow)
@@ -117,7 +129,7 @@ class WindowSessionStore {
   /// אחת. הגבולות של סשן שנצרף עוברים למארח כשאין לו משלו. מחזיר את
   /// מספר הכרטיסיות שצורפו.
   Future<int> adoptInto(int host) async {
-    final db = await _database.database;
+    final db = await _afterQueuedWrites();
     var adopted = 0;
     _inTransaction(db, () {
       final sessions = db
@@ -162,7 +174,7 @@ class WindowSessionStore {
   /// הכרטיסיות של סשנים שאין להם מקום מצורפות למארח ולא נמחקות.
   /// מחזיר את המשבצות שקיבלו סשן, לפי הסדר.
   Future<List<int>> compactAround(int host, int maxSlot) async {
-    final db = await _database.database;
+    final db = await _afterQueuedWrites();
     final targets = <int>[];
     _inTransaction(db, () {
       final slots = db
@@ -239,19 +251,18 @@ class WindowSessionStore {
     }
   }
 
-  Future<void> delete(int slot) async {
-    final db = await _database.database;
-    db.execute('DELETE FROM window_sessions WHERE slot = ?', [slot]);
+  Future<void> delete(int slot) {
+    return _database.enqueueWrite([
+      ('DELETE FROM window_sessions WHERE slot = ?', [slot]),
+    ]);
   }
 
   /// שורה ריקה, כדי ששולחן/גבולות יישמרו גם לפני שנשמרו כרטיסיות.
-  void _ensureRow(Database db, int slot) {
-    db.execute(
-      'INSERT OR IGNORE INTO window_sessions '
-      '(slot, tabs_json, current_index, updated_at) VALUES (?, ?, ?, ?)',
-      [slot, '[]', 0, _now()],
-    );
-  }
+  static (String, List<Object?>) _ensureRow(int slot) => (
+    'INSERT OR IGNORE INTO window_sessions '
+        '(slot, tabs_json, current_index, updated_at) VALUES (?, ?, ?, ?)',
+    [slot, '[]', 0, _now()],
+  );
 
   static WindowSession _fromRow(Row row) => WindowSession(
     slot: row['slot'] as int,

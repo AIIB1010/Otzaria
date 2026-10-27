@@ -516,6 +516,12 @@ class AppWindowListener extends WindowListener {
     //     hive_ce שורד dirty shutdown מעיצוב (checksum על כל record).
     //     `PreCloseRegistry.runAll()` ב-step2 כבר flushed את ההיסטוריה.
     try {
+      // סשני החלונות נכתבים ב-isolate; בלי ההמתנה exit חותך את הכתיבה האחרונה.
+      await _runBestEffortShutdownStep(
+        'flushUserStateWrites',
+        UserStateDatabase.instance.flushWrites,
+        timeout: const Duration(seconds: 10),
+      );
       // אחרי ה-flush, שכותב ל-user_state.db — אחרת הוא היה פותח אותו מחדש.
       await _runBestEffortShutdownStep(
         'closeWritableDatabases',
