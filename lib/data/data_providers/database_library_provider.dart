@@ -4375,7 +4375,7 @@ class DatabaseLibraryProvider implements LibraryProvider, LinkLinesProvider {
   }
 
   /// [resolveMovedFileBookPath] לכל שורה, ב-isolate: בדיקת קובץ סינכרונית לכל
-  /// ספר אישי חסמה את ה-UI בבניית העץ (#3380).
+  /// ספר אישי חסמה את ה-UI בבניית העץ (#3380). בכשל — השורות כמות שהן.
   @visibleForTesting
   static Future<List<Map<String, dynamic>>> resolveMovedFilePathsInBackground(
     List<Map<String, dynamic>> rows,
@@ -4387,13 +4387,19 @@ class DatabaseLibraryProvider implements LibraryProvider, LinkLinesProvider {
     if (paths.isEmpty) return rows;
     final libraryPath =
         Settings.getValue<String>(SettingsRepository.keyLibraryPath) ?? '';
-    final resolved = await Isolate.run(
-      () => [
-        for (final path in paths)
-          resolveMovedFileBookPath(path, activeLibraryPath: libraryPath),
-      ],
-      debugName: 'resolveMovedFilePaths',
-    );
+    final List<String> resolved;
+    try {
+      resolved = await Isolate.run(
+        () => [
+          for (final path in paths)
+            resolveMovedFileBookPath(path, activeLibraryPath: libraryPath),
+        ],
+        debugName: 'resolveMovedFilePaths',
+      );
+    } catch (e) {
+      debugPrint('⚠️ resolveMovedFilePaths failed: $e');
+      return rows;
+    }
     var next = 0;
     return [
       for (final row in rows)
