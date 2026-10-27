@@ -294,6 +294,13 @@ class PluginRegistryRepository {
     return _db.getPluginPublishedRecords(pluginId);
   }
 
+  /// האם יש תוסף מופעל בסשן הזה (במצב בטוח — אף אחד).
+  Future<bool> hasEnabledPlugin() async {
+    await PluginSafeMode.ready;
+    if (PluginSafeMode.isActive) return false;
+    return _db.hasEnabledPlugin();
+  }
+
   /// מחזיר האם התוסף מופעל. null = לא נמצא (=treat as disabled).
   Future<bool> getIsEnabled(String pluginId) async {
     await PluginSafeMode.ready;

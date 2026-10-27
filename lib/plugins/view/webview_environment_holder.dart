@@ -175,6 +175,32 @@ class WebViewEnvironmentHolder {
     }
   }
 
+  static Future<void> Function(WebViewEnvironmentSettings settings)?
+  _prewarmOverride;
+
+  /// מחליף את הקריאה הנייטיבית של [prewarm] בבדיקות. העבר `null` לאיפוס.
+  @visibleForTesting
+  static void debugOverridePrewarm(
+    Future<void> Function(WebViewEnvironmentSettings settings)? override,
+  ) {
+    _prewarmOverride = override;
+  }
+
+  /// טוען את WebView2 לתהליך ב-thread רקע, כדי שיצירת הסביבה הראשונה לא תחסום
+  /// את ה-UI (#3375). מחזיר false כשדולג: הסביבה כבר קיימת או שאין תוסף מופעל.
+  static Future<bool> prewarm({
+    required Future<bool> Function() hasEnabledPlugin,
+  }) async {
+    if (_environment != null || _initializeFuture != null) return false;
+    if (!await hasEnabledPlugin()) return false;
+    final settings = _environmentSettings(
+      p.join(await AppPaths.getDataRootPath(), 'webview2'),
+    );
+    await (_prewarmOverride ??
+        (settings) => WebViewEnvironment.prewarm(settings: settings))(settings);
+    return true;
+  }
+
   static int _browserExitsLogged = 0;
   static const int _maxBrowserExitsLogged = 3;
 

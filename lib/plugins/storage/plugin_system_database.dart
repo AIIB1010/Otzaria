@@ -182,6 +182,12 @@ class PluginSystemDatabase {
     return maps.map((map) => InstalledPlugin.fromDbMap(map)).toList();
   }
 
+  Future<bool> hasEnabledPlugin() async => readHasEnabledPlugin(await database);
+
+  static bool readHasEnabledPlugin(Database db) => db
+      .select('SELECT 1 FROM plugin_installation WHERE enabled = 1 LIMIT 1')
+      .isNotEmpty;
+
   Future<InstalledPlugin?> getInstalledPlugin(String pluginId) async {
     final db = await database;
     final maps = db.select(

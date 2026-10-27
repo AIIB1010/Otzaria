@@ -134,6 +134,8 @@ dependencies:
   flutter_quill: ^11.6.0
   # הפורק Otzaria/flutter_inappwebview מתוחזק אצלנו (upstream אינו פעיל).
   # כל ה-overrides מוצמדים לאותו קומיט: ראש Otzaria/flutter_inappwebview#32.
+  # TODO: להצמיד לקומיט שכולל את Otzaria/flutter_inappwebview#PR-PREWARM
+  # (WebViewEnvironment.prewarm, #3375) — בלעדיו webview_environment_holder.dart אינו מתקמפל.
   flutter_inappwebview:
     git:
       url: https://github.com/Otzaria/flutter_inappwebview

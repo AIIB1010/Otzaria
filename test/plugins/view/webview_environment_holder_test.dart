@@ -1,6 +1,9 @@
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:otzaria/core/app_paths.dart';
 import 'package:otzaria/plugins/services/plugin_asset_scheme.dart';
 import 'package:otzaria/plugins/view/webview_environment_holder.dart';
+import 'package:path/path.dart' as p;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -27,6 +30,47 @@ void main() {
       await expectLater(
         WebViewEnvironmentHolder.isRuntimeAvailable(),
         completes,
+      );
+    });
+  });
+
+  group('WebViewEnvironmentHolder.prewarm', () {
+    late List<WebViewEnvironmentSettings> calls;
+    final dataRoot = p.join('C:', 'app-data');
+
+    setUp(() {
+      calls = [];
+      AppPaths.debugOverrideDataRootPath(dataRoot);
+      WebViewEnvironmentHolder.debugOverridePrewarm((settings) async {
+        calls.add(settings);
+      });
+    });
+
+    tearDown(() {
+      WebViewEnvironmentHolder.debugOverridePrewarm(null);
+      AppPaths.debugOverrideDataRootPath(null);
+    });
+
+    test('skips the native call when no plugin is enabled', () async {
+      final ran = await WebViewEnvironmentHolder.prewarm(
+        hasEnabledPlugin: () async => false,
+      );
+
+      expect(ran, isFalse);
+      expect(calls, isEmpty);
+    });
+
+    test('uses the settings of the real environment', () async {
+      final ran = await WebViewEnvironmentHolder.prewarm(
+        hasEnabledPlugin: () async => true,
+      );
+
+      expect(ran, isTrue);
+      expect(
+        calls.single.toMap(),
+        WebViewEnvironmentHolder.debugEnvironmentSettings(
+          p.join(dataRoot, 'webview2'),
+        ).toMap(),
       );
     });
   });
