@@ -23,16 +23,13 @@ class PluginSystemDatabase {
   String? _storageMoveRequestId;
   Completer<void>? _storageMoveReleased;
 
-  final List<_KvWrite> _kvQueue = [];
-  Future<void>? _kvDrain;
-  Future<void>? _kvBatch;
   String? _dbPath;
+  List<(String, List<Object?>)>? _openWriteBatch;
+  Future<void>? _writeTail;
 
   Future<Database> get database async {
-    // קריאה וכתיבה על חיבור ה-UI רואות כל כתיבת KV שקדמה להן.
-    while (_kvDrain != null) {
-      await _kvDrain;
-    }
+    // בלי כתיבה ממתינה אין await: מתחת ל-FakeAsync הוא לא היה מתקדם.
+    if (_writeTail case final tail?) await _settled(tail);
     return _connection();
   }
 
@@ -585,7 +582,7 @@ class PluginSystemDatabase {
     String key,
     String valueJson,
   ) async {
-    return _enqueueKvWrite(
+    return _enqueueWrite(
       'INSERT OR REPLACE INTO plugin_kv_store (plugin_id, namespace, key, value_json, updated_at) VALUES (?, ?, ?, ?, ?)',
       [pluginId, namespace, key, valueJson, DateTime.now().toIso8601String()],
     );
@@ -653,73 +650,62 @@ class PluginSystemDatabase {
     String namespace,
     String key,
   ) async {
-    return _enqueueKvWrite(
+    return _enqueueWrite(
       'DELETE FROM plugin_kv_store WHERE plugin_id = ? AND namespace = ? AND key = ?',
       [pluginId, namespace, key],
     );
   }
 
-  /// כתיבת KV רצה ב-isolate עם חיבור משלו: SQLite סינכרוני, ונעילה של חלון
-  /// אחר או דיסק עמוס חסמו את ה-UI עד `busy_timeout` ויותר (#3378).
-  Future<void> _enqueueKvWrite(String sql, List<Object?> args) {
-    final write = _KvWrite(sql, args);
-    _kvQueue.add(write);
-    _kvDrain ??= _drainKvWrites();
-    return write.done.future;
-  }
-
-  Future<void> _drainKvWrites() async {
-    while (_kvQueue.isNotEmpty) {
-      final batch = List<_KvWrite>.of(_kvQueue);
-      _kvQueue.clear();
-      final batchDone = Completer<void>();
-      try {
-        await _connection();
-        _kvBatch = batchDone.future;
-        final path = _dbPath!;
-        final statements = [for (final w in batch) (w.sql, w.args)];
-        final errors = await Isolate.run(
-          () => _runKvWrites(path, statements),
-          debugName: 'PluginKvWrite',
-        );
-        for (var i = 0; i < batch.length; i++) {
-          final error = errors[i];
-          if (error == null) {
-            batch[i].done.complete();
-          } else {
-            batch[i].done.completeError(StateError(error));
-          }
-        }
-      } catch (error, stackTrace) {
-        for (final w in batch) {
-          if (!w.done.isCompleted) w.done.completeError(error, stackTrace);
-        }
-      } finally {
-        batchDone.complete();
-      }
+  /// כתיבות שתוסף מפעיל רצות ב-isolate: נעילה של כותב אחר או דיסק עמוס חסמו
+  /// את ה-UI עד busy_timeout ויותר (#3378). כתיבות שמצטברות בינתיים — באצווה אחת.
+  Future<void> _enqueueWrite(String sql, List<Object?> args) {
+    if (_openWriteBatch case final open?) {
+      open.add((sql, args));
+      return _writeTail!;
     }
-    _kvDrain = null;
+    final batch = _openWriteBatch = [(sql, args)];
+    final tail = _writeTail = _runWriteBatch(_writeTail, batch);
+    _settled(tail).then((_) {
+      if (identical(_writeTail, tail)) _writeTail = null;
+    });
+    return tail;
   }
 
-  static List<String?> _runKvWrites(
+  Future<void> _runWriteBatch(
+    Future<void>? previous,
+    List<(String, List<Object?>)> batch,
+  ) async {
+    if (previous != null) await _settled(previous);
+    _openWriteBatch = null;
+    await _connection();
+    await _writeInIsolate(_dbPath!, batch);
+  }
+
+  // static: closure בתוך מתודת מופע הייתה לוכדת את this ונכשלת בשליחה.
+  static Future<void> _writeInIsolate(
     String path,
-    List<(String, List<Object?>)> statements,
-  ) {
-    final db = openSecondaryWritableConnection(path, 'PluginKvWrite');
+    List<(String, List<Object?>)> batch,
+  ) => Isolate.run(() => _runWrites(path, batch), debugName: 'PluginDbWrite');
+
+  static void _runWrites(String path, List<(String, List<Object?>)> batch) {
+    final db = openSecondaryWritableConnection(path, 'PluginDbWrite');
     try {
-      return [
-        for (final (sql, args) in statements)
-          () {
-            try {
-              db.execute(sql, args);
-              return null;
-            } catch (error) {
-              return '$error';
-            }
-          }(),
-      ];
+      withTransaction(db, () {
+        for (final (sql, args) in batch) {
+          db.execute(sql, args);
+        }
+      });
     } finally {
       db.close();
+    }
+  }
+
+  static Future<void> _settled(Future<void> future) =>
+      future.then((_) {}, onError: (_) {});
+
+  Future<void> _drainWrites() async {
+    for (var tail = _writeTail; tail != null; tail = _writeTail) {
+      await _settled(tail);
     }
   }
 
@@ -745,8 +731,7 @@ class PluginSystemDatabase {
     String payloadJson,
     String? expiresAt,
   ) async {
-    final db = await database;
-    db.execute(
+    return _enqueueWrite(
       '''
       INSERT OR REPLACE INTO plugin_published_record 
       (plugin_id, type, scope, record_key, payload_json, version, created_at, updated_at, expires_at) 
@@ -771,8 +756,7 @@ class PluginSystemDatabase {
     String scope,
     String recordKey,
   ) async {
-    final db = await database;
-    db.execute(
+    return _enqueueWrite(
       'DELETE FROM plugin_published_record WHERE plugin_id = ? AND type = ? AND scope = ? AND record_key = ?',
       [pluginId, type, scope, recordKey],
     );
@@ -826,8 +810,7 @@ class PluginSystemDatabase {
     // לוג ריצה הוא best-effort ונקרא fire-and-forget; אם פתיחת ה-DB נכשלת
     // אסור שהכישלון יבעבע ויפיל את הקורא (או ייהפך לשגיאה אסינכרונית לא-מטופלת).
     try {
-      final db = await database;
-      db.execute(
+      await _enqueueWrite(
         'INSERT INTO plugin_runtime_log (plugin_id, level, message, created_at) VALUES (?, ?, ?, ?)',
         [pluginId, level, message, DateTime.now().toIso8601String()],
       );
@@ -985,14 +968,16 @@ class PluginSystemDatabase {
 
   /// סוגר ומאפס את חיבור ה-DB כדי לאפשר החלפת תיקיית נתונים בזמן ריצה.
   Future<void> close() async {
-    // רק האצווה שבריצה: הבאה ממתינה לשחרור העברת האחסון ב-_connection.
-    await _kvBatch;
+    // בהעברת אחסון כתיבה חדשה ממתינה לשחרור ב-_connection; מה שקדם לנעילה
+    // כבר נכתב ב-lockForStorageMove.
+    if (_storageMoveRequestId == null) await _drainWrites();
     final db = _database;
     if (db != null) closeWithCheckpoint(db);
     _database = null;
   }
 
   Future<void> lockForStorageMove(String requestId) async {
+    await _drainWrites();
     if (_storageMoveRequestId != null && _storageMoveRequestId != requestId) {
       throw StateError('Plugin database is already locked for a storage move.');
     }
@@ -1023,21 +1008,12 @@ class PluginSystemDatabase {
   /// מאפס סינכרונית את ה-singleton עבור בדיקות קיימות.
   @visibleForTesting
   void resetForTests() {
-    _kvQueue.clear();
-    _kvDrain = null;
-    _kvBatch = null;
+    _openWriteBatch = null;
+    _writeTail = null;
     _database?.close();
     _database = null;
     _opening = null;
     _storageMoveRequestId = null;
     _storageMoveReleased = null;
   }
-}
-
-class _KvWrite {
-  _KvWrite(this.sql, this.args);
-
-  final String sql;
-  final List<Object?> args;
-  final Completer<void> done = Completer<void>();
 }
