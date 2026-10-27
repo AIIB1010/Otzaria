@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:archive/archive_io.dart';
@@ -88,12 +89,31 @@ class PluginFsService {
   ///
   /// זורקת [Exception] אם הקובץ ב-[zipPath] אינו קיים, אם החילוץ נכשל, או
   /// `error.too_large` אם הארכיון חורג מאחת התקרות.
-  Future<void> extractZip(String zipPath, String destFolder) async {
+  Future<void> extractZip(String zipPath, String destFolder) {
+    final maxEntries = this.maxEntries;
+    final maxUncompressedBytes = this.maxUncompressedBytes;
+    // הפענוח סינכרוני; על ה-isolate הראשי הוא תוקע את ה-UI (#3398).
+    return Isolate.run(
+      () => _extractZipSync(
+        zipPath,
+        destFolder,
+        maxEntries: maxEntries,
+        maxUncompressedBytes: maxUncompressedBytes,
+      ),
+    );
+  }
+
+  static void _extractZipSync(
+    String zipPath,
+    String destFolder, {
+    required int maxEntries,
+    required int maxUncompressedBytes,
+  }) {
     final zipFile = File(zipPath);
-    if (!await zipFile.exists()) {
+    if (!zipFile.existsSync()) {
       throw Exception('error.not_found: zip file does not exist');
     }
-    await Directory(destFolder).create(recursive: true);
+    Directory(destFolder).createSync(recursive: true);
 
     final realDest = Directory(destFolder).resolveSymbolicLinksSync();
     final input = InputFileStream(zipPath);
@@ -121,7 +141,7 @@ class PluginFsService {
         }
 
         if (file.isDirectory) {
-          await Directory(outPath).create(recursive: true);
+          Directory(outPath).createSync(recursive: true);
           continue;
         }
 
@@ -129,7 +149,7 @@ class PluginFsService {
         if (totalBytes + file.size > maxUncompressedBytes) {
           throw Exception('error.too_large: extracted size exceeds limit');
         }
-        await File(outPath).parent.create(recursive: true);
+        File(outPath).parent.createSync(recursive: true);
         // קובץ-symlink קיים ייכתב דרכו אל היעד שלו; מוחקים כדי לכתוב קובץ רגיל.
         if (FileSystemEntity.isLinkSync(outPath)) {
           Link(outPath).deleteSync();
@@ -138,7 +158,7 @@ class PluginFsService {
         try {
           file.writeContent(output);
         } finally {
-          await output.close();
+          output.closeSync();
         }
         // הגודל המוצהר עלול לשקר; סופרים את מה שנכתב בפועל ובודקים שוב.
         totalBytes += output.length;
@@ -147,7 +167,7 @@ class PluginFsService {
         }
       }
     } finally {
-      await input.close();
+      input.closeSync();
     }
   }
 
