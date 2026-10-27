@@ -3097,9 +3097,8 @@ class _SimpleTextViewerState extends State<SimpleTextViewer> {
       primaryLine: primaryLineIndex,
     );
 
-    final Widget gutterChild = AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeInOut,
+    // בלי אנימציה: טיקר לכל שורה הופך פירוק המוני של שורות לריבועי.
+    final Widget gutterChild = Container(
       decoration: BoxDecoration(color: backgroundColor),
       padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
       child: BlocBuilder<SettingsBloc, SettingsState>(

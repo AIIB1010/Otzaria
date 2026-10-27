@@ -4,10 +4,8 @@ import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart
 import 'package:otzaria/text_book/view/selection/enhanced_gesture_detector.dart';
 import 'package:positioned_sliver_list/positioned_list.dart';
 
-// רגרסיה לבאג "טקסט מוסתר נסגר מיד": ב-combined view, בחירת שורה (onSingleTap)
-// העבירה את ה-AnimatedContainer מ-decoration:null ל-BoxDecoration. Container
-// מוסיף DecoratedBox רק כשיש decoration, כך שהמעבר שינה את עומק ה-HtmlWidget
-// ב-tree, הרס את ה-Element שלו ואיפס את מצב ה-<details> הפתוח.
+// Container מוסיף DecoratedBox רק כשיש decoration: מעבר מ-null בבחירת שורה משנה
+// את עומק ה-HtmlWidget, הורס את ה-Element שלו ומאפס <details> פתוח.
 const _html =
     '<div dir="rtl">הטקסט שלפני כן <details><summary>הצג טקסט מוסתר</summary>'
     'PAYLOAD_VISIBLE</details> המשך הטקסט...</div>';
@@ -43,8 +41,7 @@ class _HarnessState extends State<_Harness> {
               return Column(
                 key: PageStorageKey('segment-$index'),
                 children: [
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
+                  Container(
                     decoration: decoration,
                     child: EnhancedGestureDetector(
                       behavior: HitTestBehavior.translucent,

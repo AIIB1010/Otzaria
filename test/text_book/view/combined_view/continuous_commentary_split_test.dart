@@ -192,11 +192,10 @@ void main() {
       expect(_selectionMarkers(), findsOneWidget);
       final selected = find.descendant(
         of: _selectionMarkers(),
-        matching: find.byType(AnimatedContainer),
+        matching: find.byType(Container),
       );
       expect(
-        (tester.widget<AnimatedContainer>(selected).decoration as BoxDecoration)
-            .color,
+        (tester.widget<Container>(selected).decoration as BoxDecoration).color,
         isNull,
       );
     });
@@ -215,7 +214,7 @@ void main() {
     final theme = Theme.of(tester.element(find.byType(SimpleTextViewer)));
     expect(
       tester
-          .widgetList<AnimatedContainer>(find.byType(AnimatedContainer))
+          .widgetList<Container>(find.byType(Container))
           .any(
             (container) =>
                 (container.decoration as BoxDecoration?)?.color ==
