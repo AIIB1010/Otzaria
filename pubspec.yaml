@@ -168,11 +168,11 @@ dependency_overrides:
       ref: 77e31035890167e782bccfd4982e0d1309f9e2e0
       path: flutter_local_notifications_windows
   # TODO: להחזיר ל-pub.dev כשיתמזג וישוחרר getsentry/sentry-dart#4094 (ה-backport ל-9.x בענף
-  # feat/9.x-nonblocking-native-init: sentry_init ב-isolate עזר ב-Windows).
+  # feat/9.x-nonblocking-native-init: טעינת sentry.dll ו-sentry_init ב-isolate עזר ב-Windows).
   sentry_flutter:
     git:
       url: https://github.com/Otzaria/sentry-dart
-      ref: e31f9068de53d0dd826d217e4dc7c8ccd7dd5261
+      ref: 0f5dabb3012a553d281fbda0f26645fcb002ed44
       path: packages/flutter
   # TODO: לחזור ל-pub.dev אחרי שחרור DavBfr/dart_pdf#1984, #1985, #1986, #1987, #1988, #1993, #1994, #1995, #1996
   # (הדפסה ב-Windows ב-thread נפרד, PDFium עצל ופרטי, השלמת עבודה שנכשלה ב-Linux, בעלי הדיאלוג בריבוי חלונות, בעלים מפורש לכל עבודה). קומיט שילוב.
