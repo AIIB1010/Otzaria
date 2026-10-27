@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/core/user_state/user_state_database.dart';
+import 'package:otzaria/core/user_state/user_state_list_store.dart';
 import 'package:otzaria/core/user_state/window_session_store.dart';
 import 'package:sqlite3/sqlite3.dart';
 
@@ -43,6 +44,36 @@ void main() {
 
       expect(tick.elapsedMilliseconds, lessThan(500));
       expect((await store.load(1))!.tabsJson, '[{"a":1}]');
+    },
+  );
+
+  test(
+    'כתיבת רשימה בזמן אצוות סשן ממתינה לה ואינה חוסמת את ה-isolate',
+    () async {
+      final lists = UserStateListStore(database: db);
+      addTearDown(lists.dispose);
+      final locker = sqlite3.open(path);
+      locker.execute('BEGIN IMMEDIATE');
+
+      var sessionDone = false;
+      final session = store
+          .save(1, tabsJson: '["x"]', currentIndex: 0)
+          .then((_) => sessionDone = true);
+      var listDoneAfterSession = false;
+      final list = lists
+          .write('history', 'items', ['a'])
+          .then((_) => listDoneAfterSession = sessionDone);
+      final tick = Stopwatch()..start();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      tick.stop();
+
+      locker.execute('COMMIT');
+      locker.close();
+      await Future.wait([session, list]);
+
+      expect(tick.elapsedMilliseconds, lessThan(500));
+      expect(listDoneAfterSession, isTrue);
+      expect(await lists.read('history', 'items'), ['a']);
     },
   );
 

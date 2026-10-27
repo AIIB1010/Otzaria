@@ -10,6 +10,7 @@ import 'package:path/path.dart' as p;
 import 'package:otzaria/core/app_paths.dart';
 import 'package:otzaria/settings/l10n/settings_l10n_exports.dart';
 import 'package:otzaria/core/app_runtime_reset.dart';
+import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/core/messages/settings_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/data/constants/database_constants.dart';
@@ -486,6 +487,7 @@ Future<void> performLibraryMove({
       await copyDirectoryEntries(oldIndex, stagedIndex);
     }
     if (databasesNeedsMove) {
+      await UserStateDatabase.instance.flushWrites();
       await copyDirectoryEntries(oldDatabases, stagedDatabases);
     }
     if (vectorsNeedsMove) {

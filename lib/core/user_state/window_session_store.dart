@@ -34,13 +34,6 @@ class WindowSessionStore {
 
   final UserStateDatabase _database;
 
-  /// הכתיבות רצות ב-isolate ([UserStateDatabase.enqueueWrite]); כל קורא כאן
-  /// ממתין קודם לכתיבות שכבר בתור, כדי לא לראות מצב ישן ולא להידרס על ידן.
-  Future<Database> _afterQueuedWrites() async {
-    await _database.writesQueuedSoFar();
-    return _database.database;
-  }
-
   Future<void> save(
     int slot, {
     required String tabsJson,
@@ -96,7 +89,7 @@ class WindowSessionStore {
   }
 
   Future<WindowSession?> load(int slot) async {
-    final db = await _afterQueuedWrites();
+    final db = await _database.database;
     return _loadIn(db, slot);
   }
 
@@ -118,7 +111,7 @@ class WindowSessionStore {
   }
 
   Future<List<WindowSession>> loadAll() async {
-    final db = await _afterQueuedWrites();
+    final db = await _database.database;
     return db
         .select('SELECT * FROM window_sessions WHERE slot > 0 ORDER BY slot')
         .map(_fromRow)
@@ -129,7 +122,7 @@ class WindowSessionStore {
   /// אחת. הגבולות של סשן שנצרף עוברים למארח כשאין לו משלו. מחזיר את
   /// מספר הכרטיסיות שצורפו.
   Future<int> adoptInto(int host) async {
-    final db = await _afterQueuedWrites();
+    final db = await _database.database;
     var adopted = 0;
     _inTransaction(db, () {
       final sessions = db
@@ -174,7 +167,7 @@ class WindowSessionStore {
   /// הכרטיסיות של סשנים שאין להם מקום מצורפות למארח ולא נמחקות.
   /// מחזיר את המשבצות שקיבלו סשן, לפי הסדר.
   Future<List<int>> compactAround(int host, int maxSlot) async {
-    final db = await _afterQueuedWrites();
+    final db = await _database.database;
     final targets = <int>[];
     _inTransaction(db, () {
       final slots = db

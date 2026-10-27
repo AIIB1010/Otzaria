@@ -44,8 +44,16 @@ class UserStateDatabase {
     _pathOverride = path;
   }
 
-  /// המסד הפתוח. הפתיחה עצלה וסינכרונית — כמו `PersonalNotesDatabase`.
+  /// המסד הפתוח, אחרי הכתיבות שכבר בתור: כתיבה על החיבור הזה בזמן שאצווה
+  /// נכתבת ב-isolate הייתה נחסמת על הנעילה שלה, על ה-UI.
   Future<Database> get database async {
+    // בלי כתיבה ממתינה אין await: מתחת ל-FakeAsync הוא לא היה מתקדם.
+    if (_writeTail case final tail?) await _settled(tail);
+    return _connection();
+  }
+
+  /// הפתיחה עצלה וסינכרונית — כמו `PersonalNotesDatabase`.
+  Future<Database> _connection() async {
     final open = _database;
     if (open != null) return open;
     final path =
@@ -110,9 +118,8 @@ class UserStateDatabase {
     db.execute('PRAGMA user_version = $_schemaVersion');
   }
 
-  /// מריץ את [statements] בטרנזקציה ב-isolate, אחרי כל הכתיבות שקדמו להן.
-  /// כתיבה על ה-UI נתקעה עד 24 שניות בדיסק איטי (#3412). מה שמצטבר בינתיים —
-  /// באצווה אחת.
+  /// מריץ את [statements] בטרנזקציה ב-isolate, אחרי הכתיבות שקדמו; מה
+  /// שמצטבר בינתיים — באצווה אחת.
   Future<void> enqueueWrite(List<(String, List<Object?>)> statements) {
     if (_openWriteBatch case final open?) {
       open.addAll(statements);
@@ -124,11 +131,6 @@ class UserStateDatabase {
       if (identical(_writeTail, tail)) _writeTail = null;
     });
     return tail;
-  }
-
-  /// מסתיים אחרי הכתיבות שכבר בתור, ולא ממתין לכתיבות שיתווספו אחריו.
-  Future<void> writesQueuedSoFar() async {
-    if (_writeTail case final tail?) await _settled(tail);
   }
 
   /// מנקז את כל הכתיבות, גם אלה שנכנסו בזמן הניקוז.
@@ -144,7 +146,7 @@ class UserStateDatabase {
   ) async {
     if (previous != null) await _settled(previous);
     _openWriteBatch = null;
-    await database;
+    await _connection();
     if (debugWriteInline) return _runWrites(_path!, batch);
     await _writeInIsolate(_path!, batch);
   }
