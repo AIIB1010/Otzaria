@@ -2,8 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 
-import 'package:archive/archive.dart'
-    show InputFileStream, OutputFileStream, ZipDecoder;
+import 'package:archive/archive.dart' show ZipDecoder;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -36,6 +35,7 @@ import 'package:otzaria/services/data_collection_service.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
 import 'package:otzaria/utils/file/disk_free_space.dart';
 import 'package:otzaria/utils/file/native_sha256.dart';
+import 'package:otzaria/utils/file/zip_entry_io.dart';
 import 'package:otzaria_search_engine/otzaria_search_engine.dart'
     show
         SemanticHighlightTarget,
@@ -1462,8 +1462,8 @@ Future<void> _unzipModelFile(
 ) async {
   final name = file.name;
   final size = file.size;
-  final extracted = await Isolate.run(() {
-    final input = InputFileStream(archive);
+  final extracted = await Isolate.run(() async {
+    final input = openZipInput(archive);
     try {
       final entries = ZipDecoder().decodeStream(input).files;
       if (entries.length != 1) return false;
@@ -1471,12 +1471,7 @@ Future<void> _unzipModelFile(
       if (!entry.isFile || entry.name != name || entry.size != size) {
         return false;
       }
-      final output = OutputFileStream(dest);
-      try {
-        entry.writeContent(output);
-      } finally {
-        output.closeSync();
-      }
+      await writeZipEntry(entry, dest);
       File(dest).openSync(mode: FileMode.append)
         ..flushSync()
         ..closeSync();

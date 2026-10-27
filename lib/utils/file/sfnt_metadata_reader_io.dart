@@ -128,7 +128,9 @@ Uint8List? readMetadataSync(String path) {
       compactOffsets[sourceOffset] = cursor;
       final end = tableEnds[sourceOffset]!;
       raf.setPositionSync(sourceOffset);
-      raf.readIntoSync(buffer, cursor, cursor + end - sourceOffset);
+      // readIntoSync מחזיק את החוצץ בזמן גישה לדיסק ומעכב GC בכל ה-isolates.
+      final table = raf.readSync(end - sourceOffset);
+      buffer.setRange(cursor, cursor + table.length, table);
       cursor += end - sourceOffset;
     }
     for (final face in faces) {
