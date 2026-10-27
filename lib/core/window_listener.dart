@@ -436,7 +436,11 @@ class AppWindowListener extends WindowListener {
       timeout: const Duration(seconds: 1),
     );
 
-    IndexingCrashCanary.current?.finish();
+    await _runBestEffortShutdownStep(
+      'finishIndexingCanary',
+      () async => IndexingCrashCanary.current?.finish(),
+      timeout: const Duration(seconds: 1),
+    );
 
     // סוגרים את כל ה-HTTP clients המתמשכים לפני כל ניקוי אחר. כל socket
     // פתוח מחזיק handle של kernel + state של TLS; ב-Windows admin install

@@ -28,11 +28,12 @@ void main() {
       expect(canary.begin('skipped'), isFalse);
       expect(canary.begin('prefetched'), isTrue);
       canary.committed({'skipped'});
+      await canary.flush();
       expect(jsonDecode(file.readAsStringSync()), {
         'unvisited': 2,
         'prefetched': 1,
       });
-      canary.finish();
+      await canary.finish();
       expect(jsonDecode(file.readAsStringSync()), {'unvisited': 2});
     },
   );
@@ -46,7 +47,7 @@ void main() {
         fail('ריצה ללא קריסה קודמת אינה צריכה לסרוק ספרים שוב');
       },
     );
-    IndexingCrashCanary.current!.finish();
+    await IndexingCrashCanary.current!.finish();
   });
 
   test('דילוג על ספר קורס נשמר גם כשספר נוסף מפיל את אותה אצווה', () async {
@@ -61,6 +62,7 @@ void main() {
     expect(canary.begin('a'), isFalse);
     canary.end('a');
     expect(canary.begin('b'), isTrue);
+    await canary.flush();
     expect(jsonDecode(file.readAsStringSync()), {'a': 2, 'b': 2});
   });
 
@@ -78,32 +80,37 @@ void main() {
       // אצווה שנכשלה, ואחריה המסלול ספר-ספר על אותו ספר.
       expect(canary.begin('a'), isTrue);
       expect(canary.begin('a'), isTrue);
+      await canary.flush();
       expect(jsonDecode(file.readAsStringSync()), {'a': 2});
       canary.end('a');
+      await canary.flush();
       expect(jsonDecode(file.readAsStringSync()), isEmpty);
     },
   );
 
-  test('אצווה נכתבת לדיסק פעם אחת ב-flush ולא לכל ספר (issue #3330)', () async {
-    final temp = await Directory.systemTemp.createTemp('canary_save_');
-    addTearDown(() => temp.delete(recursive: true));
-    final index = p.join(temp.path, 'index');
-    final file = File('$index.in_flight.json');
-    IndexingCrashCanary.start(index);
-    final canary = IndexingCrashCanary.current!;
-    addTearDown(canary.finish);
+  test(
+    'שינויים נכתבים אסינכרונית, ושינויים רצופים בכתיבה אחת (#3330)',
+    () async {
+      final temp = await Directory.systemTemp.createTemp('canary_save_');
+      addTearDown(() => temp.delete(recursive: true));
+      final index = p.join(temp.path, 'index');
+      final file = File('$index.in_flight.json');
+      IndexingCrashCanary.start(index);
+      final canary = IndexingCrashCanary.current!;
+      addTearDown(canary.finish);
 
-    expect(canary.begin('a', save: false), isTrue);
-    expect(canary.begin('b', save: false), isTrue);
-    expect(file.existsSync(), isFalse);
-    canary.flush();
-    expect(jsonDecode(file.readAsStringSync()), {'a': 1, 'b': 1});
+      expect(canary.begin('a'), isTrue);
+      expect(canary.begin('b'), isTrue);
+      expect(file.existsSync(), isFalse);
+      await canary.flush();
+      expect(jsonDecode(file.readAsStringSync()), {'a': 1, 'b': 1});
 
-    canary.end('a', save: false);
-    expect(jsonDecode(file.readAsStringSync()), {'a': 1, 'b': 1});
-    canary.flush();
-    expect(jsonDecode(file.readAsStringSync()), {'b': 1});
-  });
+      canary.end('a');
+      expect(jsonDecode(file.readAsStringSync()), {'a': 1, 'b': 1});
+      await canary.flush();
+      expect(jsonDecode(file.readAsStringSync()), {'b': 1});
+    },
+  );
 
   test('ספר שבטיסה בסגירה מסודרת אינו נספר כקריסה (issue #2038)', () async {
     final tempDir = await Directory.systemTemp.createTemp('canary_');
@@ -115,12 +122,12 @@ void main() {
     final canary = IndexingCrashCanary.current!;
     expect(canary.recovering, isTrue);
     expect(canary.begin('a'), isTrue);
-    canary.finish();
+    await canary.finish();
     expect(IndexingCrashCanary.current, isNull);
 
     IndexingCrashCanary.start(index);
     expect(IndexingCrashCanary.current!.recovering, isFalse);
-    IndexingCrashCanary.current!.finish();
+    await IndexingCrashCanary.current!.finish();
   });
 
   test(
@@ -138,7 +145,7 @@ void main() {
       final canary = IndexingCrashCanary.current!;
       expect(canary.begin(crashed), isTrue);
       canary.end(crashed);
-      canary.finish();
+      await canary.finish();
 
       expect(logged, hasLength(1));
       expect(logged.single, contains('Indexing crash detected'));
@@ -146,7 +153,7 @@ void main() {
       expect(logged.single, isNot(contains('deleted')));
 
       IndexingCrashCanary.start(index);
-      IndexingCrashCanary.current!.finish();
+      await IndexingCrashCanary.current!.finish();
       expect(logged, hasLength(1), reason: 'ריצה בריאה אינה רושמת קריסה');
     },
   );
