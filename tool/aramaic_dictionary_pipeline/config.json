@@ -1,0 +1,28 @@
+{
+  "_comment": "ברירות מחדל. נתיבים מקומיים (PDF, תיקיית עבודה) נקבעים ב-config.local.json שאינו נכנס ל-git, או במשתני סביבה ARAMAIC_PIPELINE_*.",
+  "otzaria_repo": "../..",
+  "dictionary_asset": "assets/dictionary.json",
+  "target_dictionary": "מילון פשיטא",
+  "work_dir": "work",
+  "sources": {
+    "siftey_gitin": {
+      "label": "שפתי גיטין",
+      "author": "הרב יצחק אביקסיס",
+      "pdf": "",
+      "url": "https://daf-yomi.com/BookFiles.aspx?type=1&id=635",
+      "masechet": "גיטין"
+    },
+    "siftey_brachot": {
+      "label": "שפתי ברכות",
+      "author": "הרב יצחק אביקסיס",
+      "pdf": "",
+      "url": "https://daf-yomi.com/BookFiles.aspx?type=1&id=634",
+      "masechet": "ברכות"
+    },
+    "wiktionary": {
+      "label": "ויקימילון",
+      "api": "https://he.wiktionary.org/w/api.php",
+      "category": "קטגוריה:ערכים בשפה הארמית"
+    }
+  }
+}

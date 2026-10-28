@@ -589,7 +589,15 @@ class DictionaryLookupRepository {
 
   /// מחזיר את כל הביטויים הארמיים המכילים את המילה שנבחרה,
   /// אבל רק אם קיימת התאמה מילונית מדויקת למילה עצמה.
-  List<AramaicDictionaryEntry> findAramaicMatches(String raw) {
+  ///
+  /// התאמות מדויקות מוחזרות תמיד במלואן. [maxContainingMatches] מגביל רק את
+  /// הצירופים שמכילים את המילה בתוכם (תפריט הקשר על מילה שכיחה כמו "ליה" היה
+  /// מציג מאות שורות); כשיש יותר ממנו נשארים הקצרים ביותר, בסדר המילון.
+  List<AramaicDictionaryEntry> findAramaicMatches(
+    String raw, {
+    int? maxContainingMatches,
+  }) {
+    assert(maxContainingMatches == null || maxContainingMatches >= 0);
     final normalizedWord = _normalizeAramaic(raw);
     if (normalizedWord.isEmpty) return const <AramaicDictionaryEntry>[];
     if (!_aramaicTerms.contains(normalizedWord)) {
@@ -597,7 +605,7 @@ class DictionaryLookupRepository {
     }
 
     final exact = <AramaicDictionaryEntry>[];
-    final containsAsWord = <AramaicDictionaryEntry>[];
+    var containing = <int>[];
 
     for (var i = 0; i < _aramaicEntries.length; i++) {
       final indexed = _aramaicIndex[i];
@@ -607,13 +615,27 @@ class DictionaryLookupRepository {
       }
 
       if (indexed.words.contains(normalizedWord)) {
-        containsAsWord.add(_aramaicEntries[i]);
+        containing.add(i);
       }
+    }
+
+    if (maxContainingMatches != null &&
+        containing.length > maxContainingMatches) {
+      containing =
+          (containing..sort((a, b) {
+                final byLength = _aramaicIndex[a].words.length.compareTo(
+                  _aramaicIndex[b].words.length,
+                );
+                return byLength != 0 ? byLength : a.compareTo(b);
+              }))
+              .take(maxContainingMatches)
+              .toList()
+            ..sort();
     }
 
     return <AramaicDictionaryEntry>[
       ...exact,
-      ...containsAsWord,
+      for (final index in containing) _aramaicEntries[index],
     ];
   }
 

@@ -427,6 +427,57 @@ void main() {
     });
   });
 
+  group('findAramaicMatches (maxContainingMatches)', () {
+    late DictionaryLookupRepository repo;
+
+    setUp(() async {
+      repo = DictionaryLookupRepository(
+        loadAramaicEntries: () async => <AramaicDictionaryEntry>[
+          const AramaicDictionaryEntry(aramaic: 'ליה', hebrew: 'לו'),
+          // ארבע מילים — הארוך ביותר, לא ייבחר כשהתקרה נמוכה.
+          const AramaicDictionaryEntry(aramaic: 'א ב ג ליה', hebrew: 'ארוך'),
+          const AramaicDictionaryEntry(aramaic: 'בעי ליה', hebrew: 'צריך לו'),
+          const AramaicDictionaryEntry(aramaic: 'גמר ליה', hebrew: 'למד לו'),
+          const AramaicDictionaryEntry(aramaic: 'דבר ליה', hebrew: 'אמר לו'),
+        ],
+      );
+      await repo.ensureAramaicLoaded();
+    });
+
+    test('ללא תקרה מחזיר את כל הצירופים (התנהגות קודמת)', () {
+      expect(repo.findAramaicMatches('ליה'), hasLength(5));
+    });
+
+    test('התאמה מדויקת תמיד נשארת, והצירופים מוגבלים לקצרים ביותר', () {
+      final matches = repo.findAramaicMatches(
+        'ליה',
+        maxContainingMatches: 2,
+      );
+
+      expect(matches.map((e) => e.aramaic), <String>[
+        'ליה',
+        'בעי ליה',
+        'גמר ליה',
+      ]);
+    });
+
+    test('תקרה גבוהה מהמספר הקיים אינה משנה את התוצאה', () {
+      expect(
+        repo.findAramaicMatches('ליה', maxContainingMatches: 10),
+        hasLength(5),
+      );
+    });
+
+    test('תקרת אפס משאירה רק התאמה מדויקת', () {
+      expect(
+        repo
+            .findAramaicMatches('ליה', maxContainingMatches: 0)
+            .map((e) => e.aramaic),
+        <String>['ליה'],
+      );
+    });
+  });
+
   group('findAramaicMatches (perf)', () {
     test('חיפוש אינו מנרמל מחדש את ערכי המילון בכל קריאה', () async {
       final entries = [
