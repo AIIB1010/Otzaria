@@ -323,6 +323,12 @@ typedef _CommentaryScrollTarget = ({
 
 final _detailsTag = RegExp(r'<details\b', caseSensitive: false);
 
+/// שוליים משני צדי הפריטים: בימניים מצויר סמן הבחירה, והשמאליים שומרים על
+/// מרכוז עמודת הטקסט.
+const _selectionGutter = EdgeInsets.symmetric(
+  horizontal: kSelectionGutterWidth,
+);
+
 class _ChildBuilder extends StatelessWidget {
   const _ChildBuilder({required this.builder, required this.child});
 
@@ -2328,6 +2334,7 @@ class _CombinedViewState extends State<CombinedView> {
         child: _trackReadingScroll(
           _withReadingExtentEstimation(
             state,
+            crossAxisPadding: _selectionGutter.horizontal,
             builder: (estimateExtent, estimationKey, _) =>
                 ScrollablePositionedList.builder(
                   key: ValueKey((widget.tab, _textBookBloc)),
@@ -2342,6 +2349,7 @@ class _CombinedViewState extends State<CombinedView> {
                       : 0,
                   estimateExtent: estimateExtent,
                   estimationKey: estimationKey,
+                  padding: _selectionGutter,
                   itemScrollController: widget.tab.lines.itemController,
                   itemPositionsListener: widget.tab.lines.positionsListener,
                   scrollOffsetController: widget.tab.lines.offsetController,
@@ -2468,9 +2476,11 @@ class _CombinedViewState extends State<CombinedView> {
 
     // מרווח ברוחב המסילה בקצה הנגדי ממרכז את הטקסט; הוא בתוך הרשימה ולא
     // סביבה, כדי שטעם שבולט אחרי המילה האחרונה בשורה לא ייחתך בגבול שלה.
-    final padding = const EdgeInsetsDirectional.only(
-      end: ScrollablePositionedListScrollbar.trackWidth,
-    ).resolve(Directionality.of(context));
+    final padding =
+        const EdgeInsetsDirectional.only(
+          end: ScrollablePositionedListScrollbar.trackWidth,
+        ).resolve(Directionality.of(context)) +
+        _selectionGutter;
     // המצב ב-key מאלץ יצירת רשימה חדשה בהחלפת מצב רציף, כך שהפריים הראשון
     // כבר מצויר ב-initialScrollIndex הנכון — בלי הבזק של מיקום שגוי.
     final list = _withReadingExtentEstimation(
@@ -2901,12 +2911,14 @@ class _CombinedViewState extends State<CombinedView> {
       return ReaderLineGutter(
         color: color,
         selectedLines: selectedLines,
+        gutter: _selectionGutter.right,
         child: child,
       );
     }
-    // הטקסט מצויר מעל הסמן כדי שאותיות בקצה השורה לא יוסתרו.
     return CustomPaint(
-      painter: isSelected ? SelectionGutterPainter(color) : null,
+      painter: isSelected
+          ? SelectionGutterPainter(color, gutter: _selectionGutter.right)
+          : null,
       child: child,
     );
   }

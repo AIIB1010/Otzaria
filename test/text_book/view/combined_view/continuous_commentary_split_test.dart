@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
@@ -79,6 +80,7 @@ Future<_TestTextBookBloc> _pumpContinuousView(
   bool simple = false,
   bool isMainText = true,
   double textMaxWidth = -1,
+  double textScale = 1,
 }) async {
   final textBookBloc = _TestTextBookBloc(state);
   final personalNotesBloc = _TestPersonalNotesBloc(
@@ -98,6 +100,12 @@ Future<_TestTextBookBloc> _pumpContinuousView(
       locale: const Locale('he', 'IL'),
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
       supportedLocales: const [Locale('he', 'IL')],
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(
+          context,
+        ).copyWith(textScaler: TextScaler.linear(textScale)),
+        child: child!,
+      ),
       home: MultiBlocProvider(
         providers: [
           BlocProvider<TextBookBloc>.value(value: textBookBloc),
@@ -217,63 +225,96 @@ void main() {
     );
   });
 
-  testWidgets('קו הבחירה אינו מכסה דיו של אותיות בקצה פסקה רציפה', (
-    tester,
-  ) async {
-    final font = File('fonts/FrankRuehlCLM-Medium.ttf').readAsBytesSync();
-    final loader = FontLoader('FrankRuhlCLM')
-      ..addFont(Future.value(ByteData.sublistView(font)));
-    await loader.load();
-    Future<({int width, List<int> bytes})> pixels() async {
-      final boundary = tester.renderObject<RenderRepaintBoundary>(
-        find
-            .ancestor(
-              of: find.byType(ContinuousReadingParagraph),
-              matching: find.byType(RepaintBoundary),
-            )
-            .first,
-      );
-      return (await tester.runAsync(() async {
-        final image = await boundary.toImage();
-        final bytes = (await image.toByteData())!.buffer.asUint8List().toList();
-        final width = image.width;
-        image.dispose();
-        return (width: width, bytes: bytes);
-      }))!;
-    }
+  // issue #2554 — הקו צויר בתוך רוחב הטקסט, על האותיות שבקצה השורה.
+  for (final simple in [false, true]) {
+    for (final continuous in [false, true]) {
+      for (final textScale in [1.0, 2.0]) {
+        testWidgets(
+          'קו הבחירה מצויר בשוליים ולא על הטקסט (issue #2554), '
+          'צורת הדף=$simple, רציף=$continuous, הגדלה=$textScale',
+          (tester) async {
+            final font = File(
+              'fonts/FrankRuehlCLM-Medium.ttf',
+            ).readAsBytesSync();
+            final loader = FontLoader('FrankRuhlCLM')
+              ..addFont(Future.value(ByteData.sublistView(font)));
+            await loader.load();
+            Future<({int width, List<int> bytes})> pixels() async {
+              final boundary = tester.renderObject<RenderRepaintBoundary>(
+                find
+                    .ancestor(
+                      of: find.byType(Scaffold),
+                      matching: find.byType(RepaintBoundary),
+                    )
+                    .first,
+              );
+              return (await tester.runAsync(() async {
+                final image = await boundary.toImage();
+                final bytes = (await image.toByteData())!.buffer
+                    .asUint8List()
+                    .toList();
+                final width = image.width;
+                image.dispose();
+                return (width: width, bytes: bytes);
+              }))!;
+            }
 
-    await _pumpContinuousView(
-      tester,
-      _continuousState(linksByLine: const {}),
-      textMaxWidth: 0,
-    );
-    await tester.pump(const Duration(milliseconds: 100));
-    final before = await pixels();
-    await _pumpContinuousView(
-      tester,
-      _continuousState(selectedIndex: 1, linksByLine: const {}),
-      textMaxWidth: 0,
-    );
-    await tester.pump(const Duration(milliseconds: 100));
-    final after = await pixels();
-    expect(after.width, before.width);
-    var edgeInk = 0;
-    for (var i = 0; i < before.bytes.length; i += 4) {
-      if ((i ~/ 4) % before.width < before.width - 3) continue;
-      if (before.bytes[i] < 100 &&
-          before.bytes[i + 1] < 100 &&
-          before.bytes[i + 2] < 100 &&
-          before.bytes[i + 3] == 255) {
-        edgeInk++;
-        expect(after.bytes.sublist(i, i + 4), before.bytes.sublist(i, i + 4));
+            Future<({int width, List<int> bytes})> shot(int? selected) async {
+              await _pumpContinuousView(
+                tester,
+                _continuousState(
+                  selectedIndex: selected,
+                  linksByLine: const {},
+                ).copyWith(continuousReadingMode: continuous),
+                simple: simple,
+                textMaxWidth: 0,
+                textScale: textScale,
+              );
+              await tester.pump(const Duration(milliseconds: 300));
+              return pixels();
+            }
+
+            final before = await shot(null);
+            final after = await shot(1);
+            final primary = Theme.of(
+              tester.element(find.byType(Scaffold)),
+            ).colorScheme.primary;
+            final width = before.width;
+            final barRows = <int>{};
+            var barLeft = width;
+            for (var i = 0; i < after.bytes.length; i += 4) {
+              final isBar =
+                  (after.bytes[i] - (primary.r * 255).round()).abs() < 8 &&
+                  (after.bytes[i + 1] - (primary.g * 255).round()).abs() < 8 &&
+                  (after.bytes[i + 2] - (primary.b * 255).round()).abs() < 8;
+              if (!isBar || after.bytes[i] == before.bytes[i]) continue;
+              barRows.add((i ~/ 4) ~/ width);
+              barLeft = math.min(barLeft, (i ~/ 4) % width);
+            }
+            expect(barRows, isNotEmpty, reason: 'הקו חייב להיות מצויר');
+            var inkRight = -1;
+            for (final row in barRows) {
+              for (var x = 0; x < width; x++) {
+                final i = (row * width + x) * 4;
+                if (before.bytes[i] < 100 &&
+                    before.bytes[i + 1] < 100 &&
+                    before.bytes[i + 2] < 100 &&
+                    before.bytes[i + 3] == 255) {
+                  inkRight = math.max(inkRight, x);
+                }
+              }
+            }
+            expect(inkRight, greaterThan(-1), reason: 'טקסט לצד הקו');
+            expect(
+              barLeft - inkRight,
+              greaterThanOrEqualTo(4),
+              reason: 'בין הקו לאות הקרובה נשאר רווח',
+            );
+          },
+        );
       }
     }
-    expect(
-      edgeInk,
-      greaterThan(0),
-      reason: 'הטקסט חייב לגעת ברצועת הסמן כדי להוכיח שאין הסתרה',
-    );
-  });
+  }
 
   testWidgets('בחירת שורה באמצע פסקה — הפסקה מפוצלת והכרטיס מתחת לשורה', (
     tester,
@@ -292,8 +333,7 @@ void main() {
     final cardRect = tester.getRect(card);
     final gutterFinder = _selectionMarkers();
     expect(gutterFinder, findsOneWidget);
-    // הסמן מצויר מתחת לטקסט ונמתח רק לאורך השורה הנבחרת — לא על הכרטיס.
-    expect(tester.widget<ReaderLineGutter>(gutterFinder).foreground, isFalse);
+    // הסמן נמתח רק לאורך השורה הנבחרת — לא על הכרטיס.
     final gutter = tester.renderObject<RenderReaderLineGutter>(gutterFinder);
     final bars = gutter
         .barRects()

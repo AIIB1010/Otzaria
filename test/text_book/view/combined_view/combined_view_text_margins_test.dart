@@ -22,6 +22,7 @@ import 'package:otzaria/text_book/bloc/text_book_bloc.dart';
 import 'package:otzaria/text_book/bloc/text_book_event.dart';
 import 'package:otzaria/text_book/bloc/text_book_state.dart';
 import 'package:otzaria/text_book/view/combined_view/combined_book_screen.dart';
+import 'package:otzaria/text_book/view/widgets/selection_gutter_painter.dart';
 import 'package:otzaria/widgets/feedback/scrollable_positioned_list_scrollbar.dart';
 import 'package:otzaria/widgets/layout/reading_area_width.dart';
 import 'package:otzaria/widgets/smart_text/smart_text_widget.dart';
@@ -199,8 +200,9 @@ void main() {
     return tab;
   }
 
-  /// השוליים של השורה הראשונה משני צדי אזור התוכן של הרשימה. בתצוגה הרגילה
-  /// המרווח שממרכז את הטקסט מול המסילה יושב בתוך הרשימה, בקצה הסוף.
+  /// השוליים של השורה הראשונה משני צדי אזור התוכן של הרשימה, מעבר לשולי סמן
+  /// הבחירה. בתצוגה הרגילה המרווח שממרכז את הטקסט מול המסילה יושב בתוך הרשימה,
+  /// בקצה הסוף.
   ({double start, double end}) lineInsets(
     WidgetTester tester, {
     double listEndPadding = ScrollablePositionedListScrollbar.trackWidth,
@@ -208,8 +210,8 @@ void main() {
     final list = tester.getRect(find.byType(ScrollablePositionedList));
     final line = tester.getRect(find.byType(SmartTextWidget).first);
     return (
-      start: list.right - line.right,
-      end: line.left - list.left - listEndPadding,
+      start: list.right - line.right - kSelectionGutterWidth,
+      end: line.left - list.left - listEndPadding - kSelectionGutterWidth,
     );
   }
 
