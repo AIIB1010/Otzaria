@@ -258,8 +258,26 @@ class Handler(BaseHTTPRequestHandler):
         if body["action"] == "accept_proposal":
             body["proposal_sha"] = proposal_sha(STATE.by_id[body["item_id"]]["system_proposal"])
         record = {**body, "reviewer": body.get("reviewer", "human"), "ts": datetime.now(timezone.utc).isoformat(timespec="seconds")}
-        with LOCK, open(STATE.decisions_path, "a", encoding="utf-8", newline="\n") as fh:
-            fh.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+        with LOCK, open(STATE.decisions_path, "a+b") as fh:
+            fh.seek(0)
+            valid_end = 0
+            for line in fh:
+                try:
+                    if line.strip():
+                        json.loads(line)
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    if fh.read().strip():
+                        raise
+                    # רק סיומת פגומה מותר להסיר; כל ההחלטות השלמות נשמרות.
+                    fh.truncate(valid_end)
+                    break
+                valid_end += len(line)
+            fh.seek(0, os.SEEK_END)
+            if fh.tell():
+                fh.seek(-1, os.SEEK_END)
+                if fh.read(1) != b"\n":
+                    fh.write(b"\n")
+            fh.write((json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8"))
             fh.flush()
             os.fsync(fh.fileno())
         self._json({"ok": True})
