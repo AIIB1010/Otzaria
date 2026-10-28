@@ -172,7 +172,7 @@ dependency_overrides:
   sentry_flutter:
     git:
       url: https://github.com/Otzaria/sentry-dart
-      ref: 0f5dabb3012a553d281fbda0f26645fcb002ed44
+      ref: 16994df10b4275877fbb3f37e1057ef823ef5ee8
       path: packages/flutter
   # TODO: לחזור ל-pub.dev אחרי שחרור DavBfr/dart_pdf#1984, #1985, #1986, #1987, #1988, #1993, #1994, #1995, #1996
   # (הדפסה ב-Windows ב-thread נפרד, PDFium עצל ופרטי, השלמת עבודה שנכשלה ב-Linux, בעלי הדיאלוג בריבוי חלונות, בעלים מפורש לכל עבודה). קומיט שילוב.
