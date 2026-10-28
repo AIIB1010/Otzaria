@@ -1,7 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/models/books.dart';
-import 'package:otzaria/models/book_source.dart';
-import 'package:otzaria/models/links.dart';
 import 'package:otzaria/pdf_book/bloc/pdf_book_state.dart';
 import 'package:pdfrx/pdfrx.dart';
 
@@ -15,31 +13,20 @@ PdfOutlineNode _node(
   children: children ?? const [],
 );
 
-Link _link(int index1, String heRef) => Link(
-  heRef: heRef,
-  index1: index1,
-  path2: 'רש"י.txt',
-  index2: 1,
-  connectionType: 'commentary',
+PdfBookLoaded _state({List<PdfOutlineNode>? outline}) => PdfBookLoaded(
+  book: PdfBook(title: 'ספר', path: '/x.pdf'),
+  currentPageNumber: 1,
+  totalPages: 10,
+  isLoading: false,
+  outline: outline,
 );
-
-PdfBookLoaded _state({List<PdfOutlineNode>? outline, List<Link>? links}) =>
-    PdfBookLoaded(
-      book: PdfBook(title: 'ספר', path: '/x.pdf'),
-      currentPageNumber: 1,
-      totalPages: 10,
-      isLoading: false,
-      outline: outline,
-      links: links ?? const [],
-    );
 
 void main() {
   test('אותה רשימה (copyWith) — שווה', () {
     final outline = [
       _node('א', 1, [_node('ב', 2)]),
     ];
-    final links = [_link(1, 'א')];
-    final state = _state(outline: outline, links: links);
+    final state = _state(outline: outline);
     expect(state.copyWith(zoom: 2), isNot(state));
     expect(state.copyWith(zoom: 2), state.copyWith(zoom: 2));
   });
@@ -49,22 +36,16 @@ void main() {
       outline: [
         _node('א', 1, [_node('ב', 2)]),
       ],
-      links: [_link(1, 'א')],
     );
     final b = _state(
       outline: [
         _node('א', 1, [_node('ב', 2)]),
       ],
-      links: [_link(1, 'א')],
     );
     expect(a, b);
   });
 
   test('תוכן שונה באותו אורך — שונה', () {
-    expect(
-      _state(links: [_link(1, 'א')]),
-      isNot(_state(links: [_link(2, 'ב')])),
-    );
     expect(
       _state(
         outline: [
@@ -79,55 +60,6 @@ void main() {
         ),
       ),
     );
-  });
-
-  test('טווח מקור או מקור ספר היעד שונה — המצב שונה', () {
-    expect(
-      _state(links: [_link(1, 'א')]),
-      isNot(
-        _state(
-          links: [
-            Link(
-              heRef: 'א',
-              index1: 1,
-              index1End: 3,
-              path2: 'רש"י.txt',
-              index2: 1,
-              connectionType: 'commentary',
-            ),
-          ],
-        ),
-      ),
-    );
-    expect(
-      _state(links: [_link(1, 'א')]),
-      isNot(
-        _state(
-          links: [
-            Link(
-              heRef: 'א',
-              index1: 1,
-              path2: 'רש"י.txt',
-              index2: 1,
-              connectionType: 'commentary',
-              targetSource: BookSource.user,
-            ),
-          ],
-        ),
-      ),
-    );
-  });
-
-  test('מיקום עוגן שונה באותה כמות קישורים — המצב שונה', () {
-    Link anchored(int start) => Link(
-      heRef: 'א',
-      index1: 1,
-      path2: 'רש"י.txt',
-      index2: 1,
-      connectionType: 'commentary',
-      anchorStart: start,
-    );
-    expect(_state(links: [anchored(2)]), isNot(_state(links: [anchored(5)])));
   });
 
   test('outline חסר מול ריק — שונה', () {
