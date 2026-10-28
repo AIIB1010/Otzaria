@@ -5,6 +5,7 @@ import 'package:otzaria/settings/engine/settings_bloc.dart';
 import 'package:otzaria/settings/engine/settings_event.dart';
 import 'package:otzaria/settings/engine/settings_state.dart';
 import 'package:otzaria/tools/aramaic_dictionary/aramaic_dictionary_screen.dart';
+import 'package:otzaria/tools/aramaic_dictionary/widgets/aramaic_result_card.dart';
 import 'package:otzaria/tools/dictionary/repository/dictionary_lookup_repository.dart';
 
 class _FakeSettingsBloc extends Bloc<SettingsEvent, SettingsState>
@@ -23,6 +24,21 @@ DictionaryLookupRepository _repository() {
       AramaicDictionaryEntry(aramaic: 'איתא', hebrew: 'יש'),
       AramaicDictionaryEntry(aramaic: 'גברא', hebrew: 'איש'),
       AramaicDictionaryEntry(aramaic: 'מַאי חָזֵית', hebrew: 'מה ראית'),
+      AramaicDictionaryEntry(
+        aramaic: 'איתא',
+        hebrew: 'קיים',
+        dictionary: 'מילון שיח ישראל',
+      ),
+      AramaicDictionaryEntry(
+        aramaic: "ב''ד",
+        hebrew: 'בית דין',
+        dictionary: 'מילון שיח ישראל',
+      ),
+      AramaicDictionaryEntry(
+        aramaic: 'אִילָנָא',
+        hebrew: '{אִילָנָא} עץ',
+        dictionary: 'מפירוש אונקלוס על התורה',
+      ),
     ],
   );
 }
@@ -80,5 +96,48 @@ void main() {
     await tester.enterText(find.byType(TextField), 'מאי חזית');
     await tester.pumpAndSettle();
     expect(find.textContaining('מה ראית'), findsWidgets);
+  });
+
+  testWidgets('גרשיים בשאילתה אינם מונעים מציאת מפתח עם גרשיים אחרים', (
+    tester,
+  ) async {
+    await pumpScreen(tester);
+
+    await tester.enterText(find.byType(TextField), 'ב"ד');
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('בית דין'), findsOneWidget);
+  });
+
+  testWidgets('חיפוש עברי אינו מתאים לביטוי הארמי שבסוגריים מסולסלים', (
+    tester,
+  ) async {
+    await pumpScreen(tester);
+
+    await tester.tap(find.byTooltip('החלף כיוון'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'אילנא');
+    await tester.pumpAndSettle();
+    expect(find.text('לא נמצאו תוצאות'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'עץ');
+    await tester.pumpAndSettle();
+    expect(find.byType(AramaicResultCard), findsOneWidget);
+  });
+
+  testWidgets('מפתח שקיים בכמה מילונים מוצג בכרטיס אחד עם כל הפירושים', (
+    tester,
+  ) async {
+    await pumpScreen(tester);
+
+    await tester.enterText(find.byType(TextField), 'איתא');
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AramaicResultCard), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('יש')).dy,
+      lessThan(tester.getTopLeft(find.text('קיים')).dy),
+    );
+    expect(find.text('מילון שיח ישראל'), findsNothing);
   });
 }
