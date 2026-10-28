@@ -61,6 +61,30 @@ Bookmark _bookmark(String title) => Bookmark(
 );
 
 void main() {
+  test('טעינה שהתחילה לפני כתיבה אינה דורסת את תוצאת הכתיבה', () async {
+    final repository = _BlockingHistoryRepository();
+    final bloc = HistoryBloc(repository);
+    addTearDown(bloc.close);
+    await repository.loadStarted.future;
+
+    final opened = _bookmark('ספר א');
+    final written = bloc.stream.firstWhere(
+      (state) => state is HistoryLoaded && state.history.isNotEmpty,
+    );
+    bloc.add(BulkAddHistory([opened]));
+    await repository.firstSaveStarted.future;
+    repository.releaseFirstSave.complete();
+    await written;
+
+    // הטעינה קראה את המסד לפני הכתיבה, ומסתיימת רק עכשיו.
+    repository.releaseLoad.complete([]);
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(bloc.state, isA<HistoryLoaded>());
+    expect(bloc.state.history, [opened]);
+  });
+
   test('כתיבות היסטוריה רצופות נשמרות בלי לדרוס זו את זו', () async {
     final repository = _BlockingHistoryRepository();
     final bloc = HistoryBloc(repository);

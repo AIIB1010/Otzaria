@@ -166,6 +166,15 @@ class HistoryBloc extends Bloc<HistoryEvent, HistoryState> {
 
   StreamSubscription<void>? _remoteChanges;
 
+  /// גדל בכל הצגה של תוצאת כתיבה. טעינה שהתחילה לפני כן (הפענוח שלה
+  /// נמשך שניות ב-isolate) מציגה רשימה ישנה, ולכן נזנחת.
+  int _writeGeneration = 0;
+
+  void _emitWritten(Emitter<HistoryState> emit, List<Bookmark> history) {
+    _writeGeneration++;
+    emit(HistoryLoaded(history));
+  }
+
   /// מוסיף את רשומות [tab] לממתינים לשמירה.
   Future<void> _capture(OpenedTab? tab) async {
     if (tab == null) return;
@@ -346,7 +355,7 @@ class HistoryBloc extends Bloc<HistoryEvent, HistoryState> {
     Emitter<HistoryState> emit,
   ) async {
     final updatedHistory = await _flushPendingSnapshots();
-    if (updatedHistory != null) emit(HistoryLoaded(updatedHistory));
+    if (updatedHistory != null) _emitWritten(emit, updatedHistory);
   }
 
   Future<void> _onLoadHistory(
@@ -354,8 +363,10 @@ class HistoryBloc extends Bloc<HistoryEvent, HistoryState> {
     Emitter<HistoryState> emit,
   ) async {
     try {
+      final generation = _writeGeneration;
       emit(HistoryLoading(state.history));
       final history = await _repository.loadHistory();
+      if (generation != _writeGeneration) return;
       emit(HistoryLoaded(history));
     } catch (e) {
       emit(HistoryError(state.history, e.toString()));
@@ -409,7 +420,7 @@ class HistoryBloc extends Bloc<HistoryEvent, HistoryState> {
     if (event.snapshots.isEmpty) return;
     try {
       final updatedHistory = await _updateAndSaveHistory(event.snapshots);
-      emit(HistoryLoaded(updatedHistory));
+      _emitWritten(emit, updatedHistory);
     } catch (e) {
       emit(HistoryError(state.history, e.toString()));
     }
@@ -428,7 +439,7 @@ class HistoryBloc extends Bloc<HistoryEvent, HistoryState> {
       final updatedHistory = await _repository.mutateHistory(
         (current) => current.where((b) => b.historyKey != key).toList(),
       );
-      emit(HistoryLoaded(updatedHistory));
+      _emitWritten(emit, updatedHistory);
     } catch (e) {
       emit(HistoryError(state.history, e.toString()));
     }
@@ -440,7 +451,7 @@ class HistoryBloc extends Bloc<HistoryEvent, HistoryState> {
   ) async {
     try {
       await _repository.clearHistory();
-      emit(HistoryLoaded([]));
+      _emitWritten(emit, []);
     } catch (e) {
       emit(HistoryError(state.history, e.toString()));
     }
