@@ -66,6 +66,51 @@ void main() {
     expect(inverse.single.overlapsSourceLines(7, 8), isTrue);
   });
 
+  // #3493: קריאה בחיבור הראשי המתינה על ה-UI isolate לנעילה של כותב אחר.
+  test('מפרשי-משתמש נקראים בחיבור נפרד, לא בחיבור הראשי', () async {
+    await Settings.init(cacheProvider: MemoryCacheProvider());
+    final tempDir = await Directory.systemTemp.createTemp('user_commentators');
+    final previousRoot = AppPaths.cachedDataRootPath;
+    await UserBooksDatabaseHolder.instance.close();
+    AppPaths.debugOverrideDataRootPath(p.join(tempDir.path, 'data'));
+    addTearDown(() async {
+      await UserBooksDatabaseHolder.instance.close();
+      AppPaths.debugOverrideDataRootPath(previousRoot);
+      await tempDir.delete(recursive: true);
+    });
+
+    final db = (await UserBooksDatabaseHolder.instance.repository).database;
+    final ucr = UserContentRepository(db);
+    UserLinkRecord commentary(String target) => UserLinkRecord(
+      sourceTitle: 'בסיס',
+      sourceIsUserBook: false,
+      sourceLineIndex: 1,
+      targetTitle: target,
+      targetIsUserBook: true,
+      targetLineIndex: 1,
+      connectionType: 'COMMENTARY',
+    );
+    await ucr.upsertUserLink(commentary('מפרש'));
+
+    Future<List<String>> titles() => loadUserCommentatorTitles(
+      bookTitle: 'בסיס',
+      bookCategoryId: null,
+      source: BookSource.official,
+    );
+    expect(await titles(), ['מפרש']);
+
+    // רק החיבור הראשי רואה שורה שטרם נכתבה סופית.
+    final connection = await db.database;
+    connection.execute('BEGIN');
+    try {
+      await ucr.upsertUserLink(commentary('מפרש חדש'));
+      expect(await titles(), ['מפרש']);
+    } finally {
+      connection.execute('COMMIT');
+    }
+    expect(await titles(), unorderedEquals(['מפרש', 'מפרש חדש']));
+  });
+
   group('dedupeUserLinks', () {
     Link link(int i1, String p2, int i2, {String type = 'COMMENTARY'}) => Link(
       heRef: 'ref',
