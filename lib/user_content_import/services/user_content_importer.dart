@@ -15,7 +15,6 @@ import 'package:otzaria/utils/file/text_encoding.dart';
 class UserImportResult {
   final int generationsApplied;
   final int linksApplied;
-  final int booksWithLinks;
 
   /// מספר הספרים שקיבלו כותרות.
   final int headingsApplied;
@@ -25,7 +24,6 @@ class UserImportResult {
   const UserImportResult({
     this.generationsApplied = 0,
     this.linksApplied = 0,
-    this.booksWithLinks = 0,
     this.headingsApplied = 0,
     this.versionsApplied = 0,
     this.errors = const [],
@@ -256,14 +254,6 @@ class UserContentImporter {
       linksApplied: unique.length,
       headingsApplied: headingsByBook.length,
       versionsApplied: versions.length,
-      booksWithLinks: unique
-          .map(
-            (l) =>
-                '${l.sourceIsUserBook}|${l.sourceCategoryId}|'
-                '${l.sourceTitle}',
-          )
-          .toSet()
-          .length,
       errors: errors,
     );
   }

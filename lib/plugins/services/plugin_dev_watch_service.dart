@@ -6,12 +6,10 @@ import 'package:otzaria/plugins/models/installed_plugin.dart';
 class PluginDevFsChange {
   final String pluginId;
   final bool manifestChanged;
-  final Set<String> changedPaths;
 
   PluginDevFsChange({
     required this.pluginId,
     required this.manifestChanged,
-    required this.changedPaths,
   });
 }
 
@@ -123,7 +121,6 @@ class PluginDevWatchService {
     final changeEvent = PluginDevFsChange(
       pluginId: pluginId,
       manifestChanged: manifestChanged,
-      changedPaths: Set.from(changes),
     );
 
     _pendingChanges[pluginId]?.clear();
