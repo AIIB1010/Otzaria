@@ -14,7 +14,7 @@ import 'package:otzaria/widgets/feedback/tool_empty_state.dart';
 import 'package:otzaria/widgets/misc/tool_ui_helpers.dart';
 
 /// מסנן ערכים ש-[field] שלהם מכיל את [query] וממיין: מדויק < מתחיל ב- < מילה שלמה < מכיל.
-/// הדירוג נקבע פעם אחת לערך ולא בכל השוואה, כי המיון מריץ RegExp על ערכים ארוכים.
+/// בכל רמת התאמה "פשיטא" קודם, ובשוויון נשמר סדר הקלט (המיון של Dart אינו יציב).
 @visibleForTesting
 List<Map<String, String>> rankAramaicMatches(
   List<Map<String, String>> entries,
@@ -22,8 +22,11 @@ List<Map<String, String>> rankAramaicMatches(
   String query,
 ) {
   final wholeWord = RegExp('(^|\\s)${RegExp.escape(query)}(\$|\\s)');
-  final ranked = <({int rank, int pos, Map<String, String> entry})>[];
-  for (final entry in entries) {
+  final ranked =
+      <
+        ({int rank, bool other, int pos, int order, Map<String, String> entry})
+      >[];
+  for (final (order, entry) in entries.indexed) {
     final text = entry[field]!;
     final pos = text.indexOf(query);
     if (pos < 0) continue;
@@ -34,17 +37,82 @@ List<Map<String, String>> rankAramaicMatches(
         : wholeWord.hasMatch(text)
         ? 2
         : 3;
-    ranked.add((rank: rank, pos: pos, entry: entry));
+    final other =
+        (entry['dictionary'] ?? AramaicDictionaryEntry.peshitaDictionary) !=
+        AramaicDictionaryEntry.peshitaDictionary;
+    ranked.add((
+      rank: rank,
+      other: other,
+      pos: pos,
+      order: order,
+      entry: entry,
+    ));
   }
   ranked.sort((a, b) {
     final rankCompare = a.rank.compareTo(b.rank);
     if (rankCompare != 0) return rankCompare;
+    if (a.other != b.other) return a.other ? 1 : -1;
     final posCompare = a.pos.compareTo(b.pos);
     if (posCompare != 0) return posCompare;
-    return a.entry[field]!.length.compareTo(b.entry[field]!.length);
+    final lengthCompare = a.entry[field]!.length.compareTo(
+      b.entry[field]!.length,
+    );
+    if (lengthCompare != 0) return lengthCompare;
+    return a.order.compareTo(b.order);
   });
   return [for (final r in ranked) r.entry];
 }
+
+/// ממזג תוצאות בעלות אותו מפתח, גם ממילונים שונים, לכרטיס אחד עם כל הפירושים.
+/// פירושי "פשיטא" קודמים; פירוש זהה שחוזר אינו מוצג פעמיים.
+@visibleForTesting
+List<Map<String, String>> mergeAramaicMatches(
+  List<Map<String, String>> ranked,
+) {
+  final groups = <String, List<Map<String, String>>>{};
+  for (final entry in ranked) {
+    (groups[entry['aramaicPlain']!] ??= []).add(entry);
+  }
+
+  return [
+    for (final group in groups.values)
+      if (group.length == 1)
+        group.single
+      else
+        _mergeGroup([
+          ...group.where((e) => !_isOtherDictionary(e)),
+          ...group.where(_isOtherDictionary),
+        ]),
+  ];
+}
+
+bool _isOtherDictionary(Map<String, String> entry) =>
+    (entry['dictionary'] ?? AramaicDictionaryEntry.peshitaDictionary) !=
+    AramaicDictionaryEntry.peshitaDictionary;
+
+Map<String, String> _mergeGroup(List<Map<String, String>> group) {
+  final seen = <String>{};
+  final meanings = <String>[
+    for (final entry in group)
+      for (final part in entry['hebrew']!.split('***'))
+        if (part.trim().isNotEmpty && seen.add(removeVolwels(part.trim())))
+          part.trim(),
+  ];
+
+  return {
+    ...group.first,
+    'hebrew': meanings.join(' *** '),
+    'hebrewPlain': group.map((e) => e['hebrewPlain']!).join(' '),
+  };
+}
+
+// בלי גרשיים, כמו בתפריט ההקשר: "ב"ד" צריך למצוא גם את המפתח ב''ד.
+String _stripQuotes(String text) => text.replaceAll(RegExp("[\"'״׳]"), '');
+
+// הביטוי הארמי בסוגריים מסולסלים ובהרחבה (=...) אינו עברית לחיפוש.
+String _stripAramaicMarkup(String text) => text
+    .replaceAll(RegExp(r'\{[^{}]*\}|\(=[^)]*\)'), ' ')
+    .replaceAll(RegExp(r'\s+'), ' ');
 
 class AramaicDictionaryScreen extends StatefulWidget {
   const AramaicDictionaryScreen({super.key, this.repository, this.queryInbox});
@@ -109,9 +177,10 @@ class _AramaicDictionaryScreenState extends State<AramaicDictionaryScreen>
           return <String, String>{
             'aramaic': entry.aramaic,
             'hebrew': entry.hebrew,
+            'dictionary': entry.dictionary,
             // שדות החיפוש בלי ניקוד, כדי שהקלדה רגילה תמצא ערכים מנוקדים.
-            'aramaicPlain': removeVolwels(entry.aramaic),
-            'hebrewPlain': removeVolwels(entry.hebrew),
+            'aramaicPlain': _stripQuotes(removeVolwels(entry.aramaic)),
+            'hebrewPlain': removeVolwels(_stripAramaicMarkup(entry.hebrew)),
           };
         }).toList();
         _isLoading = false;
@@ -129,6 +198,7 @@ class _AramaicDictionaryScreenState extends State<AramaicDictionaryScreen>
 
   void _performSearch(String query) {
     query = removeVolwels(query.trim());
+    if (!_isHebrewToAramaic) query = _stripQuotes(query);
 
     if (query.isEmpty) {
       setState(() {
@@ -139,7 +209,9 @@ class _AramaicDictionaryScreenState extends State<AramaicDictionaryScreen>
 
     final field = _isHebrewToAramaic ? 'hebrewPlain' : 'aramaicPlain';
     setState(() {
-      _filteredResults = rankAramaicMatches(_dictionaryData, field, query);
+      _filteredResults = mergeAramaicMatches(
+        rankAramaicMatches(_dictionaryData, field, query),
+      );
     });
   }
 
