@@ -10,12 +10,14 @@ abstract class BaseListRepository<T> {
     required String key,
     required T Function(Map<String, dynamic>) fromJson,
     required Map<String, dynamic> Function(T) toJson,
+    bool decodeInBackground = false,
     UserStateListStore? store,
   }) : _repo = UserStateListRepository<T>(
          boxName: boxName,
          key: key,
          fromJson: fromJson,
          toJson: toJson,
+         decodeInBackground: decodeInBackground,
          store: store,
        );
 

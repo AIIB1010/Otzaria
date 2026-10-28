@@ -1,9 +1,13 @@
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:otzaria/bookmarks/models/bookmark.dart';
 import 'package:otzaria/core/user_state/user_state_database.dart';
 import 'package:otzaria/core/user_state/user_state_list_store.dart';
 import 'package:otzaria/data/repository/user_state_list_repository.dart';
+import 'package:otzaria/history/history_repository.dart';
+import 'package:otzaria/models/books.dart';
 
 void main() {
   late Directory tmp;
@@ -114,6 +118,75 @@ void main() {
 
       expect(seenByA, 1);
       expect(seenByB, 4);
+      db.close();
+    });
+  });
+
+  group('פענוח רשימה גדולה (#3380)', () {
+    // הערך המפוענח הוא שם ה-isolate שבו רץ fromJson.
+    UserStateListRepository<String> repo(
+      UserStateListStore store, {
+      required bool background,
+    }) => UserStateListRepository<String>(
+      boxName: 'history',
+      key: 'history',
+      fromJson: (json) => '${json['v']}@${Isolate.current.debugName}',
+      toJson: (value) => {'v': value},
+      decodeInBackground: background,
+      store: store,
+    );
+
+    List<Map<String, Object?>> entries(int count) => [
+      for (var i = 0; i < count; i++) {'v': i, 'pad': 'א' * 100},
+    ];
+
+    test('רשימה גדולה מפוענחת מחוץ ל-isolate הנוכחי', () async {
+      final db = UserStateDatabase.openAt(dbPath);
+      final store = UserStateListStore(database: db);
+      await store.write('history', 'history', entries(2000));
+
+      final here = Isolate.current.debugName;
+      final loaded = await repo(store, background: true).load();
+      expect(loaded, hasLength(2000));
+      expect(loaded.first, startsWith('0@'));
+      expect(loaded.first, isNot('0@$here'));
+
+      final inline = await repo(store, background: false).load();
+      expect(inline.first, '0@$here');
+      db.close();
+    });
+
+    test('רשימה קטנה נשארת בפענוח מקומי', () async {
+      final db = UserStateDatabase.openAt(dbPath);
+      final store = UserStateListStore(database: db);
+      await store.write('history', 'history', entries(3));
+
+      final loaded = await repo(store, background: true).load();
+      expect(loaded.first, '0@${Isolate.current.debugName}');
+      db.close();
+    });
+
+    test('היסטוריה גדולה נטענת ב-isolate, ורשומה פגומה נשמרת', () async {
+      final db = UserStateDatabase.openAt(dbPath);
+      final store = UserStateListStore(database: db);
+      final book = TextBook(title: 'משנה ברורה', heCategories: 'א' * 300);
+      await store.write('history', 'history', [
+        for (var i = 0; i < 200; i++)
+          Bookmark(ref: 'משנה ברורה $i', book: book, index: i).toJson(),
+        {'broken': true},
+      ]);
+
+      final history = HistoryRepository(store: store);
+      final loaded = await history.load();
+      expect(loaded, hasLength(200));
+      expect(loaded.last.ref, 'משנה ברורה 199');
+      expect(loaded.first.book.heCategories, 'א' * 300);
+
+      await history.mutate((current) => current.take(1).toList());
+      final raw = await store.read('history', 'history');
+      expect(raw, hasLength(2));
+      expect((raw.first as Map)['ref'], 'משנה ברורה 0');
+      expect(raw.last, {'broken': true});
       db.close();
     });
   });

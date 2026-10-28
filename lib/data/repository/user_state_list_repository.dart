@@ -1,3 +1,5 @@
+import 'dart:isolate';
+
 import 'package:flutter/foundation.dart';
 import 'package:otzaria/core/user_state/user_state_list_store.dart';
 import 'package:otzaria/utils/file/hive_utils.dart';
@@ -16,6 +18,7 @@ class UserStateListRepository<T> {
     required this.key,
     required this.fromJson,
     required this.toJson,
+    this.decodeInBackground = false,
     UserStateListStore? store,
   }) : _store = store ?? UserStateListStore.instance;
 
@@ -24,7 +27,14 @@ class UserStateListRepository<T> {
   final String key;
   final T Function(Map<String, dynamic>) fromJson;
   final Map<String, dynamic> Function(T) toJson;
+
+  /// [load] של רשימה גדולה מפוענח ב-isolate. רק כש-[fromJson] מייצר נתונים
+  /// טהורים — טאב משחזר bloc-ים, ואסור לבנות אותם ב-isolate אחר.
+  final bool decodeInBackground;
   final UserStateListStore _store;
+
+  // מעל הסף, בבדיקת widget הטעינה מסתיימת רק בתוך tester.runAsync (Isolate.run).
+  static const int _backgroundDecodeMinLength = 64 * 1024;
 
   /// מזהה הכותב: כל חלון מחזיק מופע משלו, וכך מסנן רק את הכתיבות שלו.
   final Object _origin = Object();
@@ -39,8 +49,28 @@ class UserStateListRepository<T> {
 
   /// טוען את הרשימה. כשל קריאה מהמסד מתפשט — "לא ידוע" אינו "ריק", וגיבוי
   /// שנכתב מרשימה ריקה כזו היה מוחק את הנתונים בשחזור.
-  Future<List<T>> load() async =>
-      _decode(await _store.read(boxName, key)).items;
+  Future<List<T>> load() async {
+    final payload = await _store.readPayload(boxName, key);
+    if (!decodeInBackground ||
+        payload == null ||
+        payload.length < _backgroundDecodeMinLength) {
+      return _decode(UserStateListStore.decodePayload(payload)).items;
+    }
+    return _decodeInIsolate(payload, fromJson, '$boxName/$key');
+  }
+
+  // static: closure במתודת מופע הייתה לוכדת את this, שאינו נשלח ל-isolate.
+  static Future<List<T>> _decodeInIsolate<T>(
+    String payload,
+    T Function(Map<String, dynamic>) fromJson,
+    String label,
+  ) => Isolate.run(
+    () => _decodeEntries(
+      UserStateListStore.decodePayload(payload),
+      fromJson,
+      label,
+    ).items,
+  );
 
   /// מחיל [apply] על הרשימה הטרייה ושומר את התוצאה, בטרנזקציה אחת.
   /// מחזיר את מה שנשמר.
@@ -69,19 +99,26 @@ class UserStateListRepository<T> {
   /// "מחק הכול" פירושו הכול, כולל מה שחלון אחר הוסיף בשנייה האחרונה.
   Future<void> clear() => _store.clear(boxName, key, origin: _origin);
 
-  _Decoded<T> _decode(List<dynamic> raw) {
-    final items = <T>[];
-    final undecodable = <dynamic>[];
-    for (final entry in raw) {
-      try {
-        items.add(fromJson(castMap(entry)));
-      } catch (e) {
-        debugPrint('⚠️ $boxName/$key: skipping undecodable entry: $e');
-        undecodable.add(entry);
-      }
+  _Decoded<T> _decode(List<dynamic> raw) =>
+      _decodeEntries(raw, fromJson, '$boxName/$key');
+}
+
+_Decoded<T> _decodeEntries<T>(
+  List<dynamic> raw,
+  T Function(Map<String, dynamic>) fromJson,
+  String label,
+) {
+  final items = <T>[];
+  final undecodable = <dynamic>[];
+  for (final entry in raw) {
+    try {
+      items.add(fromJson(castMap(entry)));
+    } catch (e) {
+      debugPrint('⚠️ $label: skipping undecodable entry: $e');
+      undecodable.add(entry);
     }
-    return _Decoded(items, undecodable);
   }
+  return _Decoded(items, undecodable);
 }
 
 class _Decoded<T> {
