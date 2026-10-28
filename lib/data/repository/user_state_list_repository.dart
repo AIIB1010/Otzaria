@@ -33,6 +33,7 @@ class UserStateListRepository<T> {
   final bool decodeInBackground;
   final UserStateListStore _store;
 
+  // מעל הסף, בבדיקת widget הטעינה מסתיימת רק בתוך tester.runAsync (Isolate.run).
   static const int _backgroundDecodeMinLength = 64 * 1024;
 
   /// מזהה הכותב: כל חלון מחזיק מופע משלו, וכך מסנן רק את הכתיבות שלו.
