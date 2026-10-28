@@ -1,4 +1,5 @@
 import 'package:otzaria/core/ui_snack.dart';
+import 'package:otzaria/core/messages/text_book_messages.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -806,7 +807,7 @@ class _AltTocSidebarViewState extends State<AltTocSidebarView>
           await _openLink(link, markerTitle: linkEntry.text);
         }
       } else {
-        UiSnack.show('לא נמצא קישור לכותרת זו');
+        UiSnack.show(TextBookMessages.headingLinkNotFound);
       }
     } catch (e) {
       debugPrint('Error handling leaf click: $e');
@@ -830,7 +831,7 @@ class _AltTocSidebarViewState extends State<AltTocSidebarView>
       // Navigate to the first root entry
       _handleLeafClick(structure.id, roots.first);
     } else {
-      UiSnack.show('לא נמצאו כותרות למבנה זה');
+      UiSnack.show(TextBookMessages.structureHeadingsNotFound);
     }
   }
 

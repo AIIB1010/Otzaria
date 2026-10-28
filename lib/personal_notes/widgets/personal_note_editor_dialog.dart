@@ -43,7 +43,6 @@ class PersonalNoteEditorDialog extends StatefulWidget {
 
 class _PersonalNoteEditorDialogState extends State<PersonalNoteEditorDialog>
     with DialogFocusRestorerMixin<PersonalNoteEditorDialog> {
-  int _focusedButtonIndex = 1; // 0 = ביטול, 1 = שמור (ברירת מחדל)
   final FocusNode _textFieldFocusNode = FocusNode();
   final FocusNode _cancelFocusNode = FocusNode();
   final FocusNode _saveFocusNode = FocusNode();
@@ -184,24 +183,23 @@ class _PersonalNoteEditorDialogState extends State<PersonalNoteEditorDialog>
           return KeyEventResult.ignored;
         }
 
-        // אם הפוקוס בכפתורים - חיצים ואנטר
-        if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
-            event.logicalKey == LogicalKeyboardKey.arrowRight) {
-          setState(() {
-            _focusedButtonIndex = _focusedButtonIndex == 0 ? 1 : 0;
-          });
-          (_focusedButtonIndex == 1 ? _saveFocusNode : _cancelFocusNode)
-              .requestFocus();
-          return KeyEventResult.handled;
-        }
-
-        if (event.logicalKey == LogicalKeyboardKey.enter) {
-          if (_focusedButtonIndex == 1) {
-            _submit();
-          } else {
-            _handleCancel();
+        // חיצים ואנטר שייכים לכפתור שבפוקוס, לא לפקדי הכותרת והעורך.
+        if (_saveFocusNode.hasFocus || _cancelFocusNode.hasFocus) {
+          if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
+              event.logicalKey == LogicalKeyboardKey.arrowRight) {
+            (_saveFocusNode.hasFocus ? _cancelFocusNode : _saveFocusNode)
+                .requestFocus();
+            return KeyEventResult.handled;
           }
-          return KeyEventResult.handled;
+
+          if (event.logicalKey == LogicalKeyboardKey.enter) {
+            if (_saveFocusNode.hasFocus) {
+              _submit();
+            } else {
+              _handleCancel();
+            }
+            return KeyEventResult.handled;
+          }
         }
 
         // Escape - ביטול

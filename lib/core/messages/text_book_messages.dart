@@ -55,6 +55,8 @@ abstract class TextBookMessages {
   // ── תצוגה, העתקה והערות ─────────────────────────────────────────────────
 
   static const String perBookSettingsReset = 'ההגדרות הפר-ספריות אופסו בהצלחה';
+  static const String headingLinkNotFound = 'לא נמצא קישור לכותרת זו';
+  static const String structureHeadingsNotFound = 'לא נמצאו כותרות למבנה זה';
   static const String searchUnavailableInThisView = 'חיפוש לא זמין בתצוגה זו';
   static const String selectTextToCopy = 'אנא בחר טקסט להעתקה';
   static const String noteSaved = 'ההערה נשמרה בהצלחה';
