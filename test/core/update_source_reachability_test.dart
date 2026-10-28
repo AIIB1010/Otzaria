@@ -7,6 +7,18 @@ import 'package:otzaria/core/update_source_reachability.dart';
 
 void main() {
   group('isUpdateSourceReachable', () {
+    // ברשת מסוננת מאושרים רק נתיבי Otzaria, לא שורש api.github.com.
+    test('הבדיקה פונה לנתיב Release של Otzaria', () async {
+      Uri? requested;
+      final client = MockClient((request) async {
+        requested = request.url;
+        return http.Response('{}', 200);
+      });
+      await isUpdateSourceReachable(client: client);
+      expect(requested?.host, 'api.github.com');
+      expect(requested?.path, startsWith('/repos/Otzaria/'));
+    });
+
     test('תשובה עם חתימת GitHub — נגיש', () async {
       final client = MockClient(
         (_) async => http.Response(
