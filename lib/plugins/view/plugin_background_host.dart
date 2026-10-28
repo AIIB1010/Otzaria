@@ -314,8 +314,7 @@ class _BackgroundPluginRunnerState extends State<_BackgroundPluginRunner>
     with PluginWebViewHost {
   late String _localHtmlPath;
 
-  /// נבדק פעם אחת, אסינכרונית: existsSync ב-build עוצר כל פריים על דיסק איטי.
-  /// שינוי נתיב מחליף את ה-ValueKey של ה-runner, ולכן State חדש בודק מחדש.
+  /// תוצאה חיובית נשמרת עד החלפת ה-State; קובץ חסר נבדק שוב ברענון.
   bool? _entryExists;
 
   @override
@@ -363,7 +362,7 @@ class _BackgroundPluginRunnerState extends State<_BackgroundPluginRunner>
         ? p.join(widget.plugin.resolvedRootPath, widget.plugin.entrypointPath)
         : _localHtmlPath;
     final exists = await File(entryFile).exists();
-    if (mounted) setState(() => _entryExists = exists);
+    if (mounted) setState(() => _entryExists = _entryExists == true || exists);
   }
 
   bool get _usesAssetScheme => pluginUsesAssetScheme(headless: _isHeadless);
@@ -378,6 +377,10 @@ class _BackgroundPluginRunnerState extends State<_BackgroundPluginRunner>
         await InAppWebViewController.clearAllCache();
         await webViewController?.reload();
       } else {
+        if (_entryExists != true) {
+          await _resolveEntryExists();
+          if (!mounted) return;
+        }
         await webViewController?.loadUrl(
           urlRequest: URLRequest(url: _entrypointUri),
         );
