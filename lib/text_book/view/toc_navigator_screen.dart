@@ -207,8 +207,10 @@ class _TocViewerState extends State<TocViewer>
     if (changed) setState(() => _expandedRevision++);
   }
 
+  // רץ בכל החלפת כותרת בגלילה על כל העץ: בלי איטרטור ובלי רשימה לכל צומת.
   List<TocEntry> _findPath(List<TocEntry> entries, int targetIndex) {
-    for (final entry in entries) {
+    for (var i = 0; i < entries.length; i++) {
+      final entry = entries[i];
       if (entry.index == targetIndex) {
         return [entry];
       }
@@ -218,7 +220,7 @@ class _TocViewerState extends State<TocViewer>
         return [entry, ...subPath];
       }
     }
-    return [];
+    return const [];
   }
 
   /// הכותרת של השורה הנבחרת, ובהיעדרה של השורה הגלויה הראשונה.
