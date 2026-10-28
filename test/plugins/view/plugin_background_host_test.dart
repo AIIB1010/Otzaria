@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,10 +18,24 @@ import 'package:otzaria/plugins/models/plugin_startup_contributions.dart';
 import 'package:otzaria/plugins/models/plugin_valid_permissions.dart';
 import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
 import 'package:otzaria/plugins/services/plugin_installer_service.dart';
+import 'package:otzaria/plugins/services/plugin_file_server.dart';
 import 'package:otzaria/plugins/services/plugin_lazy_activation_service.dart';
 import 'package:otzaria/plugins/view/plugin_background_host.dart';
 import 'package:otzaria/plugins/view/webview_environment_holder.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:flutter_inappwebview_windows/flutter_inappwebview_windows.dart';
+import 'package:otzaria/plugins/services/plugin_runtime_dispatcher.dart';
+import 'package:otzaria/plugins/services/plugin_headless_shell.dart';
+import 'package:otzaria/bookmarks/bloc/bookmark_bloc.dart';
+import 'package:otzaria/history/bloc/history_bloc.dart';
+import 'package:otzaria/library/bloc/library_bloc.dart';
+import 'package:otzaria/navigation/bloc/navigation_bloc.dart';
+import 'package:otzaria/settings/services/custom_folders/bloc/custom_folders_bloc.dart';
+import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
+import 'package:otzaria/tools/calendar/bloc/calendar_cubit.dart';
+import 'package:otzaria/workspaces/bloc/workspace_bloc.dart';
+import 'package:provider/provider.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../helpers/memory_settings_cache.dart';
 
@@ -64,6 +80,62 @@ class _TestableBloc extends PluginSystemBloc {
   void testEmit(PluginSystemState state) => emit(state);
 }
 
+class _MockHistoryBloc extends Mock implements HistoryBloc {}
+
+class _MockTabsBloc extends Mock implements TabsBloc {}
+
+class _MockNavigationBloc extends Mock implements NavigationBloc {}
+
+class _MockLibraryBloc extends Mock implements LibraryBloc {}
+
+class _MockCalendarCubit extends Mock implements CalendarCubit {}
+
+class _MockWorkspaceBloc extends Mock implements WorkspaceBloc {}
+
+class _MockBookmarkBloc extends Mock implements BookmarkBloc {}
+
+class _MockCustomFoldersBloc extends Mock implements CustomFoldersBloc {}
+
+/// רושם בדיקות קיום של קבצים תחת [prefix]; כל קובץ אחר הוא קובץ אמיתי.
+final class _EntryFileSpy extends IOOverrides {
+  _EntryFileSpy(this.prefix);
+  final String prefix;
+  bool useRealFiles = false;
+  Future<bool>? initialResult;
+  final existsCalls = <String>[];
+  final existsSyncCalls = <String>[];
+
+  @override
+  File createFile(String path) => path.replaceAll(r'\', '/').startsWith(prefix)
+      ? _SpyFile(path, this, super.createFile(path))
+      : super.createFile(path);
+}
+
+class _SpyFile implements File {
+  _SpyFile(this.path, this._spy, this._file);
+  @override
+  final String path;
+  final _EntryFileSpy _spy;
+  final File _file;
+
+  @override
+  Future<bool> exists() {
+    _spy.existsCalls.add(path.replaceAll(r'\', '/'));
+    return _spy.useRealFiles
+        ? _file.exists()
+        : _spy.initialResult ?? Future.value(false);
+  }
+
+  @override
+  bool existsSync() {
+    _spy.existsSyncCalls.add(path);
+    return _spy.useRealFiles && _file.existsSync();
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 InstalledPlugin _plugin({
@@ -72,6 +144,7 @@ InstalledPlugin _plugin({
   String installPath = '/install/path',
   String entrypointPath = 'index.html',
   String? devRootPath,
+  bool headless = false,
   List<String> permissions = const [],
   PluginStartupContributions? startup,
 }) => InstalledPlugin(
@@ -91,6 +164,7 @@ InstalledPlugin _plugin({
     author: '',
     homepage: '',
     entrypoint: entrypointPath,
+    headless: headless,
     minAppVersion: '0.0.0',
     sdkVersion: '1.0.0',
     permissions: permissions,
@@ -316,6 +390,13 @@ void main() {
     late int initializeCalls;
 
     setUp(() async {
+      PackageInfo.setMockInitialValues(
+        appName: 'Otzaria',
+        packageName: 'org.otzaria',
+        version: '1.0.0',
+        buildNumber: '1',
+        buildSignature: '',
+      );
       tempDir = await Directory.systemTemp.createTemp('otzaria-bg-host-');
       await Settings.init(cacheProvider: MemorySettingsCache());
       AppPaths.debugOverrideDataRootPath(tempDir.path);
@@ -323,6 +404,7 @@ void main() {
       // פתיחת ה-DB כאן, מחוץ ל-FakeAsync של testWidgets: הפתיחה הראשונה עושה
       // IO אמיתי שלא מתקדם תחת השעון המזויף והבדיקה הייתה נתקעת.
       await PluginRegistryRepository().getPermission('warmup', 'warmup');
+      await PluginFileServer.instance.ensurePort();
 
       initializeCalls = 0;
       WebViewEnvironmentHolder.debugOverrideRuntimeAvailable(true);
@@ -332,6 +414,7 @@ void main() {
     });
 
     tearDown(() async {
+      await PluginFileServer.instance.close();
       WebViewEnvironmentHolder.debugOverrideRuntimeAvailable(null);
       WebViewEnvironmentHolder.debugOverrideInitialize(null);
       await PluginSystemDatabase.instance.close();
@@ -342,11 +425,24 @@ void main() {
     });
 
     Future<void> pumpHost(WidgetTester tester) async {
+      // ה-runner קורא בבלוקים האלה רק בבניית ה-bridge.
       await tester.pumpWidget(
-        MaterialApp(
-          home: BlocProvider<PluginSystemBloc>.value(
-            value: bloc,
-            child: const Scaffold(body: PluginBackgroundHost()),
+        MultiProvider(
+          providers: [
+            Provider<HistoryBloc>.value(value: _MockHistoryBloc()),
+            Provider<TabsBloc>.value(value: _MockTabsBloc()),
+            Provider<NavigationBloc>.value(value: _MockNavigationBloc()),
+            Provider<LibraryBloc>.value(value: _MockLibraryBloc()),
+            Provider<CalendarCubit>.value(value: _MockCalendarCubit()),
+            Provider<WorkspaceBloc>.value(value: _MockWorkspaceBloc()),
+            Provider<BookmarkBloc>.value(value: _MockBookmarkBloc()),
+            Provider<CustomFoldersBloc>.value(value: _MockCustomFoldersBloc()),
+          ],
+          child: MaterialApp(
+            home: BlocProvider<PluginSystemBloc>.value(
+              value: bloc,
+              child: const Scaffold(body: PluginBackgroundHost()),
+            ),
           ),
         ),
       );
@@ -401,7 +497,7 @@ void main() {
       await pumpHost(tester);
 
       expect(initializeCalls, 0);
-      expect(find.byType(InAppWebView), findsNothing);
+      expect(find.byType(InAppWebView, skipOffstage: false), findsNothing);
     });
 
     testWidgets(
@@ -422,7 +518,7 @@ void main() {
         await pumpHost(tester);
 
         expect(initializeCalls, 0);
-        expect(find.byType(InAppWebView), findsNothing);
+        expect(find.byType(InAppWebView, skipOffstage: false), findsNothing);
       },
     );
     testWidgets(
@@ -467,9 +563,208 @@ void main() {
         // initializeCalls==1 מוכיח שהמסלול העצל באמת הגיע לאתחול הסביבה —
         // בלעדיו הבדיקות ה"שליליות" בקבוצה היו עוברות סתם כי הקוד נתקע.
         expect(initializeCalls, 1);
-        expect(find.byType(InAppWebView), findsNothing);
+        expect(find.byType(InAppWebView, skipOffstage: false), findsNothing);
       },
     );
+
+    testWidgets(
+      'מופע רקע בודק את קובץ הכניסה אסינכרונית — בלי existsSync ב-build (#3380)',
+      (tester) async {
+        final io = _EntryFileSpy('/install/');
+        final plugin = _plugin(
+          permissions: const [pluginRunOnStartupPermission],
+          startup: const PluginStartupContributions(
+            activationEvents: ['notes.changed'],
+          ),
+        );
+        await PluginRegistryRepository().setPermission(
+          plugin.pluginId,
+          pluginRunOnStartupPermission,
+          true,
+        );
+        final lazy = PluginLazyActivationService.instance;
+        lazy.syncPlugin(
+          plugin.pluginId,
+          broadcastTopics: const {'notes.changed'},
+          scheduleStartup: false,
+        );
+        addTearDown(() => lazy.removePlugin(plugin.pluginId));
+
+        await IOOverrides.runWithIOOverrides(() async {
+          bloc.testEmit(PluginSystemLoaded([plugin]));
+          await pumpHost(tester);
+          lazy.onBroadcast(
+            'notes.changed',
+            const {},
+            hasUsableInstance: (_) => false,
+          );
+          await tester.pumpAndSettle();
+          expect(initializeCalls, 1);
+          expect(io.existsCalls, hasLength(1));
+
+          // נתיב חדש → runner חדש שבודק את הנתיב החדש.
+          bloc.testEmit(
+            PluginSystemLoaded([plugin.copyWith(installPath: '/install/v2')]),
+          );
+          await tester.pumpAndSettle();
+        }, io);
+
+        expect(io.existsSyncCalls, isEmpty);
+        expect(io.existsCalls, hasLength(2));
+        expect(io.existsCalls.last, startsWith('/install/v2'));
+        // קובץ כניסה חסר — עדיין לא נבנה WebView.
+        expect(find.byType(InAppWebView, skipOffstage: false), findsNothing);
+      },
+    );
+
+    for (final (headless, lateInitial) in [
+      (false, false),
+      (true, false),
+      (false, true),
+      (true, true),
+    ]) {
+      testWidgets(
+        'קובץ ${headless ? "JS" : "HTML"} שנוצר אחרי ההפעלה נטען ברענון פיתוח'
+        '${lateInitial ? " גם כשהבדיקה הראשונה מסתיימת באיחור" : ""}',
+        (tester) async {
+          final previousPlatform = InAppWebViewPlatform.instance;
+          WindowsInAppWebViewPlatform.registerWith();
+          const manager = MethodChannel(
+            'com.pichillilorenzo/flutter_inappwebview_manager',
+          );
+          const view = MethodChannel(
+            'com.pichillilorenzo/custom_platform_view_3',
+          );
+          const events = EventChannel(
+            'com.pichillilorenzo/custom_platform_view_3_events',
+          );
+          const environmentManager = MethodChannel(
+            'com.pichillilorenzo/flutter_webview_environment',
+          );
+          MethodChannel? environmentChannel;
+          final messenger = tester.binding.defaultBinaryMessenger;
+          messenger.setMockMethodCallHandler(manager, (call) async {
+            return call.method == 'createInAppWebView' ? 3 : null;
+          });
+          messenger.setMockMethodCallHandler(view, (call) async => null);
+          messenger.setMockMethodCallHandler(environmentManager, (call) async {
+            if (call.method == 'create') {
+              environmentChannel = MethodChannel(
+                'com.pichillilorenzo/flutter_webview_environment_${call.arguments["id"]}',
+              );
+              messenger.setMockMethodCallHandler(
+                environmentChannel!,
+                (call) async => null,
+              );
+            }
+            return null;
+          });
+          messenger.setMockStreamHandler(
+            events,
+            MockStreamHandler.inline(onListen: (arguments, events) {}),
+          );
+          addTearDown(() async {
+            await WebViewEnvironmentHolder.disposeForAppRestart();
+            messenger.setMockMethodCallHandler(environmentManager, null);
+            if (environmentChannel case final channel?) {
+              messenger.setMockMethodCallHandler(channel, null);
+            }
+            messenger.setMockMethodCallHandler(manager, null);
+            messenger.setMockMethodCallHandler(view, null);
+            messenger.setMockStreamHandler(events, null);
+            if (previousPlatform case final platform?) {
+              InAppWebViewPlatform.instance = platform;
+            }
+          });
+          if (Platform.isWindows) {
+            WebViewEnvironmentHolder.debugOverrideInitialize(null);
+            await tester.runAsync(
+              () =>
+                  WebViewEnvironmentHolder.initialize(dataFolderChecked: true),
+            );
+          }
+
+          final entrypoint = headless ? 'main.js' : 'index.html';
+          final entryFile = File('${tempDir.path}/$entrypoint');
+          expect(await tester.runAsync(entryFile.exists), isFalse);
+          final plugin = _plugin(
+            devRootPath: tempDir.path,
+            entrypointPath: entrypoint,
+            headless: headless,
+            permissions: const [pluginRunOnStartupPermission],
+            startup: const PluginStartupContributions(
+              activationEvents: ['notes.changed'],
+            ),
+          ).copyWith(sourceType: 'development');
+          await PluginRegistryRepository().setPermission(
+            plugin.pluginId,
+            pluginRunOnStartupPermission,
+            true,
+          );
+          final lazy = PluginLazyActivationService.instance;
+          lazy.syncPlugin(
+            plugin.pluginId,
+            broadcastTopics: const {'notes.changed'},
+            scheduleStartup: false,
+          );
+          addTearDown(() => lazy.removePlugin(plugin.pluginId));
+          final io = _EntryFileSpy(tempDir.path);
+          final firstCheck = Completer<bool>();
+          if (lateInitial) io.initialResult = firstCheck.future;
+          await IOOverrides.runWithIOOverrides(() async {
+            bloc.testEmit(PluginSystemLoaded([plugin]));
+            await pumpHost(tester);
+            lazy.onBroadcast(
+              'notes.changed',
+              const {},
+              hasUsableInstance: (_) => false,
+            );
+            await tester.pumpAndSettle();
+            expect(
+              find.byType(InAppWebView, skipOffstage: false),
+              findsNothing,
+            );
+
+            await tester.runAsync(
+              () => entryFile.writeAsString(
+                headless ? 'window.ready = true;' : '<html></html>',
+              ),
+            );
+            io.useRealFiles = true;
+            await tester.runAsync(
+              () => PluginRuntimeDispatcher.instance.reloadPlugin(
+                plugin.pluginId,
+              ),
+            );
+            tester.element(find.byType(PluginBackgroundHost)).markNeedsBuild();
+            await tester.pumpAndSettle();
+
+            expect(
+              find.byType(InAppWebView, skipOffstage: false),
+              findsOneWidget,
+            );
+            final webview = tester.widget<InAppWebView>(
+              find.byType(InAppWebView, skipOffstage: false),
+            );
+            expect(
+              webview.platform.params.initialUrlRequest!.url!.path,
+              endsWith(headless ? pluginHeadlessShellFileName : entrypoint),
+            );
+            if (lateInitial) {
+              firstCheck.complete(false);
+              await tester.pumpAndSettle();
+              expect(
+                find.byType(InAppWebView, skipOffstage: false),
+                findsOneWidget,
+              );
+            }
+            await tester.pumpWidget(const SizedBox());
+            await tester.pumpAndSettle();
+          }, io);
+        },
+        variant: TargetPlatformVariant.only(TargetPlatform.windows),
+      );
+    }
 
     testWidgets('WebView2 Runtime חסר — הערה עצלה נכשלת בלי לאתחל', (
       tester,
@@ -504,7 +799,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(initializeCalls, 0);
-      expect(find.byType(InAppWebView), findsNothing);
+      expect(find.byType(InAppWebView, skipOffstage: false), findsNothing);
     });
   });
 }
