@@ -43,10 +43,31 @@ void main() {
     seed(provider);
     final link = _link(9001);
 
-    expect(await link.content, 'שגיאה: לא נמצא תוכן');
+    expect(await link.content, 'שגיאה: מאגר לא מאותחל');
     await Future<void>.delayed(Duration.zero);
     expect(await link.content, 'תוכן רש"י');
     expect(provider.calls, 2);
+  });
+
+  test('הודעת הספק הראשון שנכשל עוברת הלאה, לא הודעה כללית', () async {
+    manager.seedMappingsForTesting(
+      mapping: <BookCompositeKey, LibraryProvider>{},
+      providers: <LibraryProvider>[
+        _ScriptedProvider(['שגיאה בטעינת תוכן המפרש']),
+        _ScriptedProvider(['שגיאה: הספר לא נמצא']),
+      ],
+    );
+
+    expect(
+      (await manager.getLinkContentLines(_link(9003))).single.content,
+      'שגיאה בטעינת תוכן המפרש',
+    );
+  });
+
+  test('תוכן ריק בלי הודעת שגיאה מציג "לא נמצא תוכן"', () async {
+    seed(_ScriptedProvider(['']));
+
+    expect(await manager.getLinkContent(_link(9004)), 'שגיאה: לא נמצא תוכן');
   });
 
   test('תוצאה תקינה נשמרת במטמון', () async {
