@@ -1,7 +1,8 @@
 import 'package:otzaria/core/user_state/user_state_list_store.dart';
 import 'package:otzaria/data/repository/user_state_list_repository.dart';
 
-/// בסיס למאגרי רשימה של מצב המשתמש, עם הפעולות המשותפות.
+/// בסיס למאגרי רשימה של מצב המשתמש, עם הפעולות המשותפות. הפריטים נתונים
+/// טהורים, ולכן רשימה גדולה מפוענחת ב-isolate.
 abstract class BaseListRepository<T> {
   final UserStateListRepository<T> _repo;
 
@@ -16,6 +17,7 @@ abstract class BaseListRepository<T> {
          key: key,
          fromJson: fromJson,
          toJson: toJson,
+         decodeInBackground: true,
          store: store,
        );
 

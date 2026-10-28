@@ -27,9 +27,19 @@ class UserStateListStore {
   /// כל כתיבה משודרת עם ה-[origin] שלה, כדי שהכותב יוכל לסנן את עצמו.
   Stream<UserStateListChange> get changes => _changes.stream;
 
-  Future<List<dynamic>> read(String box, String key) async {
+  Future<List<dynamic>> read(String box, String key) async =>
+      decodePayload(await readPayload(box, key));
+
+  /// ה-JSON הגולמי של הרשימה, לפענוח מחוץ ל-isolate של ה-UI.
+  Future<String?> readPayload(String box, String key) async {
     final db = await _database.database;
-    return _readIn(db, box, key);
+    return _payloadIn(db, box, key);
+  }
+
+  static List<dynamic> decodePayload(String? payload) {
+    if (payload == null) return const [];
+    final decoded = jsonDecode(payload);
+    return decoded is List ? decoded : const [];
   }
 
   Future<void> write(
@@ -67,14 +77,15 @@ class UserStateListStore {
     _notifyPeers(box, key, origin);
   }
 
-  List<dynamic> _readIn(Database db, String box, String key) {
+  List<dynamic> _readIn(Database db, String box, String key) =>
+      decodePayload(_payloadIn(db, box, key));
+
+  String? _payloadIn(Database db, String box, String key) {
     final rows = db.select(
       'SELECT payload_json FROM lists WHERE box = ? AND key = ?',
       [box, key],
     );
-    if (rows.isEmpty) return const [];
-    final decoded = jsonDecode(rows.first['payload_json'] as String);
-    return decoded is List ? decoded : const [];
+    return rows.isEmpty ? null : rows.first['payload_json'] as String;
   }
 
   void _writeIn(Database db, String box, String key, List<dynamic> value) {
