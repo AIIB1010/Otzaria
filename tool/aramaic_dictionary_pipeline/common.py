@@ -62,13 +62,13 @@ def work_dir(cfg: dict[str, Any], *parts: str) -> Path:
 
 def read_jsonl(path: Path, tolerate_truncated_tail: bool = False) -> list[dict[str, Any]]:
     """tolerate_truncated_tail: שורה אחרונה קטומה (קריסה באמצע כתיבה) מדולגת בהודעה במקום להפיל את הקריאה."""
-    with open(path, encoding="utf-8") as fh:
+    with open(path, "rb") as fh:
         lines = [line for line in fh if line.strip()]
     rows: list[dict[str, Any]] = []
     for index, line in enumerate(lines):
         try:
-            rows.append(json.loads(line))
-        except json.JSONDecodeError:
+            rows.append(json.loads(line.decode("utf-8")))
+        except (json.JSONDecodeError, UnicodeDecodeError):
             if tolerate_truncated_tail and index == len(lines) - 1:
                 print(f"warning: {path.name}: skipping truncated last line", file=sys.stderr)
                 continue

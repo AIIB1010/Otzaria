@@ -56,10 +56,14 @@ class ReviewRecoveryTests(unittest.TestCase):
 
     def test_recover_append_reload_merge_and_revert(self) -> None:
         original = (json.dumps({"item_id": "א", "action": "reject"}, ensure_ascii=False) + "\n").encode("utf-8")
-        for tail in (b'{"item_id":"b","action":', b'{"item_id":"b","action":\n', b'{"item_id":"b","action":\n\n  '):
+        for tail in (
+            b'{"item_id":"b","action":', b'{"item_id":"b","action":\n', b'{"item_id":"b","action":\n\n  ',
+            b'{"item_id":"b","notes":"' + "א".encode("utf-8")[:1],
+        ):
             with self.subTest(tail=tail):
                 self.path.write_bytes(original + tail)
                 self.assertEqual(list(load_decisions(self.path)), ["א"])
+                self.assertEqual(self.path.read_bytes(), original + tail)
                 self.post("ב")
                 self.assertEqual(load_decisions(self.path)["ב"]["action"], "accept_proposal")
                 self.post("א")
@@ -82,6 +86,15 @@ class ReviewRecoveryTests(unittest.TestCase):
         original = b'{"item_id":"broken","action":\n{"item_id":"valid","action":"reject"}\n'
         self.path.write_bytes(original)
         with self.assertRaises(json.JSONDecodeError):
+            self.post("ב")
+        self.assertEqual(self.path.read_bytes(), original)
+
+    def test_invalid_utf8_inside_log_is_not_ignored(self) -> None:
+        original = b'{"item_id":"broken","notes":"' + "א".encode("utf-8")[:1] + b'\n{"item_id":"valid","action":"reject"}\n'
+        self.path.write_bytes(original)
+        with self.assertRaises(UnicodeDecodeError):
+            load_decisions(self.path)
+        with self.assertRaises(UnicodeDecodeError):
             self.post("ב")
         self.assertEqual(self.path.read_bytes(), original)
 
