@@ -55,6 +55,12 @@ import 'package:otzaria_search_engine/otzaria_search_engine.dart';
 export 'package:otzaria/indexing/utils/pdf_extraction_prefetcher.dart'
     show PdfExtraction;
 
+typedef PackedPdfPages = ({
+  Uint8List bytes,
+  Uint32List ends,
+  Uint32List pageIndexes,
+});
+
 class _PdfExtractionFailure implements Exception {
   const _PdfExtractionFailure(this.cause);
 
@@ -1328,10 +1334,8 @@ class IndexingRepository {
     );
   }
 
-  /// שולח את עמודי ה-PDF למנוע בקריאת FFI אחת (add_pdf_book: נרמול, סינון
-  /// זבל ואינדוקס בתוך המנוע) ומחזיר את מספר המסמכים שנוספו. מחליף את
-  /// המסלול הישן — isolate ← נרמול באצוות ← העתקת SendPort ←
-  /// addDocumentsBatch — שהעתיק את הטקסט המחולץ ארבע-חמש פעמים לכל ספר.
+  /// שולח את עמודי ה-PDF למנוע בקריאת FFI אחת (נרמול, סינון זבל ואינדוקס
+  /// בתוך המנוע) ומחזיר את מספר המסמכים שנוספו.
   Future<int> _addPdfBookToEngine(
     PdfBook book,
     List<({String reference, String text, int pageIndex})> pages, {
@@ -1344,19 +1348,17 @@ class IndexingRepository {
     }
     final engine = await _tantivyDataProvider.engine;
     final engineStopwatch = Stopwatch()..start();
-    final added = await engine.addPdfBook(
+    // FRB מקודד ומפענח את הארגומנטים על ה-UI thread; רשימת עמודים גדולה הקפיאה
+    // אותו (#3443). חוצץ בתים שנארז ב-isolate עובר כהעתקה אחת.
+    final packed = await _packPdfPagesOffFrame(pages);
+    final added = await engine.addPdfBookBytes(
       title: book.title,
       topics: _bookTopics(book),
       filePath: BookIdentity.indexedFilePath(book),
       extraFacets: _bookExtraFacets(book),
-      pages: [
-        for (final page in pages)
-          PdfPageInput(
-            reference: page.reference,
-            text: page.text,
-            pageIndex: page.pageIndex,
-          ),
-      ],
+      bytes: packed.bytes,
+      ends: packed.ends,
+      pageIndexes: packed.pageIndexes,
     );
     engineStopwatch.stop();
     debugPrint(
@@ -1364,6 +1366,34 @@ class IndexingRepository {
       'מנוע ${engineStopwatch.elapsedMilliseconds}ms',
     );
     return added;
+  }
+
+  static Future<PackedPdfPages> _packPdfPagesOffFrame(
+    List<({String reference, String text, int pageIndex})> pages,
+  ) => Isolate.run(() => packPdfPages(pages));
+
+  /// אורז את העמודים לפורמט של `addPdfBookBytes`: לכל עמוד ההפניה ואחריה
+  /// הטקסט ב-UTF-8, ו-[PackedPdfPages.ends] מחזיק את סוף כל אחד מהם.
+  @visibleForTesting
+  static PackedPdfPages packPdfPages(
+    List<({String reference, String text, int pageIndex})> pages,
+  ) {
+    final builder = BytesBuilder(copy: false);
+    final ends = Uint32List(pages.length * 2);
+    final pageIndexes = Uint32List(pages.length);
+    for (var i = 0; i < pages.length; i++) {
+      final page = pages[i];
+      builder.add(utf8.encode(page.reference));
+      ends[2 * i] = builder.length;
+      builder.add(utf8.encode(page.text));
+      ends[2 * i + 1] = builder.length;
+      pageIndexes[i] = page.pageIndex;
+    }
+    return (
+      bytes: builder.takeBytes(),
+      ends: ends,
+      pageIndexes: pageIndexes,
+    );
   }
 
   /// רושם באינדקס מסמך ריק יחיד עבור ספר שלא הניב תוכן לאינדוקס (למשל PDF

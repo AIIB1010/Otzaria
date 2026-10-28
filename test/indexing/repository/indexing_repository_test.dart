@@ -2573,10 +2573,17 @@ void main() {
           );
 
           expect(result.completed, isTrue);
-          // הראשון נוקז מוקדם — נכתב לפני שהלולאה הגיעה למקומו (3).
+          // הראשון נוקז מוקדם — נכתב לפני שהלולאה הגיעה למקומו (3). השני עשוי
+          // להתנקז באותו סבב, ואז הלולאה מדלגת על דיווח 3.
           expect(
             events.indexOf('pdf:א'),
-            lessThan(events.indexOf('progress:3')),
+            lessThan(
+              events.indexWhere(
+                (e) =>
+                    e.startsWith('progress:') &&
+                    int.parse(e.substring('progress:'.length)) >= 3,
+              ),
+            ),
           );
           // כל PDF חולץ ואונדקס בדיוק פעם אחת — הניקוז המוקדם לא מכפיל.
           expect(repository.extractedTitles, ['א', 'ב']);
@@ -4693,17 +4700,19 @@ class _CancellationRecordingEngine extends _RecordingSearchEngine {
   }
 
   @override
-  Future<int> addPdfBook({
+  Future<int> addPdfBookBytes({
     required String title,
     required String topics,
     required String filePath,
-    required List<PdfPageInput> pages,
+    required List<int> bytes,
+    required List<int> ends,
+    required List<int> pageIndexes,
     List<String>? extraFacets,
   }) async {
     _add(filePath);
     addedPdfTitles.add(title);
     onPdfAdded?.call(title);
-    return pages.length;
+    return pageIndexes.length;
   }
 
   @override
@@ -4750,11 +4759,13 @@ class _RecordingSearchEngine implements SearchEngine {
   void Function(String title)? onPdfAdded;
 
   @override
-  Future<int> addPdfBook({
+  Future<int> addPdfBookBytes({
     required String title,
     required String topics,
     required String filePath,
-    required List<PdfPageInput> pages,
+    required List<int> bytes,
+    required List<int> ends,
+    required List<int> pageIndexes,
     List<String>? extraFacets,
   }) async {
     addedPdfTitles.add(title);
@@ -4764,7 +4775,7 @@ class _RecordingSearchEngine implements SearchEngine {
     }
     // המנוע מסנן זבל בעצמו ועשוי להחזיר 0 גם כשנשלחו אליו עמודים.
     if (title == addPdfReturnsZeroFor) return 0;
-    return pages.length;
+    return pageIndexes.length;
   }
 
   /// כותרת שכתיבתה למנוע מחזירה 0 מסמכים — כל העמודים סוננו כזבל.
