@@ -132,8 +132,13 @@ class _Section {
 
 final RegExp _dartFrame = RegExp(r'^(\s*)app\.so\+0x([0-9a-fA-F]+)\s*$');
 final RegExp _buildIdLine = RegExp(r'^Dart build-id:\s*([0-9a-fA-F]+)\s*$');
+final RegExp _modulePdbLine = RegExp(
+  r'^Module PDB:\s+\S+\s+(\S+\.pdb)\s+([0-9A-F]+)\s*$',
+  caseSensitive: false,
+);
 
-/// מוסיף שם פונקציה לכל שורת `app.so+0x…` ב-errors.txt.
+/// מוסיף שם פונקציה לכל שורת `app.so+0x…` ב-errors.txt, וכתובת הורדת PDB
+/// משרת הסמלים של Microsoft לכל שורת `Module PDB:`.
 ///
 /// רשומה (`=== …`) שה-build-id שלה שונה משל [symbols] נשארת בלי שמות, עם
 /// אזהרה: שמות מקובץ סמלים של בנייה אחרת שגויים.
@@ -152,6 +157,16 @@ String symbolizeHangReport(String log, DartSymbols symbols) {
           'frames left unnamed)',
         );
       }
+      continue;
+    }
+    final pdb = _modulePdbLine.firstMatch(line);
+    if (pdb != null) {
+      out
+        ..writeln(line)
+        ..writeln(
+          '  https://msdl.microsoft.com/download/symbols/'
+          '${pdb.group(1)}/${pdb.group(2)}/${pdb.group(1)}',
+        );
       continue;
     }
     final frame = matches ? _dartFrame.firstMatch(line) : null;

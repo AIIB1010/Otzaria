@@ -253,6 +253,8 @@ Name those frames with the release asset `otzaria-dart-symbols-windows-<arch>.de
 whose `Dart build-id` does not match the file. `Build commit` identifies a dev build, and those have no
 published symbols. To name `flutter_windows.dll` frames, use its PDB from
 `flutter_infra_release/flutter/<engine.version>/windows-x64-release/windows-x64-flutter.zip`.
+For system-DLL frames, fetch the PDB from the Microsoft symbol server using the record's `Module PDB`
+line (the tool prints the URL).
 
 ## Developer diagnostics (measuring the real app)
 

@@ -123,7 +123,15 @@ void main() {
     );
     expect(identity, contains('"Build commit: "'));
     expect(identity, contains('"Dart build-id: "'));
+    expect(identity, contains('AppendModulePdbLines(frames, report);'));
     expect(identity, isNot(contains('Stack')));
+    final pdbLines = source.substring(
+      source.indexOf('void AppendModulePdbLines('),
+      source.indexOf('std::string DescribeAddress('),
+    );
+    expect(pdbLines, contains('"Module PDB: "'));
+    expect(pdbLines, contains('GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT'));
+    expect(pdbLines, contains('DartImageBase(frame) != 0'));
     final stall = source.substring(source.indexOf('void ReportStall('));
     expect(
       stall.indexOf('AppendBuildIdentitySection(frames, &report);'),

@@ -136,6 +136,7 @@ void main() {
             'Stack (module+RVA):',
             'Build commit: 0d6049857abc-dirty\n'
                 'Dart build-id: 3f4de71d7b1eccf7d1d9594e1c03aad2\n'
+                'Module PDB: dwrite.dll dwrite.pdb 3F2A0B1C4D5E6F708192A3B4C5D6E7F81\n'
                 'Stack (module+RVA):',
           );
       final rich = parseErrorLogBlocks(
