@@ -1621,8 +1621,8 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/flutter"
-      ref: "16994df10b4275877fbb3f37e1057ef823ef5ee8"
-      resolved-ref: "16994df10b4275877fbb3f37e1057ef823ef5ee8"
+      ref: aa58915e2ef0dfd506b5d6d9931b439bb770b170
+      resolved-ref: aa58915e2ef0dfd506b5d6d9931b439bb770b170
       url: "https://github.com/Otzaria/sentry-dart"
     source: git
     version: "9.30.1"
