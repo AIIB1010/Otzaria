@@ -207,10 +207,8 @@ class BackupService {
       final file = File(backupPath);
       _logger.info('Writing backup data (${backupData.length} keys)...');
 
-      final jsonString = json.encode(backupData);
-      _logger.info('JSON size: ${jsonString.length} characters');
-
-      await file.writeAsString(jsonString);
+      final jsonLength = await _writeBackupJson(backupPath, backupData);
+      _logger.info('JSON size: $jsonLength characters');
       _logger.info('Backup file written successfully');
 
       // Verify file was created
@@ -419,6 +417,14 @@ class BackupService {
       !isNonSettingKey(key) && !nonPortableSettingsKeys.contains(key);
 
   /// Backup bookmarks
+  /// גיבוי גדול נמשך שניות בקידוד JSON ו-UTF-8, ולכן נכתב מחוץ ל-isolate הראשי.
+  static Future<int> _writeBackupJson(String path, Map<String, dynamic> data) =>
+      Isolate.run(() {
+        final jsonString = json.encode(data);
+        File(path).writeAsStringSync(jsonString);
+        return jsonString.length;
+      });
+
   static Future<List<Map<String, dynamic>>> _backupBookmarks() async {
     final repo = BookmarkRepository();
     final bookmarks = await repo.loadBookmarks();
