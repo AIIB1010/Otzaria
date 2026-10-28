@@ -101,11 +101,6 @@ Map<String, String> _mergeGroup(List<Map<String, String>> group) => {
 // בלי גרשיים, כמו בתפריט ההקשר: "ב"ד" צריך למצוא גם את המפתח ב''ד.
 String _stripQuotes(String text) => text.replaceAll(RegExp("[\"'״׳]"), '');
 
-// הביטוי הארמי בסוגריים מסולסלים ובהרחבה (=...) אינו עברית לחיפוש.
-String _stripAramaicMarkup(String text) => text
-    .replaceAll(RegExp(r'\{[^{}]*\}|\(=[^)]*\)'), ' ')
-    .replaceAll(RegExp(r'\s+'), ' ');
-
 class AramaicDictionaryScreen extends StatefulWidget {
   const AramaicDictionaryScreen({super.key, this.repository, this.queryInbox});
 
@@ -173,7 +168,11 @@ class _AramaicDictionaryScreenState extends State<AramaicDictionaryScreen>
             'dictionary': entry.dictionary,
             // שדות החיפוש בלי ניקוד, כדי שהקלדה רגילה תמצא ערכים מנוקדים.
             'aramaicPlain': _stripQuotes(removeVolwels(entry.aramaic)),
-            'hebrewPlain': removeVolwels(_stripAramaicMarkup(entry.hebrew)),
+            'hebrewPlain': removeVolwels(
+              AramaicDictionaryEntryPresentation.parse(
+                entry.hebrew,
+              ).meanings.map((meaning) => meaning.hebrewText).join(' '),
+            ),
           };
         }).toList();
         _isLoading = false;

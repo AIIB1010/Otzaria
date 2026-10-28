@@ -262,13 +262,24 @@ class LaazDictionaryEntry {
 class ParsedAramaicMeaning {
   const ParsedAramaicMeaning({
     required this.mainText,
+    String? hebrewText,
     this.expression,
     this.expansion,
-  });
+  }) : hebrewText = hebrewText ?? mainText;
 
   final String mainText;
+
+  /// התרגום לחיפוש, בלי הביטוי או ההרחבה הארמית.
+  final String hebrewText;
   final String? expression;
   final String? expansion;
+
+  /// כל חלקי הפירוש המוצגים, להעתקה.
+  String get text => [
+    ?expression,
+    if (mainText.isNotEmpty) mainText,
+    if (expansion != null) '(=$expansion)',
+  ].join(' ');
 }
 
 /// מייצג ערך מלא במילון לאחר חלוקה לפירושים.
@@ -291,8 +302,7 @@ class AramaicDictionaryEntryPresentation {
       final parts = meaning.mainText
           .split(_alternativeSeparator)
           .map(
-            (part) =>
-                utils.removeVolwels(part).replaceAll(_quotes, '').trim(),
+            (part) => utils.removeVolwels(part).replaceAll(_quotes, '').trim(),
           )
           .where((part) => part.isNotEmpty)
           .toList();
@@ -329,12 +339,15 @@ class AramaicDictionaryEntryPresentation {
   }
 
   static ParsedAramaicMeaning _parseMeaning(String raw) {
-    final expressionMatch = RegExp(r'^\{([^{}]+)\}\s*').firstMatch(raw);
+    final expressionMatch =
+        RegExp(r'^\{([^{}]+)\}\s*').firstMatch(raw) ??
+        RegExp(r'^(\S+)(?=\(=)').firstMatch(raw);
     final expression = expressionMatch?.group(1)?.trim();
     var remaining = expressionMatch == null
         ? raw.trim()
         : raw.substring(expressionMatch.end).trim();
 
+    var hebrewText = remaining;
     String? expansion;
     final expansionAtStart = RegExp(
       r'^\(=\s*([^)]+?)\)\s*',
@@ -342,6 +355,8 @@ class AramaicDictionaryEntryPresentation {
     if (expansionAtStart != null) {
       expansion = expansionAtStart.group(1)?.trim();
       remaining = remaining.substring(expansionAtStart.end).trim();
+      // הרחבה בתחילת פירוש היא ארמית, אלא אם היא הפירוש היחיד.
+      hebrewText = remaining.isEmpty ? expansion! : remaining;
     } else {
       final inlineExpansion = RegExp(
         r'\s+\(=\s*([^)]+?)\)\s*',
@@ -356,6 +371,7 @@ class AramaicDictionaryEntryPresentation {
 
     return ParsedAramaicMeaning(
       mainText: remaining,
+      hebrewText: hebrewText,
       expression: expression,
       expansion: expansion,
     );
@@ -661,12 +677,8 @@ class DictionaryLookupRepository {
     ].join(' *** ');
   }
 
-  /// מחזיר את כל הביטויים הארמיים המכילים את המילה שנבחרה,
-  /// אבל רק אם קיימת התאמה מילונית מדויקת למילה עצמה.
-  /// התאמות מדויקות מוחזרות תמיד במלואן. [maxContainingMatches] מגביל רק את
-  /// הצירופים שמכילים את המילה בתוכם (תפריט הקשר על מילה שכיחה כמו "ליה" היה
-  /// מציג מאות שורות); כשיש יותר ממנו נשארים הקצרים ביותר, בסדר המילון.
-  /// [dictionaries] מגביל למילונים בשמם; ברירת המחדל היא "פשיטא" בלבד.
+  /// התאמות מדויקות וכל פירושי עד [maxContainingMatches] הצירופים הקצרים, בסדר המילון.
+  /// נדרשת מילה שקיימת במילון; [dictionaries] בוחר מילונים, כברירת מחדל "פשיטא" בלבד.
   List<AramaicDictionaryEntry> findAramaicMatches(
     String raw, {
     int? maxContainingMatches,
@@ -697,14 +709,20 @@ class DictionaryLookupRepository {
 
     if (maxContainingMatches != null &&
         containing.length > maxContainingMatches) {
-      containing =
+      final selectedKeys =
           (containing..sort((a, b) {
                 final byLength = _aramaicIndex[a].words.length.compareTo(
                   _aramaicIndex[b].words.length,
                 );
                 return byLength != 0 ? byLength : a.compareTo(b);
               }))
+              .map((i) => _aramaicIndex[i].normalized)
+              .toSet()
               .take(maxContainingMatches)
+              .toSet();
+      containing =
+          containing
+              .where((i) => selectedKeys.contains(_aramaicIndex[i].normalized))
               .toList()
             ..sort();
     }

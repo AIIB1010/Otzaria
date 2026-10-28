@@ -1,9 +1,3 @@
-// lib/tools/aramaic_dictionary/widgets/aramaic_result_card.dart
-//
-// כרטיס ערך במילון ארמי-עברי, בסגנון מילון:
-//  • כותרת הערך (המילה הארמית) והעתקת כל הערך
-//  • פירושים ממוספרים, ולכל פירוש העתקה וחיפוש הפוך
-
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -161,10 +155,10 @@ class AramaicResultCard extends StatelessWidget {
                       headwordPlain: headwordPlain,
                       query: queryIsAramaic ? '' : query,
                       highlight: highlight,
-                      onCopy: () => _copy(meanings[i].mainText),
+                      onCopy: () => _copy(meanings[i].text),
                       onSearch: queryIsAramaic && onSearch != null
                           ? () {
-                              final term = searchTermOf(meanings[i].mainText);
+                              final term = searchTermOf(meanings[i].hebrewText);
                               if (term.isNotEmpty) {
                                 onSearch!(term, hebrewToAramaic: true);
                               }
@@ -184,8 +178,8 @@ class AramaicResultCard extends StatelessWidget {
     final lines = [
       for (var i = 0; i < meanings.length; i++)
         meanings.length > 1
-            ? '${i + 1}. ${meanings[i].mainText}'
-            : meanings[i].mainText,
+            ? '${i + 1}. ${meanings[i].text}'
+            : meanings[i].text,
     ];
     return '$aramaic\n${lines.join('\n')}';
   }
