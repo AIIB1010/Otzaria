@@ -479,7 +479,8 @@ class LibraryProviderManager {
   Future<String> getLinkContent(Link link) => _getLinkContent(
     link,
     (provider) => provider.getLinkContent(link),
-    (content) => content.isNotEmpty && !content.startsWith('שגיאה'),
+    (content) => content.isEmpty,
+    (content) => content.startsWith('שגיאה'),
     'שגיאה: לא נמצא תוכן',
   );
 
@@ -499,18 +500,27 @@ class LibraryProviderManager {
                       .getLinkContent(link.withTargetRange(i, i))
                       .then((content) => (lineIndex: i - 1, content: content)),
               ]),
-        (lines) =>
-            lines.isNotEmpty &&
-            lines.every((line) => !line.content.startsWith('שגיאה')),
+        (lines) => lines.isEmpty,
+        (lines) => lines.any((line) => line.content.startsWith('שגיאה')),
         [(lineIndex: link.index2 - 1, content: 'שגיאה: לא נמצא תוכן')],
       );
 
   Future<T> _getLinkContent<T>(
     Link link,
     Future<T> Function(LibraryProvider) load,
-    bool Function(T) valid,
+    bool Function(T) isEmpty,
+    bool Function(T) isError,
     T missing,
   ) async {
+    // הודעת הספק מסבירה את הכשל (למשל מסד פגום); "לא נמצא" רק כשאין כזו.
+    T? failure;
+    bool valid(T content) {
+      if (isEmpty(content)) return false;
+      if (!isError(content)) return true;
+      failure ??= content;
+      return false;
+    }
+
     final targetName = link.path2.split('/').last;
     final targetExtension = p.extension(targetName).toLowerCase();
     final targetTitle =
@@ -546,7 +556,7 @@ class LibraryProviderManager {
       }
     }
 
-    return missing;
+    return failure ?? missing;
   }
 
   /// Builds a unified library catalog from all providers.
