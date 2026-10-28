@@ -3023,6 +3023,85 @@ void main() {
       },
     );
 
+    // #3515: קריאת קטלוג של 18 אלף ספרים אישיים בחיבור הראשי תקעה את ה-UI.
+    test('קטלוג הספרים האישיים נקרא בחיבור נפרד, לא בחיבור הראשי', () async {
+      final tempDir = await Directory.systemTemp.createTemp(
+        'otzaria_user_books_off_ui',
+      );
+      final libraryPath = path.join(tempDir.path, 'library');
+      final database = MyDatabase.withPath(
+        path.join(libraryPath, DatabaseConstants.databaseFileName),
+      );
+      final repository = SeforimRepository(database);
+      final provider = DatabaseLibraryProvider.instance;
+      final previousLibraryPath = Settings.getValue<String>(
+        SettingsRepository.keyLibraryPath,
+      );
+      final previousDataRootPath = AppPaths.cachedDataRootPath;
+
+      addTearDown(() => tempDir.delete(recursive: true));
+      addTearDown(() => database.close());
+      addTearDown(() => provider.clearCache());
+      addTearDown(() => provider.sqliteProvider.dispose());
+      addTearDown(
+        () => AppPaths.debugOverrideDataRootPath(previousDataRootPath),
+      );
+      addTearDown(() => UserBooksDatabaseHolder.instance.close());
+      addTearDown(
+        () => Settings.setValue<String>(
+          SettingsRepository.keyLibraryPath,
+          previousLibraryPath ?? '',
+        ),
+      );
+
+      await Directory(libraryPath).create(recursive: true);
+      await provider.sqliteProvider.dispose();
+      provider.clearCache();
+      await UserBooksDatabaseHolder.instance.close();
+      AppPaths.debugOverrideDataRootPath(path.join(tempDir.path, 'data'));
+      await repository.ensureInitialized();
+      await Settings.setValue<String>(
+        SettingsRepository.keyLibraryPath,
+        libraryPath,
+      );
+
+      final userRepo = await UserBooksDatabaseHolder.instance.repository;
+      final sourceId = await userRepo.insertSource('user-test', -20);
+      final personalId = await userRepo.insertCategory(
+        const migration_models.Category(
+          title: 'ספרים אישיים',
+          parentId: null,
+          level: 0,
+          orderIndex: 1,
+        ),
+      );
+      Future<void> addBook(String title) => userRepo.insertBook(
+        migration_models.Book(
+          categoryId: personalId,
+          sourceId: sourceId,
+          title: title,
+          filePath: path.join(tempDir.path, '$title.txt'),
+          fileType: 'txt',
+        ),
+      );
+      await addBook('נשמר');
+
+      // רק החיבור הראשי רואה שורה שטרם נכתבה סופית.
+      final connection = await userRepo.database.database;
+      connection.execute('BEGIN');
+      try {
+        await addBook('טרם נשמר');
+        await provider.initialize();
+        final library = await provider.buildLibraryCatalog({}, libraryPath);
+        final personal = library.subCategories.singleWhere(
+          (c) => c.title == 'ספרים אישיים',
+        );
+        expect(personal.books.map((b) => b.title), ['נשמר']);
+      } finally {
+        connection.execute('COMMIT');
+      }
+    });
+
     test(
       'resolveMovedFilePathsInBackground פותר כמו resolveMovedFileBookPath',
       () async {
