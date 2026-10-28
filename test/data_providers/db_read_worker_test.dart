@@ -1095,6 +1095,25 @@ void main() {
       expect(DbReadWorker.sentMessageCount - before, 1);
     });
 
+    test('רשימת המפרשים לא רצה על ה-UI isolate כשה-worker אינו זמין', () async {
+      addCommentaryLink(dbPath);
+      final repository = TextBookRepository(
+        fileSystem: FileSystemData.instance,
+      );
+      // טבלת temp מסתירה את link בחיבור הראשי בלבד: שאילתה עליו מחזירה ריק.
+      final mainDb =
+          await SqliteDataProvider.instance.repository!.database.database;
+      mainDb.execute('PRAGMA query_only=OFF');
+      mainDb.execute('CREATE TEMP TABLE link AS SELECT * FROM main.link');
+      mainDb.execute('DELETE FROM temp.link');
+      DbReadWorker.stallTimeout = Duration.zero;
+
+      final detailed = await repository.getCommentatorsDetailed(
+        TextBook(id: 1, title: 'בראשית', categoryId: 7),
+      );
+      expect([for (final c in detailed.commentators) c.title], ['מפרש']);
+    });
+
     test('כותרות ספרי המסד נטענות ב-worker', () async {
       final provider = DatabaseLibraryProvider.instance..clearCache();
       final before = DbReadWorker.sentMessageCount;

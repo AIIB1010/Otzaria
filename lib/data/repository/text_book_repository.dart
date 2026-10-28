@@ -673,16 +673,13 @@ class TextBookRepository {
   ) async {
     final dbPath = _sqliteProvider.dbPath;
     if (source.isOfficial && dbPath.isNotEmpty) {
-      try {
-        return (await DbReadWorker.request('commentatorsByBook', {
-                  'dbPath': dbPath,
-                  'bookId': bookId,
-                })
-                as List)
-            .cast<Map<String, dynamic>>();
-      } on DbReadWorkerUnavailable {
-        // נופלים לשאילתה הישירה, כמו שאר הקריאות כשה-worker אינו זמין.
-      }
+      // batched: כשה-worker אינו זמין השאילתה רצה ב-isolate זמני, לא על ה-UI.
+      return (await DbReadWorker.batched('commentatorsByBook', {
+                'dbPath': dbPath,
+                'bookId': bookId,
+              })
+              as List)
+          .cast<Map<String, dynamic>>();
     }
     return repository.database.linkDao.selectCommentatorsByBook(bookId);
   }

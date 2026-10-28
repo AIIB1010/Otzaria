@@ -668,6 +668,11 @@ class _PageShapeScreenState extends State<PageShapeScreen> {
       }
     }
 
+    if (!state.commentatorsLoaded &&
+        _rightPaneSelectableCommentators(state).isEmpty) {
+      return const LoadingIndicator();
+    }
+
     final commentators = _selectedRightPaneCommentators(state);
 
     return CommentaryListBase(
@@ -1459,8 +1464,12 @@ class _PageShapeScreenState extends State<PageShapeScreen> {
                                                     ),
                                                   ),
                                                   if (_rightPaneSelectableCommentators(
-                                                    state,
-                                                  ).isNotEmpty) ...[
+                                                            state,
+                                                          ).isNotEmpty ||
+                                                      (_rightCommentator !=
+                                                              null &&
+                                                          !state
+                                                              .commentatorsLoaded)) ...[
                                                     SizedBox(
                                                       width: rightWidth,
                                                       child: _buildRightPane(

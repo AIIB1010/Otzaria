@@ -281,5 +281,7 @@ void main() {
     expect(text, contains('libraryConnectionOpen'));
     expect(text, contains('source: BookSource(u)'));
     expect(text, contains('Stack:'));
+    // אחרת טור צורת הדף נשאר במצב טעינה לנצח (issue #3156).
+    expect((bloc.state as TextBookLoaded).commentatorsLoaded, isTrue);
   });
 }

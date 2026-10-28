@@ -706,6 +706,7 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
 
     List<String> existingAvailableCommentators = const [];
     List<CommentatorGroup> existingCommentatorGroups = const [];
+    var existingCommentatorsLoaded = false;
     TextDisplayLayer? preservedDisplayOverrides;
     bool? preservedPinLeftPane;
 
@@ -728,6 +729,7 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
       initialShowPageShapeView = currentState.showPageShapeView;
       existingAvailableCommentators = currentState.availableCommentators;
       existingCommentatorGroups = currentState.commentatorGroups;
+      existingCommentatorsLoaded = currentState.commentatorsLoaded;
       preservedDisplayOverrides = currentState.displayOverrides;
       preservedPinLeftPane = currentState.pinLeftPane;
       pinpointHighlightIndex = currentState.pinpointHighlightIndex;
@@ -1000,6 +1002,7 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
         links: emptyLinks,
         linksByLine: const {},
         availableCommentators: existingAvailableCommentators,
+        commentatorsLoaded: existingCommentatorsLoaded,
         tableOfContents: tableOfContents,
         fontSize: _pendingFontSize ?? event.fontSize,
         showLeftPane: initialShowLeftPane,
@@ -2981,6 +2984,7 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
           availableCommentators: _withoutHiddenCommentators(
             event.availableCommentators,
           ),
+          commentatorsLoaded: true,
           activeCommentators: _withoutHiddenCommentators(
             currentState.activeCommentators,
           ),
@@ -3178,6 +3182,21 @@ class TextBookBloc extends Bloc<TextBookEvent, TextBookState> {
     } catch (e, stackTrace) {
       debugPrint('⚠️ Failed to load commentators in background: $e');
       _logCommentatorsFailure(book, e, stackTrace);
+      final current = state;
+      // אחרת טור צורת הדף ממתין לרשימה שלא תגיע.
+      if (!isClosed &&
+          generation == _commentatorsLoadGeneration &&
+          current is TextBookLoaded &&
+          !current.commentatorsLoaded &&
+          current.book.title == book.title) {
+        add(
+          UpdateAvailableCommentators(
+            current.availableCommentators,
+            current.commentatorGroups,
+            current.rareCommentators,
+          ),
+        );
+      }
       _loadLinksAfterCommentatorsResolved(book);
     }
   }

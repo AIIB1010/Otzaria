@@ -173,6 +173,14 @@ Future<List<Map<String, Object?>>> _readBatchOnFreshConnection(
           results.add({'result': await _readBookLines(repo, method, args)});
           continue;
         }
+        if (method == 'commentatorsByBook') {
+          results.add({
+            'result': await repo.database.linkDao.selectCommentatorsByBook(
+              args['bookId'] as int,
+            ),
+          });
+          continue;
+        }
         if (method != 'linkContent') {
           throw StateError('Unknown DbReadWorker method: $method');
         }
