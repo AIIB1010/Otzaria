@@ -370,7 +370,9 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
       final manifestFile = File(
         p.join(widget.plugin.resolvedRootPath, 'manifest.json'),
       );
-      if (!await manifestFile.exists()) {
+      final manifestExists = await manifestFile.exists();
+      if (!mounted) return;
+      if (!manifestExists) {
         setState(() => _devErrorMessage = 'קובץ manifest.json חסר בתיקייה.');
         return;
       }
@@ -397,7 +399,6 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
       }
 
       final wasInError = _devErrorMessage != null;
-      setState(() => _devErrorMessage = null);
 
       try {
         await InAppWebViewController.clearAllCache();
@@ -408,6 +409,7 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
         manifest.entrypoint,
       );
       final exists = await File(localHtmlPath).exists();
+      if (!mounted) return;
       if (!exists) {
         setState(
           () => _devErrorMessage =
@@ -415,12 +417,13 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
         );
         return;
       }
-      _entrypointMissing = false;
+      setState(() {
+        _devErrorMessage = null;
+        _entrypointMissing = false;
+      });
 
       if (wasInError || webViewController == null) {
-        // במסך שגיאה ה-WebView ירד מהעץ וה-controller מת — איפוס הדגל
-        // למעלה בונה WebView חדש שטוען מחדש את נקודת הכניסה, במקום
-        // לקרוא ל-loadUrl על controller מת שזורק MissingPluginException.
+        // אחרי שגיאה יש לבנות WebView חדש, ולא לטעון כתובת ב-controller המת.
         webViewController = null;
         return;
       }
@@ -685,12 +688,8 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
         _creationWatchdog?.cancel();
         unawaited(_creationFailureSub?.cancel());
         _creationFailureSub = null;
-        // מסמנים שמתחיל ניסיון טעינה. שימוש בגרסה הסינכרונית מבטיח שהקובץ
-        // מתעדכן מיד (לפני שיש הזדמנות ל-dispose לרוץ ולנקות ריק) — אחרת
-        // קיים race שבו סגירה מהירה של הטאב לפני שה-Future של ה-async
-        // markLoadAttempt הספיק להוסיף לזיכרון, מוביל ל-canary שגוי.
-        // הסימון נשאר ב-disk **רק** אם התהליך מת native לפני שהגענו
-        // לאחד מנתיבי הסיום ב-Dart (catch / success / dispose).
+        // כתיבה סינכרונית מונעת מ-dispose לנקות לפני שהסימון נוסף,
+        // ומשאירה אותו בדיסק אם התהליך מת native בזמן הטעינה.
         PluginCrashGuard.markLoadAttemptSync(
           widget.plugin.pluginId,
           owner: widget.instanceId,
