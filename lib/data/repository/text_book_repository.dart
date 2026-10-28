@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:otzaria/data/cache/books_cache.dart';
 import 'package:otzaria/attached_libraries/repository/attached_library_registry.dart';
 import 'package:otzaria/attached_libraries/repository/external_link_repository.dart';
+import 'package:otzaria/data/data_providers/book_database_resolver.dart';
 import 'package:otzaria/data/data_providers/db_read_worker.dart';
 import 'package:otzaria/data/data_providers/file_system_data_provider.dart';
 import 'package:otzaria/data/data_providers/sqlite_data_provider.dart';
@@ -458,12 +459,11 @@ class TextBookRepository {
     if (repository == null) return userOnly();
 
     // מקבל את ה-book ישירות מה-repository (אותו DB שממנו נשלוף את המפרשים)
-    final dbBook = book.categoryId != null
-        ? await repository.getBookByTitleAndCategory(
-            book.title,
-            book.categoryId!,
-          )
-        : await repository.getBookByTitle(book.title);
+    final dbBook = await BookDatabaseResolver.findBookInRepository(
+      repository,
+      book.title,
+      categoryId: book.categoryId,
+    );
     if (dbBook == null) return userOnly();
 
     // שולף את הפרשנים ישירות מה-DB, כולל מספר הקישורים של כל מפרש
@@ -536,12 +536,11 @@ class TextBookRepository {
     final repository = await _linksRepositoryFor(book.source);
     if (repository == null) return sorted();
 
-    final dbBook = book.categoryId != null
-        ? await repository.getBookByTitleAndCategory(
-            book.title,
-            book.categoryId!,
-          )
-        : await repository.getBookByTitle(book.title);
+    final dbBook = await BookDatabaseResolver.findBookInRepository(
+      repository,
+      book.title,
+      categoryId: book.categoryId,
+    );
     if (dbBook == null) return sorted();
 
     // הגבול העליון בשאילתה בלעדי, בעוד ש-[endLine] כולל את שורת הסיום.
@@ -598,22 +597,20 @@ class TextBookRepository {
     final repository = await _linksRepositoryFor(sourceBookSource);
     if (repository == null) return CommentaryService.sortLinksByEra(external);
 
-    final sourceBook = sourceCategoryId != null
-        ? await repository.getBookByTitleAndCategory(
-            sourceBookTitle,
-            sourceCategoryId,
-          )
-        : await repository.getBookByTitle(sourceBookTitle);
+    final sourceBook = await BookDatabaseResolver.findBookInRepository(
+      repository,
+      sourceBookTitle,
+      categoryId: sourceCategoryId,
+    );
     if (sourceBook == null) return CommentaryService.sortLinksByEra(external);
 
     final currentBook = currentBookSource != sourceBookSource
         ? null
-        : currentCategoryId != null
-        ? await repository.getBookByTitleAndCategory(
+        : await BookDatabaseResolver.findBookInRepository(
+            repository,
             currentBookTitle,
-            currentCategoryId,
-          )
-        : await repository.getBookByTitle(currentBookTitle);
+            categoryId: currentCategoryId,
+          );
 
     final rows = await _siblingCommentaryRows(
       repository,

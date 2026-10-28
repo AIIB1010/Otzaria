@@ -175,24 +175,14 @@ class BookDatabaseResolver {
         }
       }
 
-      if (candidateCategoryId != null) {
-        final bookByCategory = await repository.getBookByTitleAndCategory(
-          title,
-          candidateCategoryId,
-        );
-        if (bookByCategory != null) {
-          return ResolvedDbBookRecord(
-            book: bookByCategory,
-            repository: repository,
-            source: candidate.source,
-          );
-        }
-      }
-
-      final bookByTitle = await repository.getBookByTitle(title);
-      if (bookByTitle != null) {
+      final book = await findBookInRepository(
+        repository,
+        title,
+        categoryId: candidateCategoryId,
+      );
+      if (book != null) {
         return ResolvedDbBookRecord(
-          book: bookByTitle,
+          book: book,
           repository: repository,
           source: candidate.source,
         );
@@ -200,6 +190,23 @@ class BookDatabaseResolver {
     }
 
     return null;
+  }
+
+  /// מאתר את [title] ב-[repository] לפי [categoryId], ואחרת לפי השם בלבד — קטגוריה
+  /// שנשמרה בכרטיסייה או בהיסטוריה מתיישנת כשהספרייה מוחלפת.
+  static Future<migration_models.Book?> findBookInRepository(
+    SeforimRepository repository,
+    String title, {
+    int? categoryId,
+  }) async {
+    if (categoryId != null) {
+      final book = await repository.getBookByTitleAndCategory(
+        title,
+        categoryId,
+      );
+      if (book != null) return book;
+    }
+    return repository.getBookByTitle(title);
   }
 
   static Future<String> buildCategoryPath(
