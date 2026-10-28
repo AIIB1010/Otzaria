@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show FileMode;
 import 'dart:isolate';
 
 import 'package:flutter/foundation.dart'
@@ -352,6 +353,7 @@ class DbReadWorker {
               }
               service._stalled = true;
               debugPrint('[DbReadWorker] "$method" stalled — using fallback');
+              _logStall(method, args, slot.name);
               throw const DbReadWorkerUnavailable('timeout');
             },
           );
@@ -410,16 +412,56 @@ class DbReadWorker {
           'Method': method,
           'Connection': connection,
           'Database': args['dbPath']?.toString(),
-          'Args': [
-            for (final MapEntry(:key, :value) in args.entries)
-              if (key != 'dbPath' && (value is num || value is String))
-                '$key=$value',
-          ].join(', '),
+          'Args': _describeArgs(args),
         },
       );
     } catch (_) {
       // כשל בכתיבת הלוג אינו משנה את תשובת הקריאה.
     }
+  }
+
+  static String _describeArgs(Map<String, Object?> args) => [
+    for (final MapEntry(:key, :value) in args.entries)
+      if (key != 'dbPath' && (value is num || value is String)) '$key=$value',
+  ].join(', ');
+
+  // חלק מהמסלולים החלופיים רצים על ה-UI isolate; בלי הרשומה תקיעה שנגרמה
+  // מהם אינה מזוהה בדוח.
+  static void _logStall(
+    String method,
+    Map<String, Object?> args,
+    String connection,
+  ) {
+    if (kDebugMode && !logFailuresInDebug) return;
+    if (_loggedFailures.length >= _maxLoggedFailures ||
+        !_loggedFailures.add('$method|stalled')) {
+      return;
+    }
+    final file = ErrorLogFile.resolveFile();
+    final entry = ErrorLogFile.formatEntry(
+      title: 'DB read worker stalled',
+      error:
+          '"$method" did not answer within ${stallTimeout.inSeconds}s; '
+          'using fallback',
+      details: {
+        'Method': method,
+        'Connection': connection,
+        'Args': _describeArgs(args),
+      },
+    );
+    // הדיסק כנראה כבר איטי, וכתיבה סינכרונית עם flush הייתה תוקעת את ה-UI.
+    unawaited(
+      file.parent
+          .create(recursive: true)
+          .then(
+            (_) => file.writeAsString(
+              entry,
+              mode: FileMode.append,
+              flush: true,
+            ),
+          )
+          .then<void>((_) {}, onError: (_) {}),
+    );
   }
 
   /// אצוות התאוששות על חיבור זמני מחוץ ל-UI isolate.

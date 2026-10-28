@@ -588,6 +588,26 @@ void main() {
       ]);
     });
 
+    test('ספרי האצווה רשומים בקובץ הקריסות לפני המנוע (issue #3330)', () async {
+      final dir = await Directory.systemTemp.createTemp('batch_canary');
+      addTearDown(() => dir.delete(recursive: true));
+      provider.activeIndexPath = p.join(dir.path, 'index');
+      final file = File('${provider.activeIndexPath}.in_flight.json');
+      Object? duringBatch;
+      engine.duringBatch = (_, inputs) {
+        duringBatch = jsonDecode(file.readAsStringSync());
+        return inputs.length;
+      };
+
+      await repository.indexAllBooks(
+        libraryOf(officialBooks(3)),
+        onProgress: (_, _) {},
+      );
+
+      expect(duringBatch, {'id:1': 1, 'id:2': 1, 'id:3': 1});
+      expect(jsonDecode(file.readAsStringSync()), isEmpty);
+    });
+
     test('indexBooks משתמש באותה אצווה', () async {
       final books = officialBooks(2);
 

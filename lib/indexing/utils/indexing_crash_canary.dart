@@ -46,6 +46,8 @@ class IndexingCrashCanary {
   final Set<String> _inFlight = {};
   final Set<String> _skipped = {};
   RandomAccessFile? _raf;
+  Future<void> _writing = Future.value();
+  bool _dirty = false;
 
   /// ריצה קודמת מתה באמצע: מאנדקסים ספר-ספר, כדי שרק האשם ייספר.
   bool get recovering => _attempts.isNotEmpty;
@@ -59,7 +61,10 @@ class IndexingCrashCanary {
   }
 
   /// false לספר שכבר הפיל [maxAttempts] ריצות; החסימה נשמרת עד commit.
+  /// חובה להמתין ל-[flush] לפני שהספר נכנס לעבודה native.
   bool begin(String key) {
+    // אצווה שנכשלה פותחת את הספר שוב ספר-ספר; ניסיון אחד אינו נספר פעמיים.
+    if (_inFlight.contains(key)) return true;
     final attempts = _attempts[key] ?? 0;
     if (attempts >= maxAttempts) {
       _skipped.add(key);
@@ -77,6 +82,9 @@ class IndexingCrashCanary {
     if (!_inFlight.remove(key)) return;
     if (_attempts.remove(key) != null) _write();
   }
+
+  /// מסתיים כשכל השינויים עד עכשיו בדיסק.
+  Future<void> flush() => _writing;
 
   /// רק דילוגים שנחתמו באינדקס יכולים לאבד את חסימת הקריסה.
   void committed(Set<String> indexedKeys) {
@@ -96,13 +104,15 @@ class IndexingCrashCanary {
   }
 
   /// הריצה הסתיימה (או התוכנה נסגרה) בלי שהתהליך מת — מה שבטיסה לא הפיל אותו.
-  void finish() {
+  Future<void> finish() {
     if (identical(current, this)) current = null;
     _inFlight.toList().forEach(end);
-    try {
-      _raf?.closeSync();
+    return _writing = _writing.then((_) async {
+      try {
+        await _raf?.close();
+      } catch (_) {}
       _raf = null;
-    } catch (_) {}
+    });
   }
 
   // קריסה native אינה משאירה רשומה; בלי זה דיווח שנשלח מיד אחריה אינו מזהה את הספר.
@@ -122,14 +132,23 @@ class IndexingCrashCanary {
     } catch (_) {}
   }
 
-  // קובץ פתוח לאורך הריצה: פתיחה לכל כתיבה עלתה פי 10 (נמדד ב-Windows).
+  // כתיבה סינכרונית עוצרת את ה-GC של כל ה-isolates עד סופה (#3332). שינויים
+  // רצופים, כמו ספרי אצווה, מתאחדים לכתיבה אחת של המצב האחרון.
   void _write() {
+    if (_dirty) return;
+    _dirty = true;
+    _writing = _writing.then((_) => _writeNow());
+  }
+
+  // קובץ פתוח לאורך הריצה: פתיחה לכל כתיבה עלתה פי 10 (נמדד ב-Windows).
+  Future<void> _writeNow() async {
+    _dirty = false;
     try {
       final bytes = utf8.encode(jsonEncode(_attempts));
-      (_raf ??= _file.openSync(mode: FileMode.write))
-        ..setPositionSync(0)
-        ..writeFromSync(bytes)
-        ..truncateSync(bytes.length);
+      final raf = _raf ??= await _file.open(mode: FileMode.write);
+      await raf.setPosition(0);
+      await raf.writeFrom(bytes);
+      await raf.truncate(bytes.length);
     } catch (_) {}
   }
 }

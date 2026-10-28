@@ -48,15 +48,38 @@ void main() {
     expect(describe, isNot(contains('::GetModuleFileNameW(')));
     expect(describe, isNot(contains('::GetModuleHandle')));
 
-    final captureStart = source.indexOf('bool CaptureMainThreadStack(');
-    final captureEnd = source.indexOf('\n}', captureStart);
-    expect(captureStart, greaterThanOrEqualTo(0));
-    expect(captureEnd, greaterThan(captureStart));
-    final capture = source.substring(captureStart, captureEnd);
-    expect(capture, contains('::ResumeThread(g_main_thread);'));
-    expect(capture, isNot(contains('DescribeAddress(')));
-    expect(capture, isNot(contains('GetMappedFileName')));
-    expect(capture, isNot(contains('VirtualQuery')));
+    expect(
+      source,
+      contains('return CaptureSuspendedStack(g_main_thread, frames);'),
+    );
+    // בזמן ההשהיה רק syscalls ו-memcpy; פרישה ותרגום נוטלים נעילות.
+    final captureStart = source.indexOf('bool CaptureSuspendedStack(HANDLE');
+    final suspended = source.substring(
+      source.indexOf('::SuspendThread(thread)', captureStart),
+      source.indexOf('::ResumeThread(thread);', captureStart),
+    );
+    expect(suspended, contains('::GetThreadContext('));
+    expect(suspended, contains('CopyStackBytes('));
+    for (final forbidden in [
+      'RtlLookupFunctionEntry',
+      'RtlVirtualUnwind',
+      'Unwind',
+      'DescribeAddress(',
+      'GetMappedFileName',
+      'push_back',
+      'std::vector',
+      'std::string',
+      'reserve',
+      'resize',
+      'new ',
+      'malloc',
+    ]) {
+      expect(suspended, isNot(contains(forbidden)), reason: forbidden);
+    }
+    expect(
+      source.substring(source.indexOf('::ResumeThread(thread);', captureStart)),
+      contains('UnwindCopiedStack('),
+    );
 
     final watcher = source.substring(source.indexOf('void WatcherLoop()'));
     final captureCall = watcher.indexOf('CaptureMainThreadStack(&frames);');
@@ -184,15 +207,13 @@ void main() {
         hang.indexOf('std::vector<ULONG_PTR> CaptureFrames()'),
         hang.indexOf('void ReportRecovered('),
       );
-      final reserve = captureFrames.indexOf('frames.reserve(kMaxFrames);');
-      final capture = captureFrames.indexOf(
-        'startup_watchdog::CaptureMainStack(&frames);',
+      expect(
+        captureFrames,
+        contains('startup_watchdog::CaptureMainStack(&frames);'),
       );
-      expect(reserve, greaterThanOrEqualTo(0));
-      expect(capture, greaterThan(reserve));
       expect(captureFrames, isNot(contains('AppendStack(')));
       // התרגום ב-ReportHang/ReportSample, אחרי שהלכידה חזרה.
-      expect(watcher, contains('ReportHang(CaptureFrames());'));
+      expect(watcher, contains('ReportHang(CaptureFrames(), reports == 1);'));
       expect(
         watcher,
         contains(
@@ -219,7 +240,7 @@ void main() {
         hang.indexOf('void ReportSample('),
       );
       expect(
-        report.indexOf('AppendBuildIdentity(frames, &report);'),
+        report.indexOf('AppendBuildIdentity(all_frames, &report);'),
         allOf(
           greaterThanOrEqualTo(0),
           lessThan(report.indexOf('AppendStack(frames, &report);')),

@@ -943,7 +943,7 @@ class IndexingRepository {
         removedFromIndexed.where(replaceKeys.contains),
       );
       prefetcher?.dispose();
-      IndexingCrashCanary.current?.finish();
+      await IndexingCrashCanary.current?.finish();
       _tantivyDataProvider.isIndexing.value = false;
       _runEnded();
       await LibraryLineSource.reportLibraryFallbacks();
@@ -979,7 +979,7 @@ class IndexingRepository {
     // אחת בלבד. במסלול הרגיל (ספר מ-DB) התוכן נקרא כבייטים גולמיים
     // (UTF-8 כפי שמאוחסן ב-SQLite) ונמסר ל-addTextBookBytes — בלי פענוח
     // ל-String וקידוד חוזר על הגשר (~180ms/MB שנמדדו בלוגים).
-    _beginBook(book);
+    await _beginBook(book);
     final loadStopwatch = Stopwatch()..start();
     final source = await loadTextBookSource(book);
     final bytes = source.bytes;
@@ -1149,6 +1149,7 @@ class IndexingRepository {
         pickedKeys.add(key);
         picked.add((book as TextBook, source));
       }
+      await canary?.flush();
       if (picked.isEmpty) break;
 
       onActualIndexingStarted?.call();
@@ -1491,13 +1492,12 @@ class IndexingRepository {
   }
 
   // ספר שהפיל את התהליך פעמיים ברצף נזרק, ומסומן ככשל קבוע במקום לנסותו לעד.
-  void _beginBook(Book book) {
-    if (IndexingCrashCanary.current?.begin(
-          BookIdentity.indexedFilePath(book),
-        ) ==
-        false) {
+  Future<void> _beginBook(Book book) async {
+    final canary = IndexingCrashCanary.current;
+    if (canary?.begin(BookIdentity.indexedFilePath(book)) == false) {
       throw const IndexingCrashedBefore();
     }
+    await canary?.flush();
   }
 
   /// עוטפת את [_extractPdfPages] כך שהתוצאה לעולם אינה זריקה: שגיאת פתיחה
@@ -1507,7 +1507,7 @@ class IndexingRepository {
   Future<PdfExtraction> extractPdfPagesGuarded(PdfBook book) async {
     final stopwatch = Stopwatch()..start();
     try {
-      _beginBook(book);
+      await _beginBook(book);
       // pdfium של האינדוקס ממתין בתור ה-worker לכל עבודה אחרת (הקורא קודם).
       final extracted = await Pdfrx.runAsBackgroundWork(
         () => _extractPdfPages(book),
