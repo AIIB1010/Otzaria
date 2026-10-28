@@ -36,7 +36,10 @@ class FontDropdownField extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      _RebuildAfterSystemFontsScan(builder: _buildField);
+
+  Widget _buildField(BuildContext context) {
     final all = AppFonts.availableFonts;
 
     // O(n) lookup במקום O(n²) — מחושב פעם אחת לכל build.
@@ -92,10 +95,12 @@ class FontDropdownField extends StatelessWidget {
           value: value,
           label:
               legacyName ??
-              context.settingsText(
-                '{font} (לא זמין במחשב זה)',
-                args: {'font': value},
-              ),
+              (AppFonts.systemFontsReady
+                  ? context.settingsText(
+                      '{font} (לא זמין במחשב זה)',
+                      args: {'font': value},
+                    )
+                  : value),
         ),
       );
     }
@@ -139,6 +144,32 @@ class FontDropdownField extends StatelessWidget {
       },
     );
   }
+}
+
+/// בונה מחדש כשסריקת גופני המערכת ברקע מסתיימת, כדי שיצטרפו לרשימה.
+class _RebuildAfterSystemFontsScan extends StatefulWidget {
+  final WidgetBuilder builder;
+
+  const _RebuildAfterSystemFontsScan({required this.builder});
+
+  @override
+  State<_RebuildAfterSystemFontsScan> createState() =>
+      _RebuildAfterSystemFontsScanState();
+}
+
+class _RebuildAfterSystemFontsScanState
+    extends State<_RebuildAfterSystemFontsScan> {
+  @override
+  void initState() {
+    super.initState();
+    if (AppFonts.systemFontsReady) return;
+    AppFonts.warmUpSystemFontsCache().whenComplete(() {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context);
 }
 
 /// שם הגופן, ולצידו סימן מידע כשהגופן אינו ממפה את טעמי המקרא.

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -425,6 +426,44 @@ void main() {
       expect(fonts, isNotEmpty);
       expect(fonts.any((f) => f.value == AppFonts.defaultFont), isTrue);
     });
+
+    test('availableFonts אינו סורק גופני מערכת ב-isolate הקורא (#3379)', () {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        final fonts = AppFonts.availableFonts;
+
+        expect(AppFonts.debugSystemFontsHebrewCache, isNull);
+        expect(AppFonts.systemFontsReady, isFalse);
+        expect(
+          fonts.every((f) => AppFonts.fontPaths.containsKey(f.value)),
+          isTrue,
+        );
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    testWidgets('שדה הגופן מצטרף לגופני המערכת כשהסריקה ברקע מסתיימת', (
+      tester,
+    ) async {
+      final scan = Completer<void>();
+      AppFonts.debugWarmUpFuture = scan.future;
+
+      await _pumpFontField(tester, 'MockSystemFont');
+      expect(find.textContaining('לא זמין במחשב זה'), findsNothing);
+      await tester.tapAt(Offset.zero);
+      await tester.pumpAndSettle();
+
+      AppFonts.debugSystemFontsHebrewCache = const [
+        FontInfo(value: 'MockSystemFont', label: 'Mock System Font'),
+      ];
+      scan.complete();
+      await tester.pump();
+      await tester.tap(find.byType(FontDropdownField));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Mock System Font'), findsWidgets);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
     test('debugResetSystemFontsCache מנקה גם cache וגם warm-up future', () {
       AppFonts.debugSystemFontsHebrewCache = const [
