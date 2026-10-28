@@ -7,6 +7,7 @@ import 'package:flutter_inappwebview_windows/flutter_inappwebview_windows.dart'
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:otzaria/core/app_paths.dart';
+import 'package:otzaria/core/startup_timeline.dart';
 import 'package:otzaria/core/directory_writability.dart';
 import 'package:otzaria/plugins/services/plugin_asset_scheme.dart';
 import 'package:otzaria/plugins/services/plugin_webview_failure_log.dart';
@@ -122,7 +123,7 @@ class WebViewEnvironmentHolder {
   /// [dataFolderChecked] חוסך בדיקה חוזרת כשהקורא כבר בדק כתיבה מיד לפני הקריאה.
   static Future<void> initialize({bool dataFolderChecked = false}) {
     if (_initializeOverride != null) return _initializeOverride!();
-    if (!Platform.isWindows) return Future<void>.value();
+    if (!_isWindows) return Future<void>.value();
     if (_environment != null) return Future<void>.value();
     return _initializeFuture ??= _runInitialize(
       checkDataFolder: !dataFolderChecked,
@@ -148,6 +149,7 @@ class WebViewEnvironmentHolder {
       // מדידה: integration_test/webview_scroll_smoothness_probe_test.dart.
       // מונע ממופע אחר לשתף את תהליך הדפדפן שמחזיק בתיקייה; במקרה של
       // התנגשות WebView2 דוחה את יצירת ה-controller והכשל נרשם בדיאגנוסטיקה.
+      await _awaitPrewarm();
       final environment = await WebViewEnvironment.create(
         settings: _environmentSettings(webviewDataFolder),
       );
@@ -163,7 +165,10 @@ class WebViewEnvironmentHolder {
         'WebView2 environment init failed',
         error,
         stackTrace: stackTrace,
-        details: {'UserDataFolder': webviewDataFolder},
+        details: {
+          'UserDataFolder': webviewDataFolder,
+          'Prewarm': WebView2CreationDiagnostics.prewarmOutcome,
+        },
         creationFailure: true,
       );
       rethrow;
@@ -173,6 +178,97 @@ class WebViewEnvironmentHolder {
       // ע"י future ישן עם שגיאה ישנה — היא תתחיל ניסיון אתחול חדש.
       _initializeFuture = null;
     }
+  }
+
+  static Future<WebViewEnvironmentPrewarmResult?> Function(
+    WebViewEnvironmentSettings settings,
+  )?
+  _prewarmOverride;
+
+  /// מחליף את הקריאה הנייטיבית של [prewarm] בבדיקות. העבר `null` לאיפוס.
+  @visibleForTesting
+  static void debugOverridePrewarm(
+    Future<WebViewEnvironmentPrewarmResult?> Function(
+      WebViewEnvironmentSettings settings,
+    )?
+    override,
+  ) {
+    _prewarmOverride = override;
+  }
+
+  @visibleForTesting
+  static bool? debugIsWindowsOverride;
+
+  static bool get _isWindows => debugIsWindowsOverride ?? Platform.isWindows;
+
+  static Future<void>? _prewarmInFlight;
+  @visibleForTesting
+  static Duration prewarmWaitLimit = const Duration(seconds: 30);
+
+  /// טוען את WebView2 לתהליך ב-thread רקע, כדי שיצירת הסביבה הראשונה לא תחסום
+  /// את ה-UI (#3375). מחזיר false כשדולג: הסביבה כבר קיימת או שאין תוסף מופעל.
+  static Future<bool> prewarm({
+    required Future<bool> Function() hasEnabledPlugin,
+  }) async {
+    if (_environment != null || _initializeFuture != null) {
+      _recordPrewarm('skipped: environment exists');
+      return false;
+    }
+    if (!await hasEnabledPlugin()) {
+      _recordPrewarm('skipped: no enabled plugin');
+      return false;
+    }
+    if (_environment != null || _initializeFuture != null) {
+      _recordPrewarm('skipped: environment exists');
+      return false;
+    }
+    final done = Completer<void>();
+    _prewarmInFlight = done.future;
+    try {
+      final settings = _environmentSettings(
+        p.join(await AppPaths.getDataRootPath(), 'webview2'),
+      );
+      final result =
+          await (_prewarmOverride ??
+              (settings) => WebViewEnvironment.prewarm(settings: settings))(
+            settings,
+          );
+      _recordPrewarm(result?.toString() ?? 'unsupported');
+      return true;
+    } catch (error) {
+      _recordPrewarm('error: $error');
+      rethrow;
+    } finally {
+      _prewarmInFlight = null;
+      done.complete();
+    }
+  }
+
+  // יצירה ב-thread ה-UI בזמן שהחימום עוד טוען הייתה נחסמת בטעינת ה-DLL;
+  // ההמתנה כאן אסינכרונית ומוגבלת.
+  static Future<void> _awaitPrewarm() async {
+    final prewarm = _prewarmInFlight;
+    if (prewarm == null) return;
+    final waited = Stopwatch()..start();
+    await prewarm.timeout(
+      prewarmWaitLimit,
+      // תשובה נייטיבית שלא הגיעה לא תעכב שוב כל ניסיון אתחול.
+      onTimeout: () {
+        if (identical(_prewarmInFlight, prewarm)) _prewarmInFlight = null;
+      },
+    );
+    WebView2CreationDiagnostics.prewarmOutcome =
+        '${WebView2CreationDiagnostics.prewarmOutcome ?? 'pending'}; '
+        'initialize waited ${waited.elapsedMilliseconds}ms';
+  }
+
+  static void _recordPrewarm(String outcome) {
+    final launchedAt = StartupTimeline.instance.startedAt;
+    final at = launchedAt == null
+        ? ''
+        : ', ended +${DateTime.now().difference(launchedAt).inMilliseconds}ms '
+              'after launch';
+    WebView2CreationDiagnostics.prewarmOutcome = '$outcome$at';
   }
 
   static int _browserExitsLogged = 0;
@@ -222,7 +318,7 @@ class WebViewEnvironmentHolder {
   /// Disposes the current Windows WebView environment after the old widget
   /// tree has been torn down during an in-process app restart.
   static Future<void> disposeForAppRestart() async {
-    if (!Platform.isWindows) return;
+    if (!_isWindows) return;
 
     final environment = _environment;
     _environment = null;

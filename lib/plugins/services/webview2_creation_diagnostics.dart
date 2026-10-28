@@ -98,6 +98,9 @@ $r.events = Section {
   /// הגרסה שהחזיר `WebViewEnvironment.getAvailableVersion`, אם כבר נקרא.
   static String? runtimeVersion;
 
+  /// תוצאת חימום WebView2 בתהליך הזה (תוצאה, משך, מתי הסתיים), אם רץ.
+  static String? prewarmOutcome;
+
   /// Process.start חוסם את ה-thread הראשי ב-Windows; ממתינים לחשיפת החלון.
   static Future<void> Function() startupGate = () => Future<void>.value();
 
@@ -112,6 +115,7 @@ $r.events = Section {
   static void debugReset() {
     _triggered = false;
     runtimeVersion = null;
+    prewarmOutcome = null;
     debugRunnerOverride = null;
     debugIsWindowsOverride = null;
   }
@@ -180,6 +184,7 @@ $r.events = Section {
             'OwnPid': '$pid',
             'ScanMs': '${stopwatch.elapsedMilliseconds}',
             'RuntimeVersion': runtimeVersion,
+            'Prewarm': prewarmOutcome,
             'ProcessQueryError': decoded?['processError']?.toString(),
             'Holders': holders,
             'UnreadableWebView2Processes': scan?.unreadable.length.toString(),

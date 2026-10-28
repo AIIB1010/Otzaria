@@ -63,6 +63,9 @@ class _FakeDb implements PluginSystemDatabase {
       List.of(plugins);
 
   @override
+  Future<bool> hasEnabledPlugin() async => plugins.any((p) => p.enabled);
+
+  @override
   Future<InstalledPlugin?> getInstalledPlugin(String pluginId) async =>
       plugins.where((p) => p.pluginId == pluginId).firstOrNull;
 
@@ -119,6 +122,10 @@ void main() {
         completed++;
         return v;
       });
+      final anyEnabled = repo.hasEnabledPlugin().then((v) {
+        completed++;
+        return v;
+      });
       await pumpEventQueue();
       expect(completed, 0);
       PluginSafeMode.active.value = true;
@@ -127,6 +134,7 @@ void main() {
       expect((await one)!.enabled, isFalse);
       expect(await enabled, isFalse);
       expect(await owner, isNull);
+      expect(await anyEnabled, isFalse);
     });
 
     test(
@@ -170,6 +178,7 @@ void main() {
       ]);
       expect((await repo.getPlugin('a'))!.enabled, isFalse);
       expect(await repo.getIsEnabled('a'), isFalse);
+      expect(await repo.hasEnabledPlugin(), isFalse);
     });
 
     test('saving keeps the stored enabled flag', () async {
@@ -204,6 +213,7 @@ void main() {
       PluginSafeMode.active.value = false;
 
       expect(await repo.getIsEnabled('a'), isTrue);
+      expect(await repo.hasEnabledPlugin(), isTrue);
     });
   });
 

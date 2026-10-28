@@ -17,6 +17,7 @@ import 'package:otzaria/plugins/bloc/plugin_system_state.dart';
 import 'package:otzaria/plugins/models/installed_plugin.dart';
 import 'package:otzaria/plugins/models/plugin_manifest.dart';
 import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
+import 'package:otzaria/plugins/services/webview2_creation_diagnostics.dart';
 import 'package:otzaria/plugins/storage/plugin_system_database.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
 import 'package:otzaria/tabs/bloc/tabs_state.dart';
@@ -64,6 +65,16 @@ void main() {
     expect(diagnostics['context'], {'screen': 'reading', 'tabs': 3});
     expect(diagnostics['startupTimeline'], contains('lines'));
     expect(() => jsonEncode(diagnostics), returnsNormally);
+  });
+
+  test('אבחון: תוצאת חימום WebView2 נכללת במצב', () async {
+    WebView2CreationDiagnostics.prewarmOutcome = 'ok 12ms';
+    addTearDown(WebView2CreationDiagnostics.debugReset);
+    final diagnostics = await AppReportCollector(
+      redactor: redactor,
+      clock: () => now,
+    ).collectDiagnostics();
+    expect(diagnostics['state'], containsPair('webview2Prewarm', 'ok 12ms'));
   });
 
   test('אבחון: פרופיל המשתמש מוסתר בכל המבנה', () async {

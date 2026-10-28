@@ -15,7 +15,9 @@ import 'package:path/path.dart' as p;
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hive_ce/hive.dart';
+import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
 import 'package:otzaria/plugins/view/safe_mode_controls.dart';
+import 'package:otzaria/plugins/view/webview_environment_holder.dart';
 import 'package:otzaria/plugins/services/startup_crash_counter.dart';
 import 'package:otzaria/plugins/services/webview2_creation_diagnostics.dart';
 import 'package:otzaria/attached_libraries/repository/attached_library_registry.dart';
@@ -747,6 +749,26 @@ Future<void> _initializeProcessSingletons() async {
   unawaited(_runDeferredNotificationService());
   unawaited(_runDeferredErrorReportFlush());
   unawaited(_runDeferredSqliteMemoryObserver());
+  unawaited(_runDeferredWebViewPrewarm());
+}
+
+/// טוען את WebView2 ב-thread רקע, כדי שהתוסף הראשון שנפתח לא יקפיא את ה-UI (#3375).
+Future<void> _runDeferredWebViewPrewarm() async {
+  if (kIsWeb || !Platform.isWindows) return;
+  try {
+    await _mainWindowRevealedCompleter.future.timeout(
+      const Duration(seconds: 20),
+    );
+  } on TimeoutException {
+    // ממשיכים בכל זאת — אחרת החימום לא ירוץ כלל.
+  }
+  try {
+    await WebViewEnvironmentHolder.prewarm(
+      hasEnabledPlugin: PluginRegistryRepository().hasEnabledPlugin,
+    );
+  } catch (error, stackTrace) {
+    _logNonFatalInitializationError('WebView2 prewarm', error, stackTrace);
+  }
 }
 
 Future<void> _runDeferredSqliteMemoryObserver() async {

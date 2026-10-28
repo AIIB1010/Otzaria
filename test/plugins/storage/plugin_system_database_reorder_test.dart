@@ -251,4 +251,36 @@ void main() {
       expect(_readUserOrder(db, 'b'), 200);
     });
   });
+
+  group('PluginSystemDatabase.readHasEnabledPlugin', () {
+    late Database db;
+
+    setUp(() {
+      db = sqlite3.openInMemory();
+      db.execute(_currentCreateTable);
+    });
+
+    tearDown(() => db.close());
+
+    test('false when no plugin is installed', () {
+      expect(PluginSystemDatabase.readHasEnabledPlugin(db), isFalse);
+    });
+
+    test('true when at least one plugin is enabled', () {
+      _seed(db, 'a');
+      _seed(db, 'b');
+      db.execute(
+        "UPDATE plugin_installation SET enabled = 0 WHERE plugin_id = 'a'",
+      );
+
+      expect(PluginSystemDatabase.readHasEnabledPlugin(db), isTrue);
+    });
+
+    test('false when every plugin is disabled', () {
+      _seed(db, 'a');
+      db.execute('UPDATE plugin_installation SET enabled = 0');
+
+      expect(PluginSystemDatabase.readHasEnabledPlugin(db), isFalse);
+    });
+  });
 }
