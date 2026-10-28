@@ -477,8 +477,8 @@ void _installGlobalErrorHandlers() {
 }
 
 Future<void> _initializeSentry() async {
-  // רק אחרי החשיפה ובלי timeout: sentry_init רץ ב-isolate עזר, אבל טעינת sentry.dll
-  // עדיין סינכרונית ב-UI ואיטית במחשבים מסוננים (issue #1192).
+  // רק אחרי החשיפה ובלי timeout: sentry.dll ו-sentry_init ב-isolate עזר, אבל בניית
+  // האפשרויות עדיין קוראת ל-FFI סינכרוני ב-UI (issues #1192, #3422).
   await _mainWindowRevealedCompleter.future;
   // ה-uncloak רץ כ-task נייטיבי על אותו thread; חסימה לפניו משאירה את
   // החלון בלתי-נראה (נמדד גם אחרי שני endOfFrame) — נותנים לו לרוץ קודם.
