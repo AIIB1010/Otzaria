@@ -342,7 +342,7 @@ abstract class SearchEngineOperations {
 
   /// עוצר במנוע את כל קריאות החיפוש שנשאו את [requestId] (ראו
   /// [SearchEngineRequest.cancelRequestId]), גם כאלה שעוד לא התחילו.
-  void cancelLexicalSearch(int requestId) {}
+  Future<void> cancelLexicalSearch(int requestId) async {}
 
   /// חיפוש `/…/` ([SearchEngineRequest.query] היא השאילתה הגולמית).
   Stream<UserRegexStreamUpdate> searchUserRegexStream(
@@ -410,7 +410,30 @@ class RustSearchEngineOperations
     implements SearchEngineOperations, SemanticSearchEngineOperations {
   final SearchEngine _engine;
 
+  /// מנוע שנפתח ידנית צריך [prepareCancellation] לפני חיפושים ארוכים.
   const RustSearchEngineOperations(this._engine);
+
+  static final _cancellationHandles =
+      Expando<Future<LexicalCancellationHandle>>();
+
+  static Future<LexicalCancellationHandle> _cancellationHandle(
+    SearchEngine engine,
+  ) => _cancellationHandles[engine] ??= engine.lexicalCancellationHandle();
+
+  /// מכין את ידית הביטול לפני חשיפת המנוע לחיפושים ולאינדוקס.
+  static Future<void> prepareCancellation(SearchEngine engine) async {
+    await _cancellationHandle(engine);
+  }
+
+  /// משחרר את ידית הביטול יחד עם המנוע שהיא משרתת.
+  static Future<void> disposeCancellation(SearchEngine engine) async {
+    final pending = _cancellationHandles[engine];
+    try {
+      if (pending != null) (await pending).dispose();
+    } finally {
+      _cancellationHandles[engine] = null;
+    }
+  }
 
   /// חיפוש רגיל (מדויק) עם פרמטרים: ל-API המדויק של המנוע אין מרווח בין
   /// מילים ולא אפשרויות מילה, אבל המסלול המתקדם עם אותם פרמטרים בלבד
@@ -952,9 +975,12 @@ class RustSearchEngineOperations
   }
 
   @override
-  void cancelLexicalSearch(int requestId) {
+  Future<void> cancelLexicalSearch(int requestId) async {
     _UserRegexCancellations.cancel(requestId);
-    _engine.cancelLexicalSearch(requestId: requestId);
+    if (_engine.isDisposed) return;
+    final handle = await _cancellationHandle(_engine);
+    if (_engine.isDisposed) return;
+    handle.cancel(requestId: requestId);
   }
 
   @override

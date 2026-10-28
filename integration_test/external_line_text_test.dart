@@ -241,8 +241,11 @@ void main() {
       expect((await lineSourceStatus()).hostApiReady, isFalse);
 
       final engine = await newEngine('before_registration');
-      expect(engine.setMagicDictionaryPath(path: buildLexicalDb()), isFalse);
-      expect(engine.hasMagicDictionary(), isFalse);
+      expect(
+        await engine.setMagicDictionaryPath(path: buildLexicalDb()),
+        isFalse,
+      );
+      expect(await engine.hasMagicDictionary(), isFalse);
     });
 
     test('ensureHostSqlite של האפליקציה מוסר למנוע את SQLite', () async {
@@ -278,8 +281,11 @@ void main() {
 
       // "הלך"→"הלכתי" רחוק 3 עריכות: רק ההרחבה מהמילון מגיעה אליו.
       expect(await fuzzy(), isEmpty);
-      expect(engine.setMagicDictionaryPath(path: buildLexicalDb()), isTrue);
-      expect(engine.hasMagicDictionary(), isTrue);
+      expect(
+        await engine.setMagicDictionaryPath(path: buildLexicalDb()),
+        isTrue,
+      );
+      expect(await engine.hasMagicDictionary(), isTrue);
       final results = await fuzzy();
       expect(results.map((r) => withoutHighlight(r.text)), contains('הלכתי'));
     });
