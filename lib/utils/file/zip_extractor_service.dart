@@ -13,7 +13,6 @@ class ZipExtractorService {
   static final _log = Logger('ZipExtractorService');
 
   /// בודק אם בתיקייה יש קובץ ZIP יחיד ומחלץ אותו
-  /// מחזיר את נתיב התיקייה שנוצרה או null אם לא היה צורך בחילוץ
   /// [outputDirectoryPath] - תיקיית היעד לחילוץ (ברירת מחדל: תיקיית ה-ZIP)
   /// [onProgress] - callback להתקדמות (0.0 - 1.0)
   /// [onAskDeleteZip] - callback לשאול את המשתמש אם למחוק את ה-ZIP (מחזיר `Future<bool>`)
@@ -54,8 +53,6 @@ class ZipExtractorService {
           success: false,
           errorMessage:
               'נמצאו ${zipFiles.length} קבצים דחוסים. אנא השאר רק קובץ דחוס אחד בתיקייה.',
-          multipleZipFiles: true,
-          zipFiles: zipFiles.map((f) => path.basename(f.path)).toList(),
         );
       }
 
@@ -130,7 +127,6 @@ class ZipExtractorService {
         success: true,
         wasExtracted: true,
         extractedFileName: zipFileName,
-        extractionPath: targetDir,
       );
     } catch (e, stackTrace) {
       _log.severe('שגיאה בחילוץ קובץ ZIP', e, stackTrace);
@@ -281,19 +277,13 @@ class ZipExtractionResult {
   final bool success;
   final bool wasExtracted;
   final String? extractedFileName;
-  final String? extractionPath;
   final String? errorMessage;
-  final bool multipleZipFiles;
-  final List<String>? zipFiles;
 
   ZipExtractionResult({
     required this.success,
     this.wasExtracted = false,
     this.extractedFileName,
-    this.extractionPath,
     this.errorMessage,
-    this.multipleZipFiles = false,
-    this.zipFiles,
   });
 
   /// האם הפעולה הצליחה והקובץ חולץ
