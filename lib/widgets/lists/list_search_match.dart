@@ -126,9 +126,13 @@ bool _inOrder(List<String> q, List<String> k, {required bool exact}) {
   return true;
 }
 
-/// תחילית; "הרמב" בהקלדה תואם גם "רמבם", שה"א הידיעה הוסרה ממנו במפתח.
+/// תחילית, גם בכתיב מלא/חסר ("השורש" תואם "השרשים"); "הרמב" בהקלדה תואם גם
+/// "רמבם", שה"א הידיעה הוסרה ממנו במפתח.
 bool _tokenMatches(String keyToken, String queryToken) {
-  if (keyToken.startsWith(queryToken)) return true;
+  if (keyToken.startsWith(queryToken) ||
+      startsWithBookTitleSpellingVariant(keyToken, queryToken)) {
+    return true;
+  }
   final n = queryToken.length;
   if (n < 2 ||
       queryToken.codeUnitAt(0) != 0x05D4 ||
