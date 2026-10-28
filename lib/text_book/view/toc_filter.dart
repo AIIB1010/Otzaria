@@ -80,6 +80,8 @@ TocEntry? _filterEntry(
         normalizedQuery: query,
         normalizedPrimaryText: _matchText(entry),
       );
+  // רוב הכותרות הן עלים שאינם תואמים — נפסלים לפני השכפול.
+  if (!selfMatches && entry.children.isEmpty) return null;
 
   final cloned = TocEntry(
     text: entry.text,
