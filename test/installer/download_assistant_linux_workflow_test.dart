@@ -54,9 +54,11 @@ void main() {
     expect(upload, greaterThan(build));
     expect(nextJob, greaterThan(upload));
     expect(
-      workflow.substring(upload + 1, nextJob),
-      isNot(contains('\n      - name: ')),
-      reason: 'ההעלאה היא השלב האחרון של build_linux',
+      RegExp(
+        r'\n      - name: (.+)\n',
+      ).allMatches(workflow.substring(upload + 1, nextJob)).map((m) => m[1]),
+      ['Upload release assets', 'Upload release record'],
+      reason: 'אחרי ההעלאה באים רק שלבי טיוטת השחרור, האחרונים ב-build_linux',
     );
     // x64 ו-ARM64 מגיעים מאותה מטריצה — לא job נוסף.
     expect(workflow, contains("arch: [x86_64, aarch64]"));
@@ -111,9 +113,16 @@ void main() {
     expect(windows, contains(_pwshReleaseTag));
   });
 
-  test('שמות הארטיפקט והנכס תואמים לטבלה ולשלב ה-Stage', () {
+  test('שמות הארטיפקט והנכס תואמים לטבלה ולהעלאה לטיוטה', () {
     final upload = step(uploadName);
-    final stage = step('Stage Download Assistant');
+    final releaseStart = workflow.indexOf(
+      '      - name: Upload release assets\n',
+      indexOfStep(uploadName),
+    );
+    final release = workflow.substring(
+      releaseStart,
+      workflow.indexOf('\n      - name: ', releaseStart + 1),
+    );
     for (final arch in ['x86_64', 'aarch64']) {
       final suffix = arch == 'aarch64' ? 'arm64' : 'x64';
       final resolved = resolveArch(upload, arch);
@@ -128,14 +137,19 @@ void main() {
           'Otzaria-Download-Assistant-linux-$suffix.tar.gz\n',
         ),
       );
-      expect(
-        stage,
-        contains(
-          'artifacts/otzaria-download-assistant-linux-$suffix/'
-          'Otzaria-Download-Assistant-linux-$suffix.tar.gz',
-        ),
-      );
     }
+    // שם הנכס בטיוטה הוא שם הקובץ, ו-$ARCH הוא x64 או arm64 כמו בארטיפקט.
+    expect(
+      release,
+      contains(
+        'tool/download_assistant/linux/build/'
+        r'Otzaria-Download-Assistant-linux-$ARCH.tar.gz',
+      ),
+    );
+    expect(
+      release,
+      contains("ARCH: \${{ matrix.arch == 'aarch64' && 'arm64' || 'x64' }}"),
+    );
   });
 
   test('הארכיון מכיל Otzaria-Download-Assistant/Otzaria-Download-Assistant', () {

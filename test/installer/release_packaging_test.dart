@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/update/my_update_widget.dart' show pickWindowsAssetUrl;
 import 'package:path/path.dart' as p;
+import 'package:yaml/yaml.dart';
 
 void main() {
   test('סכמת האינדקס נקראת ממקור המנוע הנעול ב-pubspec.lock', () async {
@@ -439,22 +440,33 @@ packages:
       expect('Install Inno Setup'.allMatches(workflow).length, 3);
     });
 
-    test('המניפסט נוצר אחרי ארגון הקבצים ונכתב לתוך release-files', () {
-      final organize = workflow.indexOf('- name: Organize release files');
+    test('המניפסט נבנה מהרשומות אחרי אימות הטיוטה ועולה לפני הפרסום', () {
+      final verify = workflow.indexOf('- name: Verify the draft release');
       final generate = workflow.indexOf('- name: Generate release manifest');
-      final createRelease = workflow.indexOf('- name: Create Release');
-      expect(organize, greaterThan(0));
-      expect(generate, greaterThan(organize));
-      expect(createRelease, greaterThan(generate));
+      final upload = workflow.indexOf('- name: Upload the release manifest');
+      final publish = workflow.indexOf('- name: Publish the release');
+      expect(verify, greaterThan(0));
+      expect(generate, greaterThan(verify));
+      expect(upload, greaterThan(generate));
+      expect(publish, greaterThan(upload));
 
       expect(
         workflow,
         contains('dart run tool/release/generate_release_manifest.dart'),
       );
       expect(workflow, contains('--dir release-files'));
+      // גודל ו-sha256 מהרשומות: הנכסים עצמם אינם יורדים ל-job.
+      expect(
+        workflow,
+        contains(r'--assets "$RUNNER_TEMP/release-assets.json"'),
+      );
       expect(
         workflow,
         contains('--out release-files/otzaria-release-manifest.json'),
+      );
+      expect(
+        workflow.substring(upload, upload + 300),
+        contains("if: steps.release_manifest.outcome == 'success'"),
       );
 
       // נכס עזר אינו מבטל release: כישלון כאן מזהיר, מוחק מניפסט חלקי
@@ -467,7 +479,7 @@ packages:
         '- name: Warn when the release manifest is missing',
       );
       expect(warn, greaterThan(generate));
-      expect(warn, lessThan(createRelease));
+      expect(warn, lessThan(publish));
       expect(
         workflow.substring(warn, warn + 400),
         contains('rm -f release-files/otzaria-release-manifest.json'),
@@ -483,14 +495,16 @@ packages:
     });
 
     test('חבילות FULL מפוצלות רק מעל 1.9 GiB, דרך סקריפט אחד', () {
+      // כל job מפצל לפני ההעלאה לטיוטה; אין שלב פיצול נוסף ב-create_release.
       expect(
         workflow,
-        contains(
-          '- name: Split FULL packages that exceed GitHub\'s asset limit',
-        ),
+        isNot(contains('bash tool/release/split_oversized_assets.sh')),
       );
-      final step = workflow.substring(
-        workflow.indexOf('bash tool/release/split_oversized_assets.sh'),
+      final upload = File(
+        'tool/release/upload_release_assets.sh',
+      ).readAsStringSync();
+      final step = upload.substring(
+        upload.indexOf(r'bash "$here/split_oversized_assets.sh"'),
       );
       for (final pattern in const [
         "'otzaria-*-windows-full.exe'",
@@ -592,25 +606,44 @@ packages:
       );
     });
 
-    test('Stage Download Assistant מעתיק את ארבעת המסייעים בלי להיכשל', () {
-      final start = workflow.indexOf('- name: Stage Download Assistant');
-      final step = workflow.substring(
-        start,
-        workflow.indexOf('\n      - name: ', start + 1),
+    test('ארבעת המסייעים עולים לטיוטה כנכסי רשות, ורק כשנבנו', () {
+      final steps = _releaseUploadSteps(workflow);
+      expect(
+        steps['build_windows'],
+        contains(
+          '[ "\$ASSISTANT" != success ] || '
+          'optional+=(installer/Otzaria-Download-Assistant-windows.exe)',
+        ),
       );
-      for (final path in const [
-        'artifacts/otzaria-download-assistant/Otzaria-Download-Assistant-windows.exe',
-        'artifacts/otzaria-download-assistant-macos/Otzaria-Download-Assistant-macos.zip',
-        'artifacts/otzaria-download-assistant-linux-x64/Otzaria-Download-Assistant-linux-x64.tar.gz',
-        'artifacts/otzaria-download-assistant-linux-arm64/Otzaria-Download-Assistant-linux-arm64.tar.gz',
-      ]) {
-        expect(step, contains(path));
-      }
-      // כל קובץ חסר מזהיר בנפרד, ואף אחד מהם אינו מפיל את השחרור.
-      expect(step, contains('if [ -f "\$assistant" ]; then'));
-      expect(step, contains('echo "::warning::Download Assistant'));
-      expect(step, isNot(contains('exit 1')));
-      expect(step, isNot(contains('continue-on-error: false')));
+      expect(
+        steps['build_windows'],
+        contains(r'ASSISTANT: ${{ steps.download_assistant.outcome }}'),
+      );
+      expect(
+        steps['build_macos'],
+        contains(
+          r'optional+=("$RUNNER_TEMP/download-assistant-macos/'
+          'Otzaria-Download-Assistant-macos.zip")',
+        ),
+      );
+      expect(
+        steps['build_linux'],
+        contains(
+          r'optional+=("tool/download_assistant/linux/build/'
+          r'Otzaria-Download-Assistant-linux-$ARCH.tar.gz")',
+        ),
+      );
+      expect(steps['build_linux'], contains('raw)\n'));
+      // נכס רשות חסר מזהיר ואינו מפיל את השחרור.
+      final upload = File(
+        'tool/release/upload_release_assets.sh',
+      ).readAsStringSync();
+      expect(
+        upload,
+        contains(
+          r'echo "::warning::$file is missing - the release goes out without it"',
+        ),
+      );
     });
   });
 
@@ -620,18 +653,12 @@ packages:
     ).readAsStringSync().replaceAll('\r\n', '\n');
     const asset = 'otzaria-0.9.97-windows_arm64-full.exe';
 
-    test('Organize release files מעתיק אותו, וחסרונו רק מזהיר', () {
-      final start = workflow.indexOf('- name: Organize release files');
-      final step = workflow.substring(
-        start,
-        workflow.indexOf('\n      - name: ', start + 1),
-      );
+    test('עולה לטיוטה רק כשנבנה, וחסרונו רק מזהיר', () {
+      final step = _releaseUploadSteps(workflow)['build_windows_arm64']!;
+      expect(step, contains(r'ARM64_FULL: ${{ steps.arm64_full.outcome }}'));
       expect(
         step,
-        contains(
-          'cp artifacts/otzaria-windows-arm64-installer-full/*.exe '
-          'release-files/ || true',
-        ),
+        contains('optional+=(installer/otzaria-*-windows_arm64-full.exe)'),
       );
       expect(step, contains('::warning::ARM64 FULL installer is missing'));
     });
@@ -989,4 +1016,19 @@ packages:
       });
     });
   });
+}
+
+/// גוף השלב "Upload release assets" (env ו-run) בכל job שמעלה לטיוטת השחרור.
+Map<String, String> _releaseUploadSteps(String workflow) {
+  final jobs = (loadYaml(workflow) as YamlMap)['jobs'] as YamlMap;
+  return {
+    for (final job in jobs.entries)
+      for (final step in (job.value as YamlMap)['steps'] as YamlList? ?? [])
+        if ((step as YamlMap)['name'] == 'Upload release assets')
+          job.key as String: [
+            for (final env in (step['env'] as YamlMap? ?? YamlMap()).entries)
+              '${env.key}: ${env.value}',
+            step['run'] as String,
+          ].join('\n'),
+  };
 }

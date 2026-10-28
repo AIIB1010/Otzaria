@@ -181,11 +181,12 @@ ComponentSpec(
 ## איך מוסיפים נכס מפוצל (בעתיד)
 
 1. ב-CI: `bash tool/release/split_release_asset.sh <archive> <out-dir>`.
-2. להעלות ל-release את כל החלקים **וגם** את `<archive>.manifest.json`.
+2. להעלות לטיוטה את כל החלקים **וגם** את `<archive>.manifest.json`, ב-
+   `upload_release_assets.sh` של אותו job (או להוסיף את התבנית לרשימת הפיצול שבו).
 3. ב-`ComponentSpec` להגדיר `AssetSpec(pattern: r'…\.manifest\.json$', split: true)`.
 
-הגנרטור קורא את מניפסט הפיצול, מאמת שכל חלק קיים בתיקייה ושגודלו תואם,
-ומשקף אותו פנימה. `downloadSize` של הרכיב הוא סכום החלקים.
+הגנרטור קורא את מניפסט הפיצול, מאמת שכל חלק קיים בתיקייה או ברשומות (`--assets`)
+ושגודלו תואם, ומשקף אותו פנימה. `downloadSize` של הרכיב הוא סכום החלקים.
 
 ## נתוני החיפוש החכם (`semantic-model`, `semantic-vectors`)
 
@@ -1272,6 +1273,41 @@ Setup נעוץ ל-6.7.1 (`install_inno_setup.ps1` והנסיגות ל-winget ו�
 שלב, שם ארטיפקט או שם נכס קיים לא שונה. מחוץ לשלבי המסייעים עצמם נערכו רק תנאי
 `if` בהערות השחרור, שהורחבו ב-`||` על מערך שהוא ריק היום.
 
+### נכסי השחרור — טיוטה שכל job ממלא
+
+`create_release` אינו מוריד את הנכסים ואינו מעלה אותם שוב (כ-20 GB; ההורדה לבדה
+ארכה 5–10 דקות). הזרימה:
+
+1. **`prepare_release`** (אחרי `bump_version`) מחשב תג וכותרת ויוצר את השחרור
+   כ**טיוטה** ב-commit שנבנה — בלי תג ובלי אירוע `published`. ה-job רץ תמיד, כדי
+   שה-jobs שתלויים בו לא ידלגו; השלבים שלו מותנים ב-`create_release` ובארבע
+   הבניות, וכשאין שחרור `release_id` ריק ואף job אינו מעלה. טיוטה קודמת באותו תג
+   (ריצה שבוטלה) נמחקת, כי היא מחזיקה קבצים של בנייה אחרת; שחרור שכבר **פורסם**
+   באותו תג מכשיל אותו. קריאות ה-API שלו חוזרות על עצמן. כישלון שלו אינו מדלג על
+   הבניות (הפריסה לחנויות תלויה בהן), אבל `create_release` דורש שיצליח. ב-main
+   התג הוא הגרסה בלבד, ולכן ריצות שחרור ל-main ממתינות זו לזו (`concurrency`);
+   ריצות dev נושאות את מספר הריצה בתג ואינן ממתינות.
+2. **כל job של בנייה** מסיים ב-`tool/release/upload_release_assets.sh`: מעלה את
+   נכסיו לטיוטה (curl ו-jq בלבד, כי `build_linux` רץ בקונטיינר בלי gh; ניסיונות
+   חוזרים, ושם קיים מוחלף כמו `--clobber`), מפצל חבילת FULL מעל הסף
+   (`split_oversized_assets.sh`, אותם שמות חלקים), וכותב רשומה — שם, גודל ו-sha256
+   לכל נכס, ועותק של נכסי ה-JSON — שעולה כארטיפקט `otzaria-release-record-<job>`.
+   נכסי עזר (מסייעים, סמלים, מניפסטי קבצים) עולים כ-`--optional`: חסר — אזהרה.
+3. **`update_packages_windows` / `_linux` / `_macos`** בונים את חבילות העדכון
+   הדיפרנציאלי מיד כשהבנייה של הפלטפורמה הסתיימה, במקביל לשאר, ומעלים אותן
+   לטיוטה. אופטימיזציה בלבד: `create_release` מחכה להן אך אינו דורש שיצליחו.
+4. **`create_release`** מוריד רק את הרשומות, ו-`tool/release/verify_release_draft.dart`
+   מאמת שכל job חובה כתב רשומה ושכל נכס מדווח נמצא בטיוטה, שלם, בגודל ובתקציר
+   (`digest`) שדווחו; אחרת הריצה נכשלת עם רשימה, ו-"Re-run failed jobs" מעלה
+   מחדש. נכס שאף רשומה לא מדווחת (שארית של ניסיון קודם) נמחק. המניפסט נבנה מהרשומות
+   (`generate_release_manifest.dart --assets`), עולה לטיוטה, הערות השחרור נכתבות
+   מרשימת הנכסים, ולבסוף הטיוטה מתפרסמת (`draft: false`) ב-`GITHUB_TOKEN` — אירוע
+   ה-`published` שלו אינו מפעיל workflows, ולכן ההכרזה היחידה היא `announce_release`.
+
+`build_linux` נקרא גם על ידי `extract_app_build_steps.py` שב-SeforimLibrary, עד
+"Find and prepare Linux packages". שלבי הטיוטה יושבים אחריו ובלי `if`; בדיקת
+`release_id` נעשית בתוך הסקריפט.
+
 ### בניית האשף — ב-`build_windows`, לא ב-job נפרד
 
 השלב יושב ב-`build_windows` ולא ב-job ייעודי משתי סיבות: ה-job הזה כבר פתר את
@@ -1282,18 +1318,18 @@ Setup ורץ Windows שלם בשביל קומפילציה של שניות.
 שלב הבנייה נושא `continue-on-error: true` וההעלאה שלו מותנית ב-
 `steps.download_assistant.outcome == 'success'`. משיכת העיצוב
 (`fetch_assistant_art.ps1`) רצה בתוך אותו שלב לפני ISCC, ולכן גם כישלון שלה (רשת,
-hash שאינו תואם) מפיל רק את המסייע. ב-`create_release` השלב
-"Stage Download Assistant" מעתיק את ארבעת המסייעים (Windows, macOS, Linux x64,
-Linux ARM64 — הטבלה ב"נכסי המסייעים") כל אחד בנפרד, ועל כל קובץ חסר מדפיס
-`::warning::` משלו וממשיך. גרסה
+hash שאינו תואם) מפיל רק את המסייע. כל job שבונה מסייע (Windows, macOS, Linux
+x64, Linux ARM64 — הטבלה ב"נכסי המסייעים") מעלה אותו לטיוטה כנכס רשות, רק כששלב
+הבנייה שלו הצליח; קובץ חסר מדפיס `::warning::` משלו וההעלאה ממשיכה. גרסה
 שיוצאת בלי מסייע ההורדה חסרה כלי נוחות; גרסה שלא יוצאת כלל חוסמת את כל
 המשתמשים.
 
 ### המניפסט — כישלון רועש, שאינו חוסם שחרור
 
-`Generate release manifest` רץ **אחרי** `Organize release files` (ואחרי הפיצול
-המותנה, כדי שישקף את הצורה שתעלה בפועל) וכותב ל-
-`release-files/otzaria-release-manifest.json` — כך הוא עולה עם שאר הנכסים.
+`Generate release manifest` רץ **אחרי** `Verify the draft release`, על הרשומות של
+ה-jobs (`--assets`: שם, גודל ו-sha256 של מה שעלה בפועל, אחרי הפיצול; מניפסטי
+הפיצול עצמם בתיקייה) וכותב ל-`release-files/otzaria-release-manifest.json`, ש-
+"Upload the release manifest" מעלה לטיוטה לפני הפרסום.
 השם חייב להסתיים ב-`release-manifest.json`, כי זה מה ש-
 `LoadReleaseManifest` בסקריפט מחפש ברשימת הנכסים.
 
@@ -1302,8 +1338,7 @@ Linux ARM64 — הטבלה ב"נכסי המסייעים") כל אחד בנפרד
 
 השלב ב-workflow, לעומתו, נושא `continue-on-error: true` — אותה מדיניות של
 האשף עצמו. הגנרטור זורק גם על קלט שקודם לכן רק חסר נכס (שני קבצים תואמים
-לתבנית אחת, חלק שרשום במניפסט פיצול ואינו בתיקייה — ההעתקות ל-`release-files`
-נושאות `|| true` ולכן העתקה חלקית נבלעת, או `flutter pub get` שנכשל), ולכן
+לתבנית אחת, חלק שרשום במניפסט פיצול ואינו ברשומות, או `flutter pub get` שנכשל), ולכן
 כישלון שלו היה מבטל release שלם בגלל נכס עזר אחד. השלב שאחריו מוחק מניפסט
 חלקי אם נותר, ומדפיס `::warning::`. האשף מציג במקרה כזה הודעה ידידותית ואינו
 קורס — סעיף 2 ב"מסלול הריצה" למעלה.
@@ -1324,11 +1359,15 @@ Linux ARM64 — הטבלה ב"נכסי המסייעים") כל אחד בנפרד
 בית-בבית. מספר החלקים נגזר מהגודל ואינו קבוע. המרווח מתחת ל-2 GiB הוא בכוונה:
 נכס שקרוב לגבול נכשל בהעלאה, והספרייה גדלה בכמה אחוזים בין גרסאות.
 
-* **Windows / Linux / macOS FULL** — השלב "Split FULL packages that exceed
-  GitHub's asset limit" מריץ `tool/release/split_oversized_assets.sh` על
-  `release-files` עם תבניות החבילות המלאות. כשמשהו פוצל, הוא מצרף את
-  `assemble_split_asset.sh`/`.ps1` להרכבה ידנית. אריזת Linux/macOS אינה נכשלת
-  עוד על הגודל — הפיצול בשלב השחרור הוא שמטפל בו.
+* **Windows / Linux / macOS FULL** — `upload_release_assets.sh`, בסוף ה-job שבנה
+  את החבילה, מריץ `tool/release/split_oversized_assets.sh` על תיקיית ההעלאה (קישור
+  לקובץ, כך שהקובץ של ה-job נשאר שלם) עם תבניות החבילות המלאות. כשמשהו פוצל, הוא
+  מצרף את `assemble_split_asset.sh`/`.ps1`, אבל ההעלאה משמיטה אותם אלא אם הועברו לה
+  במפורש: רק `build_library_assets` מעלה אותם (checkout של Windows החזיק את ה-ps1
+  ב-CRLF, ושני jobs דיווחו קבצים שונים באותו שם; ב-`.gitattributes` הוא עכשיו LF).
+  לפני הפיצול נמחק `full_installer`, ו-`df -h` נרשם לפניו ואחריו. בלי GNU split
+  (macOS) `split_release_asset.sh` חותך ב-`dd` לאותם שמות. אריזת Linux/macOS אינה
+  נכשלת על הגודל — הפיצול בהעלאה הוא שמטפל בו.
 * **Android FULL** — המשימה `build_android_full` אוספת את ה-APK ואת חלקי חבילת
   הספרייה והאינדקס עם המניפסטים שלהם (`otzaria-library-parts` מ-`build_library_assets`),
   ו-`tool/release/pack_android_full.sh` אורז אותם בלי דחיסה (`zip -0`; החלקים
@@ -1356,7 +1395,7 @@ Linux ARM64 — הטבלה ב"נכסי המסייעים") כל אחד בנפרד
 `otzaria_full.iss` עם `/DAppArch=arm64`, ונכסי הספרייה יורדים לשתי הארכיטקטורות
 מ-`installer/download_full_installer_assets.ps1`. השלב **אינו חוסם שחרור**
 (`continue-on-error` + `timeout-minutes`): כישלון מוציא גרסה בלי הנכס הזה ועם
-אזהרה ב-"Organize release files". לולאת הפיצול מכסה אותו כמו את ה-x64, ובהערות
+אזהרה בהעלאה לטיוטה של `build_windows_arm64`. הפיצול מכסה אותו כמו את ה-x64, ובהערות
 השחרור שלושת הענפים שלו (`.part-*`, `.manifest.json`, `.exe`) קודמים ל-
 `*windows_arm64*.exe` — אחרת הוא היה מוצג כמתקין ה-ARM הרגיל. בדיקות:
 `test/installer/installer_scripts_test.dart` ("מתקין FULL ל-Windows ARM64") ו-
@@ -1455,16 +1494,18 @@ Linux ARM64 — הטבלה ב"נכסי המסייעים") כל אחד בנפרד
 לשתי פנים ("מסייע הורדה — כלי עזר להורדת אוצריא ולהכנת התקנה למחשב ללא אינטרנט.
 זהו אינו קובץ ההתקנה עצמו"), ואחריו שורה לכל מערכת — "מסייע הורדה למחשב Windows",
 "למק", "ללינוקס", "ללינוקס במחשב עם מעבד ARM" — בסדר הזה ולא בסדר האלפביתי של
-`release-files`. מסייע שלא נבנה פשוט חסר מהרשימה.
+רשימת הנכסים. מסייע שלא נבנה פשוט חסר מהרשימה.
 
 ### בדיקות החיווט
 
 `test/installer/release_packaging_test.dart`, קבוצה "מסייע ההורדה ומניפסט
 ה-release ב-workflow": ה-`.iss` נבנה עם ה-ISCC הקיים ולא נוספה התקנה שנייה,
-הבנייה אינה פטאלית, הגנרטור רץ אחרי ארגון הקבצים וכותב ל-`release-files`, שם
+הבנייה אינה פטאלית, הגנרטור רץ אחרי אימות הטיוטה וכותב ל-`release-files`, שם
 נכס המניפסט נקרא מה-`.iss` עצמו ומושווה לשם שב-workflow, הפיצול מותנה
-במגבלה ואינו מתקיים בגודל של היום, ענף המסייעים הוא הראשון ב-`case`, ו-"Stage
-Download Assistant" מעתיק את ארבעת המסייעים עם אזהרה נפרדת לכל חסר ובלי כישלון.
+במגבלה ואינו מתקיים בגודל של היום, ענף המסייעים הוא הראשון ב-`case`, וארבעת
+המסייעים עולים כנכסי רשות. הטיוטה עצמה: `test/release/release_draft_workflow_test.dart`
+(מבנה ה-jobs) ו-`test/release/release_draft_upload_test.dart` (ההעלאה והאימות מול
+שרת שמדמה את GitHub).
 
 ## מסייע ההורדה ל-macOS — `tool/download_assistant/macos/`
 

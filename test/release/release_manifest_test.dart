@@ -1064,4 +1064,102 @@ void main() {
       }
     });
   });
+
+  // ב-CI הנכסים כבר בטיוטה; ה-job מקבל מהם רק שם, גודל ו-sha256.
+  group('נכסים שנמדדו ב-job שהעלה אותם', () {
+    /// מעביר מהתיקייה כל נכס שאינו JSON ומחזיר את מדידתו, כמו רשומת ההעלאה.
+    Map<String, MeasuredAsset> moveOutLargeAssets() => {
+      for (final file in dir.listSync().whereType<File>().toList())
+        if (!file.path.endsWith('.json'))
+          file.uri.pathSegments.last: () {
+            final measured = measureAsset(file);
+            file.deleteSync();
+            return measured;
+          }(),
+    };
+
+    test('אותו מניפסט כמו כשהקבצים עצמם בתיקייה', () {
+      writeRealisticRelease();
+      writeSplit('otzaria-linux-full.tar.zst', 0x21, const [40, 9]);
+      final expected = build();
+
+      final measured = moveOutLargeAssets();
+      expect(measured, contains('otzaria-0.9.97-windows.exe'));
+      expect(measured, contains('otzaria-linux-full.tar.zst.part-001'));
+      final manifest = buildReleaseManifest(
+        releaseTag: '0.9.97+789',
+        releaseVersion: '0.9.97',
+        directory: dir,
+        measuredAssets: measured,
+      );
+      expect(manifest, expected);
+    });
+
+    test('חלק שגודלו המדווח שונה מהמניפסט נדחה', () {
+      writeSplit('otzaria-linux-full.tar.zst', 0x21, const [40, 9]);
+      final measured = moveOutLargeAssets();
+      measured['otzaria-linux-full.tar.zst.part-001'] = const MeasuredAsset(
+        size: 8,
+        sha256: '',
+      );
+      expect(
+        () => buildReleaseManifest(
+          releaseTag: '0.9.97+789',
+          releaseVersion: '0.9.97',
+          directory: dir,
+          measuredAssets: measured,
+        ),
+        throwsA(
+          isA<ReleaseManifestException>().having(
+            (e) => e.message,
+            'message',
+            contains('is 8 bytes'),
+          ),
+        ),
+      );
+    });
+
+    test('מניפסט פיצול שדווח אך אינו בתיקייה נדחה', () {
+      final measured = {
+        'otzaria-linux-full.tar.zst.manifest.json': MeasuredAsset(
+          size: 2,
+          sha256: hex(1),
+        ),
+      };
+      expect(
+        () => buildReleaseManifest(
+          releaseTag: '0.9.97+789',
+          releaseVersion: '0.9.97',
+          directory: dir,
+          measuredAssets: measured,
+        ),
+        throwsA(isA<ReleaseManifestException>()),
+      );
+    });
+
+    test('readMeasuredAssets קורא את רשומת ההעלאה ודוחה קלט פגום', () {
+      final file = File('${dir.path}/assets.json')
+        ..writeAsStringSync(
+          jsonEncode([
+            {'name': 'otzaria-windows.zip', 'size': 8, 'sha256': hex(2)},
+          ]),
+        );
+      final measured = readMeasuredAssets(file);
+      expect(measured['otzaria-windows.zip']!.size, 8);
+      expect(measured['otzaria-windows.zip']!.sha256, hex(2));
+
+      for (final bad in [
+        {'name': '../x', 'size': 1, 'sha256': hex(2)},
+        {'name': 'x', 'size': -1, 'sha256': hex(2)},
+        {'name': 'x', 'size': 1, 'sha256': 'abc'},
+      ]) {
+        file.writeAsStringSync(jsonEncode([bad]));
+        expect(
+          () => readMeasuredAssets(file),
+          throwsA(isA<ReleaseManifestException>()),
+          reason: '$bad',
+        );
+      }
+    });
+  });
 }

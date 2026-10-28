@@ -150,9 +150,7 @@ else:
       '.github/workflows/build-and-announce.yml',
     ).readAsStringSync();
     final publish = workflow.substring(
-      workflow.indexOf(
-        '- name: Publish differential update packages (macOS, Linux)',
-      ),
+      workflow.indexOf('- name: Publish differential update packages (Linux)'),
     );
     expect(
       publish,

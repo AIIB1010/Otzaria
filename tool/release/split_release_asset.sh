@@ -23,7 +23,6 @@ mkdir -p "$output_dir"
 }
 
 base=$(basename "$archive")
-split -b "$part_size" -d -a 3 -- "$archive" "$output_dir/$base.part-"
 
 file_size() {
   if stat -c '%s' "$1" >/dev/null 2>&1; then
@@ -33,6 +32,31 @@ file_size() {
   fi
 }
 
+# macOS has shasum but no sha256sum.
+file_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1"
+  else
+    shasum -a 256 "$1"
+  fi | awk '{print $1}'
+}
+
+# GNU split; BSD split (macOS) may lack -d, so dd cuts the same numbered parts there.
+if split --version >/dev/null 2>&1; then
+  split -b "$part_size" -d -a 3 -- "$archive" "$output_dir/$base.part-"
+else
+  # The largest power of two up to 1 MiB that divides the part size.
+  block=1048576
+  while [ $((part_size % block)) -ne 0 ]; do block=$((block / 2)); done
+  total=$(file_size "$archive")
+  index=0
+  while [ $((index * part_size)) -lt "$total" ]; do
+    dd if="$archive" of="$(printf '%s/%s.part-%03d' "$output_dir" "$base" "$index")" \
+      bs="$block" skip=$((index * part_size / block)) count=$((part_size / block)) 2>/dev/null
+    index=$((index + 1))
+  done
+fi
+
 parts_json=$(
   for part in "$output_dir/$base.part-"*; do
     size=$(file_size "$part")
@@ -40,7 +64,7 @@ parts_json=$(
       echo "part exceeds GitHub's limit: $part ($size bytes)" >&2
       exit 1
     }
-    sha=$(sha256sum "$part" | awk '{print $1}')
+    sha=$(file_sha256 "$part")
     jq -n \
       --arg name "$(basename "$part")" \
       --arg sha256 "$sha" \
@@ -50,7 +74,7 @@ parts_json=$(
 )
 
 archive_size=$(file_size "$archive")
-archive_sha=$(sha256sum "$archive" | awk '{print $1}')
+archive_sha=$(file_sha256 "$archive")
 manifest="$output_dir/$base.manifest.json"
 jq -n \
   --arg archive "$base" \

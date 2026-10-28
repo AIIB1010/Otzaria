@@ -17,3 +17,7 @@ pubspec.lock linguist-generated=true
 # model.json is compared byte-for-byte with the published release copy and
 # handed to the engine as-is; autocrlf must not rewrite it.
 assets/semantic/** -text
+
+# Assemble scripts are release assets that several jobs upload; every checkout must
+# hold the same bytes, Windows included.
+tool/release/assemble_split_asset.ps1 text eol=lf

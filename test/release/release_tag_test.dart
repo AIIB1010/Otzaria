@@ -96,7 +96,7 @@ void main() {
     expect(
       RegExp(r'tool/version/release_tag\.(sh|ps1)').allMatches(workflow).length,
       12,
-      reason: 'חותם ומניפסט בכל פלטפורמה, מסייעי ההורדה ו-create_release',
+      reason: 'חותם ומניפסט בכל פלטפורמה, מסייעי ההורדה ו-prepare_release',
     );
     expect(workflow, isNot(contains(r'"$version+${{ github.run_number }}"')));
     expect(
