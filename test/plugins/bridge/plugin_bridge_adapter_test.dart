@@ -629,6 +629,36 @@ Future<void> main() async {
     expect(info['buildNumber'], '99801');
   });
 
+  test(
+    'storage.get מחזיר את ה-JSON השמור כמות שהוא, בלי לפענח (#3380)',
+    () async {
+      final repo = _StubPluginRegistryRepository();
+      final adapter = PluginBridgeAdapter(
+        _buildInstalledPlugin(permissions: const ['plugin.storage.read']),
+        dependencies: _buildNetworkDeps(),
+        pluginRepository: repo,
+      );
+      final stored = jsonEncode({
+        'items': [
+          for (var i = 0; i < 1000; i++) {'id': i, 'text': 'שורה $i'},
+        ],
+      });
+      repo.kv['$kDefaultStorageNamespace/big'] = stored;
+
+      final result = await adapter.execute('storage', 'get', {'key': 'big'});
+
+      expect(result, isA<JavaScriptHandlerJsonResult>());
+      expect(
+        identical((result as JavaScriptHandlerJsonResult).json, stored),
+        isTrue,
+      );
+      expect(
+        await adapter.execute('storage', 'get', {'key': 'missing'}),
+        isNull,
+      );
+    },
+  );
+
   group('PluginBridgeAdapter.settings.get', () {
     late PluginBridgeAdapter adapter;
 

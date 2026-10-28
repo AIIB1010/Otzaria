@@ -6191,7 +6191,7 @@ class PluginBridgeAdapter {
           kDefaultStorageNamespace,
           key,
         );
-        return value != null ? jsonDecode(value) : null;
+        return value != null ? JavaScriptHandlerJsonResult(value) : null;
       case 'set':
         final key = args['key'] as String?;
         final value = args['value'];

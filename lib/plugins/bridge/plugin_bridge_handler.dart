@@ -334,7 +334,14 @@ class PluginBridgeHandler {
   static final Map<String, String> methodPermissions =
       pluginApiMethodPermissions;
 
-  Map<String, dynamic> _successResp(dynamic data) {
+  /// ערך JSON שמור נשלח ל-WebView כמות שהוא: פענוח וקידוד מחדש של ערך גדול
+  /// ב-isolate של ה-UI תוקעים את התוכנה (#3380).
+  Object _successResp(dynamic data) {
+    if (data is JavaScriptHandlerJsonResult) {
+      return JavaScriptHandlerJsonResult(
+        '{"success":true,"data":${data.json},"error":null}',
+      );
+    }
     return PluginRpcResponse.success(data).toJson();
   }
 
