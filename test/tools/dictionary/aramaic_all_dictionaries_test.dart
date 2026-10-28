@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/tools/aramaic_dictionary/aramaic_dictionary_screen.dart';
+import 'package:otzaria/tools/aramaic_dictionary/widgets/aramaic_result_card.dart';
 import 'package:otzaria/tools/dictionary/repository/dictionary_lookup_repository.dart';
 import 'package:otzaria/utils/text/text_manipulation.dart';
 
@@ -301,6 +302,22 @@ void main() {
         mergeAramaicMatches([single]).single,
         same(single),
       );
+    });
+  });
+
+  group('AramaicResultCard', () {
+    test('פירוש שכל חלקיו כבר הופיעו אינו מוצג שוב', () {
+      final meanings = AramaicResultCard.visibleMeanings(
+        'ארץ, קרקע *** קרקע *** ארץ *** {אַרְעָא} אֲדָמָה',
+      );
+
+      expect(meanings.map((m) => m.mainText), ['ארץ, קרקע', 'אֲדָמָה']);
+    });
+
+    test('מונח החיפוש ההפוך הוא הראשון, בלי ניקוד והערות', () {
+      expect(AramaicResultCard.searchTermOf('אֶרֶץ, קרקע'), 'ארץ');
+      expect(AramaicResultCard.searchTermOf('(למעלה) עָלָה; עלה'), 'עלה');
+      expect(AramaicResultCard.searchTermOf('(הערה)'), '');
     });
   });
 

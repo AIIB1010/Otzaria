@@ -80,7 +80,7 @@ void main() {
     await tester.enterText(find.byType(TextField), 'איתא');
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('החלף כיוון'));
+    await tester.tap(find.text('עברית לארמית'));
     await tester.pumpAndSettle();
 
     final field = tester.widget<TextField>(find.byType(TextField));
@@ -114,7 +114,7 @@ void main() {
   ) async {
     await pumpScreen(tester);
 
-    await tester.tap(find.byTooltip('החלף כיוון'));
+    await tester.tap(find.text('עברית לארמית'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'אילנא');
     await tester.pumpAndSettle();
@@ -139,5 +139,47 @@ void main() {
       lessThan(tester.getTopLeft(find.text('קיים')).dy),
     );
     expect(find.text('מילון שיח ישראל'), findsNothing);
+  });
+
+  testWidgets('חיפוש הפוך מפירוש: מחליף כיוון ומחפש את המונח הראשון', (
+    tester,
+  ) async {
+    await pumpScreen(tester);
+
+    await tester.enterText(find.byType(TextField), 'גברא');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('חפש בעברית'));
+    await tester.pumpAndSettle();
+
+    final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.controller!.text, 'איש');
+    expect(find.text('חפש מילה בעברית...'), findsOneWidget);
+    expect(find.byType(AramaicResultCard), findsOneWidget);
+  });
+
+  testWidgets('בחיפוש עברי אפשר לחפש את המילה הארמית של התוצאה', (
+    tester,
+  ) async {
+    await pumpScreen(tester);
+
+    await tester.tap(find.text('עברית לארמית'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'איש');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('חפש "גברא" בארמית'));
+    await tester.pumpAndSettle();
+
+    final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.controller!.text, 'גברא');
+    expect(find.text('חפש מילה בארמית...'), findsOneWidget);
+  });
+
+  testWidgets('מספר התוצאות מוצג', (tester) async {
+    await pumpScreen(tester);
+
+    await tester.enterText(find.byType(TextField), 'איתא');
+    await tester.pumpAndSettle();
+
+    expect(find.text('ערך אחד'), findsOneWidget);
   });
 }
