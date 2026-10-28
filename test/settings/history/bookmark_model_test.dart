@@ -142,6 +142,34 @@ void main() {
     expect(restoredConfig.numResults, 250);
   });
 
+  test(
+    'search configuration drops its facet copies, also from old entries',
+    () {
+      const facets = ['/ספרים אישיים/א', '/ספרים אישיים/ב'];
+      final old = {
+        'ref': 'query',
+        'index': 0,
+        'book': {'title': 'query', 'type': 'TextBook'},
+        'isSearch': true,
+        'searchScopeFacets': facets,
+        'searchConfiguration': const SearchConfiguration(
+          distance: 3,
+          currentFacets: facets,
+          searchScopeFacets: facets,
+        ).toMap(),
+      };
+
+      final rewritten = Bookmark.fromJson(old).toJson();
+      final config = rewritten['searchConfiguration'] as Map<String, dynamic>;
+
+      expect(config.containsKey('currentFacets'), isFalse);
+      expect(config.containsKey('searchScopeFacets'), isFalse);
+      expect(config['distance'], 3);
+      expect(rewritten['searchScopeFacets'], facets);
+      expect(SearchConfiguration.fromMap(config).searchScopeFacets, ['/']);
+    },
+  );
+
   test('Bookmark.fromJson treats missing search configuration as null', () {
     final restored = Bookmark.fromJson({
       'ref': 'query',

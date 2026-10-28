@@ -105,6 +105,8 @@ class Bookmark {
   String get bookmarkIdentity =>
       '${bookIdentity(book)}|$index|${targetKind.name}';
 
+  // searchConfiguration נשמר בלי ה-facets: השחזור לוקח אותם מ-searchScopeFacets,
+  // ועם אלפי ספרים אישיים שני עותקים נוספים משלשים כל רשומת חיפוש (#3380).
   Bookmark({
     required this.ref,
     required this.book,
@@ -123,13 +125,17 @@ class Bookmark {
     this.searchMode,
     this.distance,
     this.proximityScope,
-    this.searchConfiguration,
+    Map<String, dynamic>? searchConfiguration,
     this.targetKind = BookmarkTargetKind.book,
     this.label,
     this.createdAt,
     this.readingAnchor,
     this.historySlot,
-  });
+  }) : searchConfiguration = searchConfiguration == null
+           ? null
+           : (Map.of(searchConfiguration)
+               ..remove('currentFacets')
+               ..remove('searchScopeFacets'));
 
   /// מחזיר עותק עם שדות מעודכנים. [clearLabel] מאפס את [label] ל-null
   /// (חזרה להצגת המיקום) — נחוץ כי null כערך פירושו "ללא שינוי".
