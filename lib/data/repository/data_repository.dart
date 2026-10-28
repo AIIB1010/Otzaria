@@ -5,6 +5,7 @@ import 'package:otzaria/data/cache/acronyms_cache.dart';
 import 'package:otzaria/data/cache/generation_cache.dart';
 import 'package:otzaria/data/data_providers/file_system_data_provider.dart';
 import 'package:otzaria/data/repository/book_search_worker.dart';
+import 'package:otzaria/find_ref/book_name_match.dart';
 import 'package:otzaria/models/book_source.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/library/models/library.dart';
@@ -580,7 +581,7 @@ List<int> _searchPreparedEntries(
 }
 
 /// האם כל מילות השאילתה מופיעות כמילים שלמות בכותרת, לפי סדרן.
-/// שוויון מדויק בכוונה — התאמה סלחנית מקדמת 'הרמבם' עבור שאילתת 'רמבם'.
+/// שוויון או כתיב מלא/חסר בלבד — התאמה סלחנית מקדמת 'הרמבם' עבור שאילתת 'רמבם'.
 bool _titleHasQueryWordsInOrder(
   String normalizedTitle,
   List<String> queryWords,
@@ -588,7 +589,11 @@ bool _titleHasQueryWordsInOrder(
   if (queryWords.isEmpty) return false;
   var i = 0;
   for (final titleWord in normalizedTitle.split(' ')) {
-    if (titleWord == queryWords[i] && ++i == queryWords.length) return true;
+    if ((titleWord == queryWords[i] ||
+            isBookTitleSpellingVariant(titleWord, queryWords[i])) &&
+        ++i == queryWords.length) {
+      return true;
+    }
   }
   return false;
 }
@@ -759,6 +764,7 @@ bool _wordPairMatches(String queryWord, String textWord) {
     final collapsedQuery = _collapseDoubledVavYod(queryWord);
     if (_collapseDoubledVavYod(textWord).contains(collapsedQuery)) return true;
   }
+  if (startsWithBookTitleSpellingVariant(textWord, queryWord)) return true;
 
   final allowed = _maxAllowedEdits(
     queryWord.length > textWord.length ? queryWord.length : textWord.length,

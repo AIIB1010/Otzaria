@@ -1257,6 +1257,24 @@ class BookTitleIndex {
       if (matchRank != null) mask = _acronymMay;
     }
 
+    // מילות הכותרת בכתיב מלא/חסר ("ספר השורשים" ל"ספר השרשים"): דירוג 2 כמו
+    // כותרת מילולית שמכילה אותן — גובר על תחילית כינוי, לא על כינוי מדויק.
+    int? spellingVariantTitleIndex;
+    if ((matchRank == null || matchRank >= 4) &&
+        scan.fuzzyCandidates.contains(book.id)) {
+      final start = _spellingVariantStart(
+        scan.matchWords,
+        _titleTokens[book.id] ?? _splitTitleTokens(t),
+      );
+      if (start != null) {
+        matchRank = 2;
+        matchedTerm = null;
+        tailIsTitleWords = false;
+        mask = _mayMatchAll;
+        spellingVariantTitleIndex = start;
+      }
+    }
+
     // מפלט אחרון: התאמה מקורבת (issue #1310), מדורגת מתחת לכל ההתאמות
     // המילוליות — כך סדר התוצאות הקיים אינו זז.
     if (matchRank == null && scan.fuzzyCandidates.contains(book.id)) {
@@ -1281,6 +1299,7 @@ class BookTitleIndex {
         orderIndex: book.orderIndex,
         acronymTailIsTitleWords: tailIsTitleWords,
         isExactAlias: exactAlias,
+        spellingVariantTitleIndex: spellingVariantTitleIndex,
         titleTokens: _titleTokens[book.id],
       ),
     );
@@ -1457,6 +1476,13 @@ class ReferenceBookHit {
   /// השאילתה היא גם כינוי מדויק של ספר שהותאם לפי כותרתו ("זהר" ל"ספר הזהר").
   final bool isExactAlias;
 
+  /// מקום מילות השאילתה בכותרת, כשהותאמו בכתיב מלא/חסר ([matchRank] == 2).
+  final int? spellingVariantTitleIndex;
+
+  /// סדר הדירוג: כתיב מלא/חסר בין כינוי מדויק (3) לתחילית כינוי (4).
+  double get rankOrder =>
+      spellingVariantTitleIndex == null ? matchRank.toDouble() : 3.5;
+
   /// השאילתה היא שמו המדויק של הספר — כותרת מלאה או כינוי.
   bool get namesBookExactly => matchRank == 0 || matchRank == 3 || isExactAlias;
 
@@ -1471,6 +1497,7 @@ class ReferenceBookHit {
     this.matchedTerm,
     this.acronymTailIsTitleWords = false,
     this.isExactAlias = false,
+    this.spellingVariantTitleIndex,
     List<String>? titleTokens,
     Set<String>? titleMatchTokens,
   }) : _givenTitleTokens = titleTokens,
@@ -1486,6 +1513,24 @@ class ReferenceBookHit {
   /// [titleMatchTokensOf] של [titleTokens] — מילות הכותרת גם בלי אות-חיבור.
   late final Set<String> titleMatchTokens =
       _givenTitleMatchTokens ?? titleMatchTokensOf(titleTokens);
+}
+
+/// מקום [queryWords] כרצף במילות [titleTokens], כשאחת לפחות בכתיב מלא/חסר
+/// ([isBookTitleSpellingVariant]) והשאר זהות; `null` אם אין.
+int? _spellingVariantStart(List<String> queryWords, List<String> titleTokens) {
+  final n = queryWords.length;
+  for (var s = 0; s + n <= titleTokens.length; s++) {
+    var variants = 0;
+    var i = 0;
+    for (; i < n; i++) {
+      final titleWord = bookNameMatchToken(titleTokens[s + i]);
+      if (titleWord == queryWords[i]) continue;
+      if (!isBookTitleSpellingVariant(queryWords[i], titleWord)) break;
+      variants++;
+    }
+    if (i == n && variants > 0) return s;
+  }
+  return null;
 }
 
 List<String> _splitTitleTokens(String normalizedTitle) => normalizedTitle
@@ -1536,6 +1581,9 @@ class _QueryScan {
   /// צורות [q] מול כינויים: [bookNameSpellingForm], ו-[mq] כשהיא שונה ממנה.
   final List<String> acronymQueries;
   final List<String> words;
+  late final List<String> matchWords = words
+      .map(bookNameMatchToken)
+      .toList(growable: false);
 
   /// לכל צורה ב-[acronymQueries]; `null` = אין צמצום.
   final List<AcronymCandidateBooks?> acronymCandidates;
@@ -1627,7 +1675,7 @@ class _QueryScan {
   }
 
   static int _compareHits(ReferenceBookHit a, ReferenceBookHit b) {
-    final r = a.matchRank.compareTo(b.matchRank);
+    final r = a.rankOrder.compareTo(b.rankOrder);
     if (r != 0) return r;
     // Prefer lower orderIndex, then shorter title.
     final o = a.orderIndex.compareTo(b.orderIndex);
