@@ -3,41 +3,61 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 
-const int _chunkSize = 1024 * 1024;
+const int _chunkSize = FileBuffer.kDefaultBufferSize;
 
 /// פותח ZIP לקריאה בזרימה, עבור isolate ברקע.
 ///
-/// `readIntoSync`, שבו משתמש [InputFileStream] הרגיל, עוצר את ה-GC של כל
-/// ה-isolates עד שהקריאה מהדיסק מסתיימת; `readSync` לא (#3418).
+/// `readIntoSync` מחזיק חוצץ Dart בזמן גישה לדיסק ומעכב GC; `readSync` לא.
 InputFileStream openZipInput(String path) =>
     InputFileStream.withFileBuffer(FileBuffer(_ReadSyncFileHandle(path)));
 
-/// פורס את [entry] אל [dest] בנתחים של 1MB, בכתיבה אסינכרונית.
+/// פורס את [entry] אל [dest]; none ו-deflate נכתבים אסינכרונית בזיכרון מוגבל.
 ///
 /// מחזיר את מספר הבתים שנכתבו. זורק [ArchiveException] כשהתוכן גדול מהגודל
-/// המוצהר, כמו `writeContent` של package:archive.
+/// המוצהר. bzip2 ו-zstd נשארים במסלול הסינכרוני המוגבל של archive.
 Future<int> writeZipEntry(ArchiveFile entry, String dest) async {
   final zip = entry.rawContent;
   if (zip is! ZipFile) {
     throw ArchiveException('${entry.name} is not a zip entry');
   }
-  // subset: מיקום משלו, כדי שלא לקדם את התוכן השמור של הרשומה עצמה.
-  final stored = zip.getStream(decompress: false).subset();
-  final content = switch (zip.compressionMethod) {
-    CompressionType.none => stored,
-    CompressionType.deflate => ZLibDecoder().decodeLazy(stored, raw: true),
-    CompressionType.bzip2 => BZip2Decoder().decodeLazy(stored),
-    CompressionType.zstd => ZstdDecoder().decodeLazy(stored),
-  };
   final file = File(dest);
   await file.parent.create(recursive: true);
+  // subset שומר על מיקום התוכן של הרשומה עבור קריאות חוזרות.
+  final stored = zip.getStream(decompress: false).subset();
+  // decodeLazy מחזיק בלוק מפוענח שלם; שומרים כאן על הפלט המוגבל של archive.
+  if (zip.compressionMethod == CompressionType.bzip2 ||
+      zip.compressionMethod == CompressionType.zstd) {
+    final output = OutputFileStream(dest);
+    try {
+      try {
+        final valid = zip.compressionMethod == CompressionType.bzip2
+            ? BZip2Decoder().decodeStream(
+                stored,
+                output,
+                maxOutputSize: zip.uncompressedSize,
+              )
+            : ZstdDecoder().decodeStream(
+                stored,
+                output,
+                maxOutputSize: zip.uncompressedSize,
+              );
+        if (!valid) {
+          throw ArchiveException('Invalid ${zip.compressionMethod.name} data');
+        }
+      } finally {
+        await output.close();
+      }
+    } catch (_) {
+      await file.delete();
+      rethrow;
+    }
+    return output.length;
+  }
   final output = await file.open(mode: FileMode.write);
   var written = 0;
   try {
     try {
-      // isEOS ולא נתח ריק: קריאה מעבר לסוף זורקת RangeError ב-InputDecodeStream.
-      while (!content.isEOS) {
-        final chunk = content.readBytes(_chunkSize).toUint8List();
+      for (final chunk in _decodeChunks(stored, zip.compressionMethod)) {
         written += chunk.length;
         if (written > zip.uncompressedSize) {
           throw ArchiveException(
@@ -55,6 +75,40 @@ Future<int> writeZipEntry(ArchiveFile entry, String dest) async {
     rethrow;
   }
   return written;
+}
+
+Iterable<List<int>> _decodeChunks(
+  InputStream stored,
+  CompressionType compression,
+) sync* {
+  final filter = compression == CompressionType.deflate
+      ? RawZLibFilter.inflateFilter(raw: true)
+      : null;
+  while (!stored.isEOS) {
+    final chunk = stored.readBytes(_chunkSize).toUint8List();
+    if (filter == null) {
+      yield chunk;
+      continue;
+    }
+    filter.process(chunk, 0, chunk.length);
+    // processed מחזיר חוצץ פלט יחיד; ממתינים לכתיבתו לפני הרחבת הפלט הבא.
+    for (
+      var decoded = filter.processed(flush: false);
+      decoded != null;
+      decoded = filter.processed(flush: false)
+    ) {
+      yield decoded;
+    }
+  }
+  if (filter != null) {
+    for (
+      var decoded = filter.processed(end: true);
+      decoded != null;
+      decoded = filter.processed(end: true)
+    ) {
+      yield decoded;
+    }
+  }
 }
 
 class _ReadSyncFileHandle extends AbstractFileHandle {

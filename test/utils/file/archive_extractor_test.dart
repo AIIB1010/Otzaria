@@ -78,6 +78,35 @@ void main() {
     expect(File(p.join(target, 'safe.txt')).readAsStringSync(), 'שלום');
   });
 
+  test('ZIP מעורב משמר תוכן והרשאות בכל שיטות הדחיסה', () async {
+    final archive = Archive();
+    for (final compression in CompressionType.values) {
+      archive.add(
+        ArchiveFile.string(
+            '${compression.name}/ספר.txt',
+            'שלום ${compression.name}',
+          )
+          ..compression = compression
+          ..mode = 0x81ed,
+      );
+      archive.add(
+        ArchiveFile.string('${compression.name}/../../escape.txt', 'bad')
+          ..compression = compression,
+      );
+    }
+    final zip = writeZip(archive);
+    final target = p.join(tempDir.path, 'out');
+    await extractArchiveFileToDisk(zip, target);
+    for (final compression in CompressionType.values) {
+      final file = File(p.join(target, compression.name, 'ספר.txt'));
+      expect(file.readAsStringSync(), 'שלום ${compression.name}');
+      if (!Platform.isWindows) {
+        expect(file.statSync().mode & 0x1ff, 0x1ed);
+      }
+    }
+    expect(File(p.join(tempDir.path, 'escape.txt')).existsSync(), isFalse);
+  });
+
   test('ZIP אינו יוצר קישור אל מחוץ לשורש', () async {
     final zip = writeZip(
       Archive()..add(ArchiveFile.string('escape', '../outside')..mode = 0xa1ff),
