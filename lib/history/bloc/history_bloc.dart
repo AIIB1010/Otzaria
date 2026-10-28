@@ -145,7 +145,7 @@ class HistoryBloc extends Bloc<HistoryEvent, HistoryState> {
   final OpenedTab? Function()? currentTab;
 
   HistoryBloc(this._repository, {this.currentTab}) : super(HistoryInitial()) {
-    on<LoadHistory>(_onLoadHistory);
+    on<LoadHistory>(_onLoadHistory, transformer: restartable());
     on<SetCurrentWorkspaceName>(_onSetCurrentWorkspaceName);
     on<AddHistory>(_onAddHistory);
     on<AddHistoryForTabs>(_onAddHistoryForTabs);
@@ -362,13 +362,14 @@ class HistoryBloc extends Bloc<HistoryEvent, HistoryState> {
     LoadHistory event,
     Emitter<HistoryState> emit,
   ) async {
+    final generation = _writeGeneration;
     try {
-      final generation = _writeGeneration;
       emit(HistoryLoading(state.history));
       final history = await _repository.loadHistory();
       if (generation != _writeGeneration) return;
       emit(HistoryLoaded(history));
     } catch (e) {
+      if (generation != _writeGeneration) return;
       emit(HistoryError(state.history, e.toString()));
     }
   }

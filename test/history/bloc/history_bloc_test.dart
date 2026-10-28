@@ -54,6 +54,27 @@ class _MemoryHistoryRepository extends HistoryRepository {
   }
 }
 
+class _ReloadingHistoryRepository extends HistoryRepository {
+  final changes = StreamController<void>.broadcast();
+  final initialLoadStarted = Completer<void>();
+  final reloadStarted = Completer<void>();
+  final initialLoad = Completer<List<Bookmark>>();
+  final reload = Completer<List<Bookmark>>();
+
+  @override
+  Stream<void> get remoteChanges => changes.stream;
+
+  @override
+  Future<List<Bookmark>> load() {
+    if (!initialLoadStarted.isCompleted) {
+      initialLoadStarted.complete();
+      return initialLoad.future;
+    }
+    reloadStarted.complete();
+    return reload.future;
+  }
+}
+
 Bookmark _bookmark(String title) => Bookmark(
   ref: title,
   book: TextBook(title: title),
@@ -61,29 +82,63 @@ Bookmark _bookmark(String title) => Bookmark(
 );
 
 void main() {
-  test('טעינה שהתחילה לפני כתיבה אינה דורסת את תוצאת הכתיבה', () async {
-    final repository = _BlockingHistoryRepository();
-    final bloc = HistoryBloc(repository);
-    addTearDown(bloc.close);
-    await repository.loadStarted.future;
+  for (final staleError in [false, true]) {
+    test('טעינה מחלון אחר מבטלת טעינה ישנה (שגיאה: $staleError)', () async {
+      final repository = _ReloadingHistoryRepository();
+      final bloc = HistoryBloc(repository);
+      addTearDown(() async {
+        await bloc.close();
+        await repository.changes.close();
+      });
+      await repository.initialLoadStarted.future;
 
-    final opened = _bookmark('ספר א');
-    final written = bloc.stream.firstWhere(
-      (state) => state is HistoryLoaded && state.history.isNotEmpty,
-    );
-    bloc.add(BulkAddHistory([opened]));
-    await repository.firstSaveStarted.future;
-    repository.releaseFirstSave.complete();
-    await written;
+      repository.changes.add(null);
+      await repository.reloadStarted.future;
+      final loaded = bloc.stream.firstWhere((state) => state is HistoryLoaded);
+      repository.reload.complete([]);
+      await loaded;
 
-    // הטעינה קראה את המסד לפני הכתיבה, ומסתיימת רק עכשיו.
-    repository.releaseLoad.complete([]);
-    await Future<void>.delayed(Duration.zero);
-    await Future<void>.delayed(Duration.zero);
+      if (staleError) {
+        repository.initialLoad.completeError(StateError('stale read'));
+      } else {
+        repository.initialLoad.complete([_bookmark('ספר שנמחק בחלון אחר')]);
+      }
+      await Future<void>.delayed(Duration.zero);
 
-    expect(bloc.state, isA<HistoryLoaded>());
-    expect(bloc.state.history, [opened]);
-  });
+      expect(bloc.state, isA<HistoryLoaded>());
+      expect(bloc.state.history, isEmpty);
+    });
+  }
+
+  for (final staleError in [false, true]) {
+    test('טעינה ישנה אינה דורסת כתיבה (שגיאה: $staleError)', () async {
+      final repository = _BlockingHistoryRepository();
+      final bloc = HistoryBloc(repository);
+      addTearDown(bloc.close);
+      await repository.loadStarted.future;
+
+      final opened = _bookmark('ספר א');
+      final written = bloc.stream.firstWhere(
+        (state) => state is HistoryLoaded && state.history.isNotEmpty,
+      );
+      bloc.add(BulkAddHistory([opened]));
+      await repository.firstSaveStarted.future;
+      repository.releaseFirstSave.complete();
+      await written;
+
+      // הטעינה קראה את המסד לפני הכתיבה, ומסתיימת רק עכשיו.
+      if (staleError) {
+        repository.releaseLoad.completeError(StateError('stale read'));
+      } else {
+        repository.releaseLoad.complete([]);
+      }
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(bloc.state, isA<HistoryLoaded>());
+      expect(bloc.state.history, [opened]);
+    });
+  }
 
   test('כתיבות היסטוריה רצופות נשמרות בלי לדרוס זו את זו', () async {
     final repository = _BlockingHistoryRepository();
