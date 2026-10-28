@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -161,6 +162,105 @@ void main() {
       expect(renameEvents.single.newName, 'שם חדש');
     });
   });
+
+  // issue #2728 — אחרי שמירת השם הפוקוס נזרק, ו-Enter נוסף לא פתח את השולחן.
+  for (final saveWithButton in [false, true]) {
+    testWidgets(
+      'Enter אחרי שמירת השם פותח את השולחן (issue #2728), '
+      'שמירה ב${saveWithButton ? 'כפתור' : '-Enter'}',
+      (tester) async {
+        final active = Workspace(name: 'שולחן א', tabs: const []);
+        final renamed = Workspace(name: 'שולחן ב', tabs: const []);
+        final workspaceBloc = _TestWorkspaceBloc(
+          WorkspaceState(
+            workspaces: [active, renamed],
+            isLoading: false,
+            activeWorkspaceId: active.id,
+          ),
+        );
+        final tabsBloc = _TestTabsBloc(TabsState.initial());
+        final navigationBloc = _TestNavigationBloc(
+          const NavigationState(currentScreen: Screen.reading),
+        );
+
+        addTearDown(() async {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump();
+          await workspaceBloc.close();
+          await tabsBloc.close();
+          await navigationBloc.close();
+        });
+
+        tester.view.physicalSize = const Size(1200, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        await tester.pumpWidget(
+          MultiBlocProvider(
+            providers: [
+              BlocProvider<WorkspaceBloc>.value(value: workspaceBloc),
+              BlocProvider<TabsBloc>.value(value: tabsBloc),
+              BlocProvider<NavigationBloc>.value(value: navigationBloc),
+            ],
+            child: const MaterialApp(
+              locale: Locale('he', 'IL'),
+              home: Scaffold(body: WorkspaceSwitcherDialog()),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(
+          find.descendant(
+            of: find.ancestor(
+              of: find.text('שולחן ב'),
+              matching: find.byType(Card),
+            ),
+            matching: find.byIcon(FluentIcons.edit_24_regular),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byType(RtlTextField), 'שולחן לימוד');
+        if (saveWithButton) {
+          await tester.tap(find.byTooltip('שמור'));
+        } else {
+          await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+          await tester.testTextInput.receiveAction(TextInputAction.done);
+        }
+        await tester.pumpAndSettle();
+
+        expect(find.byType(RtlTextField), findsNothing);
+        expect(
+          workspaceBloc.addedEvents.whereType<RenameWorkspace>().single.newName,
+          'שולחן לימוד',
+        );
+        expect(
+          workspaceBloc.addedEvents.whereType<SwitchToWorkspace>(),
+          isEmpty,
+          reason: 'שמירת השם לבדה אינה פותחת את השולחן',
+        );
+        // הבלוק מפרסם את השם החדש לפני ה-Enter השני.
+        workspaceBloc.emit(
+          workspaceBloc.state.copyWith(
+            workspaces: [
+              active,
+              renamed.copyWith(name: 'שולחן לימוד'),
+            ],
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+
+        final switches = workspaceBloc.addedEvents
+            .whereType<SwitchToWorkspace>()
+            .toList();
+        expect(switches, hasLength(1));
+        expect(switches.single.targetWorkspaceId, renamed.id);
+      },
+    );
+  }
 
   group('תצוגת הכרטיסיות של שולחן העבודה הפעיל', () {
     testWidgets(

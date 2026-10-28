@@ -400,7 +400,8 @@ class _WorkspaceNameFieldState extends State<_WorkspaceNameField> {
       );
     }
     setState(() => _isEditing = false);
-    FocusManager.instance.primaryFocus?.unfocus();
+    // הפוקוס חוזר לכרטיס השולחן שמכיל את השדה, כך ש-Enter נוסף פותח אותו.
+    Focus.maybeOf(context, createDependency: false)?.requestFocus();
   }
 
   @override
