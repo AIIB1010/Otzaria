@@ -46,9 +46,12 @@ List<AppContextMenuEntry> buildDictionaryContextMenuEntries({
   }
 
   if (repository.areAramaicLoaded) {
-    final aramaicMatches = repository.findAramaicMatches(
-      trimmed,
-      maxContainingMatches: _maxContainingAramaicMatches,
+    final aramaicMatches = DictionaryLookupRepository.mergeAramaicMatches(
+      repository.findAramaicMatches(
+        trimmed,
+        maxContainingMatches: _maxContainingAramaicMatches,
+        dictionaries: {...repository.aramaicDictionaryNames},
+      ),
     );
     if (aramaicMatches.isNotEmpty) {
       entries.add(
@@ -185,6 +188,7 @@ Widget _buildAramaicDialogContent(AramaicDictionaryEntry entry) {
           children: [
             AramaicDictionaryEntryView(
               definition: entry.hebrew,
+              skipRepeatedMeanings: true,
             ),
           ],
         ),

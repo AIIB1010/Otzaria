@@ -55,28 +55,10 @@ class AramaicResultCard extends StatelessWidget {
 
   /// פירושים להצגה: פירוש שכל חלקיו כבר הופיעו קודם (בערך אחר) מדולג.
   @visibleForTesting
-  static List<ParsedAramaicMeaning> visibleMeanings(String hebrew) {
-    final seen = <String>{};
-    final result = <ParsedAramaicMeaning>[];
-    for (final meaning in AramaicDictionaryEntryPresentation.parse(
-      hebrew,
-    ).meanings) {
-      final parts = meaning.mainText
-          .split(_alternativeSeparator)
-          .map(_plain)
-          .where((part) => part.isNotEmpty)
-          .toList();
-      final repeated =
-          parts.isNotEmpty &&
-          meaning.expansion == null &&
-          parts.every(seen.contains);
-      if (repeated) continue;
-
-      seen.addAll(parts);
-      result.add(meaning);
-    }
-    return result;
-  }
+  static List<ParsedAramaicMeaning> visibleMeanings(String hebrew) =>
+      AramaicDictionaryEntryPresentation.parse(
+        hebrew,
+      ).withoutRepeatedMeanings().meanings;
 
   void _copy(String text) {
     Clipboard.setData(ClipboardData(text: text));

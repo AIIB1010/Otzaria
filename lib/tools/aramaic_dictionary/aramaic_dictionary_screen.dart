@@ -90,21 +90,13 @@ bool _isOtherDictionary(Map<String, String> entry) =>
     (entry['dictionary'] ?? AramaicDictionaryEntry.peshitaDictionary) !=
     AramaicDictionaryEntry.peshitaDictionary;
 
-Map<String, String> _mergeGroup(List<Map<String, String>> group) {
-  final seen = <String>{};
-  final meanings = <String>[
-    for (final entry in group)
-      for (final part in entry['hebrew']!.split('***'))
-        if (part.trim().isNotEmpty && seen.add(removeVolwels(part.trim())))
-          part.trim(),
-  ];
-
-  return {
-    ...group.first,
-    'hebrew': meanings.join(' *** '),
-    'hebrewPlain': group.map((e) => e['hebrewPlain']!).join(' '),
-  };
-}
+Map<String, String> _mergeGroup(List<Map<String, String>> group) => {
+  ...group.first,
+  'hebrew': DictionaryLookupRepository.mergeAramaicMeanings(
+    group.map((e) => e['hebrew']!),
+  ),
+  'hebrewPlain': group.map((e) => e['hebrewPlain']!).join(' '),
+};
 
 // בלי גרשיים, כמו בתפריט ההקשר: "ב"ד" צריך למצוא גם את המפתח ב''ד.
 String _stripQuotes(String text) => text.replaceAll(RegExp("[\"'״׳]"), '');

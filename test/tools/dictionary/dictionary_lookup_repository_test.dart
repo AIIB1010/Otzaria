@@ -267,6 +267,47 @@ void main() {
     );
   });
 
+  group('מיזוג פירושים', () {
+    test('mergeAramaicMeanings משמיט חלק זהה (גם עם ניקוד) ושומר סדר', () {
+      expect(
+        DictionaryLookupRepository.mergeAramaicMeanings([
+          'אביך',
+          'אָבִיךָ *** אב',
+          'אב',
+        ]),
+        'אביך *** אב',
+      );
+    });
+
+    test('mergeAramaicMatches ממזג מפתחות זהים בסדר ההופעה', () {
+      final merged = DictionaryLookupRepository.mergeAramaicMatches(const [
+        AramaicDictionaryEntry(aramaic: 'אַבָּא', hebrew: 'אב'),
+        AramaicDictionaryEntry(aramaic: 'גברא', hebrew: 'איש'),
+        AramaicDictionaryEntry(
+          aramaic: 'אבא',
+          hebrew: 'פרי',
+          dictionary: 'אחר',
+        ),
+      ]);
+
+      expect(merged.map((e) => e.aramaic), ['אַבָּא', 'גברא']);
+      expect(merged.first.hebrew, 'אב *** פרי');
+      expect(merged.first.dictionary, AramaicDictionaryEntry.peshitaDictionary);
+    });
+
+    test('withoutRepeatedMeanings מדלג על פירוש שכבר הופיע', () {
+      final presentation = AramaicDictionaryEntryPresentation.parse(
+        'ארץ, קרקע *** קרקע *** ארץ (= הסבר) *** אדמה',
+      ).withoutRepeatedMeanings();
+
+      expect(presentation.meanings.map((m) => m.mainText), [
+        'ארץ, קרקע',
+        'ארץ',
+        'אדמה',
+      ]);
+    });
+  });
+
   group('AramaicDictionaryEntryPresentation', () {
     test('מפרק פירושים מרובים לצורות תצוגה נפרדות', () {
       final presentation = AramaicDictionaryEntryPresentation.parse(
@@ -353,6 +394,45 @@ void main() {
       );
 
       expect(entries, hasLength(1));
+    });
+
+    testWidgets('התפריט מציג ערך אחד לכל מפתח, מכל המילונים', (tester) async {
+      final repo = DictionaryLookupRepository(
+        loadAramaicEntries: () async => const <AramaicDictionaryEntry>[
+          AramaicDictionaryEntry(aramaic: 'ארעא', hebrew: 'ארץ'),
+          AramaicDictionaryEntry(
+            aramaic: 'ארעא',
+            hebrew: '{אַרְעָא} אֲדָמָה',
+            dictionary: 'מפירוש אונקלוס על התורה',
+          ),
+          AramaicDictionaryEntry(
+            aramaic: 'גברא',
+            hebrew: 'איש',
+            dictionary: 'מילון שיח ישראל',
+          ),
+        ],
+      );
+      await repo.ensureAramaicLoaded();
+      await tester.pumpWidget(
+        const MaterialApp(home: Scaffold(body: SizedBox.shrink())),
+      );
+      final context = tester.element(find.byType(SizedBox));
+
+      final merged = buildDictionaryContextMenuEntries(
+        context: context,
+        selectedText: 'ארעא',
+        repository: repo,
+      );
+      final other = buildDictionaryContextMenuEntries(
+        context: context,
+        selectedText: 'גברא',
+        repository: repo,
+      );
+
+      expect(merged.single.children!, hasLength(1));
+      expect(merged.single.children!.single.label, contains('ארץ'));
+      expect(merged.single.children!.single.label, contains('אֲדָמָה'));
+      expect(other.single.children!.single.label, contains('איש'));
     });
 
     testWidgets('נופל חזרה לחיפוש ארמי כשאין התאמת ראשי תיבות', (tester) async {
