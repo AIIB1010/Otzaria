@@ -1,4 +1,3 @@
-import 'package:otzaria/models/books.dart';
 import 'package:otzaria/search/models/search_configuration.dart';
 import 'package:otzaria_search_engine/otzaria_search_engine.dart';
 
@@ -10,7 +9,6 @@ const Object _unset = Object();
 class SearchState {
   final String? filterQuery;
   final List<SearchResult> results;
-  final Set<Book> booksToSearch;
   final bool isLoading;
 
   /// הספירה הכוללת עדיין אינה סופית; אפס אינו מעיד שאין התאמות.
@@ -44,7 +42,6 @@ class SearchState {
 
   const SearchState({
     this.results = const [],
-    this.booksToSearch = const {},
     this.isLoading = false,
     this.isCounting = false,
     this.searchQuery = '',
@@ -60,7 +57,6 @@ class SearchState {
 
   SearchState copyWith({
     List<SearchResult>? results,
-    Set<Book>? booksToSearch,
     bool? isLoading,
     bool? isCounting,
     String? searchQuery,
@@ -75,7 +71,6 @@ class SearchState {
   }) {
     return SearchState(
       results: results ?? this.results,
-      booksToSearch: booksToSearch ?? this.booksToSearch,
       isLoading: isLoading ?? this.isLoading,
       isCounting: isCounting ?? this.isCounting,
       searchQuery: searchQuery ?? this.searchQuery,
