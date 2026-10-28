@@ -2,6 +2,7 @@ import 'package:otzaria/book_common/utils/commentator_name_matching.dart';
 import 'package:otzaria/attached_libraries/repository/attached_library_registry.dart';
 import 'package:otzaria/models/book_source.dart';
 import 'package:otzaria/models/books.dart';
+import 'package:otzaria/data/data_providers/book_database_resolver.dart';
 import 'package:otzaria/data/data_providers/sqlite_data_provider.dart';
 import 'package:otzaria/migration/database/repository/seforim_repository.dart';
 import 'package:otzaria/settings/services/category_commentators_service.dart';
@@ -37,12 +38,11 @@ class DefaultCommentators {
     };
     if (repository == null) return empty;
 
-    final dbBook = book.categoryId != null
-        ? await repository.getBookByTitleAndCategory(
-            book.title,
-            book.categoryId!,
-          )
-        : await repository.getBookByTitle(book.title);
+    final dbBook = await BookDatabaseResolver.findBookInRepository(
+      repository,
+      book.title,
+      categoryId: book.categoryId,
+    );
     if (dbBook == null) return empty;
 
     final linkDao = repository.database.linkDao;
