@@ -267,7 +267,8 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
 
   Future<void> _resolveEntrypointMissing() async {
     final exists = await File(localHtmlPath).exists();
-    if (mounted) setState(() => _entrypointMissing = !exists);
+    // ריענון פיתוח שהסתיים בינתיים כבר קבע ערך עדכני — לא לדרוס בתשובה ישנה.
+    if (mounted) setState(() => _entrypointMissing ??= !exists);
   }
 
   /// מוריד את ה-WebView מהעץ. המופע נשאר רשום, והבא ייווצר במפתח חדש.
