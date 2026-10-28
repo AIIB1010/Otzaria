@@ -96,6 +96,7 @@ void main() {
   setUp(() {
     tmp = Directory.systemTemp.createTempSync('view_window_scope_');
     UserStateDatabase.instance.overridePath('${tmp.path}/user_state.db');
+    UserStateDatabase.debugWriteInline = true;
     MultiViewMode.debugOverride = true;
   });
 
@@ -104,6 +105,7 @@ void main() {
     AppWindowKeys.resetForTest();
     LastActiveWindow.resetForTest();
     UserStateDatabase.instance.close();
+    UserStateDatabase.debugWriteInline = false;
     try {
       tmp.deleteSync(recursive: true);
     } catch (_) {

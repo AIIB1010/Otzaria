@@ -51,6 +51,19 @@ Database openWritableDatabase(
   return _openInRollbackJournal(path, label, busyTimeoutMs);
 }
 
+/// חיבור נוסף למסד ש-[openWritableDatabase] כבר הכין: בלי בדיקת WAL, שנכשלת
+/// מול כותב אחר ומשאירה את החיבור ב-fsync מלא.
+Database openSecondaryWritableConnection(
+  String path,
+  String label, {
+  int busyTimeoutMs = 5000,
+}) {
+  final db = sqlite3.open(path);
+  _setBusyTimeout(db, label, busyTimeoutMs);
+  _relaxSyncIfWal(db, label);
+  return db;
+}
+
 void _setBusyTimeout(Database db, String label, int busyTimeoutMs) {
   try {
     // המתנה במקום כישלון מיידי ב-SQLITE_BUSY: מופע שני של התוכנה או נעילה

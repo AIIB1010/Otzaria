@@ -38,10 +38,10 @@ class WindowSessionStore {
     int slot, {
     required String tabsJson,
     required int currentIndex,
-  }) async {
-    final db = await _database.database;
-    db.execute(
-      '''
+  }) {
+    return _database.enqueueWrite([
+      (
+        '''
       INSERT INTO window_sessions
         (slot, tabs_json, current_index, updated_at)
       VALUES (?, ?, ?, ?)
@@ -50,38 +50,42 @@ class WindowSessionStore {
         current_index = excluded.current_index,
         updated_at = excluded.updated_at
       ''',
-      [slot, tabsJson, currentIndex, _now()],
-    );
+        [slot, tabsJson, currentIndex, _now()],
+      ),
+    ]);
   }
 
   /// מעדכן רק את הכרטיסיה הנוכחית; אין שורה — אין מה לעדכן.
-  Future<void> saveCurrentIndex(int slot, int currentIndex) async {
-    final db = await _database.database;
-    db.execute(
-      'UPDATE window_sessions SET current_index = ?, updated_at = ? '
-      'WHERE slot = ?',
-      [currentIndex, _now(), slot],
-    );
+  Future<void> saveCurrentIndex(int slot, int currentIndex) {
+    return _database.enqueueWrite([
+      (
+        'UPDATE window_sessions SET current_index = ?, updated_at = ? '
+            'WHERE slot = ?',
+        [currentIndex, _now(), slot],
+      ),
+    ]);
   }
 
-  Future<void> saveActiveWorkspace(int slot, String? workspaceId) async {
-    final db = await _database.database;
-    _ensureRow(db, slot);
-    db.execute(
-      'UPDATE window_sessions SET active_workspace_id = ?, updated_at = ? '
-      'WHERE slot = ?',
-      [workspaceId, _now(), slot],
-    );
+  Future<void> saveActiveWorkspace(int slot, String? workspaceId) {
+    return _database.enqueueWrite([
+      _ensureRow(slot),
+      (
+        'UPDATE window_sessions SET active_workspace_id = ?, updated_at = ? '
+            'WHERE slot = ?',
+        [workspaceId, _now(), slot],
+      ),
+    ]);
   }
 
-  Future<void> saveBounds(int slot, String? boundsJson) async {
-    final db = await _database.database;
-    _ensureRow(db, slot);
-    db.execute(
-      'UPDATE window_sessions SET bounds_json = ?, updated_at = ? '
-      'WHERE slot = ?',
-      [boundsJson, _now(), slot],
-    );
+  Future<void> saveBounds(int slot, String? boundsJson) {
+    return _database.enqueueWrite([
+      _ensureRow(slot),
+      (
+        'UPDATE window_sessions SET bounds_json = ?, updated_at = ? '
+            'WHERE slot = ?',
+        [boundsJson, _now(), slot],
+      ),
+    ]);
   }
 
   Future<WindowSession?> load(int slot) async {
@@ -92,7 +96,8 @@ class WindowSessionStore {
   /// הסשן מהמסד **שכבר פתוח**, בלי await, ו-null כשטרם נפתח.
   ///
   /// ⚠️ קיים בשביל `TabsRepository.loadTabs`, שנקרא מבנאי של bloc ואינו
-  /// יכול להיות אסינכרוני. מחייב שהאתחול פתח את המסד לפני בניית ה-blocs.
+  /// יכול להיות אסינכרוני. מחייב שהאתחול פתח את המסד לפני בניית ה-blocs,
+  /// ושהכותב למשבצת המתין לכתיבה שלו (אין כאן המתנה לתור).
   WindowSession? loadOpened(int slot) {
     final db = _database.openDatabase;
     return db == null ? null : _loadIn(db, slot);
@@ -239,19 +244,18 @@ class WindowSessionStore {
     }
   }
 
-  Future<void> delete(int slot) async {
-    final db = await _database.database;
-    db.execute('DELETE FROM window_sessions WHERE slot = ?', [slot]);
+  Future<void> delete(int slot) {
+    return _database.enqueueWrite([
+      ('DELETE FROM window_sessions WHERE slot = ?', [slot]),
+    ]);
   }
 
   /// שורה ריקה, כדי ששולחן/גבולות יישמרו גם לפני שנשמרו כרטיסיות.
-  void _ensureRow(Database db, int slot) {
-    db.execute(
-      'INSERT OR IGNORE INTO window_sessions '
-      '(slot, tabs_json, current_index, updated_at) VALUES (?, ?, ?, ?)',
-      [slot, '[]', 0, _now()],
-    );
-  }
+  static (String, List<Object?>) _ensureRow(int slot) => (
+    'INSERT OR IGNORE INTO window_sessions '
+        '(slot, tabs_json, current_index, updated_at) VALUES (?, ?, ?, ?)',
+    [slot, '[]', 0, _now()],
+  );
 
   static WindowSession _fromRow(Row row) => WindowSession(
     slot: row['slot'] as int,
