@@ -9,6 +9,7 @@ import 'package:otzaria/widgets/misc/app_context_menu.dart';
 import 'package:otzaria/widgets/misc/app_popup_menu.dart';
 import 'package:otzaria/widgets/feedback/scrollable_positioned_list_scrollbar.dart';
 import 'package:otzaria/widgets/text/otzaria_search_field.dart';
+import 'package:otzaria/widgets/lists/list_search_match.dart';
 import 'package:positioned_sliver_list/positioned_list.dart';
 
 /// שורה ברשימה המוצגת: כותרת קבוצה או פריט. הרשימה משוטחת כדי לאפשר
@@ -55,6 +56,13 @@ class ItemsListView extends StatefulWidget {
   final String Function(dynamic item)? searchKeyBuilder;
   final bool Function(dynamic item)? additionalFilter;
 
+  /// כינויים נוספים שהחיפוש מתאים להם (מנורמלים כמו באיתור מקורות).
+  /// null — עוד לא זמינים, וינוסו שוב בהקלדה הבאה.
+  final List<String>? Function(dynamic item)? searchAliasesBuilder;
+
+  /// false — בזמן חיפוש התוצאות מוצגות לפי דרגת ההתאמה בלי כותרות קבוצה.
+  final bool groupWhileSearching;
+
   /// כשמסופק, מוצג בצד שדה החיפוש באותה שורה (למשל כפתור מיון).
   final Widget? searchFieldTrailing;
 
@@ -99,6 +107,8 @@ class ItemsListView extends StatefulWidget {
     this.subtitleTooltipBuilder,
     this.searchKeyBuilder,
     this.additionalFilter,
+    this.searchAliasesBuilder,
+    this.groupWhileSearching = true,
     this.searchFieldTrailing,
     this.searchFocusNode,
     this.groupKeyBuilder,
@@ -156,6 +166,11 @@ class _ItemsListViewState extends State<ItemsListView> {
   List<dynamic>? _cachedItemsForSort;
   Comparator<dynamic>? _cachedComparator;
   List<MapEntry<int, dynamic>>? _cachedSortedEntries;
+
+  /// מפתחות החיפוש המוכנים לפי האינדקס המקורי; נבנים בעצלות. תלויים רק ב-items,
+  /// כי ה-comparator של הסימניות נוצר מחדש בכל build.
+  List<dynamic>? _searchKeysItems;
+  List<ListSearchKey?> _searchKeys = const [];
 
   List<MapEntry<int, dynamic>> _getSortedEntries() {
     final comparator = widget.itemSortComparator;
@@ -306,9 +321,12 @@ class _ItemsListViewState extends State<ItemsListView> {
 
   /// משטח את הפריטים (עם כותרות קבוצה אם יש) לרשימת שורות לצורך
   /// וירטואליזציה. הקיבוץ שומר על סדר ההופעה הראשון.
-  List<_ListRow> _buildDisplayRows(List<MapEntry<int, dynamic>> entries) {
+  List<_ListRow> _buildDisplayRows(
+    List<MapEntry<int, dynamic>> entries, {
+    required bool grouped,
+  }) {
     List<List<MapEntry<int, dynamic>>> groups;
-    if (widget.groupKeyBuilder == null) {
+    if (!grouped) {
       groups = [entries];
     } else {
       final grouped = <String, List<MapEntry<int, dynamic>>>{};
@@ -321,7 +339,7 @@ class _ItemsListViewState extends State<ItemsListView> {
 
     final rows = <_ListRow>[];
     for (final group in groups) {
-      if (widget.groupKeyBuilder != null) {
+      if (grouped) {
         rows.add(
           _ListRow.header(
             widget.groupTitleBuilder?.call(group.first.value),
@@ -497,6 +515,38 @@ class _ItemsListViewState extends State<ItemsListView> {
     super.dispose();
   }
 
+  /// הפריטים התואמים לחיפוש, לפי דרגת ההתאמה ובתוך דרגה — לפי הסדר הממוין.
+  List<MapEntry<int, dynamic>> _rankedEntries(
+    List<MapEntry<int, dynamic>> sortedEntries,
+    bool Function(dynamic item)? additionalFilter,
+  ) {
+    if (!identical(_searchKeysItems, widget.items)) {
+      _searchKeysItems = widget.items;
+      _searchKeys = List<ListSearchKey?>.filled(widget.items.length, null);
+    }
+    final query = ListSearchQuery(_searchQuery);
+    final aliasesBuilder = widget.searchAliasesBuilder;
+    final buckets = List.generate(
+      listSearchRankCount,
+      (_) => <MapEntry<int, dynamic>>[],
+    );
+    for (var i = 0; i < sortedEntries.length; i++) {
+      final entry = sortedEntries[i];
+      final item = entry.value;
+      if (additionalFilter != null && !additionalFilter(item)) continue;
+      final key = _searchKeys[entry.key] ??= ListSearchKey(
+        widget.searchKeyBuilder?.call(item) ?? item.ref?.toString() ?? '',
+      );
+      if (aliasesBuilder != null && key.aliasTokens == null) {
+        final aliases = aliasesBuilder(item);
+        if (aliases != null) key.setAliases(aliases);
+      }
+      final rank = listSearchRank(query, key);
+      if (rank != null) buckets[rank].add(entry);
+    }
+    return [for (final bucket in buckets) ...bucket];
+  }
+
   @override
   Widget build(BuildContext context) {
     final additionalFilter = widget.additionalFilter;
@@ -513,20 +563,25 @@ class _ItemsListViewState extends State<ItemsListView> {
     // המיון מבוצע פעם אחת על widget.items (מקושש), והסינון רץ מעליו
     // בכל הקלדה — O(n) במקום O(n log n) על כל תו.
     final sortedEntries = _getSortedEntries();
-    final lowerQuery = _searchQuery.toLowerCase();
-    final displayEntries = sortedEntries.where((entry) {
-      final item = entry.value;
-      if (widget.additionalFilter != null && !widget.additionalFilter!(item)) {
-        return false;
-      }
-      if (lowerQuery.isEmpty) return true;
-      final searchText =
-          widget.searchKeyBuilder?.call(item) ?? item.ref?.toString() ?? '';
-      return searchText.toLowerCase().contains(lowerQuery);
-    }).toList();
+    final displayEntries = _searchQuery.isEmpty
+        ? [
+            for (final entry in sortedEntries)
+              if (additionalFilter == null || additionalFilter(entry.value))
+                entry,
+          ]
+        : _rankedEntries(sortedEntries, additionalFilter);
 
-    _displayEntries = displayEntries;
-    _displayRows = _buildDisplayRows(displayEntries);
+    _displayRows = _buildDisplayRows(
+      displayEntries,
+      grouped:
+          widget.groupKeyBuilder != null &&
+          (widget.groupWhileSearching || _searchQuery.isEmpty),
+    );
+    // החצים ו-Enter עוברים על הסדר החזותי, שהקיבוץ עשוי לשנות.
+    _displayEntries = [
+      for (final row in _displayRows)
+        if (!row.isHeader) row.entry!,
+    ];
     if (_focusedOriginalIndex != -1 &&
         !displayEntries.any((e) => e.key == _focusedOriginalIndex)) {
       _focusedOriginalIndex = -1;

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/widgets/lists/items_list_view.dart';
 
@@ -526,6 +527,162 @@ void main() {
 
       expect(find.text(longRef), findsOneWidget);
       expect(find.text(subtitleText), findsNothing);
+    });
+  });
+
+  group('ItemsListView — חיפוש גמיש ודירוג', () {
+    Widget buildSearchable(
+      List<dynamic> testItems, {
+      bool grouped = false,
+      bool groupWhileSearching = true,
+      List<String>? Function(dynamic)? aliases,
+      void Function(int originalIndex)? onTap,
+    }) {
+      return MaterialApp(
+        home: Scaffold(
+          body: ItemsListView(
+            items: testItems,
+            onItemTap: (_, _, index) => onTap?.call(index),
+            onDelete: (_, _) {},
+            onClearAll: (_) {},
+            hintText: 'חיפוש...',
+            emptyText: 'ריק',
+            notFoundText: 'לא נמצא',
+            clearAllText: 'נקה',
+            groupKeyBuilder: grouped
+                ? (item) => (item as _Item).workspaceName
+                : null,
+            groupTitleBuilder: grouped
+                ? (item) => 'קבוצה ${(item as _Item).workspaceName}'
+                : null,
+            groupWhileSearching: groupWhileSearching,
+            searchAliasesBuilder: aliases,
+          ),
+        ),
+      );
+    }
+
+    double y(WidgetTester tester, String text) =>
+        tester.getTopLeft(find.text(text)).dy;
+
+    Future<void> search(WidgetTester tester, String query) async {
+      await tester.enterText(find.byType(TextField), query);
+      await tester.pump();
+    }
+
+    const ranked = [
+      _Item('משנה ברכות א', workspaceName: 'א'),
+      _Item('ברכות ב', workspaceName: 'ב'),
+      _Item('שבת ב', workspaceName: 'א'),
+    ];
+
+    testWidgets('שאילתה ריקה — סדר הקלט וכותרות הקבוצות', (tester) async {
+      await tester.pumpWidget(buildSearchable(ranked, grouped: true));
+      await tester.pump();
+
+      expect(y(tester, 'משנה ברכות א'), lessThan(y(tester, 'ברכות ב')));
+      expect(find.text('קבוצה א'), findsOneWidget);
+      expect(find.text('קבוצה ב'), findsOneWidget);
+    });
+
+    testWidgets('התאמה מתחילת המפתח מעל פריט חדש יותר', (tester) async {
+      await tester.pumpWidget(buildSearchable(ranked));
+      await search(tester, 'ברכות');
+
+      expect(y(tester, 'ברכות ב'), lessThan(y(tester, 'משנה ברכות א')));
+      expect(find.text('שבת ב'), findsNothing);
+    });
+
+    testWidgets('שוויון בדרגה — הסדר המקורי נשמר', (tester) async {
+      await tester.pumpWidget(
+        buildSearchable(const [_Item('ברכות ג'), _Item('ברכות ב')]),
+      );
+      await search(tester, 'ברכות');
+
+      expect(y(tester, 'ברכות ג'), lessThan(y(tester, 'ברכות ב')));
+    });
+
+    testWidgets('groupWhileSearching: false מסתיר כותרות בזמן חיפוש בלבד', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        buildSearchable(ranked, grouped: true, groupWhileSearching: false),
+      );
+      await tester.pump();
+      expect(find.text('קבוצה א'), findsOneWidget);
+
+      await search(tester, 'ברכות');
+      expect(find.text('קבוצה א'), findsNothing);
+      expect(find.text('קבוצה ב'), findsNothing);
+      expect(y(tester, 'ברכות ב'), lessThan(y(tester, 'משנה ברכות א')));
+
+      await search(tester, '');
+      expect(find.text('קבוצה א'), findsOneWidget);
+      expect(y(tester, 'משנה ברכות א'), lessThan(y(tester, 'ברכות ב')));
+    });
+
+    testWidgets('חצים ו-Enter עוברים לפי הסדר החזותי', (tester) async {
+      int? tapped;
+      // הדירוג: 0, 1, 2; הקיבוץ מציג 0, 2 (קבוצה א) ואז 1.
+      await tester.pumpWidget(
+        buildSearchable(
+          const [
+            _Item('ברכות ב', workspaceName: 'א'),
+            _Item('ברכות ג', workspaceName: 'ב'),
+            _Item('משנה ברכות', workspaceName: 'א'),
+          ],
+          grouped: true,
+          onTap: (index) => tapped = index,
+        ),
+      );
+      await tester.pump();
+      await search(tester, 'ברכות');
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(tapped, 0);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(tapped, 2);
+    });
+
+    testWidgets('Enter אחרי חץ ראשון פותח את התוצאה העליונה', (tester) async {
+      int? tapped;
+      await tester.pumpWidget(
+        buildSearchable(
+          ranked,
+          grouped: true,
+          groupWhileSearching: false,
+          onTap: (index) => tapped = index,
+        ),
+      );
+      await tester.pump();
+      await search(tester, 'ברכות');
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(tapped, 1);
+    });
+
+    testWidgets('פריט נמצא לפי כינוי, מתחת להתאמה מילולית', (tester) async {
+      await tester.pumpWidget(
+        buildSearchable(
+          const [_Item('משנה תורה הלכות שבת'), _Item('רמבם על המשנה')],
+          aliases: (item) =>
+              (item as _Item).ref.startsWith('משנה תורה') ? ['רמבם'] : null,
+        ),
+      );
+      await search(tester, 'רמבם');
+
+      expect(find.text('משנה תורה הלכות שבת'), findsOneWidget);
+      expect(
+        y(tester, 'רמבם על המשנה'),
+        lessThan(y(tester, 'משנה תורה הלכות שבת')),
+      );
     });
   });
 }
