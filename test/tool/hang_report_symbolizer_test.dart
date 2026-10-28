@@ -104,6 +104,7 @@ void main() {
       '  flutter_windows.dll+0x7fa88b\n'
       '=== App hang 2026-10-24T00:03:14Z ===\n'
       'Dart build-id: 0123\n'
+      'Module PDB: dwrite.dll dwrite.pdb 3F2A0B1C4D5E6F708192A3B4C5D6E7F81\n'
       'Stack (module+RVA):\n'
       '  app.so+0x204f\n',
       symbols,
@@ -120,6 +121,9 @@ void main() {
         '=== App hang 2026-10-24T00:03:14Z ===',
         'Dart build-id: 0123',
         '  (symbols file build-id deadbeef does not match; frames left unnamed)',
+        'Module PDB: dwrite.dll dwrite.pdb 3F2A0B1C4D5E6F708192A3B4C5D6E7F81',
+        '  https://msdl.microsoft.com/download/symbols/dwrite.pdb/'
+            '3F2A0B1C4D5E6F708192A3B4C5D6E7F81/dwrite.pdb',
         'Stack (module+RVA):',
         '  app.so+0x204f',
       ],

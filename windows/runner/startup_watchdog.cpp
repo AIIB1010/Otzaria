@@ -170,6 +170,94 @@ std::string DartBuildId(ULONG_PTR base) {
   return "";
 }
 
+// "<pdb> <GUID><age>" מרשומת CodeView RSDS — המפתח בשרת הסמלים של Microsoft,
+// שבלעדיו אין PDB לפריים ב-DLL של המערכת.
+std::string ModulePdbKey(HMODULE module) {
+  const auto base = reinterpret_cast<ULONG_PTR>(module);
+  IMAGE_DOS_HEADER dos = {};
+  if (!ReadBytes(base, &dos, sizeof(dos)) || dos.e_magic != IMAGE_DOS_SIGNATURE ||
+      dos.e_lfanew <= 0 || dos.e_lfanew > 0x10000) {
+    return "";
+  }
+  IMAGE_NT_HEADERS nt = {};
+  if (!ReadBytes(base + dos.e_lfanew, &nt, sizeof(nt)) ||
+      nt.Signature != IMAGE_NT_SIGNATURE ||
+      nt.OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR_MAGIC ||
+      nt.OptionalHeader.NumberOfRvaAndSizes <= IMAGE_DIRECTORY_ENTRY_DEBUG) {
+    return "";
+  }
+  const DWORD image_size = nt.OptionalHeader.SizeOfImage;
+  const IMAGE_DATA_DIRECTORY dir =
+      nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DEBUG];
+  if (dir.VirtualAddress == 0 || dir.VirtualAddress >= image_size ||
+      dir.Size > image_size - dir.VirtualAddress) {
+    return "";
+  }
+  const DWORD count = (std::min)(
+      static_cast<DWORD>(dir.Size / sizeof(IMAGE_DEBUG_DIRECTORY)), DWORD{32});
+  for (DWORD i = 0; i < count; ++i) {
+    IMAGE_DEBUG_DIRECTORY entry = {};
+    if (!ReadBytes(base + dir.VirtualAddress + i * sizeof(entry), &entry,
+                   sizeof(entry))) {
+      return "";
+    }
+    if (entry.Type != IMAGE_DEBUG_TYPE_CODEVIEW || entry.AddressOfRawData == 0 ||
+        entry.SizeOfData < 25 || entry.SizeOfData > 1024 ||
+        entry.AddressOfRawData >= image_size ||
+        entry.SizeOfData > image_size - entry.AddressOfRawData) {
+      continue;
+    }
+    // RSDS: חתימה, GUID, age, ונתיב ה-PDB מסתיים ב-0.
+    unsigned char data[1024] = {};
+    if (!ReadBytes(base + entry.AddressOfRawData, data, entry.SizeOfData) ||
+        memcmp(data, "RSDS", 4) != 0) {
+      continue;
+    }
+    GUID guid = {};
+    DWORD age = 0;
+    memcpy(&guid, data + 4, sizeof(guid));
+    memcpy(&age, data + 20, sizeof(age));
+    const char* path = reinterpret_cast<const char*>(data + 24);
+    const size_t path_len = strnlen(path, entry.SizeOfData - 24);
+    if (path_len == 0 || path_len == entry.SizeOfData - 24) continue;
+    std::string pdb(path, path_len);
+    const size_t slash = pdb.find_last_of("\\/");
+    if (slash != std::string::npos) pdb = pdb.substr(slash + 1);
+    if (pdb.empty() || pdb.find(' ') != std::string::npos) continue;
+    char key[64];
+    snprintf(key, sizeof(key),
+             "%08lX%04X%04X%02X%02X%02X%02X%02X%02X%02X%02X%lX", guid.Data1,
+             guid.Data2, guid.Data3, guid.Data4[0], guid.Data4[1],
+             guid.Data4[2], guid.Data4[3], guid.Data4[4], guid.Data4[5],
+             guid.Data4[6], guid.Data4[7], age);
+    return pdb + " " + key;
+  }
+  return "";
+}
+
+// שורת "Module PDB:" לכל מודול PE שמופיע בפריימים; app.so אינו PE.
+void AppendModulePdbLines(const std::vector<ULONG_PTR>& frames,
+                          std::string* report) {
+  std::vector<HMODULE> seen;
+  for (const ULONG_PTR frame : frames) {
+    if (DartImageBase(frame) != 0) continue;
+    HMODULE module = nullptr;
+    if (!::GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                  GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                              reinterpret_cast<LPCWSTR>(frame), &module) ||
+        std::find(seen.begin(), seen.end(), module) != seen.end()) {
+      continue;
+    }
+    seen.push_back(module);
+    const std::string key = ModulePdbKey(module);
+    if (key.empty()) continue;
+    wchar_t path[MAX_PATH] = {0};
+    const DWORD length = ::GetModuleFileNameW(module, path, MAX_PATH);
+    if (length == 0 || length >= MAX_PATH) continue;
+    *report += "Module PDB: " + NarrowPathTail(path) + " " + key + "\n";
+  }
+}
+
 std::string DescribeAddress(ULONG_PTR address) {
   char buffer[160];
   const auto modules =
@@ -439,8 +527,9 @@ void AppendBuildIdentitySection(const std::vector<ULONG_PTR>& frames,
     if (base == 0) continue;
     const std::string build_id = DartBuildId(base);
     if (!build_id.empty()) *report += "Dart build-id: " + build_id + "\n";
-    return;
+    break;
   }
+  AppendModulePdbLines(frames, report);
 }
 
 void ReportStall(int capture_index, ULONGLONG stalled_for_ms,
