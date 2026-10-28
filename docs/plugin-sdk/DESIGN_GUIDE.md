@@ -131,11 +131,8 @@ applyTheme(theme);
   --font-size-base: 18px;
   --line-height:    1.5;
 
-  /* --- Shape (כמו M3) --- */
-  --radius-sm:  8px;   /* אלמנטים קטנים: שדות, chips */
-  --radius-md:  12px;  /* כרטיסים */
-  --radius-lg:  16px;  /* חלוניות */
-  --radius-pill: 999px; /* chips/pills עגולים */
+  /* --- Shape — רדיוס אחיד לכל רכיב, כמו AppTokens.radius --- */
+  --radius: 8px;
 }
 ```
 
@@ -221,7 +218,7 @@ Material 3 מגדיר צבעי `*Container` שאינם חלק מה-API. ניתן
 .chip-primary {
   background: var(--color-primary-subtle);   /* ~12% opacity */
   color: var(--color-primary);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius);
 }
 
 /* בדוגמה זו: שבת/יום טוב ב-primary subtle — בדיוק כמו הלוח הפנימי */
@@ -255,25 +252,24 @@ body.dark-mode .card {
 
 ## צורות וגדלים (Shape)
 
-אוצריא משתמשת בסולם עקבי של `border-radius`. כדי להיראות אחיד:
+לאוצריא יש רדיוס פינות אחד לכל רכיב: `8px` (`AppTokens.radius`). הוא חל על כרטיסים, חלוניות, דיאלוגים, תפריטים, כפתורים (גם כפתורי אייקון), שדות קלט ו-chips. לא משתמשים ב-pills עגולים לגמרי ולא בפינות גדולות יותר לרכיבים גדולים — אלה נראים עגולים מדי ליד הממשק של אוצריא.
 
-| גודל | ערך | שימוש |
+| טוקן | ערך | שימוש |
 |------|-----|--------|
-| `--radius-sm` | `8px` | תאי לוח, שדות קלט, chips קטנים |
-| `--radius-md` | `12px` | כרטיסי תוכן (card) |
-| `--radius-lg` | `16px` | חלוניות, פאנלים |
-| `--radius-pill` | `999px` | pills, chips עגולים, badges |
+| `--radius` | `8px` | כל רכיב — כרטיס, חלונית, כפתור, שדה, chip, badge |
+
+חריגים בודדים: אלמנט עגול מטבעו (ספינר, ידית מתג, אווטאר) נשאר `50%`, ואלמנט זעיר (פס התקדמות דק, scrollbar) יכול לקבל רדיוס קטן יותר.
 
 ```css
 .card {
-  border-radius: var(--radius-md);
+  border-radius: var(--radius);
   background: var(--color-surface);
   border: 1px solid var(--color-outline);
   padding: 16px;
 }
 
 .chip {
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius);
   background: var(--color-primary-subtle);
   color: var(--color-primary);
   padding: 4px 12px;
@@ -292,7 +288,7 @@ body.dark-mode .card {
 .card {
   background: var(--color-surface);
   border: 1px solid var(--color-outline);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius);
   padding: 16px 20px;
   /* אין elevation (elevation: 0) — סגנון M3 flat */
 }
@@ -317,7 +313,7 @@ body.dark-mode .card {
   background: var(--color-primary);
   color: var(--color-on-primary);
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   padding: 9px 20px;
   font-family: var(--font-ui);
   font-size: 0.95rem;
@@ -337,7 +333,7 @@ body.dark-mode .card {
   background: var(--color-secondary-subtle);
   color: var(--color-on-surface);
   border: 1px solid var(--color-outline);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   padding: 9px 20px;
   font-family: var(--font-ui);
   font-size: 0.95rem;
@@ -357,7 +353,7 @@ body.dark-mode .card {
 .input {
   padding: 9px 12px;
   border: 1.5px solid var(--color-outline);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   font-family: var(--font-ui);
   font-size: 0.95rem;
   color: var(--color-on-surface);
@@ -473,7 +469,7 @@ body { user-select: none; }
 לאלמנט שיש לו מצבים (active, selected, error):
 
 ```css
-.item { border-radius: var(--radius-sm); padding: 8px 12px; transition: background 0.15s; }
+.item { border-radius: var(--radius); padding: 8px 12px; transition: background 0.15s; }
 .item.selected  { background: var(--color-primary-subtle); color: var(--color-primary); font-weight: 700; }
 .item.error     { background: rgba(179, 38, 30, 0.1); color: var(--color-error); }
 .item:hover:not(.selected) { background: var(--color-secondary-subtle); }
@@ -590,8 +586,7 @@ body { overflow: hidden; }   /* הגלילה קורית בתוכן, לא בעמ�
       --font-main: 'FrankRuhlCLM', 'David', serif;
       --font-size-base: 18px;
       --line-height: 1.5;
-      --radius-sm: 8px; --radius-md: 12px;
-      --radius-lg: 16px; --radius-pill: 999px;
+      --radius: 8px;
     }
 
     html, body { height: 100%; }
@@ -709,7 +704,7 @@ body { overflow: hidden; }   /* הגלילה קורית בתוכן, לא בעמ�
   background: var(--color-secondary-subtle);
   /* כמו secondaryContainer — secondary עם ~12% opacity מעל surface */
   background: color-mix(in srgb, var(--color-secondary) 15%, var(--color-surface));
-  border-radius: 18px;
+  border-radius: var(--radius);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
   padding: 20px;
   overflow-y: auto;
@@ -756,7 +751,7 @@ document.querySelector('.overlay-scrim').addEventListener('click', closeOverlay)
   right: 0;               /* ב-RTL: מיושר לימין */
   width: 320px;
   background: var(--color-surface-container-highest);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
   border: 1px solid var(--color-outline);
   padding: 16px;
@@ -806,7 +801,7 @@ popover.addEventListener('click', function(e) {
 | `background: white` | `background: var(--color-surface)` |
 | `font-size: 16px` (קשיח) | `font-size: 0.9em` (יחסי) |
 | `border: 1px solid #ccc` | `border: 1px solid var(--color-outline)` |
-| `border-radius: 20px` (שרירותי) | `border-radius: var(--radius-md)` |
+| `border-radius: 20px` / `999px` (עגול מדי) | `border-radius: var(--radius)` (8px, כמו כל אוצריא) |
 | ללא `Otzaria.on('theme.changed')` | תמיד להקשיב לשינוי theme (עם הרשאת `events.subscribe:theme.changed`) |
 | `<h1>` ענק בגוף התוכן ככותרת התוסף | פס עליון קבוע ברקע `var(--color-surface-container-high)` |
 | `body { min-height: 100vh }` — העמוד כולו גולל והכותרת נעלמת/נחתכת | `body { height: 100%; overflow: hidden }` + תוכן ב-`overflow-y: auto` |

@@ -276,7 +276,7 @@ function applyTheme(theme) {
   width: min(400px, 92vw);
   background: var(--color-surface-container-high);
   color: var(--color-on-surface);
-  border-radius: 18px;        /* radiusPanel */
+  border-radius: 8px;         /* AppTokens.radius */
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
   display: flex; flex-direction: column; overflow: hidden;
   z-index: 101;
@@ -295,7 +295,7 @@ function applyTheme(theme) {
 /* ── Card (כמו SettingsCard) ───────────────────── */
 .settings-card {
   background: var(--color-surface);
-  border-radius: 20px;        /* radiusXL */
+  border-radius: 8px;         /* AppTokens.radius */
   overflow: hidden;
   margin-top: 16px;
 }
@@ -321,7 +321,7 @@ function applyTheme(theme) {
 .segmented {
   display: inline-flex;
   border: 1px solid var(--color-outline);
-  border-radius: 8px;          /* radiusSM */
+  border-radius: 8px;          /* AppTokens.radius */
   overflow: hidden;
   flex: 0 0 auto;
 }
@@ -410,13 +410,13 @@ setToggle('set-israel', isInIsrael, (v) => {
 |------|-----|--------------|
 | צד פתיחת הפאנל | קצה שמאל פיזי (ב-RTL), `inset-inline-start: 10px` | `ContextOverlayPanel` (`centerEnd`) |
 | scrim | `colorScheme.scrim` ב-30% | `cs.scrim.withValues(alpha: 0.30)` |
-| רדיוס פאנל | 18px | `AppTokens.radiusPanel` |
+| רדיוס פאנל | 8px | `AppTokens.radius` |
 | רקע פאנל | `surfaceContainerHigh` | `ContextOverlayPanel` |
 | אנימציה | slide 300ms + fade 200ms | `animPanelSlide` / `animPanelOpacity` |
-| רדיוס כרטיס | 20px | `AppTokens.radiusXL` (`SettingsCard`) |
+| רדיוס כרטיס | 8px | `AppTokens.radius` (`SettingsCard`) |
 | כותרת כרטיס | בצבע `primary`, מודגשת | `SettingsCardHeader` |
 | מפריד בין שורות | 1.5px | `AppCard.sectionSpacing` |
-| רדיוס סגמנט | 8px | `AppTokens.radiusSM` |
+| רדיוס סגמנט | 8px | `AppTokens.radius` |
 | סגמנט נבחר | רקע `secondaryContainer`, טקסט `onSecondaryContainer` | `AppSegmentedControl` |
 | מתג דלוק | track `primary`, thumb `onPrimary` | `CustomSwitch` (M3) |
 | מתג כבוי | track `surfaceContainerHighest`, thumb `outline` | `CustomSwitch` (M3) |
@@ -507,7 +507,7 @@ body { overflow: hidden; }          /* הגלילה בתוכן, לא בעמוד 
   font-family: inherit; font-size: 12px; font-weight: 600;
   background: var(--color-secondary-container);
   color: var(--color-on-secondary-container);
-  border: none; border-radius: var(--radius-pill);
+  border: none; border-radius: var(--radius);
   padding: 5px 12px; cursor: pointer; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis;
 }
@@ -517,7 +517,7 @@ body { overflow: hidden; }          /* הגלילה בתוכן, לא בעמוד 
 .nav-btn {
   font-family: inherit; font-size: 13px; font-weight: 600;
   background: transparent; color: var(--color-on-surface-variant);
-  border: none; border-radius: var(--radius-pill);
+  border: none; border-radius: var(--radius);
   padding: 6px 14px; cursor: pointer; white-space: nowrap;
   transition: background 0.15s, color 0.15s;
 }
@@ -530,7 +530,7 @@ body { overflow: hidden; }          /* הגלילה בתוכן, לא בעמוד 
 .topbar-btn {
   display: inline-flex; align-items: center; gap: 6px;
   font-family: inherit; font-size: 13px;
-  background: transparent; border: none; border-radius: var(--radius-sm);
+  background: transparent; border: none; border-radius: var(--radius);
   color: var(--color-on-surface-variant);
   padding: 6px 10px; cursor: pointer;
 }
