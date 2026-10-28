@@ -164,10 +164,9 @@ void main() {
       expect((bloc.state as PdfBookLoaded).sidebarWidth, 400.0);
 
       // 5c: חלונית ימין (מפרשים)
-      bloc.add(const ToggleRightPane(show: true, initialTabIndex: 0));
+      bloc.add(const ToggleRightPane(show: true));
       await Future.delayed(Duration.zero);
       expect((bloc.state as PdfBookLoaded).showRightPane, isTrue);
-      expect((bloc.state as PdfBookLoaded).rightPaneInitialTabIndex, 0);
 
       // 5d: סגירת חלונית ימין
       bloc.add(const ToggleRightPane(show: false));

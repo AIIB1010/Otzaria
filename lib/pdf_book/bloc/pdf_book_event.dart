@@ -198,12 +198,11 @@ class UpdateSidebarWidth extends PdfBookEvent {
 /// Toggle right pane visibility
 class ToggleRightPane extends PdfBookEvent {
   final bool? show;
-  final int? initialTabIndex;
 
-  const ToggleRightPane({this.show, this.initialTabIndex});
+  const ToggleRightPane({this.show});
 
   @override
-  List<Object?> get props => [show, initialTabIndex];
+  List<Object?> get props => [show];
 }
 
 /// Update right pane width

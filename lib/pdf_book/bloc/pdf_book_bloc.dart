@@ -319,7 +319,6 @@ class PdfBookBloc extends Bloc<PdfBookEvent, PdfBookState> {
         showLeftPane: showLeftPane,
         pinLeftPane: pinLeftPane,
         sidebarWidth: sidebarWidth,
-        leftPaneTabIndex: searchText.isNotEmpty ? 1 : 0,
         searchText: searchText,
         searchOptions: searchOptions,
         alternativeWords: alternativeWords,
@@ -636,13 +635,7 @@ class PdfBookBloc extends Bloc<PdfBookEvent, PdfBookState> {
 
     final newShow = event.show ?? !current.showRightPane;
 
-    emit(
-      current.copyWith(
-        showRightPane: newShow,
-        rightPaneInitialTabIndex:
-            event.initialTabIndex ?? current.rightPaneInitialTabIndex,
-      ),
-    );
+    emit(current.copyWith(showRightPane: newShow));
   }
 
   void _onUpdateRightPaneWidth(
