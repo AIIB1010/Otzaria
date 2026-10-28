@@ -185,9 +185,9 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
 
   late String localHtmlPath;
 
-  /// נבדק פעם אחת ולא בכל build: existsSync בכל פריים resize הוא I/O סינכרוני,
-  /// וכשל חולף אחד (נעילת אנטי-וירוס) היה מפיל את ה-WebView וטוען אותו מאפס.
-  late bool _entrypointMissing;
+  /// נבדק פעם אחת, אסינכרונית (null עד לתשובה): existsSync על דיסק איטי עוצר את
+  /// ה-UI לשניות, וכשל חולף בכל build היה מפיל את ה-WebView.
+  bool? _entrypointMissing;
 
   /// צורת העץ של build ננעלת לכל חיי ה-State: מעבר FutureBuilder ↔ ישיר
   /// היה מייצר הורה חדש ל-WebView והורס אותו.
@@ -238,8 +238,11 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
     localHtmlPath = widget.plugin.isLocalhostDev
         ? widget.plugin.devRootPath!.replaceAll(RegExp(r'/+$'), '')
         : '${widget.plugin.resolvedRootPath}/${widget.plugin.entrypointPath}';
-    _entrypointMissing =
-        !widget.plugin.isLocalhostDev && !File(localHtmlPath).existsSync();
+    if (widget.plugin.isLocalhostDev) {
+      _entrypointMissing = false;
+    } else {
+      unawaited(_resolveEntrypointMissing());
+    }
     final pluginId = widget.plugin.pluginId;
     final instanceId = widget.instanceId;
     final dispatcher = PluginRuntimeDispatcher.instance;
@@ -260,6 +263,11 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
         instanceId: instanceId,
         token: this,
       );
+  }
+
+  Future<void> _resolveEntrypointMissing() async {
+    final exists = await File(localHtmlPath).exists();
+    if (mounted) setState(() => _entrypointMissing = !exists);
   }
 
   /// מוריד את ה-WebView מהעץ. המופע נשאר רשום, והבא ייווצר במפתח חדש.
@@ -361,7 +369,7 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
       final manifestFile = File(
         p.join(widget.plugin.resolvedRootPath, 'manifest.json'),
       );
-      if (!manifestFile.existsSync()) {
+      if (!await manifestFile.exists()) {
         setState(() => _devErrorMessage = 'קובץ manifest.json חסר בתיקייה.');
         return;
       }
@@ -398,7 +406,7 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
         widget.plugin.resolvedRootPath,
         manifest.entrypoint,
       );
-      final exists = File(localHtmlPath).existsSync();
+      final exists = await File(localHtmlPath).exists();
       if (!exists) {
         setState(
           () => _devErrorMessage =
@@ -526,7 +534,7 @@ class _PluginTabPageState extends State<PluginTabPage> with PluginWebViewHost {
       return Center(child: Text('שגיאה בטעינת הקובץ: $localHtmlPath'));
     }
 
-    if (_entrypointMissing) {
+    if (_entrypointMissing != false) {
       return const SizedBox.shrink(); // התוסף כבר הוסר — הטאב ייסגר בקרוב
     }
 
