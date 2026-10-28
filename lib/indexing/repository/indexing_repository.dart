@@ -1343,14 +1343,14 @@ class IndexingRepository {
     void Function()? onActualIndexingStarted,
   }) async {
     onActualIndexingStarted?.call();
+    // FRB מקודד ומפענח את הארגומנטים על ה-UI thread; רשימת עמודים גדולה הקפיאה
+    // אותו (#3443). חוצץ בתים שנארז ב-isolate עובר כהעתקה אחת.
+    final packed = await _packPdfPagesOffFrame(pages);
     if (!_tantivyDataProvider.isIndexing.value) {
       return 0;
     }
     final engine = await _tantivyDataProvider.engine;
     final engineStopwatch = Stopwatch()..start();
-    // FRB מקודד ומפענח את הארגומנטים על ה-UI thread; רשימת עמודים גדולה הקפיאה
-    // אותו (#3443). חוצץ בתים שנארז ב-isolate עובר כהעתקה אחת.
-    final packed = await _packPdfPagesOffFrame(pages);
     final added = await engine.addPdfBookBytes(
       title: book.title,
       topics: _bookTopics(book),
