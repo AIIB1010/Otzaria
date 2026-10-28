@@ -54,7 +54,6 @@ class PdfBookSearchView extends StatefulWidget {
     this.source = BookSource.official,
     this.externalLibraryId,
     this.pdfFilePath,
-    this.initialSearchText = '',
     this.initialSearchOptions = const {},
     this.initialAlternativeWords = const {},
     this.initialSpacingValues = const {},
@@ -88,7 +87,6 @@ class PdfBookSearchView extends StatefulWidget {
   /// text book (TXT) that shares the same facet path in the search index.
   final String? pdfFilePath;
 
-  final String initialSearchText;
   final Map<String, Map<String, bool>> initialSearchOptions;
   final Map<int, List<String>> initialAlternativeWords;
   final Map<String, String> initialSpacingValues;
@@ -1038,7 +1036,6 @@ class PdfBookSearchViewState extends State<PdfBookSearchView> {
                   );
                   widget.onSearchResultNavigated?.call();
                 },
-                height: 50,
                 query: widget.searchController.text,
                 isSimpleSearch: _isSimpleSearch,
                 wholeWord: _wholeWord,
@@ -1099,7 +1096,6 @@ class SearchResultTile extends StatelessWidget {
   const SearchResultTile({
     required this.result,
     required this.onTap,
-    required this.height,
     required this.query,
     required this.isSimpleSearch,
     required this.wholeWord,
@@ -1108,7 +1104,6 @@ class SearchResultTile extends StatelessWidget {
 
   final SearchResult result;
   final void Function() onTap;
-  final double height;
   final String query;
   final bool isSimpleSearch;
   final bool wholeWord;

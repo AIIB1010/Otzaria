@@ -905,9 +905,7 @@ class _PdfBookScreenState extends State<PdfBookScreen>
   void _onTextSearcherUpdated() {
     final searcher = textSearcher;
     widget.tab.searchText = widget.tab.searchController.text;
-    // matches היא רשימה בלתי-ניתנת-לשינוי שמוחלפת בכל עדכון; אין צורך בהעתקה.
     // בלי setState: ה-searcher מודיע אחרי כל עמוד, ורשימת התוצאות מאזינה לו בעצמה.
-    widget.tab.pdfSearchMatches = searcher?.matches;
     widget.tab.pdfSearchCurrentMatchIndex = searcher?.currentIndex;
 
     if (searcher == null) return;
@@ -4895,7 +4893,6 @@ class _PdfBookScreenState extends State<PdfBookScreen>
                             externalLibraryId:
                                 widget.tab.book.externalLibraryId,
                             pdfFilePath: _resolvedPdfPath,
-                            initialSearchText: widget.tab.searchText,
                             initialSearchOptions: widget.tab.searchOptions,
                             initialAlternativeWords:
                                 widget.tab.alternativeWords,

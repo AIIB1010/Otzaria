@@ -181,7 +181,6 @@ Widget _buildTile({
             continuesToNextLine: false,
           ),
           onTap: () {},
-          height: 50,
           query: query,
           isSimpleSearch: isSimpleSearch,
           wholeWord: wholeWord,
