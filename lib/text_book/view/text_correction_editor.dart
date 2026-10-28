@@ -366,7 +366,6 @@ class _TextCorrectionEditorState extends State<TextCorrectionEditor> {
             style: textStyle,
             decoration: InputDecoration(
               isDense: true,
-              border: const OutlineInputBorder(),
               labelText: 'הנוסח המתוקן',
               errorText: draft.error,
               errorMaxLines: 3,

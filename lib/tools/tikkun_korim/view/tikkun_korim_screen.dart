@@ -432,6 +432,7 @@ class _TikkunKorimViewState extends State<TikkunKorimView> {
 
   Widget _buildScaffold(BuildContext context, TikkunKorimState state) {
     return Scaffold(
+      backgroundColor: Colors.transparent,
       body: LayoutBuilder(
         builder: (context, constraints) {
           final narrow = constraints.maxWidth < kTikkunTwoColumnMinWidth;
@@ -1007,7 +1008,6 @@ class _PageIndicatorState extends State<_PageIndicator> {
                 textAlign: TextAlign.center,
                 decoration: const InputDecoration(
                   isDense: true,
-                  border: OutlineInputBorder(),
                   contentPadding: EdgeInsets.symmetric(
                     horizontal: 4,
                     vertical: 6,

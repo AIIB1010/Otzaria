@@ -1,3 +1,6 @@
+import 'package:otzaria_icons/otzaria_icons.dart';
+import 'package:otzaria/core/messages/common_messages.dart';
+import 'package:otzaria/widgets/feedback/otzaria_error_state.dart';
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -275,7 +278,10 @@ class _SearchFacetFilteringState extends State<SearchFacetFiltering>
         }
 
         if (libraryState.error != null) {
-          return Center(child: Text('Error: ${libraryState.error}'));
+          return OtzariaErrorState(
+            title: CommonMessages.loadFailed,
+            details: libraryState.error,
+          );
         }
 
         return BlocBuilder<SearchBloc, SearchState>(
@@ -292,7 +298,10 @@ class _SearchFacetFilteringState extends State<SearchFacetFiltering>
             _treeFilterQuery = _filterQuery.text;
             final library = libraryState.library;
             if (library == null) {
-              return const Center(child: Text('No library data available'));
+              return const OtzariaErrorState(
+                title: CommonMessages.noLibraryData,
+                icon: OtzariaIcons.library_exclamation_24_regular,
+              );
             }
 
             // ספירות ספק חיצוני (תוסף) מתמזגות לספירות העץ, ודלי

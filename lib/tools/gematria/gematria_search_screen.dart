@@ -1,3 +1,4 @@
+import 'package:otzaria/theme/app_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:otzaria_icons/otzaria_icons.dart';
@@ -471,7 +472,7 @@ class GematriaSearchScreenState extends State<GematriaSearchScreen>
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: cs.secondaryContainer,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppTokens.borderRadiusAll,
       ),
       child: Text(
         label,

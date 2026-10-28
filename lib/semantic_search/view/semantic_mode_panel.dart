@@ -283,7 +283,6 @@ class SemanticModePanel extends StatelessWidget {
           decoration: InputDecoration(
             filled: true,
             fillColor: theme.colorScheme.surfaceContainerHigh,
-            border: const OutlineInputBorder(),
             labelText: context.settingsText(kSemanticSearchModeLabel),
             hintText: context.settingsText(
               'תארו במילים שלכם את העניין שאתם מחפשים',

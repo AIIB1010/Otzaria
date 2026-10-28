@@ -14,6 +14,7 @@ import 'package:otzaria/tools/calendar/helpers/calendar_date_helpers.dart';
 import 'package:otzaria/tools/calendar/dialogs/jump_to_date_dialog.dart';
 import 'package:otzaria/tools/calendar/widgets/calendar_date_picker_panel.dart';
 import 'package:otzaria/settings/widgets/settings_widgets_exports.dart';
+import 'package:otzaria/theme/app_tokens.dart';
 import 'package:otzaria/theme/calendar_event_colors.dart';
 import 'package:otzaria/widgets/dialogs/dialogs_exports.dart';
 import 'package:otzaria/widgets/misc/app_menu_exports.dart';
@@ -539,7 +540,6 @@ class _CalendarEventDialogState extends State<CalendarEventDialog> {
                       textAlign: TextAlign.center,
                       decoration: const InputDecoration(
                         labelText: 'כמות',
-                        border: OutlineInputBorder(),
                       ),
                       inputFormatters: [
                         FilteringTextInputFormatter.digitsOnly,
@@ -556,7 +556,6 @@ class _CalendarEventDialogState extends State<CalendarEventDialog> {
                       value: unit,
                       decoration: const InputDecoration(
                         labelText: 'יחידת זמן',
-                        border: OutlineInputBorder(),
                       ),
                       entries: const [
                         AppMenuEntry(value: 'דקות', label: 'דקות'),
@@ -780,7 +779,7 @@ class _CalendarEventDialogState extends State<CalendarEventDialog> {
     final cs = Theme.of(context).colorScheme;
     return Material(
       color: cs.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: AppTokens.borderRadiusAll,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
@@ -922,7 +921,6 @@ class _CalendarEventDialogState extends State<CalendarEventDialog> {
             decoration: const InputDecoration(
               labelText: 'חיפוש תאריך',
               isDense: true,
-              border: OutlineInputBorder(),
             ),
             onChanged: (value) => _onDateSearchChanged(
               value,
@@ -1343,9 +1341,9 @@ class _AnchoredMenuState extends State<_AnchoredMenu> {
     );
 
     final popup = Material(
-      elevation: 8,
+      elevation: AppTokens.elevation2,
       color: cs.surfaceContainerHigh,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: AppTokens.borderRadiusAll,
       clipBehavior: Clip.antiAlias,
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: width, maxHeight: maxHeight),
@@ -1546,7 +1544,7 @@ class _InlineTimeEditorState extends State<_InlineTimeEditor> {
       textDirection: TextDirection.ltr,
       child: Material(
         color: cs.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppTokens.borderRadiusAll,
         clipBehavior: Clip.antiAlias,
         child: Padding(
           padding: const EdgeInsetsDirectional.only(
@@ -1569,7 +1567,7 @@ class _InlineTimeEditorState extends State<_InlineTimeEditor> {
                 child: Text(
                   ':',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: AppTokens.fontXL,
                     fontWeight: FontWeight.w600,
                     color: cs.onSurface,
                   ),
@@ -1621,12 +1619,12 @@ class _InlineTimeEditorState extends State<_InlineTimeEditor> {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: focused ? cs.primaryContainer : cs.surface,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: AppTokens.borderRadiusAll,
           ),
           child: Text(
             value.toString().padLeft(2, '0'),
             style: TextStyle(
-              fontSize: 18,
+              fontSize: AppTokens.fontXL,
               fontWeight: FontWeight.w600,
               color: focused ? cs.onPrimaryContainer : cs.onSurface,
             ),

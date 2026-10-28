@@ -8,12 +8,16 @@ class CustomSwitch extends StatelessWidget {
   final bool autofocus;
   final FocusNode? focusNode;
 
+  /// [MaterialTapTargetSize.shrinkWrap] למתג קומפקטי בתוך גלולה או שורה צרה.
+  final MaterialTapTargetSize? materialTapTargetSize;
+
   const CustomSwitch({
     super.key,
     required this.value,
     required this.onChanged,
     this.autofocus = false,
     this.focusNode,
+    this.materialTapTargetSize,
   });
 
   @override
@@ -25,6 +29,7 @@ class CustomSwitch extends StatelessWidget {
       onChanged: onChanged,
       autofocus: autofocus,
       focusNode: focusNode,
+      materialTapTargetSize: materialTapTargetSize,
       thumbColor: WidgetStateProperty.resolveWith((s) {
         if (s.contains(WidgetState.disabled)) {
           return cs.onSurface.withValues(alpha: 0.38);

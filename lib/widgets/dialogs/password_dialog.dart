@@ -7,12 +7,12 @@ Future<String?> passwordDialog(BuildContext context) async {
     barrierDismissible: false,
     builder: (context) {
       return const InputDialog(
-        title: 'Enter password',
-        labelText: 'Password',
+        title: 'הזנת סיסמה',
+        labelText: 'סיסמה',
         keyboardType: TextInputType.visiblePassword,
         obscureText: true,
-        confirmText: 'OK',
-        cancelText: 'Cancel',
+        confirmText: 'אישור',
+        cancelText: 'ביטול',
       );
     },
   );

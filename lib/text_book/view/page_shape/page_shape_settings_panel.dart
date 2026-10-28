@@ -872,7 +872,6 @@ class _PageShapeSettingsPanelState extends State<PageShapeSettingsPanel> {
             entries: menuData.entries,
             enableSearch: true,
             decoration: const InputDecoration(
-              border: OutlineInputBorder(),
               hintText: 'חיפוש מפרש...',
             ),
             filterLabels: menuData.filterLabels,

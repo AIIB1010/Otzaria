@@ -12,6 +12,7 @@ import 'package:otzaria/library/models/library.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/utils/navigation/talmud_bavli_open_format.dart';
 import 'package:otzaria/widgets/controls/action_buttons.dart';
+import 'package:otzaria/widgets/dialogs/app_dialog_header.dart';
 import 'package:otzaria/widgets/misc/rtl_icon.dart';
 import 'package:otzaria/widgets/text/otzaria_search_field.dart';
 import '../providers/shamor_zachor_data_provider.dart';
@@ -135,55 +136,58 @@ class _AddBooksToTrackingDialogState extends State<AddBooksToTrackingDialog> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Dialog(
+      clipBehavior: Clip.antiAlias,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 600, maxHeight: 680),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    FluentIcons.library_24_regular,
-                    color: colorScheme.primary,
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    'הוספת ספרים למעקב',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: colorScheme.primary,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'בחר ספרים מעץ הספרייה. הספרים שייבחרו יתווספו לרשימת "בתהליך".',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            AppDialogHeader(
+              icon: FluentIcons.library_24_regular,
+              title: 'הוספת ספרים למעקב',
+              subtitle:
+                  'בחר ספרים מעץ הספרייה. הספרים שייבחרו יתווספו לרשימת "בתהליך".',
+              closeEnabled: !_isAdding,
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppTokens.spaceLG,
+                  AppTokens.spaceMD,
+                  AppTokens.spaceLG,
+                  0,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildSearchField(),
+                    const SizedBox(height: AppTokens.spaceMD),
+                    Expanded(child: _buildBody(colorScheme)),
+                  ],
                 ),
               ),
-              const SizedBox(height: 16),
-              _buildSearchField(),
-              const SizedBox(height: 12),
-              Expanded(child: _buildBody(colorScheme)),
-              const SizedBox(height: 16),
-              Row(
+            ),
+            Padding(
+              padding: const EdgeInsets.all(AppTokens.spaceMD),
+              child: Row(
                 children: [
                   if (_selectedBooks.isNotEmpty)
-                    Text(
-                      'נבחרו ${_selectedBooks.length}',
-                      style: TextStyle(color: colorScheme.onSurfaceVariant),
+                    Padding(
+                      padding: const EdgeInsetsDirectional.only(
+                        start: AppTokens.spaceSM,
+                      ),
+                      child: Text(
+                        'נבחרו ${_selectedBooks.length}',
+                        style: TextStyle(color: colorScheme.onSurfaceVariant),
+                      ),
                     ),
                   const Spacer(),
                   ActionButton.neutral(
                     text: 'ביטול',
                     onPressed: () => Navigator.of(context).pop(),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: AppTokens.spaceSM),
                   ActionButton.recommended(
                     text: _selectedBooks.isEmpty
                         ? 'הוסף'
@@ -194,8 +198,8 @@ class _AddBooksToTrackingDialogState extends State<AddBooksToTrackingDialog> {
                   ),
                 ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -277,9 +281,9 @@ class _AddBooksToTrackingDialogState extends State<AddBooksToTrackingDialog> {
             _expansionState[category.path] = !isExpanded;
           }),
           child: Padding(
-            padding: EdgeInsets.only(
-              right: 12.0 + (level * 16.0),
-              left: 12.0,
+            padding: EdgeInsetsDirectional.only(
+              start: 12.0 + (level * 16.0),
+              end: 12.0,
               top: 10.0,
               bottom: 10.0,
             ),
@@ -351,7 +355,7 @@ class _AddBooksToTrackingDialogState extends State<AddBooksToTrackingDialog> {
         : 'ספר ללא מזהה — לא נתמך במעקב';
 
     return Padding(
-      padding: EdgeInsets.only(right: level * 16.0),
+      padding: EdgeInsetsDirectional.only(start: level * 16.0),
       child: CheckboxListTile(
         dense: true,
         value: alreadyTracked || isSelected,

@@ -8,6 +8,7 @@ import 'package:otzaria/search/utils/category_query_parser.dart';
 import 'package:otzaria/search/search_query_builder.dart';
 import 'package:otzaria/tabs/models/searching_tab.dart';
 import 'package:otzaria/theme/app_surfaces.dart';
+import 'package:otzaria/widgets/controls/custom_switch.dart';
 import 'package:otzaria/widgets/text/rtl_text_field.dart';
 import 'package:otzaria/settings/l10n/settings_l10n_exports.dart';
 
@@ -396,7 +397,7 @@ class _AdvancedSearchControlsState extends State<AdvancedSearchControls> {
             const SizedBox(width: 4),
             Transform.scale(
               scale: 0.75,
-              child: Switch(
+              child: CustomSwitch(
                 value: enabled,
                 onChanged: (value) {
                   setState(() {
@@ -444,7 +445,7 @@ class _AdvancedSearchControlsState extends State<AdvancedSearchControls> {
             const SizedBox(width: 4),
             Transform.scale(
               scale: 0.75,
-              child: Switch(
+              child: CustomSwitch(
                 value: useGlobal,
                 onChanged: (value) {
                   _useGlobalSearchOptions.value = value;
@@ -529,7 +530,6 @@ class _AdvancedSearchControlsState extends State<AdvancedSearchControls> {
                   decoration: InputDecoration(
                     labelText: 'מרווח למילה הבאה',
                     hintText: '0-30',
-                    border: const OutlineInputBorder(),
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 12,
                       vertical: 8,
@@ -592,7 +592,6 @@ class _AdvancedSearchControlsState extends State<AdvancedSearchControls> {
                 decoration: InputDecoration(
                   labelText: 'מילה חילופית',
                   hintText: 'הקלד מילה...',
-                  border: const OutlineInputBorder(),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 12,
                     vertical: 8,

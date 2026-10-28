@@ -11,8 +11,9 @@ import 'package:otzaria/settings/dialogs/list_dialog_frame.dart';
 import 'package:otzaria/settings/l10n/settings_l10n_exports.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/models/books.dart';
+import 'package:otzaria/theme/app_tokens.dart';
 import 'package:otzaria/utils/file/save_file_with_extension.dart';
-import 'package:otzaria/widgets/text/rtl_text_field.dart';
+import 'package:otzaria/widgets/text/otzaria_search_field.dart';
 import 'package:otzaria/widgets/widgets_exports.dart';
 
 /// פותח דיאלוג עם רשימת כל הספרים בספרייה, חיפוש, וייצוא ל-CSV.
@@ -110,20 +111,13 @@ class _BooksListDialogState extends State<_BooksListDialog> {
       title: context.settingsText('רשימת הספרים'),
       counter: '${_visibleRows.length} / ${_rows.length}',
       children: [
-        const SizedBox(height: 12),
-        RtlTextField(
+        const SizedBox(height: AppTokens.spaceMD),
+        OtzariaSearchField(
           controller: _searchController,
           autofocus: true,
-          decoration: InputDecoration(
-            prefixIcon: const Icon(OtzariaIcons.search_24_regular),
-            hintText: context.settingsText(
-              'חיפוש לפי שם, מחבר או קטגוריה',
-            ),
-            border: const OutlineInputBorder(),
-            isDense: true,
-          ),
+          hintText: context.settingsText('חיפוש לפי שם, מחבר או קטגוריה'),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppTokens.spaceMD),
         Expanded(
           child: _visibleRows.isEmpty
               ? Center(
@@ -153,7 +147,7 @@ class _BooksListDialogState extends State<_BooksListDialog> {
                   ),
                 ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppTokens.spaceMD),
         Row(
           children: [
             ActionButton.recommended(

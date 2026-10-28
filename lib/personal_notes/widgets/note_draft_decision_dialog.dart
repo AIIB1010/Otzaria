@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:otzaria/widgets/controls/action_buttons.dart';
 
 /// מה לעשות בהערה שנסגרת עם שינויים שלא נשמרו.
 enum NoteDraftDecision { cancel, discard, saveDraft }
@@ -11,18 +12,19 @@ Future<NoteDraftDecision?> showNoteDraftDecisionDialog(BuildContext context) {
       title: const Text('אזהרה'),
       content: const Text('ההערה לא נשמרה. לשמור טיוטה?'),
       actions: [
-        FilledButton.tonal(
+        ActionButton.neutral(
+          text: 'ביטול',
           onPressed: () => Navigator.of(context).pop(NoteDraftDecision.cancel),
-          child: const Text('ביטול'),
         ),
-        FilledButton.tonal(
+        ActionButton.neutral(
+          errorText: true,
+          text: 'סגור בלי לשמור',
           onPressed: () => Navigator.of(context).pop(NoteDraftDecision.discard),
-          child: const Text('סגור בלי לשמור'),
         ),
-        FilledButton(
+        ActionButton.recommended(
+          text: 'שמור טיוטה',
           onPressed: () =>
               Navigator.of(context).pop(NoteDraftDecision.saveDraft),
-          child: const Text('שמור טיוטה'),
         ),
       ],
     ),

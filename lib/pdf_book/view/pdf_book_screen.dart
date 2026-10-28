@@ -1,3 +1,4 @@
+import 'package:otzaria/core/messages/common_messages.dart';
 import 'dart:io';
 
 import 'package:otzaria/bookmarks/view/book_bookmarks_action.dart';
@@ -4682,7 +4683,10 @@ class _PdfBookScreenState extends State<PdfBookScreen>
                         }
                         if (!state.loadSucceeded) {
                           return const Positioned.fill(
-                            child: Center(child: Text('Failed to load PDF')),
+                            child: OtzariaErrorState(
+                              title: CommonMessages.pdfLoadFailed,
+                              icon: FluentIcons.document_error_24_regular,
+                            ),
                           );
                         }
                         return const SizedBox.shrink();

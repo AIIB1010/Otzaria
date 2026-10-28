@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:otzaria_icons/otzaria_icons.dart';
 import 'package:otzaria/core/focus_repository.dart';
+import 'package:otzaria/theme/app_tokens.dart';
 import 'package:otzaria/widgets/controls/action_buttons.dart';
 import 'package:otzaria/widgets/misc/keyboard_dialog_navigation.dart';
 import 'package:otzaria/widgets/text/otzaria_search_field.dart';
@@ -73,12 +74,9 @@ class _SelectionDialogState<T> extends State<SelectionDialog<T>>
       onCancel: () => Navigator.of(context).pop(),
       textFieldFocusNode: _searchFocusNode,
       child: AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh,
-        title: Text(
-          widget.title,
-        ),
+        title: Text(widget.title),
         content: SizedBox(
-          width: 300,
+          width: 400,
           height: 400,
           child: Column(
             children: [
@@ -88,7 +86,7 @@ class _SelectionDialogState<T> extends State<SelectionDialog<T>>
                 hintText: widget.searchHint,
                 autofocus: true,
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppTokens.spaceSM),
               Expanded(
                 child: filteredItems.isEmpty
                     ? const ToolEmptyState(

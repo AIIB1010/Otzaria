@@ -639,7 +639,6 @@ class _CityDropdown extends StatelessWidget {
         enableSearch: true,
         decoration: const InputDecoration(
           labelText: 'עיר',
-          border: OutlineInputBorder(),
           isDense: true,
         ),
         entries: cityNames

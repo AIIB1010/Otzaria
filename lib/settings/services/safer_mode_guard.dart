@@ -7,6 +7,7 @@ import 'package:otzaria/navigation/bloc/navigation_state.dart';
 import 'package:otzaria/settings/engine/settings_engine_exports.dart';
 import 'package:otzaria/settings/l10n/settings_l10n_exports.dart';
 import 'package:otzaria/settings/dialogs/safer_mode_password_dialog.dart';
+import 'package:otzaria/widgets/controls/action_buttons.dart';
 import 'package:otzaria/widgets/layout/centered_scrollable_state.dart';
 
 /// Wrapper שבודק סיסמה לפני כניסה למסך מוגן במצב סייפר
@@ -200,15 +201,15 @@ class _SaferModeGuardState extends State<SaferModeGuard> {
               ),
             ),
             const SizedBox(height: 32),
-            FilledButton.icon(
+            ActionButton.recommended(
+              icon: FluentIcons.key_24_regular,
+              text: 'הזן סיסמה',
               onPressed: () {
                 setState(() {
                   _dialogShown = false;
                 });
                 _showPasswordDialog();
               },
-              icon: const Icon(FluentIcons.key_24_regular),
-              label: const Text('הזן סיסמה'),
             ),
           ],
         ),

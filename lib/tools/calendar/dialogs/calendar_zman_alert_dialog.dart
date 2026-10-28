@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_spinbox/flutter_spinbox.dart';
+import 'package:otzaria/theme/app_tokens.dart';
 import 'package:otzaria/widgets/controls/action_buttons.dart';
 
 class ZmanAlertDialogResult {
@@ -57,12 +58,12 @@ class _ZmanAlertDialogState extends State<ZmanAlertDialog> {
           Text(
             'כמה זמן לפני זמן ${widget.zmanName} ברצונך לקבל התראה?',
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppTokens.spaceSM),
           Text(
             'הזמן: ${widget.timeLabel}',
             style: Theme.of(context).textTheme.bodySmall,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppTokens.spaceMD),
           Row(
             children: [
               Expanded(
@@ -76,7 +77,7 @@ class _ZmanAlertDialogState extends State<ZmanAlertDialog> {
                   onChanged: (v) => setState(() => hours = v.toInt()),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: AppTokens.spaceMD),
               Expanded(
                 child: SpinBox(
                   min: 0,
@@ -95,6 +96,7 @@ class _ZmanAlertDialogState extends State<ZmanAlertDialog> {
       actions: [
         if (widget.isEnabled)
           ActionButton.neutral(
+            errorText: true,
             text: 'בטל התראה',
             onPressed: () => Navigator.of(context).pop(
               const ZmanAlertDialogResult(minutesBefore: 0, cancelAlert: true),

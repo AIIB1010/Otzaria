@@ -13,6 +13,7 @@ import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/messages/notes_messages.dart';
 import 'package:otzaria/theme/app_surfaces.dart';
 import 'package:otzaria/theme/app_tokens.dart';
+import 'package:otzaria/widgets/controls/action_buttons.dart';
 
 class InlineNoteEditor extends StatefulWidget {
   final PersonalNote? note;
@@ -217,19 +218,13 @@ class _InlineNoteEditorState extends State<InlineNoteEditor> {
           linkableNotes: widget.linkableNotes,
           onSaveShortcut: _handleSave,
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppTokens.spaceSM),
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            TextButton(
-              onPressed: _handleCancel,
-              child: const Text('ביטול'),
-            ),
-            const SizedBox(width: 8),
-            FilledButton(
-              onPressed: _handleSave,
-              child: const Text('שמור'),
-            ),
+            ActionButton.ghost(text: 'ביטול', onPressed: _handleCancel),
+            const SizedBox(width: AppTokens.spaceSM),
+            ActionButton.recommended(text: 'שמור', onPressed: _handleSave),
           ],
         ),
       ],

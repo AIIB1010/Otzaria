@@ -1143,7 +1143,11 @@ class _CommentatorsTabScreenState extends State<CommentatorsTabScreen>
     required String title,
   }) {
     if (chapters.isEmpty) {
-      return const Center(child: Text('אין תוכן עניינים'));
+      return const OtzariaEmptyState(
+        isCompact: true,
+        icon: OtzariaIcons.text_bullet_list_tree_24_regular,
+        title: 'אין תוכן עניינים',
+      );
     }
 
     final delegate = NavPanelSearchDelegate(

@@ -1625,9 +1625,10 @@ class _SystemSettingsTabState extends State<SystemSettingsTab> {
       context: context,
       builder: settingsDialogBuilder(
         context,
-        (ctx) => AlertDialog(
-          title: Text(ctx.settingsText('יומן שינויים בתוכנה')),
-          content: SizedBox(
+        (ctx) => AppDialog.singleAction(
+          title: ctx.settingsText('יומן שינויים בתוכנה'),
+          confirmText: ctx.settingsText('סגור'),
+          customContent: SizedBox(
             width: 600,
             height: 400,
             // Markdown הגלילתי אומד את היקף התוכן מהפריטים הבנויים בלבד
@@ -1642,12 +1643,6 @@ class _SystemSettingsTabState extends State<SystemSettingsTab> {
               ),
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text(ctx.settingsText('סגור')),
-            ),
-          ],
         ),
       ),
     );

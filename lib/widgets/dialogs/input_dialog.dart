@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:otzaria/core/focus_repository.dart';
+import 'package:otzaria/theme/app_tokens.dart';
+import 'package:otzaria/widgets/controls/action_buttons.dart';
 import 'package:otzaria/widgets/text/rtl_text_field.dart';
 import 'package:otzaria/widgets/misc/keyboard_dialog_navigation.dart';
 
@@ -13,7 +15,6 @@ class InputDialog extends StatefulWidget {
   final TextInputType? keyboardType;
   final String cancelText;
   final String confirmText;
-  final Color? confirmColor;
   final bool obscureText;
 
   const InputDialog({
@@ -26,7 +27,6 @@ class InputDialog extends StatefulWidget {
     this.keyboardType,
     this.cancelText = 'ביטול',
     this.confirmText = 'שמור',
-    this.confirmColor,
     this.obscureText = false,
   });
 
@@ -35,9 +35,14 @@ class InputDialog extends StatefulWidget {
 }
 
 class _InputDialogState extends State<InputDialog>
-    with DialogNavigationMixin, DialogFocusRestorerMixin<InputDialog> {
+    with DialogFocusRestorerMixin<InputDialog> {
   late final TextEditingController _controller;
   final FocusNode _textFieldFocusNode = FocusNode();
+  final FocusNode _cancelFocusNode = FocusNode();
+  final FocusNode _confirmFocusNode = FocusNode();
+
+  // 0 = ביטול, 1 = אישור (כברירת מחדל האישור ממוקד)
+  int _focusedIndex = 1;
 
   @override
   void initState() {
@@ -54,6 +59,8 @@ class _InputDialogState extends State<InputDialog>
   void dispose() {
     _controller.dispose();
     _textFieldFocusNode.dispose();
+    _cancelFocusNode.dispose();
+    _confirmFocusNode.dispose();
     super.dispose();
   }
 
@@ -61,9 +68,16 @@ class _InputDialogState extends State<InputDialog>
     Navigator.of(context).pop(_controller.text.trim());
   }
 
+  void _moveFocus(int index) {
+    setState(() => _focusedIndex = index);
+    (index == 1 ? _confirmFocusNode : _cancelFocusNode).requestFocus();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return buildKeyboardNavigator(
+    return DialogKeyboardNavigator(
+      focusedIndex: _focusedIndex,
+      onFocusChange: _moveFocus,
       onConfirm: _submit,
       onCancel: () => Navigator.of(context).pop(),
       textFieldFocusNode: _textFieldFocusNode,
@@ -75,7 +89,7 @@ class _InputDialogState extends State<InputDialog>
           children: [
             if (widget.subtitle != null)
               Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
+                padding: const EdgeInsets.only(bottom: AppTokens.spaceSM),
                 child: Text(
                   widget.subtitle!,
                   style: Theme.of(context).textTheme.bodySmall,
@@ -95,59 +109,19 @@ class _InputDialogState extends State<InputDialog>
           ],
         ),
         actions: [
-          _buildButton(
+          ActionButton.neutral(
+            focusNode: _cancelFocusNode,
             text: widget.cancelText,
-            isFocused: focusedButtonIndex == 0,
             onPressed: () => Navigator.of(context).pop(),
           ),
-          _buildButton(
+          ActionButton.recommended(
+            focusNode: _confirmFocusNode,
             text: widget.confirmText,
-            isFocused: focusedButtonIndex == 1,
-            isConfirm: true,
             onPressed: _submit,
           ),
         ],
       ),
     );
-  }
-
-  Widget _buildButton({
-    required String text,
-    required bool isFocused,
-    required VoidCallback onPressed,
-    bool isConfirm = false,
-  }) {
-    final cs = Theme.of(context).colorScheme;
-    final color = isConfirm ? (widget.confirmColor ?? cs.primary) : null;
-    final foregroundColor = color == null
-        ? null
-        : (ThemeData.estimateBrightnessForColor(color) == Brightness.dark
-              ? cs.surface
-              : cs.onSurface);
-
-    final showHover = isFocused && !_textFieldFocusNode.hasFocus;
-
-    if (isConfirm) {
-      return FilledButton(
-        onPressed: onPressed,
-        style: FilledButton.styleFrom(
-          backgroundColor: showHover ? color!.withValues(alpha: 0.9) : color,
-          foregroundColor: foregroundColor,
-        ),
-        child: Text(text),
-      );
-    } else {
-      return FilledButton.tonal(
-        onPressed: onPressed,
-        style: FilledButton.styleFrom(
-          backgroundColor: showHover
-              ? cs.secondaryContainer.withValues(alpha: 0.9)
-              : cs.secondaryContainer,
-          foregroundColor: cs.onSecondaryContainer,
-        ),
-        child: Text(text),
-      );
-    }
   }
 }
 
@@ -162,7 +136,6 @@ Future<String?> showInputDialog({
   TextInputType? keyboardType,
   String cancelText = 'ביטול',
   String confirmText = 'שמור',
-  Color? confirmColor,
 }) {
   return showDialog<String>(
     context: context,
@@ -175,7 +148,6 @@ Future<String?> showInputDialog({
       keyboardType: keyboardType,
       cancelText: cancelText,
       confirmText: confirmText,
-      confirmColor: confirmColor,
     ),
   );
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:otzaria/theme/app_tokens.dart';
+import 'package:otzaria/theme/app_surfaces.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otzaria/workspaces/bloc/workspace_bloc.dart';
 import 'package:otzaria/workspaces/bloc/workspace_event.dart';
@@ -47,6 +48,7 @@ class _WorkspaceSwitcherDialogState extends State<WorkspaceSwitcherDialog> {
   Widget build(BuildContext context) {
     return Dialog(
       insetPadding: const EdgeInsets.all(16),
+      backgroundColor: AppSurfaces.panelBackground(context),
       child: Container(
         width: MediaQuery.of(context).size.width * 0.8,
         height: MediaQuery.of(context).size.height * 0.8,
@@ -157,13 +159,15 @@ class _WorkspaceSwitcherDialogState extends State<WorkspaceSwitcherDialog> {
                   width: 100,
                   height: 100,
                   decoration: BoxDecoration(
-                    color: Colors.grey[200],
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerHighest,
                     borderRadius: AppTokens.borderRadiusAll,
                   ),
-                  child: const Icon(
+                  child: Icon(
                     FluentIcons.add_24_regular,
                     size: 48,
-                    color: Colors.grey,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -414,7 +418,6 @@ class _WorkspaceNameFieldState extends State<_WorkspaceNameField> {
               controller: _controller,
               autofocus: true,
               decoration: const InputDecoration(
-                border: OutlineInputBorder(),
                 isDense: true,
               ),
               onSubmitted: (_) => _commitRenameAndClose(),

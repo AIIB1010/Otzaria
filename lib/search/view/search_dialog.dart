@@ -1792,7 +1792,6 @@ class _SearchDialogState extends State<SearchDialog> {
           decoration: InputDecoration(
             filled: true,
             fillColor: Theme.of(context).colorScheme.surfaceContainerHigh,
-            border: const OutlineInputBorder(),
             labelText: context.settingsText('ללא', context: 'searchExclude'),
             hintText: context.settingsText(
               'תוצאות שמכילות מילים אלו לא יופיעו',

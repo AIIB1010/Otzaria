@@ -4,6 +4,7 @@ import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
 import 'package:otzaria/plugins/services/plugin_crash_guard.dart';
 import 'package:otzaria/widgets/controls/action_buttons.dart';
+import 'package:otzaria/widgets/feedback/otzaria_error_state.dart';
 
 /// תצוגה שמופיעה במקום WebView כשהתוסף הקריס את האפליקציה בהפעלה הקודמת
 /// (נשאר ב-PluginCrashGuard). מספקת למשתמש כפתור "נסה שוב" שמסיר את
@@ -49,74 +50,47 @@ class _PluginCrashedViewState extends State<PluginCrashedView> {
     final tt = Theme.of(context).textTheme;
     final pluginLabel = widget.pluginName ?? widget.pluginId;
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 540),
+    return OtzariaErrorState(
+      icon: FluentIcons.warning_24_regular,
+      title: 'התוסף "$pluginLabel" גרם לקריסת התוכנה',
+      details:
+          'בהפעלה הקודמת התוסף הזה הקריס את התוכנה בעת טעינתו. כדי '
+          'למנוע קריסות חוזרות, אנחנו לא טוענים אותו אוטומטית.',
+      body: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 540),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(AppTokens.spaceMD),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest,
+            borderRadius: AppTokens.borderRadiusAll,
+          ),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                FluentIcons.warning_24_regular,
-                size: 56,
-                color: cs.error,
-              ),
-              const SizedBox(height: 16),
+              Text('מה אפשר לעשות:', style: tt.titleSmall),
+              const SizedBox(height: AppTokens.spaceSM),
               Text(
-                'התוסף "$pluginLabel" גרם לקריסת התוכנה',
-                style: tt.titleLarge,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'בהפעלה הקודמת התוסף הזה הקריס את התוכנה בעת טעינתו. כדי '
-                'למנוע קריסות חוזרות, אנחנו לא טוענים אותו אוטומטית.',
-                style: tt.bodyMedium,
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: cs.surfaceContainerHighest,
-                  borderRadius: AppTokens.borderRadiusAll,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'מה אפשר לעשות:',
-                      style: tt.titleSmall,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '1. אם עדכנת את התוכנה או את WebView2 — לחץ "נסה שוב" '
-                      'כדי לבדוק אם הבעיה נפתרה.\n'
-                      '2. אם הבעיה חוזרת — סביר שהתוסף לא תואם למכשיר שלך '
-                      'כרגע. אפשר להמשיך להשתמש בשאר התוספים והכלים.\n'
-                      '3. אם זה תוסף שעובד אצל אחרים — דווח לפיתוח עם מספר '
-                      'הגרסה שלך.',
-                      style: tt.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: [
-                  ActionButton.recommended(
-                    text: 'נסה שוב',
-                    icon: FluentIcons.arrow_clockwise_24_regular,
-                    isLoading: _retrying,
-                    onPressed: _handleRetry,
-                  ),
-                ],
+                '1. אם עדכנת את התוכנה או את WebView2 — לחץ "נסה שוב" '
+                'כדי לבדוק אם הבעיה נפתרה.\n'
+                '2. אם הבעיה חוזרת — סביר שהתוסף לא תואם למכשיר שלך '
+                'כרגע. אפשר להמשיך להשתמש בשאר התוספים והכלים.\n'
+                '3. אם זה תוסף שעובד אצל אחרים — דווח לפיתוח עם מספר '
+                'הגרסה שלך.',
+                style: tt.bodySmall,
               ),
             ],
           ),
         ),
       ),
+      actions: [
+        ActionButton.recommended(
+          text: 'נסה שוב',
+          icon: FluentIcons.arrow_clockwise_24_regular,
+          isLoading: _retrying,
+          onPressed: _handleRetry,
+        ),
+      ],
     );
   }
 }

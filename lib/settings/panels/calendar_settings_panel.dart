@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -15,6 +16,7 @@ import 'package:otzaria/core/messages/settings_messages.dart';
 import 'package:otzaria/core/messages/tools_messages.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/settings/widgets/settings_widgets_exports.dart';
+import 'package:otzaria/widgets/feedback/tool_empty_state.dart';
 import 'package:otzaria/widgets/text/otzaria_search_field.dart';
 import 'package:otzaria/tools/calendar/models/calendar_location.dart';
 import 'package:otzaria/tools/calendar/bloc/calendar_cubit.dart';
@@ -682,7 +684,7 @@ class _IcsSubscriptionDialogState extends State<_IcsSubscriptionDialog> {
       backgroundColor: cs.surfaceContainerHigh,
       title: Text(context.settingsText('הוספת יומן מקישור')),
       content: SizedBox(
-        width: 400,
+        width: math.min(400.0, MediaQuery.sizeOf(context).width - 112),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -693,7 +695,7 @@ class _IcsSubscriptionDialogState extends State<_IcsSubscriptionDialog> {
                 labelText: context.settingsText('שם היומן'),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppTokens.spaceMD),
             RtlTextField(
               controller: _urlController,
               decoration: InputDecoration(
@@ -705,13 +707,13 @@ class _IcsSubscriptionDialogState extends State<_IcsSubscriptionDialog> {
         ),
       ),
       actions: [
-        ActionButton.ghost(
+        ActionButton.neutral(
           text: context.settingsText('ביטול'),
           onPressed: () => Navigator.of(context).pop(),
         ),
         ActionButton.recommended(
           text: context.settingsText('אישור'),
-          onPressed: _urlValid ? _submit : () {},
+          onPressed: _urlValid ? _submit : null,
         ),
       ],
     );
@@ -841,16 +843,16 @@ class _CalendarMultiSelectionDialogState<T>
             const SizedBox(height: 8),
             Expanded(
               child: widget.items.isEmpty
-                  ? Center(
-                      child: Text(
-                        widget.emptyMessage ??
-                            context.settingsText('לא נמצאו פריטים'),
-                        style: TextStyle(color: cs.onSurfaceVariant),
-                      ),
+                  ? ToolEmptyState(
+                      icon: OtzariaIcons.calendar_24_regular,
+                      message:
+                          widget.emptyMessage ??
+                          context.settingsText('לא נמצאו פריטים'),
                     )
                   : filteredItems.isEmpty
-                  ? Center(
-                      child: Text(context.settingsText('לא נמצאו תוצאות')),
+                  ? ToolEmptyState(
+                      icon: OtzariaIcons.search_not_found_24_regular,
+                      message: context.settingsText('לא נמצאו תוצאות'),
                     )
                   : ListView.builder(
                       itemCount: filteredItems.length,
@@ -892,9 +894,8 @@ class _CalendarMultiSelectionDialogState<T>
         ActionButton.recommended(
           text: context.settingsText('אישור'),
           onPressed: selectedValues.isEmpty
-              ? () {}
+              ? null
               : () => Navigator.of(context).pop(selectedValues.toList()),
-          isLoading: false,
         ),
       ],
     );

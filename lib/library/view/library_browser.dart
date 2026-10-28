@@ -496,10 +496,16 @@ class _LibraryBrowserState extends State<LibraryBrowser>
                 p.selectedTopics != c.selectedTopics,
             builder: (context, state) {
               if (state.error != null) {
-                return Center(child: Text('Error: ${state.error}'));
+                return OtzariaErrorState(
+                  title: CommonMessages.loadFailed,
+                  details: state.error,
+                );
               }
               if (state.library == null && !state.isLoading) {
-                return const Center(child: Text('No library data available'));
+                return const OtzariaErrorState(
+                  title: CommonMessages.noLibraryData,
+                  icon: OtzariaIcons.library_exclamation_24_regular,
+                );
               }
 
               return Stack(
@@ -975,11 +981,11 @@ class _LibraryBrowserState extends State<LibraryBrowser>
         child: Chip(
           label: Text(item),
           backgroundColor: isSelected
-              ? Theme.of(context).colorScheme.secondary
+              ? Theme.of(context).colorScheme.secondaryContainer
               : null,
           labelStyle: Theme.of(context).textTheme.labelSmall?.copyWith(
             color: isSelected
-                ? Theme.of(context).colorScheme.onSecondary
+                ? Theme.of(context).colorScheme.onSecondaryContainer
                 : null,
           ),
           labelPadding: EdgeInsets.zero,
@@ -2644,29 +2650,20 @@ class _LibraryBrowserState extends State<LibraryBrowser>
   }
 
   void _showAllBooksDialog(List<Book> books) {
-    showDialog(
+    showSingleActionDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-          ctx.settingsText(
-            'כל הספרים ({count})',
-            args: {'count': books.length},
-          ),
+      title: context.settingsText(
+        'כל הספרים ({count})',
+        args: {'count': books.length},
+      ),
+      confirmText: context.settingsText('סגור'),
+      customContent: SizedBox(
+        width: 600,
+        height: 400,
+        child: ListView.builder(
+          itemCount: books.length,
+          itemBuilder: (context, i) => _buildListBookItem(books[i], 0),
         ),
-        content: SizedBox(
-          width: 600,
-          height: 400,
-          child: ListView.builder(
-            itemCount: books.length,
-            itemBuilder: (context, i) => _buildListBookItem(books[i], 0),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: Text(ctx.settingsText('סגור')),
-          ),
-        ],
       ),
     );
   }

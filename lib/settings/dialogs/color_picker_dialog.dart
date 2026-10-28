@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:otzaria/theme/theme_exports.dart';
+import 'package:otzaria/widgets/controls/action_buttons.dart';
 import 'package:otzaria/settings/l10n/settings_l10n_exports.dart';
 
 /// שורת הגדרה לבחירת צבע בסיס.
@@ -130,10 +131,10 @@ class _ColorPickerDialogState extends State<_ColorPickerDialog> {
                 ),
               ),
               const Spacer(),
-              OutlinedButton.icon(
+              ActionButton.neutral(
                 onPressed: () => _select(widget.defaultColor),
-                icon: const Icon(FluentIcons.arrow_reset_24_regular, size: 16),
-                label: Text(context.settingsText('איפוס')),
+                icon: FluentIcons.arrow_reset_24_regular,
+                text: context.settingsText('איפוס'),
               ),
             ],
           ),
@@ -188,9 +189,9 @@ class _ColorPickerDialogState extends State<_ColorPickerDialog> {
         ),
       ),
       actions: [
-        FilledButton(
+        ActionButton.recommended(
           onPressed: () => Navigator.of(context).pop(),
-          child: Text(context.settingsText('סגור')),
+          text: context.settingsText('סגור'),
         ),
       ],
     );
