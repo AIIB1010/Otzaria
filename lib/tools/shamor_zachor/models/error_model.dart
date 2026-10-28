@@ -27,14 +27,12 @@ class ShamorZachorError {
   final ShamorZachorErrorType type;
   final String message;
   final String? details;
-  final Object? originalError;
   final StackTrace? stackTrace;
 
   const ShamorZachorError({
     required this.type,
     required this.message,
     this.details,
-    this.originalError,
     this.stackTrace,
   });
 
@@ -52,7 +50,6 @@ class ShamorZachorError {
       type: errorType,
       message: message,
       details: exception.toString(),
-      originalError: exception,
       stackTrace: stackTrace,
     );
   }
