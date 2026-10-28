@@ -2642,9 +2642,8 @@ class _CombinedViewState extends State<CombinedView> {
           ),
         // הטקסט של הספר - ללא SelectionArea נפרד, כי יש SelectionArea כללי
         Builder(
-          builder: (itemContext) => AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeInOut,
+          // בלי אנימציה: טיקר לכל שורה הופך פירוק המוני של שורות לריבועי.
+          builder: (itemContext) => DecoratedBox(
             // decoration קבוע שומר על עומק הטקסט ועל מצב <details> בבחירה.
             decoration: BoxDecoration(color: backgroundColor),
             child: _withSelectionGutter(
