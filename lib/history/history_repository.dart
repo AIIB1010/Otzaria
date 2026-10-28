@@ -8,6 +8,7 @@ class HistoryRepository extends BaseListRepository<Bookmark> {
         key: 'history',
         fromJson: (json) => Bookmark.fromJson(json),
         toJson: (bookmark) => bookmark.toJson(),
+        decodeInBackground: true,
       );
 
   Future<List<Bookmark>> loadHistory() async => load();

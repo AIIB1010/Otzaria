@@ -14,7 +14,6 @@ class BookmarkRepository extends BaseListRepository<Bookmark> {
         key: 'key-bookmark-groups',
         fromJson: (json) => BookmarkGroup.fromJson(json),
         toJson: (group) => group.toJson(),
-        decodeInBackground: true,
         store: store,
       ),
       super(
