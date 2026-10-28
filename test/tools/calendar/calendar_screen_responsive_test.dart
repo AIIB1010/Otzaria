@@ -15,11 +15,13 @@ import 'package:otzaria/settings/engine/settings_event.dart';
 import 'package:otzaria/settings/engine/settings_repository.dart';
 import 'package:otzaria/tools/calendar/calendar_screen.dart';
 import 'package:otzaria/tools/calendar/dialogs/calendar_zman_alert_dialog.dart';
+import 'package:otzaria/tools/calendar/dialogs/zmanim_settings_dialog.dart';
 import 'package:otzaria/tools/calendar/services/google_calendar_service.dart';
 import 'package:otzaria/tools/calendar/services/notification_service.dart';
 import 'package:otzaria/tools/calendar/widgets/calendar_main_panel.dart';
 import 'package:otzaria/tools/calendar/widgets/calendar_side_panel.dart';
 import 'package:otzaria/tools/calendar/widgets/calendar_times_panel.dart';
+import 'package:otzaria/widgets/text/otzaria_search_field.dart';
 
 import '../../test_helpers/memory_cache_provider.dart';
 
@@ -49,7 +51,11 @@ void main() {
     await settingsBloc.close();
   });
 
-  Future<void> pumpCalendar(WidgetTester tester, Size size) async {
+  Future<void> pumpCalendar(
+    WidgetTester tester,
+    Size size, {
+    TextDirection textDirection = TextDirection.ltr,
+  }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -59,13 +65,16 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(
-          body: MultiBlocProvider(
-            providers: [
-              BlocProvider.value(value: settingsBloc),
-              BlocProvider.value(value: calendarCubit),
-            ],
-            child: const CalendarWidget(),
+        home: Directionality(
+          textDirection: textDirection,
+          child: Scaffold(
+            body: MultiBlocProvider(
+              providers: [
+                BlocProvider.value(value: settingsBloc),
+                BlocProvider.value(value: calendarCubit),
+              ],
+              child: const CalendarWidget(),
+            ),
           ),
         ),
       ),
@@ -145,6 +154,69 @@ void main() {
         greaterThan(100),
         reason: 'במסך רחב הפאנלים אמורים להיות מופרדים אופקית.',
       );
+    });
+  });
+
+  // בחלון בינוני (600–840) חלונית הזמנים/האירועים צפה מעל הלוח, וכפתור הסגירה
+  // שלה ישב מעל הפקד הראשון שבה (issue #3290).
+  group('חלונית צפה: כפתור הסגירה לא מכסה פקדים (issue #3290)', () {
+    const mediumSize = Size(720, 900);
+
+    Rect closeButtonRect(WidgetTester tester) =>
+        tester.getRect(find.byTooltip('סגור חלונית'));
+
+    testWidgets('זמנים: לחיצה על "זמנים נוספים" פותחת את הטבלה', (
+      tester,
+    ) async {
+      await pumpCalendar(
+        tester,
+        mediumSize,
+        textDirection: TextDirection.rtl,
+      );
+      await tester.tap(find.byTooltip('זמנים'));
+      await tester.pumpAndSettle();
+
+      final moreTimes = find.byTooltip('זמנים נוספים');
+      await tester.tap(moreTimes, warnIfMissed: false);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byType(ZmanimSettingsContent),
+        findsOneWidget,
+        reason: 'הלחיצה מגיעה לכפתור ולא לכפתור הסגירה שמעליו',
+      );
+      expect(
+        closeButtonRect(tester).overlaps(tester.getRect(moreTimes)),
+        isFalse,
+      );
+    });
+
+    testWidgets('אירועים: לחיצה על תחילת שדה החיפוש מתמקדת בו', (
+      tester,
+    ) async {
+      await pumpCalendar(
+        tester,
+        mediumSize,
+        textDirection: TextDirection.rtl,
+      );
+      await tester.tap(find.byTooltip('אירועים'));
+      await tester.pumpAndSettle();
+
+      final searchField = find.byType(OtzariaSearchField);
+      final fieldRect = tester.getRect(searchField);
+      // ב-RTL תחילת השדה בצדו הימני.
+      await tester.tapAt(Offset(fieldRect.right - 12, fieldRect.center.dy));
+      await tester.pump();
+
+      final editable = tester.widget<EditableText>(
+        find.descendant(of: searchField, matching: find.byType(EditableText)),
+      );
+      expect(
+        editable.focusNode.hasFocus,
+        isTrue,
+        reason: 'הלחיצה מגיעה לשדה ולא לכפתור הסגירה שמעליו',
+      );
+      expect(closeButtonRect(tester).overlaps(fieldRect), isFalse);
     });
   });
 
