@@ -314,6 +314,10 @@ class _BackgroundPluginRunnerState extends State<_BackgroundPluginRunner>
     with PluginWebViewHost {
   late String _localHtmlPath;
 
+  /// נבדק פעם אחת, אסינכרונית: existsSync ב-build עוצר כל פריים על דיסק איטי.
+  /// שינוי נתיב מחליף את ה-ValueKey של ה-runner, ולכן State חדש בודק מחדש.
+  bool? _entryExists;
+
   @override
   InstalledPlugin get plugin => widget.plugin;
   @override
@@ -337,6 +341,11 @@ class _BackgroundPluginRunnerState extends State<_BackgroundPluginRunner>
         : _isHeadless
         ? pluginHeadlessShellPath(widget.plugin.resolvedRootPath)
         : '${widget.plugin.resolvedRootPath}/${widget.plugin.backgroundEntrypointPath}';
+    if (widget.plugin.isLocalhostDev) {
+      _entryExists = true;
+    } else {
+      unawaited(_resolveEntryExists());
+    }
     final lazy = PluginLazyActivationService.instance;
     final pluginId = widget.plugin.pluginId;
     initPluginHost(
@@ -347,6 +356,14 @@ class _BackgroundPluginRunnerState extends State<_BackgroundPluginRunner>
         return () => lazy.endWork(pluginId);
       },
     );
+  }
+
+  Future<void> _resolveEntryExists() async {
+    final entryFile = _isHeadless
+        ? p.join(widget.plugin.resolvedRootPath, widget.plugin.entrypointPath)
+        : _localHtmlPath;
+    final exists = await File(entryFile).exists();
+    if (mounted) setState(() => _entryExists = exists);
   }
 
   bool get _usesAssetScheme => pluginUsesAssetScheme(headless: _isHeadless);
@@ -405,12 +422,7 @@ class _BackgroundPluginRunnerState extends State<_BackgroundPluginRunner>
 
   @override
   Widget build(BuildContext context) {
-    final entryFile = _isHeadless
-        ? p.join(widget.plugin.resolvedRootPath, widget.plugin.entrypointPath)
-        : _localHtmlPath;
-    if (!widget.plugin.isLocalhostDev && !File(entryFile).existsSync()) {
-      return const SizedBox.shrink();
-    }
+    if (_entryExists != true) return const SizedBox.shrink();
 
     if (Platform.isWindows && WebViewEnvironmentHolder.environment == null) {
       return const SizedBox.shrink();
