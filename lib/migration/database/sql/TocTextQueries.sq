@@ -12,8 +12,5 @@ VALUES (?);
 selectIdByText:
 SELECT id FROM tocText WHERE text = ? LIMIT 1;
 
-delete:
-DELETE FROM tocText WHERE id = ?;
-
 countAll:
 SELECT COUNT(*) FROM tocText;

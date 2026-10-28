@@ -1,11 +1,5 @@
 -- Requêtes pour les topics
 
-selectAll:
-SELECT * FROM topic ORDER BY name;
-
-selectByName:
-SELECT * FROM topic WHERE name = ? LIMIT 1;
-
 insert:
 INSERT INTO topic (name)
 VALUES (?)
