@@ -267,6 +267,47 @@ void main() {
     );
   });
 
+  group('מיזוג פירושים', () {
+    test('mergeAramaicMeanings משמיט חלק זהה (גם עם ניקוד) ושומר סדר', () {
+      expect(
+        DictionaryLookupRepository.mergeAramaicMeanings([
+          'אביך',
+          'אָבִיךָ *** אב',
+          'אב',
+        ]),
+        'אביך *** אב',
+      );
+    });
+
+    test('mergeAramaicMatches ממזג מפתחות זהים בסדר ההופעה', () {
+      final merged = DictionaryLookupRepository.mergeAramaicMatches(const [
+        AramaicDictionaryEntry(aramaic: 'אַבָּא', hebrew: 'אב'),
+        AramaicDictionaryEntry(aramaic: 'גברא', hebrew: 'איש'),
+        AramaicDictionaryEntry(
+          aramaic: 'אבא',
+          hebrew: 'פרי',
+          dictionary: 'אחר',
+        ),
+      ]);
+
+      expect(merged.map((e) => e.aramaic), ['אַבָּא', 'גברא']);
+      expect(merged.first.hebrew, 'אב *** פרי');
+      expect(merged.first.dictionary, AramaicDictionaryEntry.peshitaDictionary);
+    });
+
+    test('withoutRepeatedMeanings מדלג על פירוש שכבר הופיע', () {
+      final presentation = AramaicDictionaryEntryPresentation.parse(
+        'ארץ, קרקע *** קרקע *** ארץ (= הסבר) *** אדמה',
+      ).withoutRepeatedMeanings();
+
+      expect(presentation.meanings.map((m) => m.mainText), [
+        'ארץ, קרקע',
+        'ארץ',
+        'אדמה',
+      ]);
+    });
+  });
+
   group('AramaicDictionaryEntryPresentation', () {
     test('מפרק פירושים מרובים לצורות תצוגה נפרדות', () {
       final presentation = AramaicDictionaryEntryPresentation.parse(
@@ -353,6 +394,45 @@ void main() {
       );
 
       expect(entries, hasLength(1));
+    });
+
+    testWidgets('התפריט מציג ערך אחד לכל מפתח, מכל המילונים', (tester) async {
+      final repo = DictionaryLookupRepository(
+        loadAramaicEntries: () async => const <AramaicDictionaryEntry>[
+          AramaicDictionaryEntry(aramaic: 'ארעא', hebrew: 'ארץ'),
+          AramaicDictionaryEntry(
+            aramaic: 'ארעא',
+            hebrew: '{אַרְעָא} אֲדָמָה',
+            dictionary: 'מפירוש אונקלוס על התורה',
+          ),
+          AramaicDictionaryEntry(
+            aramaic: 'גברא',
+            hebrew: 'איש',
+            dictionary: 'מילון שיח ישראל',
+          ),
+        ],
+      );
+      await repo.ensureAramaicLoaded();
+      await tester.pumpWidget(
+        const MaterialApp(home: Scaffold(body: SizedBox.shrink())),
+      );
+      final context = tester.element(find.byType(SizedBox));
+
+      final merged = buildDictionaryContextMenuEntries(
+        context: context,
+        selectedText: 'ארעא',
+        repository: repo,
+      );
+      final other = buildDictionaryContextMenuEntries(
+        context: context,
+        selectedText: 'גברא',
+        repository: repo,
+      );
+
+      expect(merged.single.children!, hasLength(1));
+      expect(merged.single.children!.single.label, contains('ארץ'));
+      expect(merged.single.children!.single.label, contains('אֲדָמָה'));
+      expect(other.single.children!.single.label, contains('איש'));
     });
 
     testWidgets('נופל חזרה לחיפוש ארמי כשאין התאמת ראשי תיבות', (tester) async {
@@ -478,6 +558,88 @@ void main() {
     });
   });
 
+  group('מספר מילונים ארמיים', () {
+    const other = 'מילון שיח ישראל';
+    const entries = <AramaicDictionaryEntry>[
+      AramaicDictionaryEntry(aramaic: 'אבא', hebrew: 'אב'),
+      AramaicDictionaryEntry(
+        aramaic: 'אבא',
+        hebrew: 'פרי',
+        dictionary: 'מפירוש אונקלוס על התורה',
+      ),
+      AramaicDictionaryEntry(
+        aramaic: 'גברא',
+        hebrew: 'איש',
+        dictionary: other,
+      ),
+      AramaicDictionaryEntry(aramaic: 'בר אבא', hebrew: 'בן אבא'),
+    ];
+
+    Future<DictionaryLookupRepository> load() async {
+      final repo = DictionaryLookupRepository(
+        loadAramaicEntries: () async => entries,
+      );
+      await repo.ensureAramaicLoaded();
+      return repo;
+    }
+
+    test('ברירת המחדל מחזירה ערכי "פשיטא" בלבד', () async {
+      final repo = await load();
+
+      expect(repo.findAramaicMatches('אבא').map((e) => e.hebrew), <String>[
+        'אב',
+        'בן אבא',
+      ]);
+      expect(repo.findAramaicMatches('גברא'), isEmpty);
+    });
+
+    test('ערך במילון אחר אינו משנה את תוצאות ברירת המחדל', () async {
+      final repo = DictionaryLookupRepository(
+        loadAramaicEntries: () async => const [
+          AramaicDictionaryEntry(aramaic: 'בר גברא', hebrew: 'בן אדם'),
+          AramaicDictionaryEntry(
+            aramaic: 'גברא',
+            hebrew: 'איש',
+            dictionary: other,
+          ),
+        ],
+      );
+      await repo.ensureAramaicLoaded();
+
+      expect(repo.findAramaicMatches('גברא').map((e) => e.hebrew), <String>[
+        'בן אדם',
+      ]);
+    });
+
+    test('מפתח זהה בכמה מילונים מוצג בכולם, "פשיטא" ראשון', () async {
+      final repo = await load();
+      final matches = repo.findAramaicMatches(
+        'אבא',
+        dictionaries: {...repo.aramaicDictionaryNames},
+      );
+
+      expect(matches.map((e) => (e.dictionary, e.hebrew)), [
+        (AramaicDictionaryEntry.peshitaDictionary, 'אב'),
+        ('מפירוש אונקלוס על התורה', 'פרי'),
+        (AramaicDictionaryEntry.peshitaDictionary, 'בן אבא'),
+      ]);
+    });
+
+    test('אפשר לבקש מילון אחד בשמו', () async {
+      final repo = await load();
+
+      expect(
+        repo.findAramaicMatches('גברא', dictionaries: {other}).single.hebrew,
+        'איש',
+      );
+      expect(repo.aramaicDictionaryNames, <String>[
+        AramaicDictionaryEntry.peshitaDictionary,
+        'מפירוש אונקלוס על התורה',
+        other,
+      ]);
+    });
+  });
+
   group('findAramaicMatches (perf)', () {
     test('חיפוש אינו מנרמל מחדש את ערכי המילון בכל קריאה', () async {
       final entries = [
@@ -540,4 +702,7 @@ class _CountingAramaicEntry implements AramaicDictionaryEntry {
 
   @override
   String get hebrew => '';
+
+  @override
+  String get dictionary => AramaicDictionaryEntry.peshitaDictionary;
 }

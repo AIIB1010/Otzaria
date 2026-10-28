@@ -1,4 +1,3 @@
-import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:otzaria_icons/otzaria_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:otzaria/core/messages/tools_messages.dart';
@@ -10,11 +9,12 @@ import 'package:otzaria/tools/tool_query.dart';
 import 'package:otzaria/utils/text/text_manipulation.dart';
 import 'package:otzaria/widgets/navigation/app_top_bar.dart';
 import 'package:otzaria/widgets/text/otzaria_search_field.dart';
+import 'package:otzaria/widgets/controls/segmented_control.dart';
 import 'package:otzaria/widgets/feedback/tool_empty_state.dart';
 import 'package:otzaria/widgets/misc/tool_ui_helpers.dart';
 
 /// מסנן ערכים ש-[field] שלהם מכיל את [query] וממיין: מדויק < מתחיל ב- < מילה שלמה < מכיל.
-/// הדירוג נקבע פעם אחת לערך ולא בכל השוואה, כי המיון מריץ RegExp על ערכים ארוכים.
+/// בכל רמת התאמה "פשיטא" קודם, ובשוויון נשמר סדר הקלט (המיון של Dart אינו יציב).
 @visibleForTesting
 List<Map<String, String>> rankAramaicMatches(
   List<Map<String, String>> entries,
@@ -22,8 +22,11 @@ List<Map<String, String>> rankAramaicMatches(
   String query,
 ) {
   final wholeWord = RegExp('(^|\\s)${RegExp.escape(query)}(\$|\\s)');
-  final ranked = <({int rank, int pos, Map<String, String> entry})>[];
-  for (final entry in entries) {
+  final ranked =
+      <
+        ({int rank, bool other, int pos, int order, Map<String, String> entry})
+      >[];
+  for (final (order, entry) in entries.indexed) {
     final text = entry[field]!;
     final pos = text.indexOf(query);
     if (pos < 0) continue;
@@ -34,17 +37,69 @@ List<Map<String, String>> rankAramaicMatches(
         : wholeWord.hasMatch(text)
         ? 2
         : 3;
-    ranked.add((rank: rank, pos: pos, entry: entry));
+    final other =
+        (entry['dictionary'] ?? AramaicDictionaryEntry.peshitaDictionary) !=
+        AramaicDictionaryEntry.peshitaDictionary;
+    ranked.add((
+      rank: rank,
+      other: other,
+      pos: pos,
+      order: order,
+      entry: entry,
+    ));
   }
   ranked.sort((a, b) {
     final rankCompare = a.rank.compareTo(b.rank);
     if (rankCompare != 0) return rankCompare;
+    if (a.other != b.other) return a.other ? 1 : -1;
     final posCompare = a.pos.compareTo(b.pos);
     if (posCompare != 0) return posCompare;
-    return a.entry[field]!.length.compareTo(b.entry[field]!.length);
+    final lengthCompare = a.entry[field]!.length.compareTo(
+      b.entry[field]!.length,
+    );
+    if (lengthCompare != 0) return lengthCompare;
+    return a.order.compareTo(b.order);
   });
   return [for (final r in ranked) r.entry];
 }
+
+/// ממזג תוצאות בעלות אותו מפתח, גם ממילונים שונים, לכרטיס אחד עם כל הפירושים.
+/// פירושי "פשיטא" קודמים; פירוש זהה שחוזר אינו מוצג פעמיים.
+@visibleForTesting
+List<Map<String, String>> mergeAramaicMatches(
+  List<Map<String, String>> ranked,
+) {
+  final groups = <String, List<Map<String, String>>>{};
+  for (final entry in ranked) {
+    (groups[entry['aramaicPlain']!] ??= []).add(entry);
+  }
+
+  return [
+    for (final group in groups.values)
+      if (group.length == 1)
+        group.single
+      else
+        _mergeGroup([
+          ...group.where((e) => !_isOtherDictionary(e)),
+          ...group.where(_isOtherDictionary),
+        ]),
+  ];
+}
+
+bool _isOtherDictionary(Map<String, String> entry) =>
+    (entry['dictionary'] ?? AramaicDictionaryEntry.peshitaDictionary) !=
+    AramaicDictionaryEntry.peshitaDictionary;
+
+Map<String, String> _mergeGroup(List<Map<String, String>> group) => {
+  ...group.first,
+  'hebrew': DictionaryLookupRepository.mergeAramaicMeanings(
+    group.map((e) => e['hebrew']!),
+  ),
+  'hebrewPlain': group.map((e) => e['hebrewPlain']!).join(' '),
+};
+
+// בלי גרשיים, כמו בתפריט ההקשר: "ב"ד" צריך למצוא גם את המפתח ב''ד.
+String _stripQuotes(String text) => text.replaceAll(RegExp("[\"'״׳]"), '');
 
 class AramaicDictionaryScreen extends StatefulWidget {
   const AramaicDictionaryScreen({super.key, this.repository, this.queryInbox});
@@ -67,6 +122,7 @@ class _AramaicDictionaryScreenState extends State<AramaicDictionaryScreen>
   List<Map<String, String>> _filteredResults = [];
   bool _isLoading = true;
   bool _isHebrewToAramaic = false;
+  String _query = '';
 
   @override
   ToolQueryInbox? get toolQueryInbox => widget.queryInbox;
@@ -109,9 +165,14 @@ class _AramaicDictionaryScreenState extends State<AramaicDictionaryScreen>
           return <String, String>{
             'aramaic': entry.aramaic,
             'hebrew': entry.hebrew,
+            'dictionary': entry.dictionary,
             // שדות החיפוש בלי ניקוד, כדי שהקלדה רגילה תמצא ערכים מנוקדים.
-            'aramaicPlain': removeVolwels(entry.aramaic),
-            'hebrewPlain': removeVolwels(entry.hebrew),
+            'aramaicPlain': _stripQuotes(removeVolwels(entry.aramaic)),
+            'hebrewPlain': removeVolwels(
+              AramaicDictionaryEntryPresentation.parse(
+                entry.hebrew,
+              ).meanings.map((meaning) => meaning.hebrewText).join(' '),
+            ),
           };
         }).toList();
         _isLoading = false;
@@ -129,9 +190,11 @@ class _AramaicDictionaryScreenState extends State<AramaicDictionaryScreen>
 
   void _performSearch(String query) {
     query = removeVolwels(query.trim());
+    if (!_isHebrewToAramaic) query = _stripQuotes(query);
 
     if (query.isEmpty) {
       setState(() {
+        _query = '';
         _filteredResults = [];
       });
       return;
@@ -139,13 +202,23 @@ class _AramaicDictionaryScreenState extends State<AramaicDictionaryScreen>
 
     final field = _isHebrewToAramaic ? 'hebrewPlain' : 'aramaicPlain';
     setState(() {
-      _filteredResults = rankAramaicMatches(_dictionaryData, field, query);
+      _query = query;
+      _filteredResults = mergeAramaicMatches(
+        rankAramaicMatches(_dictionaryData, field, query),
+      );
     });
   }
 
-  void _toggleDirection() {
-    setState(() => _isHebrewToAramaic = !_isHebrewToAramaic);
+  void _setDirection(bool hebrewToAramaic) {
+    setState(() => _isHebrewToAramaic = hebrewToAramaic);
     _performSearch(_searchController.text);
+    _searchFocusNode.requestFocus();
+  }
+
+  void _searchFor(String text, {required bool hebrewToAramaic}) {
+    _isHebrewToAramaic = hebrewToAramaic;
+    fillSearchField(_searchController, text);
+    _performSearch(text);
     _searchFocusNode.requestFocus();
   }
 
@@ -173,7 +246,10 @@ class _AramaicDictionaryScreenState extends State<AramaicDictionaryScreen>
                   : 'חפש מילה בארמית...',
               autofocus: true,
               onChanged: _performSearch,
-              onClear: () => setState(() => _filteredResults = []),
+              onClear: () => setState(() {
+                _query = '';
+                _filteredResults = [];
+              }),
             ),
           ),
           Expanded(
@@ -193,50 +269,40 @@ class _AramaicDictionaryScreenState extends State<AramaicDictionaryScreen>
 
   Widget _buildDirectionToggle() {
     final cs = Theme.of(context).colorScheme;
+    final count = _filteredResults.length;
+    final width = MediaQuery.sizeOf(context).width;
+
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: AppTokens.spaceMD,
         vertical: AppTokens.spaceSM,
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            'עברית',
-            style: TextStyle(
-              fontSize: AppTokens.fontLG,
-              fontWeight: _isHebrewToAramaic
-                  ? FontWeight.bold
-                  : FontWeight.normal,
-              color: _isHebrewToAramaic ? cs.primary : cs.onSurface,
+      child: SizedBox(
+        width: double.infinity,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            AppSegmentedControl<bool>(
+              options: const [
+                SegmentOption(value: false, label: 'ארמית לעברית'),
+                SegmentOption(value: true, label: 'עברית לארמית'),
+              ],
+              currentValue: _isHebrewToAramaic,
+              onChanged: _setDirection,
             ),
-          ),
-          const SizedBox(width: AppTokens.spaceMD - 4),
-          IconButton(
-            icon: Icon(
-              _isHebrewToAramaic
-                  ? FluentIcons.arrow_right_24_regular
-                  : FluentIcons.arrow_left_24_regular,
-            ),
-            onPressed: _toggleDirection,
-            tooltip: 'החלף כיוון',
-            style: IconButton.styleFrom(
-              backgroundColor: cs.primaryContainer,
-              foregroundColor: cs.onPrimaryContainer,
-            ),
-          ),
-          const SizedBox(width: AppTokens.spaceMD - 4),
-          Text(
-            'ארמית',
-            style: TextStyle(
-              fontSize: AppTokens.fontLG,
-              fontWeight: !_isHebrewToAramaic
-                  ? FontWeight.bold
-                  : FontWeight.normal,
-              color: !_isHebrewToAramaic ? cs.primary : cs.onSurface,
-            ),
-          ),
-        ],
+            if (_query.isNotEmpty && count > 0 && width >= 560)
+              PositionedDirectional(
+                end: 0,
+                child: Text(
+                  count == 1 ? 'ערך אחד' : '$count ערכים',
+                  style: TextStyle(
+                    fontSize: AppTokens.fontMD,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -264,7 +330,9 @@ class _AramaicDictionaryScreenState extends State<AramaicDictionaryScreen>
         return AramaicResultCard(
           aramaic: entry['aramaic']!,
           hebrew: entry['hebrew']!,
-          isHebrewToAramaic: _isHebrewToAramaic,
+          query: _query,
+          queryIsAramaic: !_isHebrewToAramaic,
+          onSearch: _searchFor,
         );
       },
     );

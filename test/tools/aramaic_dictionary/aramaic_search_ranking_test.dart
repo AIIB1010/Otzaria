@@ -20,16 +20,22 @@ List<Map<String, String>> _referenceSearch(
     return 3;
   }
 
-  return data.where((entry) => entry[field]!.contains(query)).toList()
-    ..sort((a, b) {
-      final textA = a[field]!;
-      final textB = b[field]!;
-      final rankCompare = rank(textA).compareTo(rank(textB));
-      if (rankCompare != 0) return rankCompare;
-      final posCompare = textA.indexOf(query).compareTo(textB.indexOf(query));
-      if (posCompare != 0) return posCompare;
-      return textA.length.compareTo(textB.length);
-    });
+  // בשוויון נשמר סדר הקלט: המיון של Dart אינו יציב, והמסך דורש תוצאה יציבה.
+  final matches = [
+    for (final (i, entry) in data.indexed)
+      if (entry[field]!.contains(query)) (i, entry),
+  ];
+  matches.sort((a, b) {
+    final textA = a.$2[field]!;
+    final textB = b.$2[field]!;
+    final rankCompare = rank(textA).compareTo(rank(textB));
+    if (rankCompare != 0) return rankCompare;
+    final posCompare = textA.indexOf(query).compareTo(textB.indexOf(query));
+    if (posCompare != 0) return posCompare;
+    final lengthCompare = textA.length.compareTo(textB.length);
+    return lengthCompare != 0 ? lengthCompare : a.$1.compareTo(b.$1);
+  });
+  return [for (final m in matches) m.$2];
 }
 
 List<Map<String, String>> _loadRealDictionary() {

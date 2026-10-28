@@ -219,7 +219,10 @@ void main() {
       final index = DictionaryLookupRepository.decodeAramaicIndex(rawJson);
       stopwatch.stop();
 
-      expect(index.entries.length, entries.length);
+      expect(
+        index.entries.where((e) => e.dictionary == _dictionaryName).length,
+        entries.length,
+      );
       // תקרה נדיבה (CI איטי): ב-5,000 ערכים הפענוח לוקח עשרות אלפיות שנייה.
       expect(stopwatch.elapsedMilliseconds, lessThan(5000));
     });

@@ -605,5 +605,53 @@ void main() {
         _codedError('error.invalid_params'),
       );
     });
+
+    test('dictionaries חייב להיות רשימת שמות', () async {
+      for (final bad in <Object>[
+        'מילון פשיטא',
+        [1],
+        List.filled(21, 'x'),
+        ['x' * 101],
+      ]) {
+        expect(
+          () => buildAdapter().execute('tools', 'dictionary', {
+            'term': 'אבא',
+            'dictionaries': bad,
+          }),
+          _codedError('error.invalid_params'),
+          reason: '$bad',
+        );
+      }
+    });
+
+    test('ברירת המחדל "פשיטא" בלבד; dictionaries בוחר מילון בשמו', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      const other = 'מילון שיח ישראל';
+      final byDefault = await buildAdapter().execute('tools', 'dictionary', {
+        'term': 'אבידתא',
+      });
+      final chosen = await buildAdapter().execute('tools', 'dictionary', {
+        'term': 'אבידתא',
+        'dictionaries': [other],
+      });
+      final peshita = await buildAdapter().execute('tools', 'dictionary', {
+        'term': 'גברא',
+      });
+
+      final defaultAramaic = (byDefault as Map)['aramaic'] as List;
+      final chosenAramaic = (chosen as Map)['aramaic'] as List;
+      expect(
+        defaultAramaic.every((e) => e['dictionary'] == 'מילון פשיטא'),
+        isTrue,
+      );
+      final peshitaAramaic = (peshita as Map)['aramaic'] as List;
+      expect(peshitaAramaic, isNotEmpty);
+      expect(
+        peshitaAramaic.every((e) => e['dictionary'] == 'מילון פשיטא'),
+        isTrue,
+      );
+      expect(chosenAramaic, isNotEmpty);
+      expect(chosenAramaic.every((e) => e['dictionary'] == other), isTrue);
+    });
   });
 }

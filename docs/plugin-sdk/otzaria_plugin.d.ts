@@ -911,8 +911,8 @@ export interface GematriaResult {
 export interface DictionaryLookupResult {
   term: string;
   acronyms: Array<{ acronym: string; meanings: string[] }>;
-  /** `hebrew` הוא טקסט עם סימון מקורי. */
-  aramaic: Array<{ aramaic: string; hebrew: string }>;
+  /** `hebrew` הוא טקסט עם סימון מקורי; `dictionary` הוא שם המילון (מ-0.9.99). */
+  aramaic: Array<{ aramaic: string; hebrew: string; dictionary: string }>;
 }
 
 export type JewishHolidayKind =

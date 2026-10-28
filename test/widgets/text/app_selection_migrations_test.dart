@@ -127,7 +127,6 @@ void main() {
             child: AramaicResultCard(
               aramaic: 'אבא',
               hebrew: 'אב',
-              isHebrewToAramaic: false,
             ),
           ),
         ),

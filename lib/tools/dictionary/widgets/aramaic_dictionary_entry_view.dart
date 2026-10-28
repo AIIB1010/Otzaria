@@ -9,15 +9,22 @@ class AramaicDictionaryEntryView extends StatelessWidget {
     required this.definition,
     this.maxMeanings,
     this.compact = false,
+    this.skipRepeatedMeanings = false,
   });
 
   final String definition;
   final int? maxMeanings;
   final bool compact;
 
+  /// מדלג על פירוש שכל חלקיו כבר הופיעו קודם (לערך שמוזג מכמה מילונים).
+  final bool skipRepeatedMeanings;
+
   @override
   Widget build(BuildContext context) {
-    final parsedEntry = AramaicDictionaryEntryPresentation.parse(definition);
+    final parsed = AramaicDictionaryEntryPresentation.parse(definition);
+    final parsedEntry = skipRepeatedMeanings
+        ? parsed.withoutRepeatedMeanings()
+        : parsed;
     final meanings = maxMeanings == null
         ? parsedEntry.meanings
         : parsedEntry.meanings.take(maxMeanings!).toList();

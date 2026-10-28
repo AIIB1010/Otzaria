@@ -6899,6 +6899,15 @@ class PluginBridgeAdapter {
           if (term is! String || term.trim().isEmpty || term.length > 200) {
             throw Exception('error.invalid_params: term required');
           }
+          final dictionaries = args['dictionaries'];
+          if (dictionaries != null &&
+              (dictionaries is! List ||
+                  dictionaries.length > 20 ||
+                  dictionaries.any((d) => d is! String || d.length > 100))) {
+            throw Exception(
+              'error.invalid_params: dictionaries must be a list of names',
+            );
+          }
           final names = await _derivedTextNames(null, args);
           final repository = DictionaryLookupRepository.instance;
           await repository.ensureAcronymsLoaded();
@@ -6918,11 +6927,17 @@ class PluginBridgeAdapter {
                 )
                 .toList(),
             'aramaic': repository
-                .findAramaicMatches(term)
+                .findAramaicMatches(
+                  term,
+                  dictionaries: dictionaries == null
+                      ? const {AramaicDictionaryEntry.peshitaDictionary}
+                      : {...dictionaries.cast<String>()},
+                )
                 .map(
                   (e) => {
                     'aramaic': e.aramaic,
                     'hebrew': filterPluginDivineNamesText(e.hebrew, names),
+                    'dictionary': e.dictionary,
                   },
                 )
                 .toList(),

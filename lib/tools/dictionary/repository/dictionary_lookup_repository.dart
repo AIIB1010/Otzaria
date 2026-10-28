@@ -39,10 +39,17 @@ class AramaicDictionaryEntry {
   const AramaicDictionaryEntry({
     required this.aramaic,
     required this.hebrew,
+    this.dictionary = peshitaDictionary,
   });
+
+  /// המילון הראשי: ערכיו קודמים לשאר המילונים בתוצאות ובדירוג.
+  static const String peshitaDictionary = 'מילון פשיטא';
 
   final String aramaic;
   final String hebrew;
+
+  /// שם המילון שממנו הערך, כפי שהוא מופיע בקובץ הנתונים.
+  final String dictionary;
 }
 
 /// מייצג ערך במילון לעזי רש"י (ספר "אוצר לעזי רש"י").
@@ -255,13 +262,24 @@ class LaazDictionaryEntry {
 class ParsedAramaicMeaning {
   const ParsedAramaicMeaning({
     required this.mainText,
+    String? hebrewText,
     this.expression,
     this.expansion,
-  });
+  }) : hebrewText = hebrewText ?? mainText;
 
   final String mainText;
+
+  /// התרגום לחיפוש, בלי הביטוי או ההרחבה הארמית.
+  final String hebrewText;
   final String? expression;
   final String? expansion;
+
+  /// כל חלקי הפירוש המוצגים, להעתקה.
+  String get text => [
+    ?expression,
+    if (mainText.isNotEmpty) mainText,
+    if (expansion != null) '(=$expansion)',
+  ].join(' ');
 }
 
 /// מייצג ערך מלא במילון לאחר חלוקה לפירושים.
@@ -271,6 +289,34 @@ class AramaicDictionaryEntryPresentation {
   });
 
   final List<ParsedAramaicMeaning> meanings;
+
+  static final RegExp _alternativeSeparator = RegExp('[,;]');
+  static final RegExp _quotes = RegExp("[\"'״׳]");
+
+  /// בלי פירוש שכל חלקיו (מופרדים בפסיק) כבר הופיעו בפירוש קודם, כדי שערך
+  /// שמוזג מכמה מילונים לא יחזור על עצמו ("ארץ, קרקע" ואחריו "קרקע").
+  AramaicDictionaryEntryPresentation withoutRepeatedMeanings() {
+    final seen = <String>{};
+    final kept = <ParsedAramaicMeaning>[];
+    for (final meaning in meanings) {
+      final parts = meaning.mainText
+          .split(_alternativeSeparator)
+          .map(
+            (part) => utils.removeVolwels(part).replaceAll(_quotes, '').trim(),
+          )
+          .where((part) => part.isNotEmpty)
+          .toList();
+      final repeated =
+          parts.isNotEmpty &&
+          meaning.expansion == null &&
+          parts.every(seen.contains);
+      if (repeated) continue;
+
+      seen.addAll(parts);
+      kept.add(meaning);
+    }
+    return AramaicDictionaryEntryPresentation(meanings: kept);
+  }
 
   static AramaicDictionaryEntryPresentation parse(String raw) {
     final normalized = raw.replaceAll(RegExp(r'\s*\*\*\*\s*'), '***').trim();
@@ -293,12 +339,15 @@ class AramaicDictionaryEntryPresentation {
   }
 
   static ParsedAramaicMeaning _parseMeaning(String raw) {
-    final expressionMatch = RegExp(r'^\{([^{}]+)\}\s*').firstMatch(raw);
+    final expressionMatch =
+        RegExp(r'^\{([^{}]+)\}\s*').firstMatch(raw) ??
+        RegExp(r'^(\S+)(?=\(=)').firstMatch(raw);
     final expression = expressionMatch?.group(1)?.trim();
     var remaining = expressionMatch == null
         ? raw.trim()
         : raw.substring(expressionMatch.end).trim();
 
+    var hebrewText = remaining;
     String? expansion;
     final expansionAtStart = RegExp(
       r'^\(=\s*([^)]+?)\)\s*',
@@ -306,6 +355,8 @@ class AramaicDictionaryEntryPresentation {
     if (expansionAtStart != null) {
       expansion = expansionAtStart.group(1)?.trim();
       remaining = remaining.substring(expansionAtStart.end).trim();
+      // הרחבה בתחילת פירוש היא ארמית, אלא אם היא הפירוש היחיד.
+      hebrewText = remaining.isEmpty ? expansion! : remaining;
     } else {
       final inlineExpansion = RegExp(
         r'\s+\(=\s*([^)]+?)\)\s*',
@@ -320,6 +371,7 @@ class AramaicDictionaryEntryPresentation {
 
     return ParsedAramaicMeaning(
       mainText: remaining,
+      hebrewText: hebrewText,
       expression: expression,
       expansion: expansion,
     );
@@ -369,6 +421,7 @@ class DictionaryLookupRepository {
   Map<String, String> _originalAcronymByKey = <String, String>{};
   List<AramaicDictionaryEntry> _aramaicEntries = <AramaicDictionaryEntry>[];
   Set<String> _aramaicTerms = <String>{};
+  List<String> _aramaicDictionaryNames = const <String>[];
   // מקביל ל-_aramaicEntries: הנרמול נעשה פעם אחת בטעינה ולא בכל תפריט הקשר.
   List<({String normalized, List<String> words})> _aramaicIndex = const [];
   List<LaazDictionaryEntry> _laazEntries = <LaazDictionaryEntry>[];
@@ -524,7 +577,7 @@ class DictionaryLookupRepository {
   /// במקום לתת לכל קריאה ל-[acronymMatchesQuery] לנרמל את אותה שאילתה מחדש.
   String normalizeAcronymQuery(String raw) => _normalizeAcronym(raw);
 
-  /// מחזיר את כל רשומות המילון הארמי-עברי.
+  /// מחזיר את כל רשומות המילון הארמי-עברי, מכל המילונים ובסדר הקובץ.
   List<AramaicDictionaryEntry> getAllAramaicEntries() {
     return List<AramaicDictionaryEntry>.unmodifiable(_aramaicEntries);
   }
@@ -587,15 +640,49 @@ class DictionaryLookupRepository {
     return _normalizeAcronym(acronym).contains(normalizedQuery);
   }
 
-  /// מחזיר את כל הביטויים הארמיים המכילים את המילה שנבחרה,
-  /// אבל רק אם קיימת התאמה מילונית מדויקת למילה עצמה.
-  ///
-  /// התאמות מדויקות מוחזרות תמיד במלואן. [maxContainingMatches] מגביל רק את
-  /// הצירופים שמכילים את המילה בתוכם (תפריט הקשר על מילה שכיחה כמו "ליה" היה
-  /// מציג מאות שורות); כשיש יותר ממנו נשארים הקצרים ביותר, בסדר המילון.
+  /// שמות כל המילונים הארמיים שנטענו, בסדר הקובץ ("פשיטא" ראשון).
+  List<String> get aramaicDictionaryNames => _aramaicDictionaryNames;
+
+  /// ממזג התאמות בעלות אותו מפתח (גם ממילונים שונים) לערך אחד, בסדר הופעתן.
+  static List<AramaicDictionaryEntry> mergeAramaicMatches(
+    List<AramaicDictionaryEntry> matches,
+  ) {
+    final groups = <String, List<AramaicDictionaryEntry>>{};
+    for (final entry in matches) {
+      (groups[_normalizeAramaic(entry.aramaic)] ??= []).add(entry);
+    }
+
+    return [
+      for (final group in groups.values)
+        if (group.length == 1)
+          group.single
+        else
+          AramaicDictionaryEntry(
+            aramaic: group.first.aramaic,
+            hebrew: mergeAramaicMeanings(group.map((entry) => entry.hebrew)),
+            dictionary: group.first.dictionary,
+          ),
+    ];
+  }
+
+  /// מחבר פירושים של אותו מפתח לערך אחד; חלק ("***") זהה, בלי ניקוד, מופיע פעם.
+  static String mergeAramaicMeanings(Iterable<String> meanings) {
+    final seen = <String>{};
+    return [
+      for (final meaning in meanings)
+        for (final part in meaning.split('***'))
+          if (part.trim().isNotEmpty &&
+              seen.add(utils.removeVolwels(part.trim())))
+            part.trim(),
+    ].join(' *** ');
+  }
+
+  /// התאמות מדויקות וכל פירושי עד [maxContainingMatches] הצירופים הקצרים, בסדר המילון.
+  /// נדרשת מילה שקיימת במילון; [dictionaries] בוחר מילונים, כברירת מחדל "פשיטא" בלבד.
   List<AramaicDictionaryEntry> findAramaicMatches(
     String raw, {
     int? maxContainingMatches,
+    Set<String> dictionaries = const {AramaicDictionaryEntry.peshitaDictionary},
   }) {
     assert(maxContainingMatches == null || maxContainingMatches >= 0);
     final normalizedWord = _normalizeAramaic(raw);
@@ -608,6 +695,7 @@ class DictionaryLookupRepository {
     var containing = <int>[];
 
     for (var i = 0; i < _aramaicEntries.length; i++) {
+      if (!dictionaries.contains(_aramaicEntries[i].dictionary)) continue;
       final indexed = _aramaicIndex[i];
       if (indexed.normalized == normalizedWord) {
         exact.add(_aramaicEntries[i]);
@@ -621,14 +709,20 @@ class DictionaryLookupRepository {
 
     if (maxContainingMatches != null &&
         containing.length > maxContainingMatches) {
-      containing =
+      final selectedKeys =
           (containing..sort((a, b) {
                 final byLength = _aramaicIndex[a].words.length.compareTo(
                   _aramaicIndex[b].words.length,
                 );
                 return byLength != 0 ? byLength : a.compareTo(b);
               }))
+              .map((i) => _aramaicIndex[i].normalized)
+              .toSet()
               .take(maxContainingMatches)
+              .toSet();
+      containing =
+          containing
+              .where((i) => selectedKeys.contains(_aramaicIndex[i].normalized))
               .toList()
             ..sort();
     }
@@ -683,6 +777,9 @@ class DictionaryLookupRepository {
     final loaded = await _loadAramaic();
     _aramaicEntries = loaded.entries;
     _aramaicTerms = loaded.terms;
+    _aramaicDictionaryNames = List<String>.unmodifiable(
+      loaded.entries.map((entry) => entry.dictionary).toSet(),
+    );
     _aramaicIndex = loaded.index;
   }
 
@@ -784,25 +881,53 @@ class DictionaryLookupRepository {
   @visibleForTesting
   static AramaicIndex decodeAramaicIndex(String jsonString) {
     final jsonData = _decodeJsonObject(jsonString);
-    final List<dynamic> entries = jsonData['מילון פשיטא'] ?? <dynamic>[];
+    // "פשיטא" ראשון, כדי שבמפתח זהה הוא יקדם את שאר המילונים.
+    final names = <String>[
+      if (jsonData[AramaicDictionaryEntry.peshitaDictionary] is List)
+        AramaicDictionaryEntry.peshitaDictionary,
+      for (final name in jsonData.keys)
+        if (name != AramaicDictionaryEntry.peshitaDictionary &&
+            jsonData[name] is List)
+          name,
+    ];
 
-    final parsed = entries
-        .whereType<Map<String, dynamic>>()
-        .map((entry) {
-          if (entry.isEmpty) {
-            return null;
-          }
+    final parsed = <AramaicDictionaryEntry>[];
+    for (final name in names) {
+      for (final entry in (jsonData[name] as List).whereType<Map>()) {
+        if (entry.isEmpty) continue;
 
-          final aramaic = entry.keys.first;
+        final aramaic = entry.keys.first as String;
+        final hebrew = entry[aramaic].toString();
+        if (_isPlaceholderEntry(aramaic, hebrew)) continue;
 
-          return AramaicDictionaryEntry(
+        parsed.add(
+          AramaicDictionaryEntry(
             aramaic: aramaic,
-            hebrew: entry[aramaic].toString(),
-          );
-        })
-        .whereType<AramaicDictionaryEntry>()
-        .toList();
+            hebrew: hebrew,
+            dictionary: name,
+          ),
+        );
+      }
+    }
     return _buildAramaicIndex(parsed);
+  }
+
+  static const Set<String> _placeholderMeanings = {'*', '(סימן)'};
+  static final RegExp _hebrewLetter = RegExp('[א-ת]');
+
+  /// ערכי מילוי ("*", "(סימן)") ושורות בלי אות עברית אינם פירוש ואינם נטענים.
+  static bool _isPlaceholderEntry(String aramaic, String hebrew) {
+    if (!_hebrewLetter.hasMatch(aramaic)) return true;
+
+    return hebrew
+        .split('***')
+        .map((part) => part.trim())
+        .where((part) => part.isNotEmpty)
+        .every(
+          (part) =>
+              _placeholderMeanings.contains(part) ||
+              !_hebrewLetter.hasMatch(part),
+        );
   }
 
   static Future<List<LaazDictionaryEntry>> _defaultLoadLaazEntries() async {
@@ -899,6 +1024,7 @@ class DictionaryLookupRepository {
   void _resetAramaicCache() {
     _aramaicEntries = <AramaicDictionaryEntry>[];
     _aramaicTerms = <String>{};
+    _aramaicDictionaryNames = const <String>[];
     _aramaicIndex = const [];
     _areAramaicLoaded = false;
   }
