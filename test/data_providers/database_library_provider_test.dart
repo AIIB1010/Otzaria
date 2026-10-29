@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -2961,6 +2962,180 @@ void main() {
         expect(nestedCategory.path, '/ספרים אישיים/תיקייה קיימת/תת קטגוריה');
         expect(nestedCategory.books, hasLength(1));
         expect(nestedCategory.books.single.category, same(nestedCategory));
+      },
+    );
+
+    test(
+      'בניית עץ הספרים האישיים אינה בודקת קבצים ב-isolate הקורא (#3380)',
+      () {
+        final provider = DatabaseLibraryProvider.instance;
+        provider.clearCache();
+        final category = library_models.Category(
+          title: 'תיקייה',
+          description: '',
+          shortDescription: '',
+          order: 1,
+          subCategories: [],
+          books: [],
+          parent: library_models.Library(categories: []),
+        );
+        final filePath = path.join(
+          Directory.systemTemp.path,
+          'missing',
+          'א.pdf',
+        );
+        final touched = <String>[];
+
+        IOOverrides.runZoned(
+          () => provider.populateUserBooksCategoryForTesting(
+            targetCategory: category,
+            dbCategory: const migration_models.Category(
+              id: 30,
+              parentId: null,
+              title: 'תיקייה',
+              level: 0,
+              orderIndex: 1,
+            ),
+            booksByCategory: {
+              30: [
+                {
+                  'id': 300,
+                  'title': 'א',
+                  'categoryId': 30,
+                  'orderIndex': 1,
+                  'fileType': 'pdf',
+                  'filePath': filePath,
+                },
+              ],
+            },
+            categoriesByParent: const {},
+            authorsByBookId: const {},
+            metadata: const {},
+          ),
+          createFile: (filePath) {
+            touched.add(filePath);
+            return Zone.root.run(() => File(filePath));
+          },
+        );
+
+        expect(touched, isEmpty);
+        expect((category.books.single as PdfBook).path, filePath);
+      },
+    );
+
+    // #3515: קריאת קטלוג של 18 אלף ספרים אישיים בחיבור הראשי תקעה את ה-UI.
+    test('קטלוג הספרים האישיים נקרא בחיבור נפרד, לא בחיבור הראשי', () async {
+      final tempDir = await Directory.systemTemp.createTemp(
+        'otzaria_user_books_off_ui',
+      );
+      final libraryPath = path.join(tempDir.path, 'library');
+      final database = MyDatabase.withPath(
+        path.join(libraryPath, DatabaseConstants.databaseFileName),
+      );
+      final repository = SeforimRepository(database);
+      final provider = DatabaseLibraryProvider.instance;
+      final previousLibraryPath = Settings.getValue<String>(
+        SettingsRepository.keyLibraryPath,
+      );
+      final previousDataRootPath = AppPaths.cachedDataRootPath;
+
+      addTearDown(() => tempDir.delete(recursive: true));
+      addTearDown(() => database.close());
+      addTearDown(() => provider.clearCache());
+      addTearDown(() => provider.sqliteProvider.dispose());
+      addTearDown(
+        () => AppPaths.debugOverrideDataRootPath(previousDataRootPath),
+      );
+      addTearDown(() => UserBooksDatabaseHolder.instance.close());
+      addTearDown(
+        () => Settings.setValue<String>(
+          SettingsRepository.keyLibraryPath,
+          previousLibraryPath ?? '',
+        ),
+      );
+
+      await Directory(libraryPath).create(recursive: true);
+      await provider.sqliteProvider.dispose();
+      provider.clearCache();
+      await UserBooksDatabaseHolder.instance.close();
+      AppPaths.debugOverrideDataRootPath(path.join(tempDir.path, 'data'));
+      await repository.ensureInitialized();
+      await Settings.setValue<String>(
+        SettingsRepository.keyLibraryPath,
+        libraryPath,
+      );
+
+      final userRepo = await UserBooksDatabaseHolder.instance.repository;
+      final sourceId = await userRepo.insertSource('user-test', -20);
+      final personalId = await userRepo.insertCategory(
+        const migration_models.Category(
+          title: 'ספרים אישיים',
+          parentId: null,
+          level: 0,
+          orderIndex: 1,
+        ),
+      );
+      Future<void> addBook(String title) => userRepo.insertBook(
+        migration_models.Book(
+          categoryId: personalId,
+          sourceId: sourceId,
+          title: title,
+          filePath: path.join(tempDir.path, '$title.txt'),
+          fileType: 'txt',
+        ),
+      );
+      await addBook('נשמר');
+
+      // רק החיבור הראשי רואה שורה שטרם נכתבה סופית.
+      final connection = await userRepo.database.database;
+      connection.execute('BEGIN');
+      try {
+        await addBook('טרם נשמר');
+        await provider.initialize();
+        final library = await provider.buildLibraryCatalog({}, libraryPath);
+        final personal = library.subCategories.singleWhere(
+          (c) => c.title == 'ספרים אישיים',
+        );
+        expect(personal.books.map((b) => b.title), ['נשמר']);
+      } finally {
+        connection.execute('COMMIT');
+      }
+    });
+
+    test(
+      'resolveMovedFilePathsInBackground פותר כמו resolveMovedFileBookPath',
+      () async {
+        final tempDir = await Directory.systemTemp.createTemp('otzaria_moved');
+        final activeLibrary = path.join(tempDir.path, 'new', 'books');
+        final stalePath = path.join(tempDir.path, 'old', 'books', 'ב.pdf');
+        final activePath = path.join(activeLibrary, 'ב.pdf');
+        final previousLibraryPath = Settings.getValue<String>(
+          SettingsRepository.keyLibraryPath,
+        );
+        addTearDown(() async {
+          await Settings.setValue<String>(
+            SettingsRepository.keyLibraryPath,
+            previousLibraryPath ?? '',
+          );
+          await tempDir.delete(recursive: true);
+        });
+        await Directory(activeLibrary).create(recursive: true);
+        await File(activePath).writeAsBytes([1]);
+        await Settings.setValue<String>(
+          SettingsRepository.keyLibraryPath,
+          activeLibrary,
+        );
+
+        final rows =
+            await DatabaseLibraryProvider.resolveMovedFilePathsInBackground([
+              {'id': 1, 'filePath': stalePath},
+              {'id': 2, 'filePath': null},
+              {'id': 3},
+            ]);
+
+        expect(rows[0], {'id': 1, 'filePath': activePath});
+        expect(rows[1], {'id': 2, 'filePath': null});
+        expect(rows[2], {'id': 3});
       },
     );
 

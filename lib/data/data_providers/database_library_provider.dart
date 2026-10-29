@@ -210,6 +210,73 @@ Future<AttachedCatalogRows> _readAttachedCatalogInIsolate(
   ReadOnlyDbTarget target,
 ) => Isolate.run(() => readAttachedCatalogSync(target));
 
+typedef _UserBooksCatalogRows = ({
+  List<Map<String, dynamic>> books,
+  List<Map<String, dynamic>> categories,
+  Map<int, String> authors,
+  List<Map<String, dynamic>> versions,
+});
+
+/// בטרנזקציה אחת — תמונת מצב עקבית של כל טבלאות הקטלוג של user_books.db.
+_UserBooksCatalogRows _selectUserBooksCatalog(
+  sqlite3.Database db,
+  DbCapabilities capabilities,
+) {
+  late final _UserBooksCatalogRows rows;
+  withTransaction(db, () {
+    rows = (
+      books: BookDao.selectBooksMinimal(
+        db,
+        capabilities,
+        withFileColumns: true,
+      ),
+      categories: CategoryDao.selectCategoryRows(db, capabilities),
+      authors: BookDao.selectBookAuthorsMap(db, capabilities),
+      versions: db
+          .select(
+            'SELECT versionBookId, primaryBookId, primarySource, primaryTitle, '
+            'primaryCategoryPath, versionTitle, versionNotes, priority '
+            'FROM user_book_version',
+          )
+          .toMapList(),
+    );
+  });
+  return rows;
+}
+
+/// קטלוג user_books.db ופתרון נתיבי הקבצים, על חיבור read-only ב-isolate:
+/// פענוח עשרות אלפי שורות על ה-UI isolate תקע את הממשק (#3515).
+Future<_UserBooksCatalogRows> _readUserBooksCatalogInIsolate(
+  String dbPath,
+  String libraryPath,
+) => Isolate.run(() {
+  final db = openReadOnlyTarget(trustedDbTarget(dbPath));
+  try {
+    db.execute('PRAGMA busy_timeout=5000');
+    final rows = _selectUserBooksCatalog(db, DbCapabilities.probe(db));
+    return (
+      books: [
+        for (final row in rows.books)
+          if (row['filePath'] case final String path)
+            {
+              ...row,
+              'filePath': resolveMovedFileBookPath(
+                path,
+                activeLibraryPath: libraryPath,
+              ),
+            }
+          else
+            row,
+      ],
+      categories: rows.categories,
+      authors: rows.authors,
+      versions: rows.versions,
+    );
+  } finally {
+    db.close();
+  }
+}, debugName: 'readUserBooksCatalog');
+
 /// קריאת קטלוג של מסד מצורף שעדיין רצה, כולל אחרי שבניית העץ ויתרה עליה.
 class _PendingAttachedCatalog {
   _PendingAttachedCatalog(this.future) {
@@ -3521,7 +3588,7 @@ class DatabaseLibraryProvider implements LibraryProvider, LinkLinesProvider {
   Future<void> _appendUserBooksToLibrary(
     Library library,
     Map<String, Map<String, dynamic>> metadata,
-  ) async {
+  ) => UserBooksDatabaseHolder.instance.trackRead(() async {
     try {
       final dbPath = await UserBooksDatabaseHolder.resolveDbPath();
       if (!await File(dbPath).exists()) {
@@ -3530,32 +3597,36 @@ class DatabaseLibraryProvider implements LibraryProvider, LinkLinesProvider {
 
       final repo = await UserBooksDatabaseHolder.instance.repository;
 
-      late final List<Map<String, dynamic>> userBooks;
-      late final List<Map<String, dynamic>> userCats;
-      late final Map<int, String> userAuthors;
-      late final List<UserBookVersionRecord> userVersions;
-
       // קריאת הנתונים מ-user_books.db מתבצעת *לפני* ניקוי הקאשים. אם
       // הקריאה נכשלת (למשל "database is locked" בזמן כתיבה מקבילית),
       // יוצאים דרך ה-catch בלי לגעת בקאשים או ב-library — והמצב הקודם
       // (ספרי המשתמש שכבר נטענו) נשמר עד הניסיון הבא, במקום להיעלם.
-      final db = await repo.database.database;
-      withTransaction(db, () {
-        userBooks = repo.database.bookDao.getAllBooksMinimal(
-          db,
-          withFileColumns: true,
+      _UserBooksCatalogRows rows;
+      try {
+        rows = await _readUserBooksCatalogInIsolate(
+          repo.database.path,
+          Settings.getValue<String>(SettingsRepository.keyLibraryPath) ?? '',
         );
-        userCats = repo.database.categoryDao.getAllCategoryRows(db);
-        userAuthors = repo.database.bookDao.getBookAuthorsMap(db);
-        userVersions = [
-          for (final row in db.select(
-            'SELECT versionBookId, primaryBookId, primarySource, primaryTitle, '
-            'primaryCategoryPath, versionTitle, versionNotes, priority '
-            'FROM user_book_version',
-          ))
-            ?_userBookVersionFromRow(row),
-        ];
-      });
+      } catch (e) {
+        debugPrint('⚠️ readUserBooksCatalog failed, reading directly: $e');
+        final db = await repo.database.database;
+        final direct = _selectUserBooksCatalog(
+          db,
+          DbCapabilities.forDatabase(repo.database.path, db),
+        );
+        rows = (
+          books: await resolveMovedFilePathsInBackground(direct.books),
+          categories: direct.categories,
+          authors: direct.authors,
+          versions: direct.versions,
+        );
+      }
+      final userBooks = rows.books;
+      final userCats = rows.categories;
+      final userAuthors = rows.authors;
+      final userVersions = [
+        for (final row in rows.versions) ?_userBookVersionFromRow(row),
+      ];
 
       // הקריאה הצליחה — עכשיו בטוח לנקות ולבנות מחדש. מכאן והלאה הבנייה
       // פועלת על נתונים שכבר בזיכרון ואינה ניגשת ל-DB, כך שאם תיכשל בכל
@@ -3680,6 +3751,7 @@ class DatabaseLibraryProvider implements LibraryProvider, LinkLinesProvider {
           source: BookSource.user,
           idOverride: dbBook['id'] as int? ?? 0,
           categoryIdOverride: personalRootId,
+          remapMovedPath: false,
         );
         if (book == null) continue;
         _registerUserBook(book, directBooksParent);
@@ -3754,6 +3826,7 @@ class DatabaseLibraryProvider implements LibraryProvider, LinkLinesProvider {
             source: BookSource.user,
             idOverride: dbBook['id'] as int? ?? 0,
             categoryIdOverride: pickedFolder.id,
+            remapMovedPath: false,
           );
           if (book == null) continue;
           looseBooksParent.books.add(book);
@@ -3806,7 +3879,7 @@ class DatabaseLibraryProvider implements LibraryProvider, LinkLinesProvider {
       // שבור או הרשאות חסרות.
       unawaited(Sentry.captureException(e, stackTrace: stackTrace));
     }
-  }
+  });
 
   /// מצרף לעץ את ספרי המסדים המצורפים הגלויים, לפי סדר העדיפות: תחת
   /// `ספרים אישיים/<שם המסד>`, או ממוזגים לקטגוריות הספרייה לפי שם. מסד שאינו
@@ -4232,6 +4305,7 @@ class DatabaseLibraryProvider implements LibraryProvider, LinkLinesProvider {
         source: BookSource.user,
         idOverride: dbBook['id'] as int? ?? 0,
         categoryIdOverride: nativeCategoryId,
+        remapMovedPath: false,
       );
       if (book == null) continue;
       _registerUserBook(book, category);
@@ -4368,6 +4442,42 @@ class DatabaseLibraryProvider implements LibraryProvider, LinkLinesProvider {
           .join(', ');
     }
     return (categoryPath: categoryPath, topics: topics);
+  }
+
+  /// [resolveMovedFileBookPath] לכל שורה, ב-isolate: בדיקת קובץ סינכרונית לכל
+  /// ספר אישי חסמה את ה-UI בבניית העץ (#3380). בכשל — השורות כמות שהן.
+  @visibleForTesting
+  static Future<List<Map<String, dynamic>>> resolveMovedFilePathsInBackground(
+    List<Map<String, dynamic>> rows,
+  ) async {
+    final paths = [
+      for (final row in rows)
+        if (row['filePath'] case final String path) path,
+    ];
+    if (paths.isEmpty) return rows;
+    final libraryPath =
+        Settings.getValue<String>(SettingsRepository.keyLibraryPath) ?? '';
+    final List<String> resolved;
+    try {
+      resolved = await Isolate.run(
+        () => [
+          for (final path in paths)
+            resolveMovedFileBookPath(path, activeLibraryPath: libraryPath),
+        ],
+        debugName: 'resolveMovedFilePaths',
+      );
+    } catch (e) {
+      debugPrint('⚠️ resolveMovedFilePaths failed: $e');
+      return rows;
+    }
+    var next = 0;
+    return [
+      for (final row in rows)
+        if (row['filePath'] is String)
+          {...row, 'filePath': resolved[next++]}
+        else
+          row,
+    ];
   }
 
   @visibleForTesting

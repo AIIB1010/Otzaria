@@ -76,8 +76,29 @@ class UserBooksDatabaseHolder {
   void addCloseListener(FutureOr<void> Function() listener) =>
       _closeListeners.add(listener);
 
+  final Set<Future<void>> _activeReads = {};
+  Future<void>? _closeFuture;
+
+  /// הסגירה ממתינה לקריאה כולה, כולל הכנת הנתיב ופתיחת חיבורים זמניים.
+  /// קריאה שמתחילה בזמן הסגירה מדולגת בלי לפתוח מחדש את הקובץ.
+  Future<void> trackRead(Future<void> Function() read) {
+    if (_closeFuture != null) {
+      return Future.value();
+    }
+    final result = read();
+    final tracked = result.then<void>((_) {}, onError: (Object _) {});
+    _activeReads.add(tracked);
+    return result.whenComplete(() => _activeReads.remove(tracked));
+  }
+
   /// סוגר את ה-DB ומודיע ל-[addCloseListener] כדי שהקובץ ישוחרר.
-  Future<void> close() async {
+  Future<void> close() =>
+      _closeFuture ??= _close().whenComplete(() => _closeFuture = null);
+
+  Future<void> _close() async {
+    await Future.wait(_activeReads);
+    // אתחול שהתחיל לפני הסגירה לא יפרסם חיבור אחרי שהיא הסתיימה.
+    await _initFuture?.then<void>((_) {}, onError: (Object _) {});
     // המנוע מחזיק את הקובץ פתוח לקריאה; בלי זה החלפתו נכשלת ב-Windows.
     await configureSearchLineSource(null);
     for (final listener in _closeListeners.toList()) {
