@@ -23,8 +23,6 @@ class TarStreamExtractor {
   RandomAccessFile? _file;
   Future<void>? _write;
   final _inFlight = <Future<void>>[];
-  final _inFlightPaths = <String>{};
-  String? _filePath;
   BytesBuilder? _meta;
   int _metaType = 0;
   int _remaining = 0;
@@ -103,17 +101,12 @@ class TarStreamExtractor {
       file.closeSync();
     } else {
       _inFlight.add(write.whenComplete(file.close));
-      _inFlightPaths.add(_pathKey(_filePath!));
     }
   }
-
-  static String _pathKey(String path) =>
-      Platform.isWindows || Platform.isMacOS ? path.toLowerCase() : path;
 
   Future<void> _drain() async {
     final pending = [..._inFlight, ?_write];
     _inFlight.clear();
-    _inFlightPaths.clear();
     _write = null;
     await Future.wait(pending);
   }
@@ -176,13 +169,14 @@ class TarStreamExtractor {
         _resetPending();
         final target = _resolve(name);
         if (target != null) {
+          final file = File(target);
+          // שמות שונים עשויים להפנות לאותו קובץ (Unicode, אותיות גדולות).
           if (_inFlight.length >= _maxInFlight ||
-              _inFlightPaths.contains(_pathKey(target))) {
+              (_inFlight.isNotEmpty && file.existsSync())) {
             await _drain();
           }
           Directory(p.dirname(target)).createSync(recursive: true);
-          _file = File(target).openSync(mode: FileMode.writeOnly);
-          _filePath = target;
+          _file = file.openSync(mode: FileMode.writeOnly);
           _filesWritten++;
         }
       case 0x35: // תיקייה
