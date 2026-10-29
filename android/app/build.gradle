@@ -60,8 +60,9 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId "org.otzaria.otzaria"
+        // A distinct ID lets the HumanWare edition coexist with the official
+        // Otzaria app, whose signing key is different from this build.
+        applicationId "org.otzaria.humanware"
         // You can update the following values to match your application needs.
         // For more information, see: https://docs.flutter.dev/deployment/android#reviewing-the-gradle-build-configuration.
         // Android 7.0 / 7.1 (API 24+) is the supported floor for this build.
