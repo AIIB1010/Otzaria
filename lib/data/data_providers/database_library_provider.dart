@@ -3588,7 +3588,7 @@ class DatabaseLibraryProvider implements LibraryProvider, LinkLinesProvider {
   Future<void> _appendUserBooksToLibrary(
     Library library,
     Map<String, Map<String, dynamic>> metadata,
-  ) async {
+  ) => UserBooksDatabaseHolder.instance.trackRead(() async {
     try {
       final dbPath = await UserBooksDatabaseHolder.resolveDbPath();
       if (!await File(dbPath).exists()) {
@@ -3879,7 +3879,7 @@ class DatabaseLibraryProvider implements LibraryProvider, LinkLinesProvider {
       // שבור או הרשאות חסרות.
       unawaited(Sentry.captureException(e, stackTrace: stackTrace));
     }
-  }
+  });
 
   /// מצרף לעץ את ספרי המסדים המצורפים הגלויים, לפי סדר העדיפות: תחת
   /// `ספרים אישיים/<שם המסד>`, או ממוזגים לקטגוריות הספרייה לפי שם. מסד שאינו

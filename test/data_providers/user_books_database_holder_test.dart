@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -38,6 +39,67 @@ void main() {
 
       await UserBooksDatabaseHolder.instance.close();
       expect(calls, 1);
+    });
+
+    test('close ממתין גם לקריאה שטרם פתחה את המסד', () async {
+      final holder = UserBooksDatabaseHolder.instance;
+      final ready = Completer<void>();
+      final finish = Completer<void>();
+      final read = holder.trackRead(() async {
+        await ready.future;
+        await holder.repository;
+        await finish.future;
+      });
+      var closed = false;
+      final closing = holder.close().then((_) => closed = true);
+      ready.complete();
+      await Future<void>.delayed(Duration.zero);
+      expect(closed, isFalse);
+      finish.complete();
+      await Future.wait([read, closing]);
+      expect(holder.openDbPath, isNull);
+    });
+
+    test('קריאה שמתחילה במהלך close אינה פותחת חיבור נוסף', () async {
+      final holder = UserBooksDatabaseHolder.instance;
+      final finish = Completer<void>();
+      final read = holder.trackRead(() => finish.future);
+      final closing = holder.close();
+      var started = false;
+      await holder.trackRead(() async {
+        started = true;
+        await holder.repository;
+      });
+      expect(started, isFalse);
+      expect(holder.openDbPath, isNull);
+      finish.complete();
+      await Future.wait([read, closing]);
+      await holder.trackRead(() async {
+        started = true;
+        await holder.repository;
+      });
+      expect(started, isTrue);
+      expect(holder.openDbPath, isNotNull);
+    });
+
+    test('כשל בקריאה מדווח לקורא ומשחרר את ההמתנה לסגירה', () async {
+      final holder = UserBooksDatabaseHolder.instance;
+      final finish = Completer<void>();
+      final read = holder.trackRead(() => finish.future);
+      final failed = expectLater(read, throwsStateError);
+      final closing = holder.close();
+      finish.completeError(StateError('read failed'));
+      await Future.wait([failed, closing]);
+      expect(holder.openDbPath, isNull);
+    });
+
+    test('close ממתין לאתחול שכבר התחיל ולא משאיר חיבור פתוח', () async {
+      final holder = UserBooksDatabaseHolder.instance;
+      final initializing = holder.repository;
+      final closing = holder.close();
+      await Future.wait([initializing, closing]);
+      expect(holder.openDbPath, isNull);
+      expect(holder.repositoryIfInitialized, isNull);
     });
 
     test('repository מאותחל פעם אחת ומוחזק במטמון (אותו instance)', () async {
