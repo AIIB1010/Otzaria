@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:otzaria/settings/engine/app_settings_store.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +12,7 @@ import 'package:otzaria/user_content_import/models/user_import_models.dart';
 import 'package:otzaria/user_content_import/repository/user_content_repository.dart';
 import 'package:otzaria/user_content_import/services/user_links_loader.dart';
 import 'package:path/path.dart' as p;
+import 'package:sqlite3/sqlite3.dart';
 
 import '../test_helpers/memory_cache_provider.dart';
 
@@ -64,6 +67,162 @@ void main() {
     expect(inverse.single.index1, 4);
     expect(inverse.single.index1End, 11);
     expect(inverse.single.overlapsSourceLines(7, 8), isTrue);
+  });
+
+  test('מפרשי-משתמש נקראים בחיבור נפרד, לא בחיבור הראשי', () async {
+    await Settings.init(cacheProvider: MemoryCacheProvider());
+    final tempDir = await Directory.systemTemp.createTemp('user_commentators');
+    final previousRoot = AppPaths.cachedDataRootPath;
+    await UserBooksDatabaseHolder.instance.close();
+    AppPaths.debugOverrideDataRootPath(p.join(tempDir.path, 'data'));
+    addTearDown(() async {
+      await UserBooksDatabaseHolder.instance.close();
+      AppPaths.debugOverrideDataRootPath(previousRoot);
+      await tempDir.delete(recursive: true);
+    });
+
+    final db = (await UserBooksDatabaseHolder.instance.repository).database;
+    final ucr = UserContentRepository(db);
+    UserLinkRecord commentary(String target) => UserLinkRecord(
+      sourceTitle: 'בסיס',
+      sourceIsUserBook: false,
+      sourceLineIndex: 1,
+      targetTitle: target,
+      targetIsUserBook: true,
+      targetLineIndex: 1,
+      connectionType: 'COMMENTARY',
+    );
+    await ucr.upsertUserLink(commentary('מפרש'));
+
+    Future<List<String>> titles() => loadUserCommentatorTitles(
+      bookTitle: 'בסיס',
+      bookCategoryId: null,
+      source: BookSource.official,
+    );
+    expect(await titles(), ['מפרש']);
+
+    // רק החיבור הראשי רואה שורה שטרם נכתבה סופית.
+    final connection = await db.database;
+    connection.execute('BEGIN');
+    try {
+      await ucr.upsertUserLink(commentary('מפרש חדש'));
+      expect(await titles(), ['מפרש']);
+    } finally {
+      connection.execute('COMMIT');
+    }
+    expect(await titles(), unorderedEquals(['מפרש', 'מפרש חדש']));
+  });
+
+  group('מחזור החיים של קריאות המשתמש', () {
+    final holder = UserBooksDatabaseHolder.instance;
+    late Directory tempDir;
+    String? previousRoot;
+
+    setUp(() async {
+      await Settings.init(cacheProvider: MemoryCacheProvider());
+      tempDir = await Directory.systemTemp.createTemp('user_links_lifecycle');
+      previousRoot = AppPaths.cachedDataRootPath;
+      await holder.close();
+      AppPaths.debugOverrideDataRootPath(tempDir.path);
+      final repo = await holder.repository;
+      await UserContentRepository(repo.database).upsertUserLink(
+        const UserLinkRecord(
+          sourceTitle: 'בסיס',
+          sourceIsUserBook: false,
+          sourceLineIndex: 1,
+          targetTitle: 'מפרש',
+          targetIsUserBook: true,
+          targetLineIndex: 1,
+          connectionType: 'COMMENTARY',
+        ),
+      );
+    });
+
+    tearDown(() async {
+      await holder.close();
+      AppPaths.debugOverrideDataRootPath(previousRoot);
+      await tempDir.delete(recursive: true);
+    });
+
+    for (final entry in <String, Future<List<Object>> Function()>{
+      'מפרשים': () => loadUserCommentatorTitles(
+        bookTitle: 'בסיס',
+        bookCategoryId: null,
+        source: BookSource.official,
+      ),
+      'קישורים': () => loadUserLinksForBook(
+        bookTitle: 'בסיס',
+        bookCategoryId: null,
+        source: BookSource.official,
+        startLineIndex: 0,
+        endLineIndex: 2,
+      ),
+    }.entries) {
+      test('close ממתין לקריאת ${entry.key} שממתינה לנעילת כותב', () async {
+        final connection = await (await holder.repository).database.database;
+        connection.execute('PRAGMA journal_mode=DELETE');
+        final path = holder.openDbPath!;
+        final ready = ReceivePort();
+        final writer = _holdExclusiveLock(holder.openDbPath!, ready.sendPort);
+        final release = await ready.first as SendPort;
+        ready.close();
+        var readFinished = false;
+        final read = entry.value().whenComplete(() => readFinished = true);
+        final closing = holder.close();
+        bool closedBeforeRead;
+        try {
+          closedBeforeRead = await Future.any([
+            closing.then((_) => true),
+            Future<bool>.delayed(
+              const Duration(milliseconds: 100),
+              () => false,
+            ),
+          ]);
+        } finally {
+          release.send(null);
+          await writer;
+        }
+        expect(await read, hasLength(1));
+        await closing;
+        expect(closedBeforeRead, isFalse);
+        expect(readFinished, isTrue);
+        expect(holder.openDbPath, isNull);
+        // החלפת הקובץ אחרי close חייבת לקרות בלי קורא שיפתח אותו באיחור.
+        final saved = File('$path.saved');
+        await File(path).rename(saved.path);
+        await saved.rename(path);
+        await holder.repository;
+        expect(await entry.value(), hasLength(1));
+      });
+
+      test('${entry.key} מדולגים בזמן close וחוזרים אחרי פתיחה מחדש', () async {
+        final finish = Completer<void>();
+        final active = holder.trackRead(() => finish.future);
+        final closing = holder.close();
+        try {
+          expect(await entry.value(), isEmpty);
+        } finally {
+          finish.complete();
+          await Future.wait([active, closing]);
+        }
+        expect(await entry.value(), isEmpty);
+        expect(holder.openDbPath, isNull);
+        await holder.repository;
+        expect(await entry.value(), hasLength(1));
+      });
+
+      test('כשל בקריאת ${entry.key} מדווח ומשחרר את close', () async {
+        final connection = await (await holder.repository).database.database;
+        connection.execute('DROP TABLE user_link');
+        final failed = expectLater(
+          entry.value(),
+          throwsA(isA<SqliteException>()),
+        );
+        await holder.close();
+        await failed;
+        expect(holder.openDbPath, isNull);
+      });
+    }
   });
 
   group('dedupeUserLinks', () {
@@ -181,3 +340,18 @@ void main() {
     });
   });
 }
+
+Future<void> _holdExclusiveLock(String dbPath, SendPort ready) =>
+    Isolate.run(() async {
+      final release = ReceivePort();
+      final db = sqlite3.open(dbPath);
+      try {
+        db.execute('BEGIN EXCLUSIVE');
+        ready.send(release.sendPort);
+        await release.first;
+        db.execute('COMMIT');
+      } finally {
+        release.close();
+        db.close();
+      }
+    });

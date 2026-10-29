@@ -1,5 +1,9 @@
+import 'dart:isolate';
+
 import 'package:flutter/foundation.dart';
 import 'package:otzaria/data/data_providers/user_books_database_holder.dart';
+import 'package:otzaria/migration/database/daos/database.dart';
+import 'package:otzaria/migration/database/query_loader.dart';
 import 'package:otzaria/models/book_source.dart';
 import 'package:otzaria/models/link_types.dart';
 import 'package:otzaria/models/links.dart';
@@ -23,20 +27,33 @@ Future<List<Link>> loadUserLinksForBook({
   List<String>? targetBookTitles,
 }) async {
   if (source.isAttached) return const [];
-  final repo = UserBooksDatabaseHolder.instance.repositoryIfInitialized;
-  if (repo == null) return const [];
+  final dbPath = UserBooksDatabaseHolder.instance.openDbPath;
+  if (dbPath == null) return const [];
   final isUserBook = source.isUser;
 
-  final ucr = UserContentRepository(repo.database);
   final result = <Link>[];
-
-  // forward — קישורים היוצאים מהספר הנקרא (אישי או רשמי).
-  final forward = await ucr.forwardUserLinks(
-    bookTitle,
-    sourceIsUserBook: isUserBook,
-    sourceCategoryId: bookCategoryId,
-    startLineIndex: startLineIndex,
-    endLineIndex: endLineIndex,
+  final (forward, inverse) = await _readUserContent(
+    dbPath,
+    (ucr) async => (
+      // forward — קישורים היוצאים מהספר הנקרא (אישי או רשמי).
+      await ucr.forwardUserLinks(
+        bookTitle,
+        sourceIsUserBook: isUserBook,
+        sourceCategoryId: bookCategoryId,
+        startLineIndex: startLineIndex,
+        endLineIndex: endLineIndex,
+      ),
+      // inverse — קישור-משתמש שמצביע אל הספר הנקרא; פתיחתו חוזרת אל ספר
+      // המקור (אישי או רשמי, לפי sourceIsUserBook).
+      await ucr.inverseUserLinks(
+        bookTitle,
+        targetIsUserBook: isUserBook,
+        targetCategoryId: bookCategoryId,
+        startLineIndex: startLineIndex,
+        endLineIndex: endLineIndex,
+      ),
+    ),
+    ifSkipped: (const [], const []),
   );
   for (final r in forward) {
     final targetLine = r.targetLineIndex;
@@ -68,15 +85,6 @@ Future<List<Link>> loadUserLinksForBook({
     );
   }
 
-  // inverse — קישור-משתמש שמצביע אל הספר הנקרא; פתיחתו חוזרת אל ספר המקור
-  // (אישי או רשמי, לפי sourceIsUserBook).
-  final inverse = await ucr.inverseUserLinks(
-    bookTitle,
-    targetIsUserBook: isUserBook,
-    targetCategoryId: bookCategoryId,
-    startLineIndex: startLineIndex,
-    endLineIndex: endLineIndex,
-  );
   for (final r in inverse) {
     final targetLine = r.targetLineIndex;
     if (targetLine == null) continue;
@@ -111,13 +119,50 @@ Future<List<String>> loadUserCommentatorTitles({
   required BookSource source,
 }) async {
   if (source.isAttached) return const [];
-  final repo = UserBooksDatabaseHolder.instance.repositoryIfInitialized;
-  if (repo == null) return const [];
-  return UserContentRepository(repo.database).userCommentatorTitles(
-    bookTitle,
-    sourceIsUserBook: source.isUser,
-    sourceCategoryId: bookCategoryId,
+  final dbPath = UserBooksDatabaseHolder.instance.openDbPath;
+  if (dbPath == null) return const [];
+  final isUserBook = source.isUser;
+  return _readUserContent(
+    dbPath,
+    (ucr) => ucr.userCommentatorTitles(
+      bookTitle,
+      sourceIsUserBook: isUserBook,
+      sourceCategoryId: bookCategoryId,
+    ),
+    ifSkipped: const [],
   );
+}
+
+/// קורא את user_books.db בחיבור read-only משלו ב-isolate: כתיבה מקבילה
+/// (סנכרון הרקע) נועלת את המסד, והמתנה לה על ה-UI isolate תוקעת את הממשק.
+Future<T> _readUserContent<T>(
+  String dbPath,
+  Future<T> Function(UserContentRepository ucr) read, {
+  required T ifSkipped,
+}) async {
+  var result = ifSkipped;
+  await UserBooksDatabaseHolder.instance.trackRead(() async {
+    result = await _readUserContentInIsolate(dbPath, read);
+  });
+  return result;
+}
+
+Future<T> _readUserContentInIsolate<T>(
+  String dbPath,
+  Future<T> Function(UserContentRepository ucr) read,
+) async {
+  await QueryLoader.initialize();
+  final queryCache = QueryLoader.cacheSnapshot;
+  return Isolate.run(() async {
+    QueryLoader.seedCache(queryCache);
+    final db = MyDatabase.withPath(dbPath, readOnly: true);
+    try {
+      (await db.database).execute('PRAGMA busy_timeout=5000');
+      return await read(UserContentRepository(db));
+    } finally {
+      db.close();
+    }
+  });
 }
 
 /// מסיר כפילויות בין forward ל-inverse: קישור דו-כיווני (כמו שמייצר "מנהל
