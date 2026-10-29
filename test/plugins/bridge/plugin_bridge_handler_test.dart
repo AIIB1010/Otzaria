@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/plugins/bridge/plugin_bridge_adapter.dart';
 import 'package:otzaria/plugins/bridge/plugin_bridge_handler.dart';
 import 'package:otzaria/plugins/models/installed_plugin.dart';
 import 'package:otzaria/plugins/models/plugin_manifest.dart';
+import 'package:otzaria/plugins/models/plugin_rpc_response.dart';
 import 'package:otzaria/plugins/models/plugin_valid_permissions.dart';
 import 'package:otzaria/plugins/repository/plugin_registry_repository.dart';
 import 'package:otzaria/plugins/services/plugin_extended_validator.dart';
@@ -202,6 +205,63 @@ void main() {
       );
       expect(PluginBridgeHandler.isRateLimitExempt(''), isFalse);
     });
+  });
+
+  // #3380: הערך השמור עובר בלי פענוח, והתוסף מקבל בדיוק את מה שקיבל קודם.
+  test('JSON שמור נשלח כמות שהוא, זהה לתשובה המפוענחת', () async {
+    final shapes = <Object?>[
+      {
+        'items': [
+          for (var i = 0; i < 50; i++)
+            {
+              'id': i,
+              'text': 'שורה "$i"\n\t\\',
+              'tags': ['a', 'ב'],
+            },
+        ],
+      },
+      [1, -0.5, 1.0, 1e21, 9007199254740993, true, false, null],
+      'מחרוזת עם "גרשיים" ו-\u2028 ו-\u0000 ו-\n ו-😀',
+      42,
+      3.25,
+      true,
+      null,
+      <String, Object?>{},
+      <Object?>[],
+      {
+        'deep': {
+          'a': [
+            {
+              'b': [
+                {'c': 'ד'},
+              ],
+            },
+          ],
+        },
+      },
+    ];
+    for (final shape in shapes) {
+      final raw = jsonEncode(shape);
+      final handler = PluginBridgeHandler(
+        _buildInstalledPlugin(permissions: const ['plugin.storage.read']),
+        adapter: _FakeAdapter(result: JavaScriptHandlerJsonResult(raw)),
+        registry: _StubRegistry(true),
+      );
+
+      final response = await handler.handleRpcForTesting([
+        {
+          'method': 'storage.get',
+          'payload': const {'key': 'k'},
+        },
+      ]);
+
+      expect(response, isA<JavaScriptHandlerJsonResult>(), reason: raw);
+      expect(
+        JavaScriptHandlerJsonResult.encode(response),
+        jsonEncode(PluginRpcResponse.success(jsonDecode(raw)).toJson()),
+        reason: raw,
+      );
+    }
   });
 
   group('network.fetch הוסר', () {

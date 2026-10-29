@@ -832,6 +832,8 @@ void main() {
       await db.setPermission(pluginId, 'app.run_on_startup', true);
       await db.setPermission(pluginId, 'fs.user_files.write', true);
       await db.setPluginKV(pluginId, 'settings', 'theme', '"dark"');
+      await db.setPluginKV(pluginId, 'default', 'valid', '{"a":[1]}');
+      await db.setPluginKV(pluginId, 'default', 'broken', '{"a":');
       await db.setPluginKV(
         pluginId,
         PluginUserFolderGrants.namespace,
@@ -881,6 +883,9 @@ void main() {
         isNot(true),
       );
       expect(await db.getPluginKV(pluginId, 'settings', 'theme'), '"dark"');
+      // storage.get מטמיע את הערך בסקריפט של ה-WebView, ולכן ערך שבור נזרק.
+      expect(await db.getPluginKV(pluginId, 'default', 'valid'), '{"a":[1]}');
+      expect(await db.getPluginKV(pluginId, 'default', 'broken'), isNull);
       expect(
         await db.getPluginKV(
           pluginId,

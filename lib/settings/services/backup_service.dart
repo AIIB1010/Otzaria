@@ -25,6 +25,7 @@ import 'package:otzaria/workspaces/workspace.dart';
 import 'package:otzaria/personal_notes/storage/personal_notes_database.dart';
 import 'package:otzaria/personal_notes/models/personal_note.dart';
 import 'package:otzaria/personal_notes/services/personal_note_draft_service.dart';
+import 'package:otzaria/plugins/plugin_constants.dart';
 import 'package:otzaria/plugins/storage/plugin_system_database.dart';
 import 'package:otzaria/plugins/models/installed_plugin.dart';
 import 'package:otzaria/plugins/models/plugin_valid_permissions.dart';
@@ -1394,6 +1395,20 @@ class BackupService {
     }
   }
 
+  // storage.get מטמיע את הערך כמות שהוא בסקריפט של ה-WebView, וערך שאינו JSON
+  // היה משאיר את קריאת התוסף תלויה. כל כתיבה אחרת למחסן עוברת jsonEncode.
+  static bool _isRestorableKV(Map row) {
+    if (row['namespace'] != kDefaultStorageNamespace) return true;
+    final value = row['value_json'];
+    if (value is! String) return false;
+    try {
+      jsonDecode(value);
+      return true;
+    } on FormatException {
+      return false;
+    }
+  }
+
   // כשל בתוסף אחד מדווח כשחזור חלקי בלי למנוע שחזור של שאר התוספים.
   static Future<({bool hadFailures, int restored})> _restorePlugins(
     List<Map<String, dynamic>> pluginsData,
@@ -1469,7 +1484,9 @@ class BackupService {
           ],
           'kvStore': [
             for (final row in entry['kvStore'] as List? ?? const [])
-              if ((row as Map)['namespace'] != PluginUserFolderGrants.namespace)
+              if ((row as Map)['namespace'] !=
+                      PluginUserFolderGrants.namespace &&
+                  _isRestorableKV(row))
                 row,
           ],
           'publishedRecords': entry['publishedRecords'],
