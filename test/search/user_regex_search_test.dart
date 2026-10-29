@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -193,7 +194,9 @@ Future<void> main() async {
             chunkSize: 50,
           )
           .map((update) {
-            if (update.progressTotal > 0) ops.cancelLexicalSearch(first);
+            if (update.progressTotal > 0) {
+              unawaited(ops.cancelLexicalSearch(first));
+            }
             return update;
           })
           .last;

@@ -120,10 +120,9 @@ class SearchRepository {
   Future<void> cancelLexicalSearch(int requestId) async {
     final provider = _engineProvider;
     if (provider == null) {
-      TantivyDataProvider.instance.cancelLexicalSearch(requestId);
-      return;
+      return TantivyDataProvider.instance.cancelLexicalSearch(requestId);
     }
-    (await provider()).cancelLexicalSearch(requestId);
+    await (await provider()).cancelLexicalSearch(requestId);
   }
 
   /// חיפוש בזרם של chunks. האירוע הראשון נושא גם את הספירה הכוללת

@@ -104,7 +104,10 @@ dependencies:
   googleapis_auth: ^2.3.4
   characters: ^1.4.1
   collection: ^1.19.1
-  otzaria_search_engine: ^6.0.0
+  otzaria_search_engine:
+    git:
+      url: https://github.com/palmoni5/otzaria_search_engine.git
+      ref: d64e82d342550d048cc9bb394ec04afae1db2ba1
   # חוזה הדיווחים מול השרת, משותף עם "עדכוני אוצריא" (Dart טהור).
   otzaria_report_contract:
     path: packages/otzaria_report_contract

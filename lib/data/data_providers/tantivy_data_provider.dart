@@ -212,7 +212,7 @@ class TantivyDataProvider {
   Future<bool> _attachMagicDictionary(SearchEngine engine) async {
     try {
       final dictPath = await AppPaths.getMagicDictionaryPath();
-      final loaded = engine.setMagicDictionaryPath(path: dictPath);
+      final loaded = await engine.setMagicDictionaryPath(path: dictPath);
       debugPrint(
         loaded
             ? '🔤 מילון מורפולוגי נטען לחיפוש המקורב: $dictPath'
@@ -230,13 +230,12 @@ class TantivyDataProvider {
   Future<void> replaceMagicDictionaryDetached(
     Future<void> Function() replace,
   ) async {
-    // אינדוקס נועל את המנוע לכתיבה והקריאה הסינכרונית הייתה מקפיאה את הממשק;
-    // ב-Windows ההחלפה תיכשל אז, והעותק הממתין יותקן בפתיחת המנוע הבאה.
+    // מילון פתוח ב-Windows מוחלף בפתיחת המנוע הבאה כשהאינדוקס פעיל.
     if (isIndexing.value) return replace();
     final searchEngine = await engine;
     final dictPath = await AppPaths.getMagicDictionaryPath();
     // פתיחת נתיב שאינו קיים נכשלת, והמנוע משחרר את המילון הקודם.
-    searchEngine.setMagicDictionaryPath(path: '$dictPath.detached');
+    await searchEngine.setMagicDictionaryPath(path: '$dictPath.detached');
     try {
       await replace();
     } finally {
@@ -255,7 +254,9 @@ class TantivyDataProvider {
       'dictionary.json',
     );
     if (translationPath != null) {
-      final loaded = engine.setTranslationDictionaryPath(path: translationPath);
+      final loaded = await engine.setTranslationDictionaryPath(
+        path: translationPath,
+      );
       debugPrint(
         loaded
             ? '🔤 מילון תרגום ארמי נטען: $translationPath'
@@ -267,7 +268,7 @@ class TantivyDataProvider {
       'Acronyms.json',
     );
     if (acronymsPath != null) {
-      final loaded = engine.setAcronymsDictionaryPath(path: acronymsPath);
+      final loaded = await engine.setAcronymsDictionaryPath(path: acronymsPath);
       debugPrint(
         loaded
             ? '🔤 מילון ראשי-תיבות נטען: $acronymsPath'
@@ -397,6 +398,7 @@ class TantivyDataProvider {
       try {
         await sentinelFile.delete();
       } catch (_) {}
+      await RustSearchEngineOperations.prepareCancellation(engine);
 
       // ניקוי שרידי ההסגר רץ ברקע; fallback פעיל מסוג _new_ מוחרג ממנו.
       unawaited(
@@ -440,6 +442,7 @@ class TantivyDataProvider {
   Future<SearchEngine> _openTempFallbackEngine() async {
     final tempDir = Directory.systemTemp.createTempSync('otzaria_temp_index_');
     final engine = await SearchEngine.newInstance(path: tempDir.path);
+    await RustSearchEngineOperations.prepareCancellation(engine);
     isTempFallback = true;
     activeIndexPath = tempDir.path;
     return engine;
@@ -543,17 +546,11 @@ class TantivyDataProvider {
   }
 
   /// מבטל במנוע את קריאות החיפוש של [requestId]. מנוע שלא נפתח לא התחיל אותן.
-  void cancelLexicalSearch(int requestId) {
+  Future<void> cancelLexicalSearch(int requestId) async {
     final current = _engineInit.current;
     if (current == null) return;
-    unawaited(
-      current.then(
-        (engine) =>
-            RustSearchEngineOperations(engine).cancelLexicalSearch(requestId),
-        onError: (Object error) =>
-            debugPrint('cancelLexicalSearch skipped: $error'),
-      ),
-    );
+    final engine = await current;
+    await RustSearchEngineOperations(engine).cancelLexicalSearch(requestId);
   }
 
   Future<Map<String, int>> countByBook(
@@ -716,6 +713,7 @@ class TantivyDataProvider {
     try {
       final index = await engine;
       index.dispose();
+      await RustSearchEngineOperations.disposeCancellation(index);
     } catch (e) {
       debugPrint('⚠️ Error disposing search engine: $e');
     }

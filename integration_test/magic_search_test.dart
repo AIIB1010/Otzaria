@@ -115,7 +115,7 @@ void main() {
     );
 
     // מקורב ללא מילון: "הלך"→"הלכתי" הוא 3 עריכות — מעבר ל-maxDistance=2.
-    expect(engine.hasMagicDictionary(), isFalse);
+    expect(await engine.hasMagicDictionary(), isFalse);
     expect(
       await fuzzy(engine, 'הלך'),
       isEmpty,
@@ -123,8 +123,8 @@ void main() {
     );
 
     // טעינת המילון אל המנוע החי.
-    expect(engine.setMagicDictionaryPath(path: buildLexicalDb()), isTrue);
-    expect(engine.hasMagicDictionary(), isTrue);
+    expect(await engine.setMagicDictionaryPath(path: buildLexicalDb()), isTrue);
+    expect(await engine.hasMagicDictionary(), isTrue);
 
     // מקורב עם מילון: כעת ההרחבה הלקסיקלית מזריקה את "הלכתי" → התאמה.
     final results = await fuzzy(engine, 'הלך');
@@ -137,8 +137,8 @@ void main() {
   ) async {
     final engine = await buildIndex();
     final missing = p.join(tmp.path, 'nope.db');
-    expect(engine.setMagicDictionaryPath(path: missing), isFalse);
-    expect(engine.hasMagicDictionary(), isFalse);
+    expect(await engine.setMagicDictionaryPath(path: missing), isFalse);
+    expect(await engine.hasMagicDictionary(), isFalse);
 
     // והמסלול המקורב עדיין עובד (fallback ל-fuzzy רגיל) — "הלכתי" עם שיבוש
     // קל (מרחק 1) עדיין נמצא.

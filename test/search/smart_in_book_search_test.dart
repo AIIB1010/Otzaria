@@ -135,7 +135,7 @@ Future<void> main() async {
       dictionary.close();
       await Directory('${temporary.path}/index').create();
       engine = await SearchEngine.newInstance(path: '${temporary.path}/index');
-      expect(engine.setMagicDictionaryPath(path: databasePath), isTrue);
+      expect(await engine.setMagicDictionaryPath(path: databasePath), isTrue);
       for (var i = 0; i < lines.length; i++) {
         await engine.addDocument(
           ordinal: i,
