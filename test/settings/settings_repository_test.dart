@@ -55,9 +55,9 @@ void main() {
         when(
           mockSettingsWrapper.getValue<double>(
             SettingsRepository.keyFontSize,
-            defaultValue: 25,
+            defaultValue: 30,
           ),
-        ).thenReturn(25.0);
+        ).thenReturn(30.0);
         when(
           mockSettingsWrapper.getValue<String>(
             SettingsRepository.keyFontFamily,
@@ -192,7 +192,7 @@ void main() {
       when(
         mockSettingsWrapper.getValue<double>(
           SettingsRepository.keyFontSize,
-          defaultValue: 25,
+          defaultValue: 30,
         ),
       ).thenReturn(20.0);
       when(
@@ -436,9 +436,9 @@ void main() {
       when(
         mockSettingsWrapper.getValue<double>(
           SettingsRepository.keyFontSize,
-          defaultValue: 25,
+          defaultValue: 30,
         ),
-      ).thenReturn(25.0);
+      ).thenReturn(30.0);
       when(
         mockSettingsWrapper.getValue<String>(
           SettingsRepository.keyFontFamily,
@@ -516,7 +516,7 @@ void main() {
         mockSettingsWrapper.setValue(SettingsRepository.keyTextMaxWidth, -1.0),
       ).called(1);
       verify(
-        mockSettingsWrapper.setValue(SettingsRepository.keyFontSize, 25.0),
+        mockSettingsWrapper.setValue(SettingsRepository.keyFontSize, 30.0),
       ).called(1);
       verify(
         mockSettingsWrapper.setValue(
@@ -616,9 +616,9 @@ void main() {
         when(
           mockSettingsWrapper.getValue<double>(
             SettingsRepository.keyFontSize,
-            defaultValue: 25,
+            defaultValue: 30,
           ),
-        ).thenReturn(25.0);
+        ).thenReturn(30.0);
         when(
           mockSettingsWrapper.getValue<String>(
             SettingsRepository.keyFontFamily,
