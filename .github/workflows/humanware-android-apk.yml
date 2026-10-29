@@ -1,0 +1,50 @@
+name: HumanWare Android APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-android-7-apk:
+    name: Build installable Android 7+ APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.7
+          cache: false
+
+      - name: Install locked dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Analyze the accessibility changes
+        run: flutter analyze
+
+      - name: Run focused regression tests
+        run: |
+          flutter test \
+            test/settings/settings_repository_test.dart \
+            test/shortcuts/shortcut_helper_test.dart \
+            test/shortcuts/shortcut_validator_registration_test.dart
+
+      - name: Build a universal debug APK
+        run: >
+          flutter build apk --debug
+          --target-platform android-arm,android-arm64
+
+      - name: Upload installable APK
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: Otzaria-HumanWare-Android7-debug
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
