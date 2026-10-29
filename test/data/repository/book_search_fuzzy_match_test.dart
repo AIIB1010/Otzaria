@@ -840,4 +840,146 @@ void main() {
       expect(search([remote, official, bundled]), [2, 1, 0]);
     });
   });
+
+  group('filterBookSearchEntries - כתיב מלא/חסר בשם הספר', () {
+    // כותרות אמת מ-seforim.db.
+    const entries = [
+      BookSearchEntry(
+        index: 0,
+        title: 'ספר השרשים לרדק',
+        author: '',
+        topics: '',
+      ),
+      BookSearchEntry(
+        index: 1,
+        title: 'כללות שרשי החכמה',
+        author: '',
+        topics: '',
+      ),
+      BookSearchEntry(
+        index: 2,
+        title: 'שולחן ערוך, אורח חיים',
+        author: '',
+        topics: '',
+      ),
+      BookSearchEntry(
+        index: 3,
+        title: 'ביאור הלכה',
+        author: '',
+        topics: '',
+        acronyms: ['ביאור הלכה על שלחן ערוך'],
+      ),
+      BookSearchEntry(index: 4, title: 'תשובות רשי', author: '', topics: ''),
+      BookSearchEntry(
+        index: 5,
+        title: 'שות שבות יעקב חלק א',
+        author: '',
+        topics: '',
+      ),
+    ];
+
+    List<int> search(String query) => filterBookSearchEntries(
+      entries: entries,
+      queryWords: query.split(' '),
+      topics: const [],
+      sortByRatio: true,
+      normalizedQuery: query,
+    );
+
+    test('מילה קצרה בכתיב מלא מוצאת את הכתיב החסר', () {
+      expect(search('שורש'), containsAll([0, 1]));
+      expect(search('ספר השורשים'), [0]);
+    });
+
+    test('כינוי מילולי קודם לכתיב חלופי של מילות הכותרת', () {
+      final results = search('שלחן ערוך');
+      expect(results.indexOf(3), lessThan(results.indexOf(2)));
+    });
+
+    test('לא באמצע מילה', () {
+      expect(search('שבות'), [5]);
+    });
+
+    test('ראשי-תיבות של חכם אינם כתיב מלא/חסר: מהר"ל לפני מהרי"ל', () {
+      const sages = [
+        BookSearchEntry(
+          index: 0,
+          title: 'גבורות השם',
+          author: '',
+          topics: '',
+          acronyms: ['מהרל גבורות השם'],
+        ),
+        BookSearchEntry(
+          index: 1,
+          title: 'מהריל (מנהגים)',
+          author: '',
+          topics: '',
+        ),
+      ];
+      expect(
+        filterBookSearchEntries(
+          entries: sages,
+          queryWords: const ['מהרל'],
+          topics: const [],
+          sortByRatio: true,
+          normalizedQuery: 'מהרל',
+        ),
+        [0, 1],
+      );
+    });
+
+    test('כותרת מילולית קודמת לכתיב מלא/חסר (מגילה לפני מגלה)', () {
+      const books = [
+        BookSearchEntry(
+          index: 0,
+          title: 'מגלה עמוקות על התורה',
+          author: '',
+          topics: '',
+        ),
+        BookSearchEntry(
+          index: 1,
+          title: 'תוספתא מגילה',
+          author: '',
+          topics: '',
+        ),
+      ];
+      expect(
+        filterBookSearchEntries(
+          entries: books,
+          queryWords: const ['מגילה'],
+          topics: const [],
+          sortByRatio: true,
+          normalizedQuery: 'מגילה',
+        ),
+        [1, 0],
+      );
+    });
+  });
+
+  group('bookSearchWordMatchesFuzzy - כתיב מלא/חסר הדדי במילים קצרות', () {
+    const pairs = [
+      ('שרש', 'שורש'),
+      ('כהן', 'כוהן'),
+      ('שלחן', 'שולחן'),
+      ('תפלה', 'תפילה'),
+      ('מגלת', 'מגילת'),
+    ];
+    for (final (haser, male) in pairs) {
+      test('$haser ↔ $male', () {
+        expect(bookSearchWordMatchesFuzzy(haser, 'ספר $male'), isTrue);
+        expect(bookSearchWordMatchesFuzzy(male, 'ספר $haser'), isTrue);
+      });
+    }
+
+    test('אחרי אות שימוש בכותרת', () {
+      expect(bookSearchWordMatchesFuzzy('שורש', 'ספר השרשים'), isTrue);
+      expect(bookSearchWordMatchesFuzzy('שרש', 'כללות השורשים'), isTrue);
+    });
+
+    test('מילים שונות בנות שלוש אותיות אינן מותאמות', () {
+      expect(bookSearchWordMatchesFuzzy('אדם', 'ספר אדום'), isFalse);
+      expect(bookSearchWordMatchesFuzzy('פרש', 'ספר פירש'), isFalse);
+      expect(bookSearchWordMatchesFuzzy('שלם', 'ספר שלום'), isFalse);
+    });
+  });
 }

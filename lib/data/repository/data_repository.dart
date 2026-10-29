@@ -5,6 +5,7 @@ import 'package:otzaria/data/cache/acronyms_cache.dart';
 import 'package:otzaria/data/cache/generation_cache.dart';
 import 'package:otzaria/data/data_providers/file_system_data_provider.dart';
 import 'package:otzaria/data/repository/book_search_worker.dart';
+import 'package:otzaria/find_ref/book_name_match.dart';
 import 'package:otzaria/models/book_source.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/library/models/library.dart';
@@ -533,11 +534,10 @@ List<int> _searchPreparedEntries(
               in filtered)
             _ScoredBookSearchEntry(
               index: entry.index,
-              // שכבות עדיפות (כותרת מדויקת > מכילה ברצף > מילותיה לפי הסדר > כינוי
-              // > fuzzy > נתיב התיקיות); בתוך כל שכבה: דור ואז ratio, כך ספר יסוד
-              // לא נקבר תחת פירושים.
+              // כותרת מדויקת > מכילה > מילים לפי הסדר > כינוי > מילולי > fuzzy > נתיב.
+              // בתוך כל שכבה: דור ואז ratio, כדי שספר יסוד לא ייקבר תחת פירושים.
               tier: viaCategoryOnly
-                  ? -1
+                  ? -2
                   : entry.normalizedTitle == normalizedQuery
                   ? 4
                   : entry.normalizedTitle.contains(normalizedQuery)
@@ -549,7 +549,12 @@ List<int> _searchPreparedEntries(
                   ? 2
                   : entry.acronyms.any((a) => a.contains(normalizedQuery))
                   ? 1
-                  : 0,
+                  : queryWords.every(
+                      (word) =>
+                          entry.searchWords.any((text) => text.contains(word)),
+                    )
+                  ? 0
+                  : -1,
               eraOrder: entry.eraOrder,
               source: entry.source,
               isExternalCatalog: entry.isExternalCatalog,
@@ -752,12 +757,20 @@ int _maxAllowedEdits(int len) {
 
 /// התאמת זוג מילים בודדות: הכלה, או מרחק עריכה שסיפו נגזר מהארוכה
 /// מבין השתיים — כך ההתאמה הדדית (מדות↔מידות).
-bool _wordPairMatches(String queryWord, String textWord) {
+bool _wordPairMatches(
+  String queryWord,
+  String textWord, {
+  bool matchBookTitleSpellingVariants = true,
+}) {
   if (textWord.contains(queryWord)) return true;
   if (queryWord.length < 3) return false;
   if (_hasDoubledVavYod(queryWord) || _hasDoubledVavYod(textWord)) {
     final collapsedQuery = _collapseDoubledVavYod(queryWord);
     if (_collapseDoubledVavYod(textWord).contains(collapsedQuery)) return true;
+  }
+  if (matchBookTitleSpellingVariants &&
+      startsWithBookTitleSpellingVariant(textWord, queryWord)) {
+    return true;
   }
 
   final allowed = _maxAllowedEdits(
@@ -784,11 +797,21 @@ bool bookSearchWordPairMatches(String queryWord, String textWord) =>
     _wordPairMatches(queryWord, textWord);
 
 /// התאמת מילת שאילתה לטקסט שלם (כותרת/מחבר מנורמלים) עם סלחנות לשגיאות כתיב.
-/// משמשת גם את תחביר `@` בחיפוש (ראה `parseCategoryQuery`).
-bool bookSearchWordMatchesFuzzy(String queryWord, String text) {
+/// תחביר `@` מכבה את כלל כתיב שמות הספרים כדי לשמר את תחום החיפוש.
+bool bookSearchWordMatchesFuzzy(
+  String queryWord,
+  String text, {
+  bool matchBookTitleSpellingVariants = true,
+}) {
   for (final textWord in text.split(' ')) {
     if (textWord.isEmpty) continue;
-    if (_wordPairMatches(queryWord, textWord)) return true;
+    if (_wordPairMatches(
+      queryWord,
+      textWord,
+      matchBookTitleSpellingVariants: matchBookTitleSpellingVariants,
+    )) {
+      return true;
+    }
   }
   return false;
 }

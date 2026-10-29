@@ -1234,7 +1234,7 @@ class FindRefRepository {
           secondaryPhraseTokenCount[hit] = n;
           continue;
         }
-        if (hit.matchRank >= 4) {
+        if (hit.matchRank >= 4 && hit.spellingVariantTitleIndex == null) {
           if (hit.matchRank == 4 && hit.acronymTailIsTitleWords) {
             joinablePrefixHits.add(hit);
           }
@@ -1242,7 +1242,8 @@ class FindRefRepository {
         }
         final titleTokens = hit.titleTokens;
         if (!_phraseAppearsAsTokens(titleTokens, phraseTokens)) continue;
-        if (hit.matchRank == 2) {
+        if ((hit.matchRank == 2 || hit.spellingVariantTitleIndex != null) &&
+            hit.spellingVariantTitleIndex != 0) {
           secondaryHits.add(hit);
           secondaryPhraseTokenCount[hit] = n;
         } else {
@@ -1296,8 +1297,11 @@ class FindRefRepository {
       if (hit.bookId > 0 || hit.filePath.isNotEmpty) {
         final key = _bookKey(source, hit.bookId, hit.filePath);
         final previous = bookMatchRanks[key];
-        if (previous == null || hit.matchRank < previous) {
-          bookMatchRanks[key] = hit.matchRank;
+        final rank = hit.spellingVariantTitleIndex != null && hit.matchRank == 2
+            ? ReferenceBooksCache.fuzzyMatchRank
+            : hit.matchRank;
+        if (previous == null || rank < previous) {
+          bookMatchRanks[key] = rank;
         }
       }
     }
@@ -2422,7 +2426,7 @@ class FindRefRepository {
     mergeSort(
       ranked,
       compare: (a, b) {
-        final byRank = a.hit.matchRank.compareTo(b.hit.matchRank);
+        final byRank = a.hit.rankOrder.compareTo(b.hit.rankOrder);
         if (byRank != 0) return byRank;
         final byCoverage = b.coverage.compareTo(a.coverage);
         return byCoverage != 0 ? byCoverage : a.index.compareTo(b.index);
@@ -3012,6 +3016,15 @@ class FindRefRepository {
         final bare = titleTokenWithoutConjunction(token, allowVav: ti > 0);
         if (bare != null) idx = remaining.indexOf(bare);
       }
+      // כתיב מלא/חסר קודם לתחילית — אחרת "של" נבלע ב"שלחנו" ו"שולחנו" נשאר.
+      if (idx == -1 && prefixEligible.isNotEmpty) {
+        final matchToken = bookNameMatchToken(token);
+        idx = remaining.indexWhere(
+          (t) =>
+              prefixEligible.contains(t) &&
+              isBookTitleSpellingVariant(bookNameMatchToken(t), matchToken),
+        );
+      }
       // כתיב מקוצר של שם הספר: "ירמיה" מול "ירמיהו". רצפת 2 תווים —
       // כמו בחריג אות-החיבור, אות בודדת נשארת תמיד טוקן מיקום.
       if (idx == -1 && prefixEligible.isNotEmpty) {
@@ -3315,9 +3328,10 @@ class FindRefRepository {
     for (var start = 0; start <= maxStart; start++) {
       var ok = true;
       for (var i = 0; i < phraseTokens.length; i++) {
-        if (!bookNameMatchToken(
-          titleTokens[start + i],
-        ).startsWith(bookNameMatchToken(phraseTokens[i]))) {
+        final titleToken = bookNameMatchToken(titleTokens[start + i]);
+        final phraseToken = bookNameMatchToken(phraseTokens[i]);
+        if (!titleToken.startsWith(phraseToken) &&
+            !isBookTitleSpellingVariant(phraseToken, titleToken)) {
           ok = false;
           break;
         }

@@ -41,6 +41,34 @@ class _CountingCategory extends Category {
 
 void main() {
   group('parseCategoryQuery', () {
+    for (final pair in [('שורש', 'שרש'), ('דובר', 'דבר')]) {
+      test('@${pair.$1} אינו מרחיב את התחום לפי כלל כתיב שמות הספרים', () {
+        final library = Library(categories: [_category(pair.$2, [])]);
+        final parsed = parseCategoryQuery('מילה@${pair.$1}', library);
+        expect(parsed.categoryFound, isFalse);
+        expect(parsed.facets, isEmpty);
+      });
+    }
+
+    test('@ מעדיף קטגוריה מילולית על מילה אחרת בכתיב קרוב', () {
+      final library = Library(
+        categories: [
+          _category('דבר', []),
+          _category('דובר', []),
+        ],
+      );
+      final parsed = parseCategoryQuery('מילה@דובר', library);
+      expect(parsed.facets, hasLength(1));
+      expect(parsed.facets!.single, contains('דובר'));
+    });
+
+    test('@ שומר התאמת שגיאת הקלדה גם בלי כלל כתיב שמות הספרים', () {
+      final library = Library(categories: [_category('בראשית', [])]);
+      final parsed = parseCategoryQuery('מילה@בראשיתת', library);
+      expect(parsed.categoryFound, isTrue);
+      expect(parsed.facets, contains(contains('בראשית')));
+    });
+
     test('ללא @ — מחזיר את השאילתה כמות שהיא ו-facets null', () {
       final library = Library(
         categories: [
