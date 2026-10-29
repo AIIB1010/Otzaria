@@ -142,7 +142,7 @@ Future<void> _extractAsset(
     case RawAssetFormat.plain:
       final out = File(target).openSync(mode: FileMode.write);
       try {
-        await _streamParts(asset, out.writeFromSync, onBytes, isCancelled);
+        await _streamParts(asset, out.writeFrom, onBytes, isCancelled);
       } finally {
         out.closeSync();
       }
@@ -152,7 +152,7 @@ Future<void> _extractAsset(
       try {
         await _streamParts(
           asset,
-          (chunk) => decoder.add(chunk, out.writeFromSync),
+          (chunk) => decoder.add(chunk, out.writeFrom),
           onBytes,
           isCancelled,
         );
@@ -189,7 +189,7 @@ Future<void> _extractAsset(
 /// חלק ולשלם כשידועים. מחזיר את ה-SHA-256 של השלם כש-[wholeDigest].
 Future<String?> _streamParts(
   RawLibraryAsset asset,
-  void Function(List<int> chunk) consume,
+  Future<void> Function(List<int> chunk) consume,
   void Function(int bytes) onBytes,
   bool Function()? isCancelled, {
   bool wholeDigest = false,
@@ -215,7 +215,7 @@ Future<String?> _streamParts(
       // לדווח איזה חלק פגום, ולא שגיאת zstd סתמית.
       if (consumeError == null) {
         try {
-          consume(chunk);
+          await consume(chunk);
         } on FormatException catch (error, stack) {
           if (partInput == null) rethrow;
           consumeError = error;

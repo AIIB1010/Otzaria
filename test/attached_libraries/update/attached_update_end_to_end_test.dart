@@ -57,7 +57,7 @@ const _manifestUrl = 'https://updates.example.org/lib/manifest.json';
 
 // Top-level so the closure sent to the download isolate captures only a path.
 AttachedUpdatePatchDecoder _patchWith(String lib) =>
-    (patch, base, output, max, _) async => decodePatchSyncForTest(
+    (patch, base, output, max, _) async => decodePatchForTest(
       patch,
       base,
       output,
@@ -66,7 +66,7 @@ AttachedUpdatePatchDecoder _patchWith(String lib) =>
     );
 
 AttachedUpdateDecompressor _decompressWith(String lib) =>
-    (archive, output, max) async => decompressSyncForTest(
+    (archive, output, max) async => decompressForTest(
       archive,
       output,
       DynamicLibrary.open(lib),

@@ -35,7 +35,7 @@ void main() {
   // characterization: מחלץ patch אמיתי ומשווה ל-uncompressedSha256 מה-manifest.
   test(
     'decompress מחלץ patch-v1-v2.db.zst לפלט תקין (sha256)',
-    () {
+    () async {
       const src = '/Users/david/Downloads/releases/v2/patch-v1-v2.db.zst';
       const expectedSha =
           'c02ccccd132e2b331e24ee60ca7886c4ee35b122d2b602d3690176e633c8ea05';
@@ -44,7 +44,7 @@ void main() {
         return;
       }
       final out = '${tmp.path}/extracted.db';
-      decompressSyncForTest(src, out, lib!);
+      await decompressForTest(src, out, lib!);
       final hash = sha256.convert(File(out).readAsBytesSync()).toString();
       expect(hash, expectedSha);
     },
@@ -52,50 +52,50 @@ void main() {
     timeout: const Timeout(Duration(minutes: 2)),
   );
 
-  test('מחלץ קובץ גדול מנתח קריאה אחד במדויק', () {
+  test('מחלץ קובץ גדול מנתח קריאה אחד במדויק', () async {
     final data = payload(3 * 1024 * 1024 + 123);
     final src = writeZst('big.zst', [data]);
     final out = p.join(tmp.path, 'out.db');
     File(out).writeAsStringSync('ישן — חייב להידרס');
 
-    decompressSyncForTest(src, out, lib!);
+    await decompressForTest(src, out, lib!);
 
     expect(File(out).readAsBytesSync(), data);
   }, skip: skip);
 
-  test('קובץ של כמה frames נפרס במלואו', () {
+  test('קובץ של כמה frames נפרס במלואו', () async {
     final a = payload(200000);
     final b = Uint8List.fromList(utf8.encode('frame שני' * 5000));
     final src = writeZst('multi.zst', [a, b]);
     final out = p.join(tmp.path, 'out.db');
 
-    decompressSyncForTest(src, out, lib!);
+    await decompressForTest(src, out, lib!);
 
     expect(File(out).readAsBytesSync(), [...a, ...b]);
   }, skip: skip);
 
-  test('חריגה מ-maxOutputBytes זורקת ומוחקת את הפלט', () {
+  test('חריגה מ-maxOutputBytes זורקת ומוחקת את הפלט', () async {
     final src = writeZst('big.zst', [payload(1 << 20)]);
     final out = p.join(tmp.path, 'out.db');
 
-    expect(
-      () => decompressSyncForTest(src, out, lib!, maxOutputBytes: 1000),
+    await expectLater(
+      () => decompressForTest(src, out, lib!, maxOutputBytes: 1000),
       throwsA(isA<ZstdOutputLimitExceeded>()),
     );
     expect(File(out).existsSync(), isFalse);
   }, skip: skip);
 
-  test('פלט בדיוק בגודל maxOutputBytes מתקבל', () {
+  test('פלט בדיוק בגודל maxOutputBytes מתקבל', () async {
     final data = payload(5000);
     final src = writeZst('exact.zst', [data]);
     final out = p.join(tmp.path, 'out.db');
 
-    decompressSyncForTest(src, out, lib!, maxOutputBytes: data.length);
+    await decompressForTest(src, out, lib!, maxOutputBytes: data.length);
 
     expect(File(out).lengthSync(), data.length);
   }, skip: skip);
 
-  test('קובץ קטוע נכשל ומוחק את הפלט החלקי', () {
+  test('קובץ קטוע נכשל ומוחק את הפלט החלקי', () async {
     final full = File(
       writeZst('full.zst', [payload(1 << 20)]),
     ).readAsBytesSync();
@@ -103,19 +103,19 @@ void main() {
     File(src).writeAsBytesSync(full.sublist(0, full.length - 100));
     final out = p.join(tmp.path, 'out.db');
 
-    expect(
-      () => decompressSyncForTest(src, out, lib!),
+    await expectLater(
+      () => decompressForTest(src, out, lib!),
       throwsA(isA<FormatException>()),
     );
     expect(File(out).existsSync(), isFalse);
   }, skip: skip);
 
-  test('קובץ zst פגום נכשל ומוחק את הפלט החלקי', () {
+  test('קובץ zst פגום נכשל ומוחק את הפלט החלקי', () async {
     final src = '${tmp.path}/corrupt.zst';
     File(src).writeAsBytesSync([0x28, 0xb5, 0x2f, 0xfd, 0x00, 0x01, 0x02]);
     final out = '${tmp.path}/out.db';
-    expect(
-      () => decompressSyncForTest(src, out, lib!),
+    await expectLater(
+      () => decompressForTest(src, out, lib!),
       throwsA(isA<Exception>()),
     );
     expect(File(out).existsSync(), isFalse);
@@ -127,7 +127,7 @@ void main() {
       return writeZst('archive.tar.zst', [tar]);
     }
 
-    test('פורס לתיקייה בלי קובץ tar זמני ליד הארכיון', () {
+    test('פורס לתיקייה בלי קובץ tar זמני ליד הארכיון', () async {
       final big = payload(2 * 1024 * 1024);
       final src = writeTarZst(
         {
@@ -138,7 +138,7 @@ void main() {
       );
       final out = p.join(tmp.path, 'out');
 
-      extractTarSyncForTest(src, out, lib!);
+      await extractTarForTest(src, out, lib!);
 
       expect(
         File(p.join(out, 'תלמוד בבלי', 'ברכות.pdf')).readAsBytesSync(),
@@ -156,39 +156,39 @@ void main() {
       expect(leftovers, ['archive.tar.zst']);
     }, skip: skip);
 
-    test('קבצים בשורש הארכיון נפרסים', () {
+    test('קבצים בשורש הארכיון נפרסים', () async {
       final src = writeTarZst({
         'a.txt': utf8.encode('א'),
         'dir/b.txt': utf8.encode('ב'),
       });
       final out = p.join(tmp.path, 'out');
 
-      extractTarSyncForTest(src, out, lib!);
+      await extractTarForTest(src, out, lib!);
 
       expect(File(p.join(out, 'a.txt')).readAsStringSync(), 'א');
       expect(File(p.join(out, 'dir', 'b.txt')).readAsStringSync(), 'ב');
     }, skip: skip);
 
-    test('נתיב שבורח מהיעד נדחה', () {
+    test('נתיב שבורח מהיעד נדחה', () async {
       final src = writeTarZst({'../evil.txt': utf8.encode('x')});
       final out = p.join(tmp.path, 'out');
 
-      expect(
-        () => extractTarSyncForTest(src, out, lib!),
+      await expectLater(
+        () => extractTarForTest(src, out, lib!),
         throwsA(isA<FormatException>()),
       );
       expect(File(p.join(tmp.path, 'evil.txt')).existsSync(), isFalse);
     }, skip: skip);
 
-    test('tar.zst קטוע נכשל', () {
+    test('tar.zst קטוע נכשל', () async {
       final full = File(
         writeTarZst({'a.bin': payload(1 << 20)}),
       ).readAsBytesSync();
       final src = p.join(tmp.path, 'cut.tar.zst');
       File(src).writeAsBytesSync(full.sublist(0, full.length ~/ 2));
 
-      expect(
-        () => extractTarSyncForTest(src, p.join(tmp.path, 'out'), lib!),
+      await expectLater(
+        () => extractTarForTest(src, p.join(tmp.path, 'out'), lib!),
         throwsA(isA<FormatException>()),
       );
     }, skip: skip);

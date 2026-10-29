@@ -20,8 +20,8 @@ class ZstdDecodeCancelled implements Exception {
   String toString() => 'ZstdDecodeCancelled';
 }
 
-/// דגל ביטול משותף בין isolates. תא בזיכרון נייטיב ולא פורט, כי לולאת
-/// הפענוח סינכרונית ולא תגיע ללולאת האירועים כדי לקבל הודעה.
+/// דגל ביטול משותף בין isolates. תא בזיכרון נייטיב ולא פורט: הלולאה בודקת
+/// אותו בכל נתח, בלי לחכות להודעה בלולאת האירועים.
 class ZstdCancelFlag {
   ZstdCancelFlag() : _cell = calloc<Uint8>();
 
@@ -55,9 +55,9 @@ Future<void> decodePatchToFile(
   ),
 );
 
-/// נקודת כניסה לבדיקות בלבד: הרצה סינכרונית עם [lib] מוזרק (למשל libzstd
-/// של המערכת), כדי לאמת את לוגיקת ה-FFI בלי ה-framework של Flutter.
-void decodePatchSyncForTest(
+/// נקודת כניסה לבדיקות בלבד: הרצה ב-isolate הנוכחי עם [lib] מוזרק (למשל
+/// libzstd של המערכת), כדי לאמת את לוגיקת ה-FFI בלי ה-framework של Flutter.
+Future<void> decodePatchForTest(
   String patchPath,
   String basePath,
   String outputPath,
@@ -73,26 +73,28 @@ void decodePatchSyncForTest(
   cancelAddress,
 );
 
-void _decodeWithLib(
+Future<void> _decodeWithLib(
   String patchPath,
   String basePath,
   String outputPath,
   DynamicLibrary dylib,
   int? maxOutputBytes,
   int cancelAddress,
-) {
+) async {
   try {
-    MappedFile.use(
-      basePath,
-      (base) => _decodeCore(
+    final base = MappedFile.open(basePath);
+    try {
+      await _decodeCore(
         patchPath,
         base,
         outputPath,
         dylib,
         maxOutputBytes,
         cancelAddress,
-      ),
-    );
+      );
+    } finally {
+      base.unmap();
+    }
   } catch (_) {
     try {
       final partial = File(outputPath);
@@ -102,20 +104,20 @@ void _decodeWithLib(
   }
 }
 
-void _decodeCore(
+Future<void> _decodeCore(
   String patchPath,
   MappedFile base,
   String outputPath,
   DynamicLibrary dylib,
   int? maxOutputBytes,
   int cancelAddress,
-) {
+) async {
   final cancelCell = cancelAddress == 0
       ? nullptr
       : Pointer<Uint8>.fromAddress(cancelAddress);
   final bindings = ZstandardNativeBindings(dylib);
-  final inBufSize = bindings.ZSTD_DStreamInSize();
-  final outBufSize = bindings.ZSTD_DStreamOutSize();
+  const inBufSize = zstdInputChunkBytes;
+  const outBufSize = zstdOutputChunkBytes;
 
   final dctx = bindings.ZSTD_createDCtx();
   if (dctx == nullptr) throw Exception('ZSTD_createDCtx נכשל');
@@ -160,7 +162,7 @@ void _decodeCore(
           var lastRet = 0;
           var totalWritten = 0;
           while (true) {
-            final bytesRead = inputRaf.readIntoSync(inView);
+            final bytesRead = await inputRaf.readInto(inView);
             if (bytesRead == 0) break;
             inBuf.ref.src = inNative.cast();
             inBuf.ref.size = bytesRead;
@@ -179,7 +181,10 @@ void _decodeCore(
                 throw ZstdOutputLimitExceeded(maxOutputBytes);
               }
               if (outBuf.ref.pos > 0) {
-                outputRaf.writeFromSync(outNative.asTypedList(outBuf.ref.pos));
+                // writeFromSync עוצר את ה-GC של כל ה-isolates עד סוף הכתיבה.
+                await outputRaf.writeFrom(
+                  outNative.asTypedList(outBuf.ref.pos),
+                );
                 totalWritten += outBuf.ref.pos;
               }
             }

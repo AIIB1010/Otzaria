@@ -60,7 +60,7 @@ Future<void> extractLibraryPackage({
         // לדווח איזה חלק פגום, ולא שגיאת zstd סתמית.
         if (decodeError == null) {
           try {
-            decoder.add(chunk, tar.add);
+            await decoder.add(chunk, tar.add);
           } catch (error, stack) {
             if (partInput == null) rethrow;
             decodeError = error;
