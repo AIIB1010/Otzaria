@@ -1257,8 +1257,7 @@ class BookTitleIndex {
       if (matchRank != null) mask = _acronymMay;
     }
 
-    // מילות הכותרת בכתיב מלא/חסר ("ספר השורשים" ל"ספר השרשים"): דירוג 2 כמו
-    // כותרת מילולית שמכילה אותן — גובר על תחילית כינוי, לא על כינוי מדויק.
+    // הכתיב החלופי מזהה את טוקני שם הספר, בלי לדרוס התאמת כינוי מילולית.
     int? spellingVariantTitleIndex;
     if ((matchRank == null || matchRank >= 4) &&
         scan.fuzzyCandidates.contains(book.id)) {
@@ -1267,9 +1266,7 @@ class BookTitleIndex {
         _titleTokens[book.id] ?? _splitTitleTokens(t),
       );
       if (start != null) {
-        matchRank = 2;
-        matchedTerm = null;
-        tailIsTitleWords = false;
+        matchRank ??= 2;
         mask = _mayMatchAll;
         spellingVariantTitleIndex = start;
       }
@@ -1476,12 +1473,13 @@ class ReferenceBookHit {
   /// השאילתה היא גם כינוי מדויק של ספר שהותאם לפי כותרתו ("זהר" ל"ספר הזהר").
   final bool isExactAlias;
 
-  /// מקום מילות השאילתה בכותרת, כשהותאמו בכתיב מלא/חסר ([matchRank] == 2).
+  /// מקום מילות השאילתה בכותרת כשהותאמו בכתיב מלא/חסר, גם לצד כינוי מילולי.
   final int? spellingVariantTitleIndex;
 
-  /// סדר הדירוג: כתיב מלא/חסר בין כינוי מדויק (3) לתחילית כינוי (4).
-  double get rankOrder =>
-      spellingVariantTitleIndex == null ? matchRank.toDouble() : 3.5;
+  /// כתיב חלופי ללא התאמה מילולית מדורג אחרי כל הכינויים ולפני שגיאות הקלדה.
+  double get rankOrder => spellingVariantTitleIndex != null && matchRank == 2
+      ? 5.5
+      : matchRank.toDouble();
 
   /// השאילתה היא שמו המדויק של הספר — כותרת מלאה או כינוי.
   bool get namesBookExactly => matchRank == 0 || matchRank == 3 || isExactAlias;

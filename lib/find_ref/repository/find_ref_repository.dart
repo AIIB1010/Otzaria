@@ -1234,7 +1234,7 @@ class FindRefRepository {
           secondaryPhraseTokenCount[hit] = n;
           continue;
         }
-        if (hit.matchRank >= 4) {
+        if (hit.matchRank >= 4 && hit.spellingVariantTitleIndex == null) {
           if (hit.matchRank == 4 && hit.acronymTailIsTitleWords) {
             joinablePrefixHits.add(hit);
           }
@@ -1242,7 +1242,8 @@ class FindRefRepository {
         }
         final titleTokens = hit.titleTokens;
         if (!_phraseAppearsAsTokens(titleTokens, phraseTokens)) continue;
-        if (hit.matchRank == 2 && hit.spellingVariantTitleIndex != 0) {
+        if ((hit.matchRank == 2 || hit.spellingVariantTitleIndex != null) &&
+            hit.spellingVariantTitleIndex != 0) {
           secondaryHits.add(hit);
           secondaryPhraseTokenCount[hit] = n;
         } else {
@@ -1292,13 +1293,11 @@ class FindRefRepository {
     Map<_BookKey, int>? into,
   }) {
     final bookMatchRanks = into ?? <_BookKey, int>{};
-    // כשהשאילתה היא שם מדויק של ספר, כתיב מלא/חסר של ספר אחר מדורג כמקורב.
-    final namesBookExactly = hits.any((hit) => hit.namesBookExactly);
     for (final hit in hits) {
       if (hit.bookId > 0 || hit.filePath.isNotEmpty) {
         final key = _bookKey(source, hit.bookId, hit.filePath);
         final previous = bookMatchRanks[key];
-        final rank = namesBookExactly && hit.spellingVariantTitleIndex != null
+        final rank = hit.spellingVariantTitleIndex != null && hit.matchRank == 2
             ? ReferenceBooksCache.fuzzyMatchRank
             : hit.matchRank;
         if (previous == null || rank < previous) {

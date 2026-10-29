@@ -534,11 +534,10 @@ List<int> _searchPreparedEntries(
               in filtered)
             _ScoredBookSearchEntry(
               index: entry.index,
-              // שכבות עדיפות (כותרת מדויקת > מכילה ברצף > מילותיה לפי הסדר > כינוי
-              // > fuzzy > נתיב התיקיות); בתוך כל שכבה: דור ואז ratio, כך ספר יסוד
-              // לא נקבר תחת פירושים.
+              // כותרת מדויקת > מכילה > מילים לפי הסדר > כינוי > מילולי > fuzzy > נתיב.
+              // בתוך כל שכבה: דור ואז ratio, כדי שספר יסוד לא ייקבר תחת פירושים.
               tier: viaCategoryOnly
-                  ? -1
+                  ? -2
                   : entry.normalizedTitle == normalizedQuery
                   ? 4
                   : entry.normalizedTitle.contains(normalizedQuery)
@@ -550,7 +549,12 @@ List<int> _searchPreparedEntries(
                   ? 2
                   : entry.acronyms.any((a) => a.contains(normalizedQuery))
                   ? 1
-                  : 0,
+                  : queryWords.every(
+                      (word) =>
+                          entry.searchWords.any((text) => text.contains(word)),
+                    )
+                  ? 0
+                  : -1,
               eraOrder: entry.eraOrder,
               source: entry.source,
               isExternalCatalog: entry.isExternalCatalog,
@@ -581,7 +585,7 @@ List<int> _searchPreparedEntries(
 }
 
 /// האם כל מילות השאילתה מופיעות כמילים שלמות בכותרת, לפי סדרן.
-/// שוויון או כתיב מלא/חסר בלבד — התאמה סלחנית מקדמת 'הרמבם' עבור שאילתת 'רמבם'.
+/// שוויון מדויק בכוונה — התאמה סלחנית מקדמת 'הרמבם' עבור שאילתת 'רמבם'.
 bool _titleHasQueryWordsInOrder(
   String normalizedTitle,
   List<String> queryWords,
@@ -589,11 +593,7 @@ bool _titleHasQueryWordsInOrder(
   if (queryWords.isEmpty) return false;
   var i = 0;
   for (final titleWord in normalizedTitle.split(' ')) {
-    if ((titleWord == queryWords[i] ||
-            isBookTitleSpellingVariant(titleWord, queryWords[i])) &&
-        ++i == queryWords.length) {
-      return true;
-    }
+    if (titleWord == queryWords[i] && ++i == queryWords.length) return true;
   }
   return false;
 }
@@ -757,14 +757,21 @@ int _maxAllowedEdits(int len) {
 
 /// התאמת זוג מילים בודדות: הכלה, או מרחק עריכה שסיפו נגזר מהארוכה
 /// מבין השתיים — כך ההתאמה הדדית (מדות↔מידות).
-bool _wordPairMatches(String queryWord, String textWord) {
+bool _wordPairMatches(
+  String queryWord,
+  String textWord, {
+  bool matchBookTitleSpellingVariants = true,
+}) {
   if (textWord.contains(queryWord)) return true;
   if (queryWord.length < 3) return false;
   if (_hasDoubledVavYod(queryWord) || _hasDoubledVavYod(textWord)) {
     final collapsedQuery = _collapseDoubledVavYod(queryWord);
     if (_collapseDoubledVavYod(textWord).contains(collapsedQuery)) return true;
   }
-  if (startsWithBookTitleSpellingVariant(textWord, queryWord)) return true;
+  if (matchBookTitleSpellingVariants &&
+      startsWithBookTitleSpellingVariant(textWord, queryWord)) {
+    return true;
+  }
 
   final allowed = _maxAllowedEdits(
     queryWord.length > textWord.length ? queryWord.length : textWord.length,
@@ -790,11 +797,21 @@ bool bookSearchWordPairMatches(String queryWord, String textWord) =>
     _wordPairMatches(queryWord, textWord);
 
 /// התאמת מילת שאילתה לטקסט שלם (כותרת/מחבר מנורמלים) עם סלחנות לשגיאות כתיב.
-/// משמשת גם את תחביר `@` בחיפוש (ראה `parseCategoryQuery`).
-bool bookSearchWordMatchesFuzzy(String queryWord, String text) {
+/// תחביר `@` מכבה את כלל כתיב שמות הספרים כדי לשמר את תחום החיפוש.
+bool bookSearchWordMatchesFuzzy(
+  String queryWord,
+  String text, {
+  bool matchBookTitleSpellingVariants = true,
+}) {
   for (final textWord in text.split(' ')) {
     if (textWord.isEmpty) continue;
-    if (_wordPairMatches(queryWord, textWord)) return true;
+    if (_wordPairMatches(
+      queryWord,
+      textWord,
+      matchBookTitleSpellingVariants: matchBookTitleSpellingVariants,
+    )) {
+      return true;
+    }
   }
   return false;
 }

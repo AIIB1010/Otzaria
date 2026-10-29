@@ -891,9 +891,9 @@ void main() {
       expect(search('ספר השורשים'), [0]);
     });
 
-    test('כתיב מלא של מילות הכותרת קודם להתאמה דרך כינוי', () {
+    test('כינוי מילולי קודם לכתיב חלופי של מילות הכותרת', () {
       final results = search('שלחן ערוך');
-      expect(results.indexOf(2), lessThan(results.indexOf(3)));
+      expect(results.indexOf(3), lessThan(results.indexOf(2)));
     });
 
     test('לא באמצע מילה', () {

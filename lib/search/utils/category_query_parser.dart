@@ -159,7 +159,11 @@ List<String> _facetsForName(
     if (texts.any((text) => text.contains(normalizedName))) return 2;
     final searchText = texts.join(' ');
     if (nameWords.every(
-      (word) => bookSearchWordMatchesFuzzy(word, searchText),
+      (word) => bookSearchWordMatchesFuzzy(
+        word,
+        searchText,
+        matchBookTitleSpellingVariants: false,
+      ),
     )) {
       return 3;
     }
