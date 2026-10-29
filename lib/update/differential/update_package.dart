@@ -4,6 +4,7 @@ import 'dart:isolate';
 
 import 'package:archive/archive.dart';
 import 'package:otzaria/utils/file/native_sha256.dart';
+import 'package:otzaria/utils/file/zip_entry_io.dart';
 
 import 'managed_paths.dart';
 import 'tree_fs.dart';
@@ -506,7 +507,7 @@ Object? _readManifestJson(String packagePath) {
   try {
     final Archive archive;
     try {
-      input = InputFileStream(packagePath);
+      input = openZipInput(packagePath);
       archive = ZipDecoder().decodeStream(input);
     } catch (error) {
       _invalid('the update package could not be read: $error');
@@ -532,7 +533,7 @@ Future<void> _extractVerifiedPayload(
   String path,
   String outputPath,
 ) async {
-  final input = InputFileStream(packagePath);
+  final input = openZipInput(packagePath);
   try {
     final file = ZipDecoder().decodeStream(input).findFile(entryName);
     if (file == null || !file.isFile) {
@@ -541,12 +542,7 @@ Future<void> _extractVerifiedPayload(
         '$path: $entryName is missing from the package',
       );
     }
-    final output = OutputFileStream(outputPath);
-    try {
-      file.writeContent(output);
-    } finally {
-      output.closeSync();
-    }
+    await writeZipEntry(file, outputPath);
   } finally {
     input.closeSync();
   }

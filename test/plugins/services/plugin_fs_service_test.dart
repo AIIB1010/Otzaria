@@ -43,6 +43,78 @@ void main() {
   }
 
   group('PluginFsService.extractZip', () {
+    for (final compression in CompressionType.values) {
+      String writeArchive(Archive archive) {
+        final zipPath = p.join(tempDir.path, '${compression.name}.zip');
+        File(zipPath).writeAsBytesSync(ZipEncoder().encodeBytes(archive));
+        return zipPath;
+      }
+
+      ArchiveFile entry(String name, Uint8List bytes) =>
+          ArchiveFile.bytes(name, bytes)..compression = compression;
+
+      test(
+        '${compression.name}: נתיבים מנורמלים זהים נכתבים לפי הסדר',
+        () async {
+          final last = Uint8List(17)..fillRange(0, 17, 2);
+          final archive = Archive()
+            ..add(entry('dir/same.bin', Uint8List(2 * 1024 * 1024)))
+            ..add(entry('dir/./same.bin', last));
+          final destFolder = p.join(tempDir.path, 'out');
+
+          await service.extractZip(writeArchive(archive), destFolder);
+
+          expect(
+            File(p.join(destFolder, 'dir/same.bin')).readAsBytesSync(),
+            last,
+          );
+        },
+      );
+
+      test('${compression.name}: גודל מוצהר שקרי מסיר פלט חלקי', () async {
+        final archive = Archive()
+          ..add(entry('large.bin', Uint8List(2 * 1024 * 1024)));
+        final zipPath = writeArchive(archive);
+        final bytes = File(zipPath).readAsBytesSync();
+        final header = ByteData.sublistView(bytes);
+        final end = bytes.length - 22;
+        final central = header.getUint32(end + 16, Endian.little);
+        header.setUint32(central + 24, 1, Endian.little);
+        File(zipPath).writeAsBytesSync(bytes);
+        final destFolder = p.join(tempDir.path, 'out');
+
+        await expectLater(
+          service.extractZip(zipPath, destFolder),
+          throwsA(isA<ArchiveException>()),
+        );
+
+        expect(File(p.join(destFolder, 'large.bin')).existsSync(), isFalse);
+      });
+
+      if (compression != CompressionType.none) {
+        test('${compression.name}: פענוח פגום מסיר פלט חלקי', () async {
+          final archive = Archive()..add(entry('bad.bin', Uint8List(1024)));
+          final zipPath = writeArchive(archive);
+          final bytes = File(zipPath).readAsBytesSync();
+          final header = ByteData.sublistView(bytes);
+          final start =
+              30 +
+              header.getUint16(26, Endian.little) +
+              header.getUint16(28, Endian.little);
+          bytes.fillRange(start, start + 4, 0);
+          File(zipPath).writeAsBytesSync(bytes);
+          final destFolder = p.join(tempDir.path, 'out');
+
+          await expectLater(
+            service.extractZip(zipPath, destFolder),
+            throwsA(isA<FormatException>()),
+          );
+
+          expect(File(p.join(destFolder, 'bad.bin')).existsSync(), isFalse);
+        });
+      }
+    }
+
     test('מחלץ קבצים אל תיקיית היעד ויוצר אותה אם אינה קיימת', () async {
       final zipPath = buildZip(p.join(tempDir.path, 'a.zip'), {
         'hello.txt': 'שלום עולם',
