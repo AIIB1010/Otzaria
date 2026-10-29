@@ -207,7 +207,7 @@ class BackupService {
       final file = File(backupPath);
       _logger.info('Writing backup data (${backupData.length} keys)...');
 
-      final jsonLength = await _writeBackupJson(backupPath, backupData);
+      final jsonLength = await writeBackupJson(backupPath, backupData);
       _logger.info('JSON size: $jsonLength characters');
       _logger.info('Backup file written successfully');
 
@@ -416,14 +416,17 @@ class BackupService {
   static bool isPortableSettingKey(String key) =>
       !isNonSettingKey(key) && !nonPortableSettingsKeys.contains(key);
 
-  /// Backup bookmarks
   /// גיבוי גדול נמשך שניות בקידוד JSON ו-UTF-8, ולכן נכתב מחוץ ל-isolate הראשי.
-  static Future<int> _writeBackupJson(String path, Map<String, dynamic> data) =>
-      Isolate.run(() {
-        final jsonString = json.encode(data);
-        File(path).writeAsStringSync(jsonString);
-        return jsonString.length;
-      });
+  @visibleForTesting
+  static Future<int> writeBackupJson(
+    String path,
+    Map<String, dynamic> data,
+  ) => Isolate.run(() async {
+    final jsonString = json.encode(data);
+    // כתיבה סינכרונית מחזיקה TypedDataAcquire ומעכבת GC גם ב-isolates אחרים.
+    await File(path).writeAsString(jsonString);
+    return jsonString.length;
+  });
 
   static Future<List<Map<String, dynamic>>> _backupBookmarks() async {
     final repo = BookmarkRepository();
