@@ -17,6 +17,7 @@ import 'package:otzaria/tabs/bloc/tabs_bloc.dart';
 import 'package:otzaria/tabs/bloc/tabs_event.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:otzaria/bookmarks/utils/bookmark_from_tab.dart';
+import 'package:otzaria/bookmarks/utils/bookmark_search_aliases.dart';
 import 'package:otzaria/core/ui_snack.dart';
 import 'package:otzaria/core/messages/notes_messages.dart';
 import 'package:otzaria/widgets/controls/action_buttons.dart';
@@ -339,6 +340,8 @@ class _BookmarkViewState extends State<BookmarkView> {
           searchFocusNode: _searchFocusNode,
           items: state.bookmarks,
           searchFieldTrailing: _buildSearchTrailing(context),
+          searchAliasesBuilder: bookmarkSearchAliases,
+          searchTitleBuilder: bookmarkSearchTitle,
           itemSortComparator: byDate
               ? (a, b) => _compareByDateAdded(a as Bookmark, b as Bookmark)
               : (a, b) => _compareBookmarks(b as Bookmark, a as Bookmark),

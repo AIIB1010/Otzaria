@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/bookmarks/models/bookmark.dart';
+import 'package:otzaria/data/cache/acronyms_cache.dart';
 import 'package:otzaria/history/bloc/history_bloc.dart';
 import 'package:otzaria/history/bloc/history_event.dart';
 import 'package:otzaria/history/bloc/history_state.dart';
@@ -114,6 +115,43 @@ Future<void> main() async {
       await navigation.close();
     });
   }
+
+  testWidgets('חיפוש בהיסטוריה מוצא ספר לפי כינוי', (tester) async {
+    AcronymsCache.instance.setAcronymsForTesting({
+      7: ['רמבם'],
+    });
+    addTearDown(AcronymsCache.instance.clear);
+    final history = MockHistoryBloc();
+    whenListen(
+      history,
+      const Stream<HistoryState>.empty(),
+      initialState: HistoryLoaded([
+        Bookmark(
+          ref: 'משנה תורה, הלכות שבת',
+          book: TextBook(id: 7, title: 'משנה תורה'),
+          index: 3,
+        ),
+        _bookmark('ברכות ב.'),
+      ]),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: BlocProvider<HistoryBloc>.value(
+            value: history,
+            child: const HistoryView(),
+          ),
+        ),
+      ),
+    );
+    await tester.enterText(find.byType(TextField).first, 'רמבם');
+    await tester.pump();
+
+    expect(find.text('משנה תורה'), findsOneWidget);
+    expect(find.text('ברכות ב.'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await history.close();
+  });
 
   group('HistoryView - workspace filter chips', () {
     late MockHistoryBloc historyBloc;
