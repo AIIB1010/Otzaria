@@ -7,6 +7,11 @@ const _kGithubSignatureHeader = 'x-github-request-id';
 
 const _kReachabilityTimeout = Duration(seconds: 5);
 
+/// נתיב שעדכון הספרייה פונה אליו ממילא: ברשת מסוננת מאשרים את נתיבי
+/// Otzaria בלבד ולא את כל api.github.com, ובדיקה מול השורש תיחסם.
+const _kReachabilityProbeUrl =
+    'https://api.github.com/repos/Otzaria/SeforimLibrary/releases/latest';
+
 /// האם שרת העדכונים (api.github.com) נגיש בפועל.
 ///
 /// נבדקת חתימת GitHub בכותרות ולא סטטוס 200: רשת מסוננת מחזירה דף חסימה
@@ -18,7 +23,7 @@ Future<bool> isUpdateSourceReachable({
   final httpClient = client ?? http.Client();
   try {
     final response = await httpClient
-        .get(Uri.parse('https://api.github.com/'))
+        .get(Uri.parse(_kReachabilityProbeUrl))
         .timeout(timeout);
     return response.headers.containsKey(_kGithubSignatureHeader);
   } catch (_) {
