@@ -77,24 +77,24 @@ class _LibrarySetupViewState extends State<LibrarySetupView> {
     final unsupportedSchema = widget.unsupportedDbSchemaVersion;
     return CenteredScrollableState(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
+        constraints: const BoxConstraints(maxWidth: 520),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               FluentIcons.library_24_regular,
-              size: 64,
+              size: 96,
               color: cs.onSurfaceVariant,
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
             Text(
               unsupportedSchema == null
                   ? 'לא נמצאה ספריית ספרים'
                   : 'ספריית הספרים חדשה מגרסת התוכנה',
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 30, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             Text(
               unsupportedSchema == null
                   ? 'ניתן להוריד את הספרייה מהאינטרנט, להצביע על ספרייה קיימת\n'
@@ -103,7 +103,7 @@ class _LibrarySetupViewState extends State<LibrarySetupView> {
                         'אוצריא קוראת עד פורמט '
                         '${DatabaseConstants.readableDbSchemaVersion}.\n'
                         'יש לעדכן את התוכנה לגרסה האחרונה, או לבחור ספרייה אחרת.',
-              style: TextStyle(fontSize: 16, color: cs.onSurfaceVariant),
+              style: TextStyle(fontSize: 18, color: cs.onSurfaceVariant),
               textAlign: TextAlign.center,
             ),
             if (_sdLibraryWiped) ...[
@@ -124,7 +124,7 @@ class _LibrarySetupViewState extends State<LibrarySetupView> {
                 ),
               ),
             ],
-            const SizedBox(height: 32),
+            const SizedBox(height: 40),
             SizedBox(
               width: double.infinity,
               child: ActionButton.recommended(
