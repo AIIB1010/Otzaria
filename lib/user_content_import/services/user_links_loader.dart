@@ -53,6 +53,7 @@ Future<List<Link>> loadUserLinksForBook({
         endLineIndex: endLineIndex,
       ),
     ),
+    ifSkipped: (const [], const []),
   );
   for (final r in forward) {
     final targetLine = r.targetLineIndex;
@@ -128,12 +129,25 @@ Future<List<String>> loadUserCommentatorTitles({
       sourceIsUserBook: isUserBook,
       sourceCategoryId: bookCategoryId,
     ),
+    ifSkipped: const [],
   );
 }
 
 /// קורא את user_books.db בחיבור read-only משלו ב-isolate: כתיבה מקבילה
 /// (סנכרון הרקע) נועלת את המסד, והמתנה לה על ה-UI isolate תוקעת את הממשק.
 Future<T> _readUserContent<T>(
+  String dbPath,
+  Future<T> Function(UserContentRepository ucr) read, {
+  required T ifSkipped,
+}) async {
+  var result = ifSkipped;
+  await UserBooksDatabaseHolder.instance.trackRead(() async {
+    result = await _readUserContentInIsolate(dbPath, read);
+  });
+  return result;
+}
+
+Future<T> _readUserContentInIsolate<T>(
   String dbPath,
   Future<T> Function(UserContentRepository ucr) read,
 ) async {
