@@ -139,7 +139,7 @@ void main() {
         expect(settings['seedColor'], AppSeedColors.defaultLight);
         expect(settings['darkSeedColor'], AppSeedColors.defaultDark);
         expect(settings['textMaxWidth'], -1.0);
-        expect(settings['fontSize'], 25.0);
+        expect(settings['fontSize'], 30.0);
         expect(settings['fontFamily'], 'FrankRuhlCLM');
         expect(settings['showOtzarHachochma'], false);
         expect(settings['showHebrewBooks'], false);

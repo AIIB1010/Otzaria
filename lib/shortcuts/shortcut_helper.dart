@@ -43,7 +43,7 @@ class ShortcutHelper {
     }
     return event.logicalKey != LogicalKeyboardKey.escape &&
         !(event.logicalKey.keyId >= LogicalKeyboardKey.f1.keyId &&
-            event.logicalKey.keyId <= LogicalKeyboardKey.f12.keyId);
+            event.logicalKey.keyId <= LogicalKeyboardKey.f24.keyId);
   }
 
   // ─── modifiers ────────────────────────────────────────────────────────────────

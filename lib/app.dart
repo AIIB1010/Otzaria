@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -91,6 +92,20 @@ class App extends StatelessWidget {
                       child: child ?? const SizedBox.shrink(),
                     ),
                   );
+
+              // This edition is intended for close-range, low-vision reading.
+              // Keep a user's larger Android text setting, but never render the
+              // application chrome below the large-print baseline.
+              final textScale = math.max(
+                1.35,
+                MediaQuery.textScalerOf(context).textScaleFactor,
+              ).toDouble();
+              content = MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(textScale)),
+                child: content,
+              );
 
               // קביעת צבע אייקוני פס הסטטוס לפי התמה הפעילה.
               // האפליקציה אינה משתמשת ב-AppBar רגיל, ולכן systemOverlayStyle

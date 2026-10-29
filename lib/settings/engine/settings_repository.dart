@@ -388,7 +388,7 @@ class SettingsRepository {
         keyTextMaxWidth,
         defaultValue: -1,
       ),
-      'fontSize': _settings.getValue<double>(keyFontSize, defaultValue: 25),
+      'fontSize': _settings.getValue<double>(keyFontSize, defaultValue: 30),
       'fontFamily': _settings.getValue<String>(
         keyFontFamily,
         defaultValue: AppFonts.defaultFont,
@@ -408,11 +408,11 @@ class SettingsRepository {
       ),
       'commentatorsFontSize': _settings.getValue<double>(
         keyCommentatorsFontSize,
-        defaultValue: 22,
+        defaultValue: 26,
       ),
       'lineHeight': _settings.getValue<double>(
         keyLineHeight,
-        defaultValue: 1.5,
+        defaultValue: 1.7,
       ),
       'showOtzarHachochma': _settings.getValue<bool>(
         keyShowOtzarHachochma,
@@ -1199,7 +1199,7 @@ class SettingsRepository {
       AppSeedColors.defaultDark.toARGB32(),
     );
     await _settings.setValue(keyTextMaxWidth, -1.0);
-    await _settings.setValue(keyFontSize, 25.0);
+    await _settings.setValue(keyFontSize, 30.0);
     await _settings.setValue(keyFontFamily, AppFonts.defaultFont);
     await _settings.setValue(
       keyCommentatorsFontFamily,
@@ -1207,8 +1207,8 @@ class SettingsRepository {
     );
     await _settings.setValue(keyFontBold, false);
     await _settings.setValue(keyCommentatorsFontBold, false);
-    await _settings.setValue(keyCommentatorsFontSize, 22.0);
-    await _settings.setValue(keyLineHeight, 1.5);
+    await _settings.setValue(keyCommentatorsFontSize, 26.0);
+    await _settings.setValue(keyLineHeight, 1.7);
     await _settings.setValue(keyShowOtzarHachochma, false);
     await _settings.setValue(keyShowHebrewBooks, false);
     await _settings.setValue(keyShowLocalHebrewBooks, true);

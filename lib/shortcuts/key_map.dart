@@ -94,6 +94,18 @@ class KeyMap {
     'f10': LogicalKeyboardKey.f10,
     'f11': LogicalKeyboardKey.f11,
     'f12': LogicalKeyboardKey.f12,
+    'f13': LogicalKeyboardKey.f13,
+    'f14': LogicalKeyboardKey.f14,
+    'f15': LogicalKeyboardKey.f15,
+    'f16': LogicalKeyboardKey.f16,
+    'f17': LogicalKeyboardKey.f17,
+    'f18': LogicalKeyboardKey.f18,
+    'f19': LogicalKeyboardKey.f19,
+    'f20': LogicalKeyboardKey.f20,
+    'f21': LogicalKeyboardKey.f21,
+    'f22': LogicalKeyboardKey.f22,
+    'f23': LogicalKeyboardKey.f23,
+    'f24': LogicalKeyboardKey.f24,
   };
 
   /// מיפוי הפוך: [LogicalKeyboardKey] → שם מחרוזת.

@@ -1,7 +1,17 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:otzaria/shortcuts/shortcut_helper.dart';
 import 'package:otzaria/shortcuts/shortcut_validator.dart';
 
 void main() {
+  test('מקשי F13 עד F24 זמינים להגדרת Macro Pad', () {
+    for (var key = 13; key <= 24; key++) {
+      expect(
+        ShortcutHelper.isRecognized('f$key'),
+        isTrue,
+      );
+    }
+  });
+
   test('קיצור חזרה למיקום הקודם ב־PDF רשום וניתן להתאמה', () {
     expect(
       ShortcutValidator.shortcutKeys,

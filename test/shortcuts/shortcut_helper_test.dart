@@ -279,6 +279,7 @@ void main() {
         'ctrl+shift+f',
         'ctrl+alt+shift+z',
         'f11',
+        'f13',
         'escape',
         'alt+arrowup',
         'alt+pagedown',
@@ -349,7 +350,7 @@ void main() {
 
     test('קיצור עם שם מקש שאינו ב-KeyMap אינו מוכר', () {
       expect(ShortcutHelper.isRecognized('ctrl+capslock'), isFalse);
-      expect(ShortcutHelper.isRecognized('f13'), isFalse);
+      expect(ShortcutHelper.isRecognized('f25'), isFalse);
     });
 
     test('כל קיצור מוכר שאינו ריק ניתן גם להמרה ל-ShortcutActivator', () {

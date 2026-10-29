@@ -91,24 +91,46 @@ class AppThemeData {
 
     return ThemeData(
       useMaterial3: true,
-      visualDensity: VisualDensity.adaptivePlatformDensity,
+      // A generous target size is essential when the screen is viewed from a
+      // very short distance.  Do not use the compact platform density here.
+      visualDensity: VisualDensity.standard,
       fontFamily: 'Roboto',
       colorScheme: cs,
       textTheme: const TextTheme(
-        bodyMedium: TextStyle(fontSize: 18.0),
+        bodyMedium: TextStyle(fontSize: 20.0),
+        titleMedium: TextStyle(fontSize: 20.0),
+        labelLarge: TextStyle(fontSize: 18.0),
       ),
       cardTheme: const CardThemeData(shape: AppTokens.roundedShape),
       iconButtonTheme: IconButtonThemeData(
-        style: _hoverButtonStyle(cs.primary),
+        style: _hoverButtonStyle(cs.primary).copyWith(
+          minimumSize: const WidgetStatePropertyAll(Size(64, 64)),
+          iconSize: const WidgetStatePropertyAll(32),
+        ),
       ),
       filledButtonTheme: FilledButtonThemeData(
-        style: _hoverButtonStyle(cs.onPrimary),
+        style: _hoverButtonStyle(cs.onPrimary).copyWith(
+          minimumSize: const WidgetStatePropertyAll(Size(0, 56)),
+        ),
       ),
       textButtonTheme: TextButtonThemeData(
-        style: _hoverButtonStyle(cs.primary),
+        style: _hoverButtonStyle(cs.primary).copyWith(
+          minimumSize: const WidgetStatePropertyAll(Size(0, 56)),
+        ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
-        style: _hoverButtonStyle(cs.primary),
+        style: _hoverButtonStyle(cs.primary).copyWith(
+          minimumSize: const WidgetStatePropertyAll(Size(0, 56)),
+        ),
+      ),
+      iconTheme: const IconThemeData(size: 32),
+      listTileTheme: const ListTileThemeData(minTileHeight: 72),
+      navigationBarTheme: NavigationBarThemeData(
+        height: 104,
+        iconTheme: const WidgetStatePropertyAll(IconThemeData(size: 36)),
+        labelTextStyle: const WidgetStatePropertyAll(
+          TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
       ),
       tabBarTheme: _tabBarTheme(cs),
       tooltipTheme: _tooltipTheme(cs),
@@ -135,6 +157,7 @@ class AppThemeData {
       // מצויר כקו תחתון), ובאותו רדיוס כמו שאר הרכיבים.
       inputDecorationTheme: const InputDecorationTheme(
         border: OutlineInputBorder(borderRadius: AppTokens.borderRadiusAll),
+        contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 18),
       ),
     );
   }
