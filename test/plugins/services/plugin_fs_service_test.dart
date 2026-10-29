@@ -144,6 +144,54 @@ void main() {
       },
     );
 
+    test('חילוצים מקבילים ממופעים שונים אינם מערבבים קובץ משותף', () async {
+      const size = 48 * 1024 * 1024;
+      final zipPaths = <String>[];
+      for (var value = 1; value <= 3; value++) {
+        final bytes = Uint8List(size)..fillRange(0, size, value);
+        final archive = Archive()..add(ArchiveFile('same.bin', size, bytes));
+        final zipPath = p.join(tempDir.path, '$value.zip');
+        File(zipPath).writeAsBytesSync(ZipEncoder().encode(archive, level: 0));
+        zipPaths.add(zipPath);
+      }
+      final destFolder = p.join(tempDir.path, 'shared');
+      for (var round = 0; round < 3; round++) {
+        await Future.wait([
+          for (final zipPath in zipPaths)
+            PluginFsService().extractZip(zipPath, destFolder),
+        ]);
+        final result = File(p.join(destFolder, 'same.bin')).readAsBytesSync();
+        expect(result.length, size);
+        expect(result.first, inInclusiveRange(1, 3));
+        expect(result.every((value) => value == result.first), isTrue);
+      }
+    }, timeout: const Timeout(Duration(minutes: 2)));
+
+    test('כשל בחילוץ אינו חוסם חילוצים ממתינים ליעדים שונים', () async {
+      final zipPath = buildZip(p.join(tempDir.path, 'a.zip'), {
+        'a.txt': 'שלום',
+      });
+      final failed = expectLater(
+        PluginFsService(maxUncompressedBytes: 1).extractZip(
+          zipPath,
+          p.join(tempDir.path, 'failed'),
+        ),
+        throwsA(predicate((e) => e.toString().contains('error.too_large'))),
+      );
+      final destinations = [
+        p.join(tempDir.path, 'first'),
+        p.join(tempDir.path, 'second'),
+      ];
+      await Future.wait([
+        failed,
+        for (final dest in destinations)
+          PluginFsService().extractZip(zipPath, dest),
+      ]);
+      for (final dest in destinations) {
+        expect(File(p.join(dest, 'a.txt')).readAsStringSync(), 'שלום');
+      }
+    });
+
     test('ה-isolate הקורא ממשיך להגיב בזמן חילוץ קובץ גדול (#3398)', () async {
       final rng = Random(3398);
       final words = Uint32List(8 * 1024 * 1024);

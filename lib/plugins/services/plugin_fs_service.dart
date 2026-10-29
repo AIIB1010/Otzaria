@@ -49,6 +49,9 @@ class PluginWorkspaceEntry {
 /// ואוכפות בעצמן את הגבול דרך [resolveWithinRoot] — כל נתיב שיוצא מהשורש נדחה
 /// ב-`error.forbidden`, גם דרך `..` וגם דרך symlink.
 class PluginFsService {
+  // משותף לכל המופעים ב-isolate הקורא: כותבים מקבילים עלולים לערבב קובץ.
+  static Future<void> _extractionQueue = Future.value();
+
   /// תקרת הגודל הכולל (לא דחוס) שמותר לחלץ. חילוץ שחורג ממנה נקטע
   /// ב-`error.too_large` — הגנת zip bomb (ארכיון דחוס קטן שמתרחב לגיגה-בייטים).
   final int maxUncompressedBytes;
@@ -93,14 +96,21 @@ class PluginFsService {
     final maxEntries = this.maxEntries;
     final maxUncompressedBytes = this.maxUncompressedBytes;
     // הפענוח סינכרוני; על ה-isolate הראשי הוא תוקע את ה-UI (#3398).
-    return Isolate.run(
-      () => _extractZipSync(
-        zipPath,
-        destFolder,
-        maxEntries: maxEntries,
-        maxUncompressedBytes: maxUncompressedBytes,
+    final result = _extractionQueue.then(
+      (_) => Isolate.run(
+        () => _extractZipSync(
+          zipPath,
+          destFolder,
+          maxEntries: maxEntries,
+          maxUncompressedBytes: maxUncompressedBytes,
+        ),
       ),
     );
+    _extractionQueue = result.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return result;
   }
 
   static void _extractZipSync(
@@ -130,9 +140,7 @@ class PluginFsService {
         }
 
         final outPath = p.join(destFolder, p.normalize(file.name));
-        // הנתיב הקנוני האמיתי (כולל פתרון symlink-תיקייה קיים ביעד) חייב
-        // להישאר בתוך היעד — נבדק *לפני* כל יצירת תיקייה, כדי שגם רשומת תיקייה
-        // או אב של קובץ לא ייצרו תיקיות מחוץ ליעד דרך symlink, וגם `../` נחסם.
+        // בודקים לפני יצירת תיקיות כדי לחסום גם בריחה דרך symlink קיים.
         final canonical = canonicalizeNearestExisting(outPath);
         if (canonical == null ||
             (!p.equals(canonical, realDest) &&
