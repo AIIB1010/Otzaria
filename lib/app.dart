@@ -96,9 +96,10 @@ class App extends StatelessWidget {
               // This edition is intended for close-range, low-vision reading.
               // Keep a user's larger Android text setting, but never render the
               // application chrome below the large-print baseline.
+              final systemTextScaler = MediaQuery.textScalerOf(context);
               final textScale = math.max(
                 1.35,
-                MediaQuery.textScalerOf(context).textScaleFactor,
+                systemTextScaler.scale(14) / 14,
               ).toDouble();
               content = MediaQuery(
                 data: MediaQuery.of(
