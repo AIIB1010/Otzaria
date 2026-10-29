@@ -98,7 +98,11 @@ class App extends StatelessWidget {
               // application chrome below the large-print baseline.
               final systemTextScaler = MediaQuery.textScalerOf(context);
               final textScale = math.max(
-                1.35,
+                // The HumanWare profile is intentionally much larger than a
+                // normal Android accessibility baseline.  At 185%, 16sp UI
+                // copy is rendered at almost 30sp, which is usable for a
+                // reader viewing the screen from very close range.
+                1.85,
                 systemTextScaler.scale(14) / 14,
               ).toDouble();
               content = MediaQuery(
