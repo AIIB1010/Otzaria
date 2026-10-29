@@ -1,9 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:otzaria/find_ref/book_name_match.dart';
 import 'package:otzaria/utils/text/text_manipulation.dart';
 
-/// הצורה שבה משווים בחיפוש הרשימה — כמו באיתור מקורות.
-String _matchForm(String text) =>
-    bookNameMatchForm(normalizeForFindRefMatch(text));
+String _matchForm(String text) => normalizeForFindRefMatch(text);
 
 List<String> _tokensOf(String form) =>
     form.isEmpty ? const [] : form.split(' ');
@@ -14,43 +13,106 @@ class ListSearchQuery {
     : rawLower = raw.toLowerCase(),
       form = _matchForm(raw) {
     tokens = _tokensOf(form);
-    assignOrder = List.of(tokens)..sort((a, b) => b.length - a.length);
   }
 
   final String rawLower;
   final String form;
   late final List<String> tokens;
+  late final List<String> _spellingTokens = tokens
+      .map(bookNameMatchToken)
+      .toList();
+  final Map<String, List<bool>> _literalMatches = {};
+  final Map<String, List<bool>> _variantMatches = {};
 
-  /// הארוכות קודם — כדי ש"ב" לא יתפוס את "ברכות" לפני "ברכות" עצמה.
-  late final List<String> assignOrder;
+  bool matches(String token, int index, {bool spelling = false}) {
+    final literal = _literalMatches.putIfAbsent(
+      token,
+      () => [for (final word in tokens) _tokenMatches(token, word)],
+    );
+    if (literal[index] || !spelling) return literal[index];
+    return _variantMatches.putIfAbsent(token, () {
+      final key = bookNameMatchToken(token);
+      return [
+        for (final word in _spellingTokens)
+          key.startsWith(word) || startsWithBookTitleSpellingVariant(key, word),
+      ];
+    })[index];
+  }
 }
 
-/// מפתח החיפוש של פריט, מוכן מראש ונשמר בין הקלדות.
+/// מפתח מוכן; כתיב חלופי מותר רק במילות [bookTitle] המופיעות בו כרצף.
 class ListSearchKey {
-  ListSearchKey(String raw)
+  ListSearchKey(this.raw, {this.bookTitle})
     : rawLower = raw.toLowerCase(),
       form = _matchForm(raw) {
     tokens = _tokensOf(form);
+    final title = bookTitle == null
+        ? const <String>[]
+        : _tokensOf(_matchForm(bookTitle!));
+    if (title.isEmpty) return;
+    for (var start = 0; start + title.length <= tokens.length; start++) {
+      if (listEquals(tokens.sublist(start, start + title.length), title)) {
+        titlePositions.addAll(List.generate(title.length, (i) => start + i));
+        break;
+      }
+    }
   }
 
+  final String raw;
+  final String? bookTitle;
   final String rawLower;
   final String form;
   late final List<String> tokens;
+  final Set<int> titlePositions = {};
+  late final List<String> contextTokens = [
+    for (var i = 0; i < tokens.length; i++)
+      if (!titlePositions.contains(i)) tokens[i],
+  ];
+  List<List<String>> aliasTokens = const [];
+  List<String>? _aliases;
+  final Map<String, List<int>> _aliasIndicesByToken = {};
 
-  /// null — הכינויים עוד לא סופקו (למשל המטמון שלהם לא נטען).
-  List<String>? aliasTokens;
-
-  /// [aliases] כבר מנורמלים ב-[normalizeForFindRefMatch].
-  void setAliases(List<String> aliases) {
-    final out = <String>{};
-    for (final alias in aliases) {
-      out.addAll(_tokensOf(bookNameSpellingForm(alias)));
+  Iterable<List<String>> aliasesFor(
+    ListSearchQuery query, {
+    bool spelling = false,
+  }) {
+    Set<int>? candidates;
+    for (var i = 0; i < query.tokens.length; i++) {
+      if (contextTokens.any((token) => query.matches(token, i))) continue;
+      final matching = <int>{};
+      for (final entry in _aliasIndicesByToken.entries) {
+        if (query.matches(entry.key, i, spelling: spelling)) {
+          matching.addAll(entry.value);
+        }
+      }
+      if (matching.isEmpty) return const [];
+      candidates = candidates == null
+          ? matching
+          : candidates.intersection(matching);
+      if (candidates.isEmpty) return const [];
     }
-    aliasTokens = out.toList(growable: false);
+    return candidates == null
+        ? aliasTokens
+        : candidates.map((i) => aliasTokens[i]);
+  }
+
+  /// הכינויים כבר מנורמלים; כל כינוי נשאר חלופה עצמאית לשם הספר.
+  void setAliases(List<String>? aliases) {
+    if (listEquals(_aliases, aliases)) return;
+    _aliases = aliases == null ? null : List.of(aliases);
+    aliasTokens = [
+      for (final alias in aliases ?? const <String>[]) _tokensOf(alias),
+    ];
+    _aliasIndicesByToken.clear();
+    for (var i = 0; i < aliasTokens.length; i++) {
+      for (final token in aliasTokens[i].toSet()) {
+        (_aliasIndicesByToken[token] ??= []).add(i);
+      }
+    }
   }
 }
 
-/// דרגת ההתאמה של [key] ל-[query]: נמוך יותר — טוב יותר; null — אין התאמה.
+/// דרגת ההתאמה: כל התאמה מילולית קודמת לכתיב חלופי של שם הספר.
 int? listSearchRank(ListSearchQuery query, ListSearchKey key) {
   final q = query.tokens;
   if (q.isEmpty) {
@@ -58,66 +120,85 @@ int? listSearchRank(ListSearchQuery query, ListSearchKey key) {
   }
   final k = key.tokens;
   if (key.form.startsWith(query.form)) return 0;
-  switch (_assignTokens(query.assignOrder, k, key.aliasTokens)) {
-    case _Assigned.key:
-      // דרגות 1-2 מוכלות ב-3, ולכן נבדקות רק כשהיא מתקיימת.
-      if (_inOrder(q, k, exact: true)) return 1;
-      if (_inOrder(q, k, exact: false)) return 2;
-      return 3;
-    case _Assigned.withAliases:
-      return 4;
-    case _Assigned.none:
-      break;
+  if (_inOrder(query, k, exact: true)) return 1;
+  if (_inOrder(query, k, exact: false)) return 2;
+  if (_assignTokens(query, k)) return 3;
+  for (final alias in key.aliasesFor(query)) {
+    if (_assignTokens(query, key.contextTokens, extra: alias)) return 4;
   }
   if (key.rawLower.contains(query.rawLower) || key.form.contains(query.form)) {
     return 5;
   }
+  if (key.titlePositions.isNotEmpty &&
+      _assignTokens(query, k, spellingPositions: key.titlePositions)) {
+    return 6;
+  }
+  for (final alias in key.aliasesFor(query, spelling: true)) {
+    if (_assignTokens(
+      query,
+      key.contextTokens,
+      extra: alias,
+      spellingExtra: true,
+    )) {
+      return 6;
+    }
+  }
   return null;
 }
 
-/// דרגות [listSearchRank] האפשריות: 0..5.
-const int listSearchRankCount = 6;
+const int listSearchRankCount = 7;
 
-enum _Assigned { none, key, withAliases }
+/// התאמה חד-חד-ערכית; הקצאה חמדנית עלולה לתפוס מילה שדרושה למילת שאילתה אחרת.
+bool _assignTokens(
+  ListSearchQuery query,
+  List<String> k, {
+  Set<int>? spellingPositions,
+  List<String> extra = const [],
+  bool spellingExtra = false,
+}) {
+  final length = k.length + extra.length;
+  if (query.tokens.length > length) return false;
+  bool matches(int j, int i) {
+    final token = j < k.length ? k[j] : extra[j - k.length];
+    return query.matches(
+      token,
+      i,
+      spelling: j < k.length
+          ? spellingPositions?.contains(j) == true
+          : spellingExtra,
+    );
+  }
 
-/// כל מילת שאילתה צריכה טוקן משלה — אחרת "ב" של "ברכות ב:" נבלע ב"ברכות".
-/// מעבר ל-63 טוקנים הסימון לא נשמר, והם זמינים שוב.
-_Assigned _assignTokens(List<String> q, List<String> k, List<String>? aliases) {
-  var usedKey = 0;
-  var usedAlias = 0;
-  var needAliases = false;
-  for (var i = 0; i < q.length; i++) {
-    final t = q[i];
-    final j = _claim(k, t, usedKey);
-    if (j != -1) {
-      if (j < 63) usedKey |= 1 << j;
-      continue;
+  if (query.tokens.length == 1) {
+    for (var j = 0; j < length; j++) {
+      if (matches(j, 0)) return true;
     }
-    final a = aliases == null ? -1 : _claim(aliases, t, usedAlias);
-    if (a == -1) return _Assigned.none;
-    if (a < 63) usedAlias |= 1 << a;
-    needAliases = true;
+    return false;
   }
-  return needAliases ? _Assigned.withAliases : _Assigned.key;
+  final owners = List.filled(length, -1);
+  bool claim(int queryIndex, List<bool> seen) {
+    for (var j = 0; j < length; j++) {
+      if (seen[j] || !matches(j, queryIndex)) continue;
+      seen[j] = true;
+      if (owners[j] == -1 || claim(owners[j], seen)) {
+        owners[j] = queryIndex;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  for (var i = 0; i < query.tokens.length; i++) {
+    if (!claim(i, List.filled(length, false))) return false;
+  }
+  return true;
 }
 
-/// הטוקן הפנוי הראשון שתואם את [t], עם עדיפות לזהה; -1 — אין.
-int _claim(List<String> tokens, String t, int used) {
-  var prefixAt = -1;
-  for (var j = 0; j < tokens.length; j++) {
-    if (j < 63 && used & (1 << j) != 0) continue;
-    if (tokens[j] == t) return j;
-    if (prefixAt == -1 && _tokenMatches(tokens[j], t)) prefixAt = j;
-  }
-  return prefixAt;
-}
-
-// התאמה חמדנית לטוקן המוקדם ביותר — מספיקה לבדיקת תת-סדרה.
-bool _inOrder(List<String> q, List<String> k, {required bool exact}) {
+bool _inOrder(ListSearchQuery query, List<String> k, {required bool exact}) {
   var j = 0;
-  for (var i = 0; i < q.length; i++) {
-    final t = q[i];
-    while (j < k.length && !(exact ? k[j] == t : _tokenMatches(k[j], t))) {
+  for (var i = 0; i < query.tokens.length; i++) {
+    while (j < k.length &&
+        !(exact ? k[j] == query.tokens[i] : query.matches(k[j], i))) {
       j++;
     }
     if (j == k.length) return false;
@@ -126,11 +207,12 @@ bool _inOrder(List<String> q, List<String> k, {required bool exact}) {
   return true;
 }
 
-/// תחילית, גם בכתיב מלא/חסר ("השורש" תואם "השרשים"); "הרמב" בהקלדה תואם גם
-/// "רמבם", שה"א הידיעה הוסרה ממנו במפתח.
+/// ה"א הידיעה לפני ראשי תיבות מוכרים תואמת גם בהקלדה חלקית ("הרמב").
 bool _tokenMatches(String keyToken, String queryToken) {
-  if (keyToken.startsWith(queryToken) ||
-      startsWithBookTitleSpellingVariant(keyToken, queryToken)) {
+  if (keyToken.startsWith(queryToken)) return true;
+  if (keyToken.startsWith('ה') &&
+      sagesTakingDefiniteArticle.contains(keyToken.substring(1)) &&
+      keyToken.substring(1).startsWith(queryToken)) {
     return true;
   }
   final n = queryToken.length;

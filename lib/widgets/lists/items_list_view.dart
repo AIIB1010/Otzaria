@@ -54,6 +54,9 @@ class ItemsListView extends StatefulWidget {
   final String? Function(dynamic item)? subtitleBuilder;
   final String? Function(dynamic item)? subtitleTooltipBuilder;
   final String Function(dynamic item)? searchKeyBuilder;
+
+  /// כותרת הספר בלבד — כתיב חלופי אינו חל על מיקום פנימי או חיפוש שמור.
+  final String? Function(dynamic item)? searchTitleBuilder;
   final bool Function(dynamic item)? additionalFilter;
 
   /// כינויים נוספים שהחיפוש מתאים להם (מנורמלים כמו באיתור מקורות).
@@ -106,6 +109,7 @@ class ItemsListView extends StatefulWidget {
     this.subtitleBuilder,
     this.subtitleTooltipBuilder,
     this.searchKeyBuilder,
+    this.searchTitleBuilder,
     this.additionalFilter,
     this.searchAliasesBuilder,
     this.groupWhileSearching = true,
@@ -167,8 +171,7 @@ class _ItemsListViewState extends State<ItemsListView> {
   Comparator<dynamic>? _cachedComparator;
   List<MapEntry<int, dynamic>>? _cachedSortedEntries;
 
-  /// מפתחות החיפוש המוכנים לפי האינדקס המקורי; נבנים בעצלות. תלויים רק ב-items,
-  /// כי ה-comparator של הסימניות נוצר מחדש בכל build.
+  /// מפתחות מוכנים לפי האינדקס המקורי; נרמול חוזר רק כשהטקסט או הכינויים משתנים.
   List<dynamic>? _searchKeysItems;
   List<ListSearchKey?> _searchKeys = const [];
 
@@ -534,13 +537,14 @@ class _ItemsListViewState extends State<ItemsListView> {
       final entry = sortedEntries[i];
       final item = entry.value;
       if (additionalFilter != null && !additionalFilter(item)) continue;
-      final key = _searchKeys[entry.key] ??= ListSearchKey(
-        widget.searchKeyBuilder?.call(item) ?? item.ref?.toString() ?? '',
-      );
-      if (aliasesBuilder != null && key.aliasTokens == null) {
-        final aliases = aliasesBuilder(item);
-        if (aliases != null) key.setAliases(aliases);
+      final raw =
+          widget.searchKeyBuilder?.call(item) ?? item.ref?.toString() ?? '';
+      final title = widget.searchTitleBuilder?.call(item);
+      var key = _searchKeys[entry.key];
+      if (key == null || key.raw != raw || key.bookTitle != title) {
+        key = _searchKeys[entry.key] = ListSearchKey(raw, bookTitle: title);
       }
+      key.setAliases(aliasesBuilder?.call(item));
       final rank = listSearchRank(query, key);
       if (rank != null) buckets[rank].add(entry);
     }

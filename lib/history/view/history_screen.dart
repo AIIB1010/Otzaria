@@ -276,6 +276,7 @@ class _HistoryViewState extends State<HistoryView> {
                 groupTitleBuilder: (item) => item.workspaceName as String?,
                 groupWhileSearching: false,
                 searchAliasesBuilder: bookmarkSearchAliases,
+                searchTitleBuilder: bookmarkSearchTitle,
                 searchKeyBuilder: (item) {
                   final parts = [item.ref as String];
                   final ws = item.workspaceName as String?;

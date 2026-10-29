@@ -341,6 +341,7 @@ class _BookmarkViewState extends State<BookmarkView> {
           items: state.bookmarks,
           searchFieldTrailing: _buildSearchTrailing(context),
           searchAliasesBuilder: bookmarkSearchAliases,
+          searchTitleBuilder: bookmarkSearchTitle,
           itemSortComparator: byDate
               ? (a, b) => _compareByDateAdded(a as Bookmark, b as Bookmark)
               : (a, b) => _compareBookmarks(b as Bookmark, a as Bookmark),

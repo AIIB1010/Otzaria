@@ -17,3 +17,9 @@ List<String>? bookmarkSearchAliases(dynamic item) {
   }
   return cache.acronymsFor(source, id) ?? const [];
 }
+
+/// חיפושים שמורים מכילים שאילתה, ולא שם ספר שניתן לשנות את כתיבו.
+String? bookmarkSearchTitle(dynamic item) {
+  final bookmark = item as Bookmark;
+  return bookmark.isSearch ? null : bookmark.book.title;
+}

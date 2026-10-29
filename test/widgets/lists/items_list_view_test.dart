@@ -11,8 +11,9 @@ class _Book {
 class _Item {
   final String ref;
   final String? workspaceName;
-  const _Item(this.ref, {this.workspaceName});
-  _Book get book => _Book(ref);
+  final String? title;
+  const _Item(this.ref, {this.workspaceName, this.title});
+  _Book get book => _Book(title ?? ref);
 }
 
 void main() {
@@ -557,6 +558,7 @@ void main() {
                 : null,
             groupWhileSearching: groupWhileSearching,
             searchAliasesBuilder: aliases,
+            searchTitleBuilder: (item) => (item as _Item).book.title,
           ),
         ),
       );
@@ -575,6 +577,50 @@ void main() {
       _Item('ברכות ב', workspaceName: 'ב'),
       _Item('שבת ב', workspaceName: 'א'),
     ];
+
+    testWidgets('כתיב חלופי בכותרת בלבד ומילולי לפניו', (tester) async {
+      await tester.pumpWidget(
+        buildSearchable(const [
+          _Item('שורש א'),
+          _Item('ספר השרש א'),
+          _Item('משנה תורה הלכות שורש', title: 'משנה תורה'),
+        ]),
+      );
+      await search(tester, 'שרש');
+      expect(find.text('משנה תורה הלכות שורש'), findsNothing);
+      expect(y(tester, 'ספר השרש א'), lessThan(y(tester, 'שורש א')));
+    });
+
+    testWidgets('מפתחות מתעדכנים כשה-builder משתנה עם אותה רשימה', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildWidget(searchKeyBuilder: (_) => 'ראשון'));
+      await search(tester, 'ראשון');
+      expect(find.text('שבת עד:'), findsOneWidget);
+      await tester.pumpWidget(buildWidget(searchKeyBuilder: (_) => 'שני'));
+      await tester.pump();
+      expect(find.text('שבת עד:'), findsNothing);
+      await search(tester, 'שני');
+      expect(find.text('שבת עד:'), findsOneWidget);
+    });
+
+    testWidgets('כינויים שנוספו והוסרו מתעדכנים בלי להחליף items', (
+      tester,
+    ) async {
+      List<String>? aliases;
+      Widget build() => buildSearchable(ranked, aliases: (_) => aliases);
+      await tester.pumpWidget(build());
+      await search(tester, 'כינוי');
+      expect(find.text('ברכות ב'), findsNothing);
+      aliases = ['כינוי'];
+      await tester.pumpWidget(build());
+      await tester.pump();
+      expect(find.text('ברכות ב'), findsOneWidget);
+      aliases.clear();
+      await tester.pumpWidget(build());
+      await tester.pump();
+      expect(find.text('ברכות ב'), findsNothing);
+    });
 
     testWidgets('שאילתה ריקה — סדר הקלט וכותרות הקבוצות', (tester) async {
       await tester.pumpWidget(buildSearchable(ranked, grouped: true));
