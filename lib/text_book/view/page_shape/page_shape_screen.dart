@@ -643,7 +643,10 @@ class _PageShapeScreenState extends State<PageShapeScreen> {
         availableCommentators: selectableCommentators,
         commentedBookTitle: state.book.title,
       );
-      if (resolvedSingle == null) {
+      if (resolvedSingle == null ||
+          (state.commentatorsLoaded &&
+              !isPageShapeRemainingCommentatorsValue(resolvedSingle) &&
+              !selectableCommentators.contains(resolvedSingle))) {
         return _buildEmptyColumnContent(
           columnName: 'right',
           onSelectCommentator: () => _showColumnAndOpenSettings('right'),
@@ -653,6 +656,10 @@ class _PageShapeScreenState extends State<PageShapeScreen> {
       if (!isPageShapeRemainingCommentatorsValue(resolvedSingle) &&
           !isPageShapeMultiCommentatorsValue(resolvedSingle) &&
           resolvedSingle != pageShapeMultipleCommentatorsModeValue) {
+        if (!state.commentatorsLoaded &&
+            !selectableCommentators.contains(resolvedSingle)) {
+          return const LoadingIndicator();
+        }
         return _CommentaryPane(
           column: 'right',
           commentatorName: resolvedSingle,
@@ -666,6 +673,11 @@ class _PageShapeScreenState extends State<PageShapeScreen> {
           ),
         );
       }
+    }
+
+    if (!state.commentatorsLoaded &&
+        _rightPaneSelectableCommentators(state).isEmpty) {
+      return const LoadingIndicator();
     }
 
     final commentators = _selectedRightPaneCommentators(state);
@@ -1459,8 +1471,12 @@ class _PageShapeScreenState extends State<PageShapeScreen> {
                                                     ),
                                                   ),
                                                   if (_rightPaneSelectableCommentators(
-                                                    state,
-                                                  ).isNotEmpty) ...[
+                                                            state,
+                                                          ).isNotEmpty ||
+                                                      (_rightCommentator !=
+                                                              null &&
+                                                          !state
+                                                              .commentatorsLoaded)) ...[
                                                     SizedBox(
                                                       width: rightWidth,
                                                       child: _buildRightPane(
@@ -2057,12 +2073,6 @@ class _CommentaryPaneState extends State<_CommentaryPane> {
     });
     _scheduleInitialSync();
     return true;
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // הסרנו את הקריאה מכאן כדי למנוע כפילות או בעיות context מוקדמות
   }
 
   @override

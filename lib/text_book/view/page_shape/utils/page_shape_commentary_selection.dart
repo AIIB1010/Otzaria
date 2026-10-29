@@ -121,8 +121,9 @@ String? resolvePageShapeCommentatorSelection({
     }
   }
 
+  // מול רשימה ריקה (למשל לפני שנטענה) הבחירה נשמרת, כמו בחירת מפרש יחיד.
   if (resolved.isEmpty) {
-    return null;
+    return availableCommentators.isEmpty ? selection : null;
   }
 
   return encodePageShapeCommentatorsSelection(
