@@ -22,6 +22,7 @@ class PluginSystemDatabase {
   Future<Database>? _opening;
   String? _storageMoveRequestId;
   Completer<void>? _storageMoveReleased;
+  Completer<void>? _storageMoveWritesReleased;
 
   String? _dbPath;
   List<(String, List<Object?>)>? _openWriteBatch;
@@ -47,7 +48,7 @@ class PluginSystemDatabase {
         if (identical(_opening, opening)) _opening = null;
         rethrow;
       }
-      if (_storageMoveRequestId != null) {
+      if (_storageMoveReleased != null) {
         if (identical(_opening, opening)) {
           _opening = null;
           opened.close();
@@ -656,9 +657,11 @@ class PluginSystemDatabase {
     );
   }
 
-  /// כתיבות שתוסף מפעיל רצות ב-isolate: נעילה של כותב אחר או דיסק עמוס חסמו
-  /// את ה-UI עד busy_timeout ויותר (#3378). כתיבות שמצטברות בינתיים — באצווה אחת.
+  /// כתיבות תוספים רצות ב-isolate; מה שמצטבר בזמן אצווה נכנס לאצווה הבאה.
   Future<void> _enqueueWrite(String sql, List<Object?> args) {
+    if (_storageMoveWritesReleased case final released?) {
+      return released.future.then((_) => _enqueueWrite(sql, args));
+    }
     if (_openWriteBatch case final open?) {
       open.add((sql, args));
       return _writeTail!;
@@ -968,20 +971,21 @@ class PluginSystemDatabase {
 
   /// סוגר ומאפס את חיבור ה-DB כדי לאפשר החלפת תיקיית נתונים בזמן ריצה.
   Future<void> close() async {
-    // בהעברת אחסון כתיבה חדשה ממתינה לשחרור ב-_connection; מה שקדם לנעילה
-    // כבר נכתב ב-lockForStorageMove.
-    if (_storageMoveRequestId == null) await _drainWrites();
+    // נעילת החיבור מוקמת רק אחרי שהכתיבות שקדמו לבקשת ההעברה נוקזו.
+    if (_storageMoveReleased == null) await _drainWrites();
     final db = _database;
     if (db != null) closeWithCheckpoint(db);
     _database = null;
   }
 
   Future<void> lockForStorageMove(String requestId) async {
-    await _drainWrites();
     if (_storageMoveRequestId != null && _storageMoveRequestId != requestId) {
       throw StateError('Plugin database is already locked for a storage move.');
     }
     _storageMoveRequestId = requestId;
+    // חוסמים קבלה לפני ה-await; החיבור נשאר זמין לאצוות שכבר בתור.
+    _storageMoveWritesReleased ??= Completer<void>();
+    await _drainWrites();
     _storageMoveReleased ??= Completer<void>();
     final opening = _opening;
     if (opening != null) {
@@ -1000,6 +1004,9 @@ class PluginSystemDatabase {
   void releaseStorageMove(String requestId) {
     if (_storageMoveRequestId != requestId) return;
     _storageMoveRequestId = null;
+    final writesReleased = _storageMoveWritesReleased;
+    _storageMoveWritesReleased = null;
+    writesReleased?.complete();
     final released = _storageMoveReleased;
     _storageMoveReleased = null;
     if (released != null && !released.isCompleted) released.complete();
@@ -1015,5 +1022,6 @@ class PluginSystemDatabase {
     _opening = null;
     _storageMoveRequestId = null;
     _storageMoveReleased = null;
+    _storageMoveWritesReleased = null;
   }
 }
