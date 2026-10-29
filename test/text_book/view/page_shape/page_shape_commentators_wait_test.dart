@@ -1,6 +1,11 @@
 // הטור שמפתחו 'right' בצורת הדף לא מציג "בחר מפרש" בזמן שרשימת המפרשים
 // עוד נטענת (issue #3156).
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:otzaria/core/app_paths.dart';
+import 'package:otzaria/text_book/view/commentary_list_base.dart';
+import 'package:otzaria/text_book/view/page_shape/utils/page_shape_settings_manager.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/data/data_providers/book_composite_key.dart';
@@ -42,6 +47,12 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() async {
+    final root = Directory.systemTemp.createTempSync('page-shape-wait-');
+    AppPaths.debugOverrideDataRootPath(root.path);
+    addTearDown(() async {
+      AppPaths.debugOverrideDataRootPath(null);
+      await root.delete(recursive: true);
+    });
     await Settings.init(cacheProvider: MemoryCacheProvider());
     LibraryProviderManager.instance.resetForTesting();
   });
@@ -54,7 +65,7 @@ void main() {
 
   /// צורת הדף כשבטור 'right' בלבד נבחר [right], ורשימת המפרשים הזמינים
   /// היא [available].
-  Future<void> pumpPageShape(
+  Future<_TestTextBookBloc> pumpPageShape(
     WidgetTester tester, {
     required String bookTitle,
     required List<String> names,
@@ -62,7 +73,7 @@ void main() {
     required List<String> available,
     required bool commentatorsLoaded,
   }) async {
-    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.physicalSize = const Size(2400, 1200);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
@@ -79,6 +90,11 @@ void main() {
       providers: [provider],
     );
 
+    await PageShapeSettingsManager.saveConfiguration(
+      bookTitle,
+      {for (final c in _columns) c: c == 'right' ? right : null},
+      columnVisibility: {for (final c in _columns) c: c == 'right'},
+    );
     final book = TextBook(title: bookTitle);
     final bloc = _TestTextBookBloc(
       _state(book, names, available, commentatorsLoaded),
@@ -138,21 +154,32 @@ void main() {
           .isNotEmpty,
     );
     await tester.pump();
+    return bloc;
   }
 
   // תרחיש אחד לקובץ: אתחול המסד שמתחיל בבדיקת צורת הדף נשאר תלוי באזור
   // הזמן שלה, ובדיקה נוספת בקובץ הייתה ממתינה לו לנצח.
   testWidgets('טור המפרשים לא מציג "בחר מפרש" לפני שהרשימה נטענה '
       '(issue #3156)', (tester) async {
-    // מפרש יחיד: הטור נבנה מיד לפי השם השמור, כמו הטור השני.
+    // בחירה ללא רשימה ממתינה לאימות לפני טעינת תוכן המפרש.
     const single = ['מפרש יחיד'];
-    await pumpPageShape(
+    final singleBloc = await pumpPageShape(
       tester,
       bookTitle: 'ספר יחיד',
       names: single,
       right: single.first,
       available: const [],
       commentatorsLoaded: false,
+    );
+    await _pumpUntil(tester, () => commentaryViewer().evaluate().isNotEmpty);
+    expect(commentaryViewer(), findsNothing);
+    expect(find.byType(LoadingIndicator), findsOneWidget);
+    expect(find.text('בחר מפרש'), findsNothing);
+    singleBloc.publish(
+      (singleBloc.state as TextBookLoaded).copyWith(
+        availableCommentators: single,
+        commentatorsLoaded: true,
+      ),
     );
     await _pumpUntil(tester, () => commentaryViewer().evaluate().isNotEmpty);
     expect(
@@ -189,6 +216,131 @@ void main() {
     );
     expect(find.byType(LoadingIndicator), findsNothing);
     expect(find.text('בחר מפרש'), findsOneWidget);
+
+    for (final available in [
+      const ['מפרש מתאים'],
+      const <String>[],
+    ]) {
+      const stale = 'מפרש זר';
+      final bookTitle = 'בחירה ישנה ${available.length}';
+      final bloc = await pumpPageShape(
+        tester,
+        bookTitle: bookTitle,
+        names: [stale, ...available],
+        right: stale,
+        available: const [],
+        commentatorsLoaded: false,
+      );
+      await _pumpUntil(tester, () => commentaryViewer().evaluate().isNotEmpty);
+      expect(commentaryViewer(), findsNothing);
+      expect(find.byType(LoadingIndicator), findsOneWidget);
+      bloc.publish(
+        (bloc.state as TextBookLoaded).copyWith(
+          availableCommentators: available,
+          commentatorsLoaded: true,
+        ),
+      );
+      await _pumpUntil(
+        tester,
+        () => find.text('בחר מפרש').evaluate().isNotEmpty,
+      );
+      expect(commentaryViewer(), findsNothing);
+      expect(find.text('בחר מפרש'), findsOneWidget);
+      expect(
+        PageShapeSettingsManager.loadConfiguration(bookTitle)?['right'],
+        stale,
+      );
+    }
+
+    const valid = 'מפרש קיים';
+    final validBloc = await pumpPageShape(
+      tester,
+      bookTitle: 'בחירה תקפה',
+      names: const [valid],
+      right: valid,
+      available: const [valid],
+      commentatorsLoaded: false,
+    );
+    await _pumpUntil(tester, () => commentaryViewer().evaluate().isNotEmpty);
+    final viewerState = tester.state(commentaryViewer());
+    for (final available in [
+      const [valid],
+      const [valid, 'מפרש נוסף'],
+    ]) {
+      validBloc.publish(
+        (validBloc.state as TextBookLoaded).copyWith(
+          availableCommentators: available,
+          commentatorsLoaded: true,
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(tester.state(commentaryViewer()), same(viewerState));
+      expect(
+        tester.widget<SimpleTextViewer>(commentaryViewer()).bookTitle,
+        valid,
+      );
+    }
+    validBloc.publish(
+      (validBloc.state as TextBookLoaded).copyWith(
+        availableCommentators: const ['מפרש אחר'],
+      ),
+    );
+    await _pumpUntil(tester, () => commentaryViewer().evaluate().isEmpty);
+    expect(commentaryViewer(), findsNothing);
+    expect(
+      PageShapeSettingsManager.loadConfiguration('בחירה תקפה')?['right'],
+      valid,
+    );
+
+    final savedMulti = encodePageShapeCommentatorsSelection(
+      const [valid, 'מפרש זר'],
+      forceMultipleMode: true,
+    )!;
+    final multiBloc = await pumpPageShape(
+      tester,
+      bookTitle: 'בחירה מרובה שמורה',
+      names: const [valid, 'מפרש זר'],
+      right: savedMulti,
+      available: const [],
+      commentatorsLoaded: false,
+    );
+    expect(find.byType(LoadingIndicator), findsOneWidget);
+    multiBloc.publish(
+      (multiBloc.state as TextBookLoaded).copyWith(
+        availableCommentators: const [valid],
+        commentatorsLoaded: true,
+      ),
+    );
+    await _pumpUntil(
+      tester,
+      () => find.byType(CommentaryListBase).evaluate().isNotEmpty,
+    );
+    expect(
+      tester
+          .widget<CommentaryListBase>(find.byType(CommentaryListBase))
+          .selectedCommentatorsOverride,
+      const [valid],
+    );
+    expect(
+      PageShapeSettingsManager.loadConfiguration('בחירה מרובה שמורה')?['right'],
+      savedMulti,
+    );
+    tester
+        .widget<CommentaryListBase>(find.byType(CommentaryListBase))
+        .onSelectedCommentatorsOverrideChanged!(const []);
+    await _pumpUntil(
+      tester,
+      () => tester
+          .widget<CommentaryListBase>(find.byType(CommentaryListBase))
+          .selectedCommentatorsOverride!
+          .isEmpty,
+    );
+    expect(find.byType(CommentaryListBase), findsOneWidget);
+    expect(
+      PageShapeSettingsManager.loadConfiguration('בחירה מרובה שמורה')?['right'],
+      pageShapeMultipleCommentatorsModeValue,
+    );
   });
 }
 
@@ -246,6 +398,8 @@ TextBookLoaded _state(
 
 class _TestTextBookBloc extends Bloc<TextBookEvent, TextBookState>
     implements TextBookBloc {
+  void publish(TextBookState state) => emit(state);
+
   _TestTextBookBloc(super.initialState) {
     on<TextBookEvent>((event, emit) {});
   }

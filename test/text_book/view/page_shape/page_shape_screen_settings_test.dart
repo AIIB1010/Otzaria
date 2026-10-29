@@ -1,7 +1,4 @@
-// טסט רגרסיה לפתיחת פאנל הגדרות צורת הדף דרך ה-notifier:
-// כפתור גלגל השיניים בסרגל העליון (TextBookScreen) רק מסמן בקשה ב-notifier,
-// ו-PageShapeScreen הוא שפותח את פאנל ההגדרות הצף (ContextOverlayPanel) בצד
-// הימני — עם onSettingsChanged מחווט, כדי שכל שינוי יוחל על המסך בעדכון חי.
+// בדיקות פתיחת חלונית ההגדרות דרך ה-notifier והחיווט לעדכון חי.
 
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
@@ -720,6 +717,7 @@ TextBookLoaded _loadedState({
     activeCommentators: const [],
     commentatorGroups: const [],
     availableCommentators: availableCommentators,
+    commentatorsLoaded: true,
     links: const [],
     visibleLinks: const [],
     linksByLine: const {},
