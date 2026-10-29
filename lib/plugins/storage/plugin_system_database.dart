@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:otzaria/data/sqlite/sqlite3_api.dart';
@@ -21,8 +22,19 @@ class PluginSystemDatabase {
   Future<Database>? _opening;
   String? _storageMoveRequestId;
   Completer<void>? _storageMoveReleased;
+  Completer<void>? _storageMoveWritesReleased;
+
+  String? _dbPath;
+  List<(String, List<Object?>)>? _openWriteBatch;
+  Future<void>? _writeTail;
 
   Future<Database> get database async {
+    // בלי כתיבה ממתינה אין await: מתחת ל-FakeAsync הוא לא היה מתקדם.
+    if (_writeTail case final tail?) await _settled(tail);
+    return _connection();
+  }
+
+  Future<Database> _connection() async {
     while (true) {
       final released = _storageMoveReleased;
       if (released != null) await released.future;
@@ -36,7 +48,7 @@ class PluginSystemDatabase {
         if (identical(_opening, opening)) _opening = null;
         rethrow;
       }
-      if (_storageMoveRequestId != null) {
+      if (_storageMoveReleased != null) {
         if (identical(_opening, opening)) {
           _opening = null;
           opened.close();
@@ -53,7 +65,7 @@ class PluginSystemDatabase {
   Database? get openDatabase => _database;
 
   Future<Database> _initDatabase() async {
-    final dbPath = await AppPaths.resolvePluginsDbPath();
+    final dbPath = _dbPath = await AppPaths.resolvePluginsDbPath();
     final db = openWritableDatabase(dbPath, 'PluginSystemDatabase');
     _createSchema(db);
     ensureSchemaUpgrades(db);
@@ -571,8 +583,7 @@ class PluginSystemDatabase {
     String key,
     String valueJson,
   ) async {
-    final db = await database;
-    db.execute(
+    return _enqueueWrite(
       'INSERT OR REPLACE INTO plugin_kv_store (plugin_id, namespace, key, value_json, updated_at) VALUES (?, ?, ?, ?, ?)',
       [pluginId, namespace, key, valueJson, DateTime.now().toIso8601String()],
     );
@@ -640,11 +651,65 @@ class PluginSystemDatabase {
     String namespace,
     String key,
   ) async {
-    final db = await database;
-    db.execute(
+    return _enqueueWrite(
       'DELETE FROM plugin_kv_store WHERE plugin_id = ? AND namespace = ? AND key = ?',
       [pluginId, namespace, key],
     );
+  }
+
+  /// כתיבות תוספים רצות ב-isolate; מה שמצטבר בזמן אצווה נכנס לאצווה הבאה.
+  Future<void> _enqueueWrite(String sql, List<Object?> args) {
+    if (_storageMoveWritesReleased case final released?) {
+      return released.future.then((_) => _enqueueWrite(sql, args));
+    }
+    if (_openWriteBatch case final open?) {
+      open.add((sql, args));
+      return _writeTail!;
+    }
+    final batch = _openWriteBatch = [(sql, args)];
+    final tail = _writeTail = _runWriteBatch(_writeTail, batch);
+    _settled(tail).then((_) {
+      if (identical(_writeTail, tail)) _writeTail = null;
+    });
+    return tail;
+  }
+
+  Future<void> _runWriteBatch(
+    Future<void>? previous,
+    List<(String, List<Object?>)> batch,
+  ) async {
+    if (previous != null) await _settled(previous);
+    _openWriteBatch = null;
+    await _connection();
+    await _writeInIsolate(_dbPath!, batch);
+  }
+
+  // static: closure בתוך מתודת מופע הייתה לוכדת את this ונכשלת בשליחה.
+  static Future<void> _writeInIsolate(
+    String path,
+    List<(String, List<Object?>)> batch,
+  ) => Isolate.run(() => _runWrites(path, batch), debugName: 'PluginDbWrite');
+
+  static void _runWrites(String path, List<(String, List<Object?>)> batch) {
+    final db = openSecondaryWritableConnection(path, 'PluginDbWrite');
+    try {
+      withTransaction(db, () {
+        for (final (sql, args) in batch) {
+          db.execute(sql, args);
+        }
+      });
+    } finally {
+      db.close();
+    }
+  }
+
+  static Future<void> _settled(Future<void> future) =>
+      future.then((_) {}, onError: (_) {});
+
+  Future<void> _drainWrites() async {
+    for (var tail = _writeTail; tail != null; tail = _writeTail) {
+      await _settled(tail);
+    }
   }
 
   Future<List<String>> listPluginKVKeys(
@@ -669,8 +734,7 @@ class PluginSystemDatabase {
     String payloadJson,
     String? expiresAt,
   ) async {
-    final db = await database;
-    db.execute(
+    return _enqueueWrite(
       '''
       INSERT OR REPLACE INTO plugin_published_record 
       (plugin_id, type, scope, record_key, payload_json, version, created_at, updated_at, expires_at) 
@@ -695,8 +759,7 @@ class PluginSystemDatabase {
     String scope,
     String recordKey,
   ) async {
-    final db = await database;
-    db.execute(
+    return _enqueueWrite(
       'DELETE FROM plugin_published_record WHERE plugin_id = ? AND type = ? AND scope = ? AND record_key = ?',
       [pluginId, type, scope, recordKey],
     );
@@ -750,8 +813,7 @@ class PluginSystemDatabase {
     // לוג ריצה הוא best-effort ונקרא fire-and-forget; אם פתיחת ה-DB נכשלת
     // אסור שהכישלון יבעבע ויפיל את הקורא (או ייהפך לשגיאה אסינכרונית לא-מטופלת).
     try {
-      final db = await database;
-      db.execute(
+      await _enqueueWrite(
         'INSERT INTO plugin_runtime_log (plugin_id, level, message, created_at) VALUES (?, ?, ?, ?)',
         [pluginId, level, message, DateTime.now().toIso8601String()],
       );
@@ -909,6 +971,8 @@ class PluginSystemDatabase {
 
   /// סוגר ומאפס את חיבור ה-DB כדי לאפשר החלפת תיקיית נתונים בזמן ריצה.
   Future<void> close() async {
+    // נעילת החיבור מוקמת רק אחרי שהכתיבות שקדמו לבקשת ההעברה נוקזו.
+    if (_storageMoveReleased == null) await _drainWrites();
     final db = _database;
     if (db != null) closeWithCheckpoint(db);
     _database = null;
@@ -919,6 +983,9 @@ class PluginSystemDatabase {
       throw StateError('Plugin database is already locked for a storage move.');
     }
     _storageMoveRequestId = requestId;
+    // חוסמים קבלה לפני ה-await; החיבור נשאר זמין לאצוות שכבר בתור.
+    _storageMoveWritesReleased ??= Completer<void>();
+    await _drainWrites();
     _storageMoveReleased ??= Completer<void>();
     final opening = _opening;
     if (opening != null) {
@@ -937,6 +1004,9 @@ class PluginSystemDatabase {
   void releaseStorageMove(String requestId) {
     if (_storageMoveRequestId != requestId) return;
     _storageMoveRequestId = null;
+    final writesReleased = _storageMoveWritesReleased;
+    _storageMoveWritesReleased = null;
+    writesReleased?.complete();
     final released = _storageMoveReleased;
     _storageMoveReleased = null;
     if (released != null && !released.isCompleted) released.complete();
@@ -945,10 +1015,13 @@ class PluginSystemDatabase {
   /// מאפס סינכרונית את ה-singleton עבור בדיקות קיימות.
   @visibleForTesting
   void resetForTests() {
+    _openWriteBatch = null;
+    _writeTail = null;
     _database?.close();
     _database = null;
     _opening = null;
     _storageMoveRequestId = null;
     _storageMoveReleased = null;
+    _storageMoveWritesReleased = null;
   }
 }
