@@ -104,32 +104,32 @@ class AppThemeData {
       cardTheme: const CardThemeData(shape: AppTokens.roundedShape),
       iconButtonTheme: IconButtonThemeData(
         style: _hoverButtonStyle(cs.primary).copyWith(
-          minimumSize: const WidgetStatePropertyAll(Size(80, 80)),
-          iconSize: const WidgetStatePropertyAll(40),
+          minimumSize: const WidgetStatePropertyAll(Size(128, 128)),
+          iconSize: const WidgetStatePropertyAll(72),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: _hoverButtonStyle(cs.onPrimary).copyWith(
-          minimumSize: const WidgetStatePropertyAll(Size(0, 72)),
+          minimumSize: const WidgetStatePropertyAll(Size(0, 112)),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: _hoverButtonStyle(cs.primary).copyWith(
-          minimumSize: const WidgetStatePropertyAll(Size(0, 72)),
+          minimumSize: const WidgetStatePropertyAll(Size(0, 112)),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: _hoverButtonStyle(cs.primary).copyWith(
-          minimumSize: const WidgetStatePropertyAll(Size(0, 72)),
+          minimumSize: const WidgetStatePropertyAll(Size(0, 112)),
         ),
       ),
-      iconTheme: const IconThemeData(size: 40),
-      listTileTheme: const ListTileThemeData(minTileHeight: 96),
+      iconTheme: const IconThemeData(size: 72),
+      listTileTheme: const ListTileThemeData(minTileHeight: 132),
       navigationBarTheme: NavigationBarThemeData(
-        height: 128,
-        iconTheme: const WidgetStatePropertyAll(IconThemeData(size: 44)),
+        height: 176,
+        iconTheme: const WidgetStatePropertyAll(IconThemeData(size: 64)),
         labelTextStyle: const WidgetStatePropertyAll(
-          TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+          TextStyle(fontSize: 26, fontWeight: FontWeight.w700),
         ),
       ),
       tabBarTheme: _tabBarTheme(cs),
@@ -157,7 +157,7 @@ class AppThemeData {
       // מצויר כקו תחתון), ובאותו רדיוס כמו שאר הרכיבים.
       inputDecorationTheme: const InputDecorationTheme(
         border: OutlineInputBorder(borderRadius: AppTokens.borderRadiusAll),
-        contentPadding: EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        contentPadding: EdgeInsets.symmetric(horizontal: 32, vertical: 36),
       ),
     );
   }

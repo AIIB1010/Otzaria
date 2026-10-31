@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:math' as math;
+import 'package:otzaria/humanware/humanware_profile.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -98,11 +99,11 @@ class App extends StatelessWidget {
               // application chrome below the large-print baseline.
               final systemTextScaler = MediaQuery.textScalerOf(context);
               final textScale = math.max(
-                // The HumanWare profile is intentionally much larger than a
-                // normal Android accessibility baseline.  At 185%, 16sp UI
-                // copy is rendered at almost 30sp, which is usable for a
-                // reader viewing the screen from very close range.
-                1.85,
+                // This edition is for close-range use on a large low-vision
+                // display, not ordinary phone accessibility.  At 300%, 16sp
+                // UI copy is rendered at 48sp and remains readable when the
+                // user has to bring their eyes close to the screen.
+                kHumanWareMinimumTextScale,
                 systemTextScaler.scale(14) / 14,
               ).toDouble();
               content = MediaQuery(
