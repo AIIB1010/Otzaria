@@ -54,5 +54,49 @@ void main() {
         expect(find.byType(FilledButton), findsWidgets);
       });
     }
+
+    testWidgets('בהגדלת HumanWare הגוף גולל והכפתור נשאר במסך', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(360, 640));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(1.85)),
+          child: MaterialApp(
+            home: Directionality(
+              textDirection: TextDirection.rtl,
+              child: SettingsTextScope(
+                language: SettingsLanguage.hebrew,
+                child: Scaffold(
+                  body: Center(
+                    child: TourTooltipCard(
+                      title: 'ברוכים הבאים לאוצריא',
+                      body:
+                          'ספרייה תורנית דיגיטלית חינמית ופתוחה.\n\n'
+                          'מאחר שעדיין לא טענת ספרייה, יוצג כעת סיור מקוצר. '
+                          'לאחר טעינת הספרייה תוכל להפעיל שוב את הסיור המלא '
+                          'מ: הגדרות ← מערכת.',
+                      currentIndex: -1,
+                      totalSteps: 3,
+                      isLastStep: false,
+                      isWelcomeStep: true,
+                      onNext: () {},
+                      onSkip: () {},
+                      onToggleAutoPlay: () {},
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('בוא נתחיל'), findsOneWidget);
+      expect(find.byType(SingleChildScrollView), findsOneWidget);
+    });
   });
 }
