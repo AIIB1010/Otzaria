@@ -26,16 +26,16 @@ void main() {
     );
 
     expect(theme.textTheme.bodyMedium?.fontSize, 22);
-    expect(theme.iconTheme.size, 40);
-    expect(theme.listTileTheme.minTileHeight, 96);
-    expect(theme.navigationBarTheme.height, 128);
+    expect(theme.iconTheme.size, 72);
+    expect(theme.listTileTheme.minTileHeight, 132);
+    expect(theme.navigationBarTheme.height, 176);
     expect(
       theme.iconButtonTheme.style?.minimumSize?.resolve(const {}),
-      const Size(80, 80),
+      const Size(128, 128),
     );
     expect(
       theme.filledButtonTheme.style?.minimumSize?.resolve(const {}),
-      const Size(0, 72),
+      const Size(0, 112),
     );
   });
 

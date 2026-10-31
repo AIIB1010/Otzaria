@@ -77,13 +77,13 @@ class _LibrarySetupViewState extends State<LibrarySetupView> {
     final unsupportedSchema = widget.unsupportedDbSchemaVersion;
     return CenteredScrollableState(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520),
+        constraints: const BoxConstraints(maxWidth: 620),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               FluentIcons.library_24_regular,
-              size: 96,
+              size: 128,
               color: cs.onSurfaceVariant,
             ),
             const SizedBox(height: 32),
