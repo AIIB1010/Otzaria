@@ -31,7 +31,7 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
   List<Book> _results = const [];
   bool _searching = false;
   bool _keyboardVisible = true;
-  int _selected = 0;
+  int _selected = -1;
   int _searchSeq = 0;
   Timer? _debounce;
   final _scroll = ScrollController();
@@ -47,7 +47,7 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
   void _setQuery(String value) {
     setState(() {
       _query = value;
-      _selected = 0;
+      _selected = -1;
     });
     _debounce?.cancel();
     if (value.trim().isEmpty) {
@@ -98,7 +98,12 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
   void _move(int delta) {
     if (_results.isEmpty) return;
     setState(
-      () => _selected = (_selected + delta).clamp(0, _results.length - 1),
+      () {
+        final from = _selected < 0
+            ? (delta > 0 ? -1 : _results.length)
+            : _selected;
+        _selected = (from + delta).clamp(0, _results.length - 1);
+      },
     );
     final context = _rowKeys[_selected]?.currentContext;
     if (context != null) Scrollable.ensureVisible(context, alignment: 0.5);
@@ -129,7 +134,7 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
       if (_keyboardVisible || _results.isEmpty) {
         _submit();
       } else {
-        _open(_results[_selected]);
+        _open(_results[_selected < 0 ? 0 : _selected]);
       }
       return true;
     }
@@ -168,6 +173,8 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
       },
       child: LvScaffold(
         title: 'חיפוש ספרים',
+        // החזקה ארוכה על מקש מוחקת הכל, ולכן אין כאן "החזקה לחזרה".
+        holdToGoBack: false,
         // במסך צר שורת החיפוש יורדת לשורה משלה, כדי שלא תיעלם בין הכפתורים.
         titleWidget: wide ? queryBar : null,
         onBack: () => Navigator.of(context).maybePop(),

@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otzaria/low_vision/cubit/low_vision_cubit.dart';
 import 'package:otzaria/low_vision/theme/lv_metrics.dart';
 import 'package:otzaria/low_vision/theme/lv_palette.dart';
+import 'package:otzaria/low_vision/view/widgets/lv_touch_zones.dart';
 import 'package:otzaria/widgets/misc/rtl_icon.dart';
 
 /// הערכה הנוכחית; בונה מחדש את הווידג'ט כשהמשתמש מחליף צבעים.
@@ -120,12 +121,16 @@ class LvScaffold extends StatelessWidget {
     this.bottom,
     this.backLabel = 'חזרה',
     this.titleWidget,
+    this.holdToGoBack = true,
   });
 
   final String title;
 
   /// מחליף את הכותרת (למשל שורת חיפוש).
   final Widget? titleWidget;
+
+  /// החזקה ארוכה של אצבע אחת בכל מקום בגוף המסך חוזרת אחורה.
+  final bool holdToGoBack;
   final Widget body;
   final VoidCallback? onBack;
   final List<Widget> actions;
@@ -183,7 +188,11 @@ class LvScaffold extends StatelessWidget {
                   ),
                 ),
                 SizedBox(height: m.gap),
-                Expanded(child: body),
+                Expanded(
+                  child: onBack != null && holdToGoBack
+                      ? LvTouchZones(onHoldBack: onBack, child: body)
+                      : body,
+                ),
                 if (bottom != null) ...[SizedBox(height: m.gap), bottom!],
               ],
             ),

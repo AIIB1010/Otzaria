@@ -183,6 +183,8 @@ class _LvPdfReaderState extends State<LvPdfReader> {
                 smartMaxScale: 20,
                 maxPagesVisible: 1,
               ),
+              // לחיצה כפולה והחזקה ארוכה שייכות למחוות הדפדוף שלנו, לא לזום ולבחירת טקסט.
+              onGeneralTap: (context, controller, details) => true,
               onViewerReady: _onReady,
               onPageChanged: _onPageChanged,
               margin: 0,

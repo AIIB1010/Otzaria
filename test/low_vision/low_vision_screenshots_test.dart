@@ -237,6 +237,26 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump();
     await _shot(tester, '11-חיפוש-בטלפון');
+
+    // קורא בגודל טלפון
+    await pumpLowVision(
+      tester,
+      LvTextReader(
+        book: TextBook(title: 'בראשית'),
+        loadText: () async => _lines().join('\n'),
+        loadToc: () async => [
+          TocEntry(text: 'פרק א', index: 0, level: 2),
+          TocEntry(text: 'פרק ב', index: 34, level: 2),
+        ],
+      ),
+      theme: theme(),
+      boundaryKey: _boundary,
+      size: const Size(360, 700),
+    );
+    await tester.pump();
+    await tester.pump();
+    await _shot(tester, '12-קורא-בטלפון');
+    await tester.pump(const Duration(seconds: 2));
     await tester.pump(const Duration(seconds: 2));
   });
 }

@@ -30,6 +30,7 @@ class LowVisionState extends Equatable {
     this.textScale = 1.0,
     this.palette = LvPalette.blackOnWhite,
     this.showNikud = true,
+    this.swapTapSides = false,
     this.keyOverrides = const {},
   });
 
@@ -49,6 +50,9 @@ class LowVisionState extends Equatable {
   final LvPalette palette;
   final bool showNikud;
 
+  /// ברירת מחדל: לחיצה כפולה בצד שמאל = הבא, בצד ימין = הקודם (כמו ספר עברי).
+  final bool swapTapSides;
+
   /// שיוך מקשים מותאם: שם הפעולה ← מזהי מקשים לוגיים.
   final Map<String, List<int>> keyOverrides;
 
@@ -63,6 +67,7 @@ class LowVisionState extends Equatable {
     double? textScale,
     LvPalette? palette,
     bool? showNikud,
+    bool? swapTapSides,
     Map<String, List<int>>? keyOverrides,
   }) => LowVisionState(
     loaded: loaded ?? this.loaded,
@@ -72,6 +77,7 @@ class LowVisionState extends Equatable {
     textScale: textScale ?? this.textScale,
     palette: palette ?? this.palette,
     showNikud: showNikud ?? this.showNikud,
+    swapTapSides: swapTapSides ?? this.swapTapSides,
     keyOverrides: keyOverrides ?? this.keyOverrides,
   );
 
@@ -84,6 +90,7 @@ class LowVisionState extends Equatable {
     textScale,
     palette,
     showNikud,
+    swapTapSides,
     keyOverrides,
   ];
 }

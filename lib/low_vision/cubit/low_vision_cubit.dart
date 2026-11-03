@@ -52,6 +52,7 @@ class LowVisionCubit extends Cubit<LowVisionState> {
               orElse: () => LvPalette.blackOnWhite,
             ),
             showNikud: json['showNikud'] as bool? ?? true,
+            swapTapSides: json['swapTapSides'] as bool? ?? false,
             keyOverrides: {
               for (final e
                   in (json['keys'] as Map<String, dynamic>? ?? {}).entries)
@@ -176,6 +177,11 @@ class LowVisionCubit extends Cubit<LowVisionState> {
     _scheduleSave();
   }
 
+  void setSwapTapSides(bool value) {
+    emit(state.copyWith(swapTapSides: value));
+    _scheduleSave();
+  }
+
   void setKeyOverride(String action, List<int> keys) {
     emit(state.copyWith(keyOverrides: {...state.keyOverrides, action: keys}));
     _scheduleSave();
@@ -204,6 +210,7 @@ class LowVisionCubit extends Cubit<LowVisionState> {
         'textScale': state.textScale,
         'palette': state.palette.name,
         'showNikud': state.showNikud,
+        'swapTapSides': state.swapTapSides,
         'keys': state.keyOverrides,
       });
       await (await _prefs()).setString(_prefsKey, data);

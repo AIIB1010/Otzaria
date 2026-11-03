@@ -153,6 +153,29 @@ class _LvSettingsScreenState extends State<LvSettingsScreen> {
                 ),
               ),
               _Section(
+                title: 'דפדוף בלחיצה כפולה',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'בקורא: לחיצה כפולה בצד אחד של המסך מדפדפת, והחזקה ארוכה '
+                      'של אצבע אחת חוזרת אחורה. נגיעה בודדת אינה עושה דבר.',
+                      style: _bodyStyle(m, p),
+                    ),
+                    SizedBox(height: m.gap),
+                    LvButton(
+                      label: state.swapTapSides
+                          ? 'ימין = הבא, שמאל = הקודם (הקישו להחלפה)'
+                          : 'שמאל = הבא, ימין = הקודם (הקישו להחלפה)',
+                      icon: FluentIcons.arrow_swap_24_filled,
+                      filled: false,
+                      onPressed: () =>
+                          cubit.setSwapTapSides(!state.swapTapSides),
+                    ),
+                  ],
+                ),
+              ),
+              _Section(
                 title: 'מקלדת חיצונית ומקשי מאקרו',
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

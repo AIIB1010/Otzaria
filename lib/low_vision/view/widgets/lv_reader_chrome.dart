@@ -13,6 +13,7 @@ import 'package:otzaria/low_vision/theme/lv_palette.dart';
 import 'package:otzaria/low_vision/view/lv_books_screen.dart';
 import 'package:otzaria/low_vision/view/lv_navigation.dart';
 import 'package:otzaria/low_vision/view/lv_search_screen.dart';
+import 'package:otzaria/low_vision/view/widgets/lv_touch_zones.dart';
 import 'package:otzaria/low_vision/view/widgets/lv_widgets.dart';
 import 'package:otzaria/models/books.dart';
 
@@ -104,6 +105,17 @@ class _LvReaderChromeState extends State<LvReaderChrome> {
     final pinned = context.select(
       (LowVisionCubit c) => c.isPinned(widget.book),
     );
+    final swap = context.select((LowVisionCubit c) => c.state.swapTapSides);
+    final nextZone = LvZoneAction(
+      label: 'עמוד הבא',
+      icon: FluentIcons.arrow_down_24_filled,
+      onTriggered: widget.onNext,
+    );
+    final previousZone = LvZoneAction(
+      label: 'עמוד קודם',
+      icon: FluentIcons.arrow_up_24_filled,
+      onTriggered: widget.onPrevious,
+    );
     final actions = <LvAction, VoidCallback>{
       LvAction.back: () => Navigator.of(context).maybePop(),
       LvAction.home: _goHome,
@@ -152,9 +164,12 @@ class _LvReaderChromeState extends State<LvReaderChrome> {
                           SizedBox(height: m.gap),
                         ],
                         Expanded(
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.translucent,
-                            onTap: _toggleImmersive,
+                          child: LvTouchZones(
+                            // לחיצה כפולה בצד אחד של המסך מדפדפת; נגיעה בודדת
+                            // (יד, אף) אינה עושה דבר. החזקה ארוכה חוזרת אחורה.
+                            left: swap ? previousZone : nextZone,
+                            right: swap ? nextZone : previousZone,
+                            onHoldBack: () => Navigator.of(context).maybePop(),
                             child: ClipRect(child: widget.child),
                           ),
                         ),
@@ -265,20 +280,27 @@ class _LvReaderChromeState extends State<LvReaderChrome> {
             ),
           ),
           SizedBox(width: m.gap),
-          Text(
-            widget.progress,
-            style: TextStyle(
-              color: p.foreground,
-              fontSize: m.label,
-              fontWeight: FontWeight.w700,
+          if (m.isWide)
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  widget.progress,
+                  style: TextStyle(
+                    color: p.foreground,
+                    fontSize: m.label,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
             ),
-          ),
           SizedBox(width: m.gap),
           LvButton(
             label: pinned ? 'קבוע' : 'קבע',
             icon: pinned
                 ? FluentIcons.pin_24_filled
                 : FluentIcons.pin_24_regular,
+            iconOnly: !m.isWide,
             filled: pinned,
             height: double.infinity,
             onPressed: () => cubit.togglePin(widget.book),
@@ -287,9 +309,19 @@ class _LvReaderChromeState extends State<LvReaderChrome> {
           LvButton(
             label: 'צבעים',
             icon: FluentIcons.color_24_filled,
+            iconOnly: !m.isWide,
             filled: false,
             height: double.infinity,
             onPressed: cubit.cyclePalette,
+          ),
+          SizedBox(width: m.gap),
+          LvButton(
+            label: 'מסך מלא',
+            icon: FluentIcons.full_screen_maximize_24_filled,
+            iconOnly: true,
+            filled: false,
+            height: double.infinity,
+            onPressed: _toggleImmersive,
           ),
         ],
       ),
@@ -320,6 +352,7 @@ class _LvReaderChromeState extends State<LvReaderChrome> {
               LvButton(
                 label: 'סעיף',
                 icon: FluentIcons.arrow_previous_24_regular,
+                iconOnly: !m.isWide,
                 directionalIcon: true,
                 filled: false,
                 onPressed: widget.onPreviousSection,
@@ -334,6 +367,7 @@ class _LvReaderChromeState extends State<LvReaderChrome> {
               LvButton(
                 label: widget.contentsLabel,
                 icon: widget.contentsIcon,
+                iconOnly: !m.isWide,
                 filled: false,
                 onPressed: widget.onContents,
                 height: double.infinity,
@@ -371,6 +405,7 @@ class _LvReaderChromeState extends State<LvReaderChrome> {
               LvButton(
                 label: 'סעיף',
                 icon: FluentIcons.arrow_next_24_regular,
+                iconOnly: !m.isWide,
                 directionalIcon: true,
                 filled: false,
                 onPressed: widget.onNextSection,

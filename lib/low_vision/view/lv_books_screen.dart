@@ -22,7 +22,9 @@ class LvBooksScreen extends StatefulWidget {
 class _LvBooksScreenState extends State<LvBooksScreen> {
   final _scroll = ScrollController();
   final _rowKeys = <int, GlobalKey>{};
-  int _selected = 0;
+
+  /// -1: אין פריט מסומן. הסימון מופיע רק אחרי ניווט במקלדת חיצונית.
+  int _selected = -1;
 
   @override
   void dispose() {
@@ -32,7 +34,8 @@ class _LvBooksScreenState extends State<LvBooksScreen> {
 
   void _move(int delta, int count) {
     if (count == 0) return;
-    setState(() => _selected = (_selected + delta).clamp(0, count - 1));
+    final from = _selected < 0 ? (delta > 0 ? -1 : count) : _selected;
+    setState(() => _selected = (from + delta).clamp(0, count - 1));
     final context = _rowKeys[_selected]?.currentContext;
     if (context != null) {
       Scrollable.ensureVisible(context, alignment: 0.5);
@@ -55,8 +58,8 @@ class _LvBooksScreenState extends State<LvBooksScreen> {
     return BlocBuilder<LowVisionCubit, LowVisionState>(
       builder: (context, _) {
         final books = cubit.openBooks;
-        final selected = books.isEmpty
-            ? 0
+        final selected = books.isEmpty || _selected < 0
+            ? -1
             : _selected.clamp(0, books.length - 1);
         return LvKeyScope(
           actions: {
@@ -66,7 +69,9 @@ class _LvBooksScreenState extends State<LvBooksScreen> {
             LvAction.next: () => _page(1),
             LvAction.previous: () => _page(-1),
             LvAction.select: () {
-              if (books.isNotEmpty) lvOpenBook(context, books[selected]);
+              if (books.isNotEmpty) {
+                lvOpenBook(context, books[selected < 0 ? 0 : selected]);
+              }
             },
             LvAction.openSearch: () => lvPush<void>(
               context,

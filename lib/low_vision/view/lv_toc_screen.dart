@@ -31,7 +31,7 @@ class LvTocScreen extends StatefulWidget {
 
 class _LvTocScreenState extends State<LvTocScreen> {
   final _scroll = ScrollController();
-  int _selected = 0;
+  int _selected = -1;
 
   List<LvTocItem> get _rows => [
     if (widget.parent != null)
@@ -58,7 +58,8 @@ class _LvTocScreenState extends State<LvTocScreen> {
   void _move(int delta) {
     final rows = _rows;
     if (rows.isEmpty) return;
-    final next = (_selected + delta).clamp(0, rows.length - 1);
+    final from = _selected < 0 ? (delta > 0 ? -1 : rows.length) : _selected;
+    final next = (from + delta).clamp(0, rows.length - 1);
     setState(() => _selected = next);
     final m = LvMetrics.of(context);
     final rowHeight = m.tapHeight * 1.3 + m.gap;
@@ -93,7 +94,9 @@ class _LvTocScreenState extends State<LvTocScreen> {
   Widget build(BuildContext context) {
     final m = LvMetrics.of(context);
     final rows = _rows;
-    final selected = rows.isEmpty ? 0 : _selected.clamp(0, rows.length - 1);
+    final selected = rows.isEmpty || _selected < 0
+        ? -1
+        : _selected.clamp(0, rows.length - 1);
     final parentRows = widget.parent != null ? 1 : 0;
     return LvKeyScope(
       actions: {
@@ -103,7 +106,7 @@ class _LvTocScreenState extends State<LvTocScreen> {
         LvAction.next: () => _page(1),
         LvAction.previous: () => _page(-1),
         LvAction.select: () {
-          if (rows.isNotEmpty) _choose(rows[selected].target);
+          if (rows.isNotEmpty && selected >= 0) _choose(rows[selected].target);
         },
         LvAction.nextSection: () {
           final i = selected - parentRows;
