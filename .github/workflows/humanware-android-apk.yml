@@ -7,7 +7,7 @@ on:
       - build-humanware-apk
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-android-7-apk:
@@ -35,10 +35,27 @@ jobs:
       - name: Run low vision tests
         run: flutter test test/low_vision
 
+      - name: Prepare the signing key file (optional)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::warning::No signing secrets. The APK is signed with a throw-away debug key, so it cannot update an installed copy."
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/humanware-release.keystore"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/humanware-release.keystore" >> "$GITHUB_ENV"
+
       - name: Build a release APK (Android 7+, 32/64-bit ARM)
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: >
           flutter build apk --release
           --dart-define=LOW_VISION=true
+          --dart-define=LV_BUILD=${{ github.run_number }}
+          --build-number=$((100000 + ${{ github.run_number }}))
           --target-platform android-arm,android-arm64
 
       - name: Upload installable APK
@@ -48,3 +65,14 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish as the latest in-app update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk otzaria-humanware.apk
+          gh release delete humanware-latest --yes --cleanup-tag || true
+          gh release create humanware-latest otzaria-humanware.apk \
+            --target "$GITHUB_SHA" --prerelease \
+            --title "HumanWare build ${{ github.run_number }}" \
+            --notes "build: ${{ github.run_number }}"
