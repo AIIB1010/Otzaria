@@ -26,6 +26,31 @@
 הפשוט (הוא קשה לשימוש במצבו של המשתמש); הוא זמין בתוכנה המלאה, שאליה עוברים
 דרך אייקון ההגדרות הקטן.
 
+## עדכון מתוך האפליקציה
+
+בהגדרות יש סעיף "עדכון האפליקציה": "בדוק אם יש גרסה חדשה" ואז "עדכן עכשיו".
+האפליקציה מורידה את ה-APK האחרון ומפעילה את מתקין Android.
+
+איך זה עובד:
+
+- בכל הרצה של ה-workflow (`humanware-android-apk.yml`) נוצר מחדש release בשם
+  `humanware-latest` עם `otzaria-humanware.apk` ובהערות `build: <מספר ריצה>`.
+- ה-APK נבנה עם `--dart-define=LV_BUILD=<מספר ריצה>`. האפליקציה משווה אותו
+  למספר שב-release (`lib/low_vision/update/lv_update_service.dart`). כתובת
+  המאגר קבועה שם (`kLvReleaseApi`); שינוי מאגר דורש לעדכן אותה.
+- `versionCode` הוא `100000 + מספר ריצה`, כדי שיהיה תמיד גבוה מהקודם.
+- בצד אנדרואיד: `ApkInstallerChannel.kt` + `LvFileProvider` + ההרשאה
+  `REQUEST_INSTALL_PACKAGES`. באנדרואיד 8+ המשתמש מאשר פעם אחת "התקנה
+  מהאפליקציה הזו".
+
+**חתימה (חובה לעדכון):** אנדרואיד מתקין עדכון רק על גבי גרסה שנחתמה באותו
+מפתח. בלי מפתח קבוע ה-CI חותם במפתח debug חדש בכל ריצה והעדכון ייכשל.
+מגדירים פעם אחת ארבעה Secrets במאגר (Settings, Secrets and variables, Actions):
+`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`,
+`ANDROID_KEY_PASSWORD`. ה-workflow מפענח אותם ל-`ANDROID_KEYSTORE_PATH`
+ש-`build.gradle` כבר יודע לקרוא. אין להכניס את המפתח או הסיסמה למאגר.
+המעבר הראשון למפתח הקבוע דורש להסיר את הגרסה המותקנת ולהתקין מחדש פעם אחת.
+
 ## מקלדת חיצונית ומקשי מאקרו
 
 מקשים מטופלים דרך `HardwareKeyboard` ולא דרך Focus, כך שמגע על המסך לא "גונב"
