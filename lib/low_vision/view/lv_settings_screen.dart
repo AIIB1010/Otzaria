@@ -8,6 +8,7 @@ import 'package:otzaria/low_vision/input/lv_action.dart';
 import 'package:otzaria/low_vision/input/lv_key_scope.dart';
 import 'package:otzaria/low_vision/theme/lv_metrics.dart';
 import 'package:otzaria/low_vision/theme/lv_palette.dart';
+import 'package:otzaria/low_vision/update/lv_update_service.dart';
 import 'package:otzaria/low_vision/view/lv_shell_controller.dart';
 import 'package:otzaria/low_vision/view/widgets/lv_widgets.dart';
 
@@ -21,7 +22,10 @@ String lvKeyLabel(int keyId) {
 
 /// הגדרות לעוזר רואה: צבעים, גודל טקסט, שיוך מקשים, ומעבר לתוכנה המלאה.
 class LvSettingsScreen extends StatefulWidget {
-  const LvSettingsScreen({super.key});
+  const LvSettingsScreen({super.key, this.updateService});
+
+  /// לבדיקות.
+  final LvUpdateService? updateService;
 
   @override
   State<LvSettingsScreen> createState() => _LvSettingsScreenState();
@@ -88,6 +92,10 @@ class _LvSettingsScreenState extends State<LvSettingsScreen> {
                     ),
                   ],
                 ),
+              ),
+              _Section(
+                title: 'עדכון האפליקציה',
+                child: _UpdateSection(service: widget.updateService),
               ),
               _Section(
                 title: 'צבעים',
@@ -276,6 +284,154 @@ class _PaletteChip extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+enum _UpdateStatus {
+  idle,
+  checking,
+  upToDate,
+  available,
+  downloading,
+  waitingForInstaller,
+  needsPermission,
+  noRelease,
+  error,
+}
+
+/// בדיקה והתקנה של בנייה חדשה בלחיצת כפתור.
+class _UpdateSection extends StatefulWidget {
+  const _UpdateSection({this.service});
+
+  final LvUpdateService? service;
+
+  @override
+  State<_UpdateSection> createState() => _UpdateSectionState();
+}
+
+class _UpdateSectionState extends State<_UpdateSection> {
+  late final LvUpdateService _service = widget.service ?? LvUpdateService();
+  _UpdateStatus _status = _UpdateStatus.idle;
+  LvUpdateInfo? _latest;
+  double _progress = 0;
+  String? _error;
+
+  @override
+  void dispose() {
+    if (widget.service == null) _service.dispose();
+    super.dispose();
+  }
+
+  Future<void> _check() async {
+    setState(() => _status = _UpdateStatus.checking);
+    try {
+      final latest = await _service.fetchLatest();
+      if (!mounted) return;
+      setState(() {
+        _latest = latest;
+        _status = latest == null
+            ? _UpdateStatus.noRelease
+            : latest.isNewerThan(kLvBuildNumber)
+            ? _UpdateStatus.available
+            : _UpdateStatus.upToDate;
+      });
+    } on LvUpdateException catch (error) {
+      if (mounted) {
+        setState(() {
+          _error = error.message;
+          _status = _UpdateStatus.error;
+        });
+      }
+    }
+  }
+
+  Future<void> _update() async {
+    final latest = _latest;
+    if (latest == null) return;
+    setState(() {
+      _status = _UpdateStatus.downloading;
+      _progress = 0;
+    });
+    try {
+      final apk = await _service.download(
+        latest,
+        onProgress: (value) {
+          if (mounted) setState(() => _progress = value);
+        },
+      );
+      final result = await _service.install(apk);
+      if (!mounted) return;
+      setState(
+        () => _status = result == LvInstallResult.needsPermission
+            ? _UpdateStatus.needsPermission
+            : _UpdateStatus.waitingForInstaller,
+      );
+    } on LvUpdateException catch (error) {
+      if (mounted) {
+        setState(() {
+          _error = error.message;
+          _status = _UpdateStatus.error;
+        });
+      }
+    }
+  }
+
+  String get _message {
+    final current = kLvBuildNumber == 0 ? 'מקומית' : '$kLvBuildNumber';
+    return switch (_status) {
+      _UpdateStatus.idle => 'גרסה מותקנת: $current',
+      _UpdateStatus.checking => 'בודק אם יש גרסה חדשה…',
+      _UpdateStatus.upToDate => 'האפליקציה מעודכנת (גרסה $current).',
+      _UpdateStatus.available =>
+        'יש גרסה חדשה: ${_latest?.build} (מותקנת: $current).',
+      _UpdateStatus.downloading => 'מוריד… ${(_progress * 100).round()}%',
+      _UpdateStatus.waitingForInstaller =>
+        'אשרו את ההתקנה במסך שנפתח. האפליקציה תיסגר ותיפתח מחדש.',
+      _UpdateStatus.needsPermission =>
+        'אפשרו "התקנה מהאפליקציה הזו" במסך שנפתח, חזרו ולחצו "עדכן עכשיו".',
+      _UpdateStatus.noRelease => 'עדיין לא פורסמה גרסה לעדכון.',
+      _UpdateStatus.error => _error ?? 'אירעה שגיאה.',
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final m = LvMetrics.of(context);
+    final p = lvPaletteOf(context);
+    final busy =
+        _status == _UpdateStatus.checking ||
+        _status == _UpdateStatus.downloading;
+    final canUpdate =
+        _status == _UpdateStatus.available ||
+        _status == _UpdateStatus.needsPermission;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          _message,
+          style: TextStyle(
+            color: p.foreground,
+            fontSize: m.label,
+            fontWeight: FontWeight.w600,
+            height: 1.3,
+          ),
+        ),
+        SizedBox(height: m.gap),
+        if (canUpdate)
+          LvButton(
+            label: 'עדכן עכשיו',
+            icon: FluentIcons.arrow_download_24_filled,
+            onPressed: _update,
+          )
+        else
+          LvButton(
+            label: 'בדוק אם יש גרסה חדשה',
+            icon: FluentIcons.arrow_sync_24_filled,
+            filled: false,
+            onPressed: busy ? null : _check,
+          ),
+      ],
     );
   }
 }

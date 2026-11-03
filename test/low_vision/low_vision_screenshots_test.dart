@@ -223,6 +223,20 @@ void main() {
     );
     await tester.pump();
     await _shot(tester, '10-הגדרות');
+
+    // חיפוש בטלפון צר
+    await pumpLowVision(
+      tester,
+      LvSearchScreen(search: (q) async => books.take(2).toList()),
+      theme: theme(),
+      boundaryKey: _boundary,
+      size: const Size(360, 700),
+    );
+    await tester.tap(find.text('מ').first);
+    await tester.tap(find.text('ש').first);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    await _shot(tester, '11-חיפוש-בטלפון');
     await tester.pump(const Duration(seconds: 2));
   });
 }

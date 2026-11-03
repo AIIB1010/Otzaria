@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/low_vision/view/lv_home_screen.dart';
@@ -229,5 +230,29 @@ void main() {
       expect(harness.cubit.state.pinned.single.title, 'ספר בדיקה');
       expect(find.text('קבוע'), findsOneWidget);
     });
+  });
+  testWidgets('המקלדת בסדר עברית רגיל: ק משמאל ו-פ מימין', (tester) async {
+    await pumpLowVision(tester, LvSearchScreen(search: (_) async => const []));
+    final qof = tester.getCenter(find.text('ק').first);
+    final pe = tester.getCenter(find.text('פ').first);
+    expect(qof.dx, lessThan(pe.dx));
+  });
+
+  testWidgets('בטלפון צר שורת החיפוש נשארת רחבה וקריאה', (tester) async {
+    await pumpLowVision(
+      tester,
+      LvSearchScreen(search: (_) async => const []),
+      size: const Size(360, 640),
+    );
+    await tester.tap(find.text('ש').first);
+    await tester.pump();
+    final searchIcon = tester
+        .getCenter(find.byIcon(FluentIcons.search_24_filled).first)
+        .dx;
+    final clearIcon = tester
+        .getCenter(find.byIcon(FluentIcons.dismiss_circle_24_filled))
+        .dx;
+    final barWidth = (searchIcon - clearIcon).abs();
+    expect(barWidth, greaterThan(150));
   });
 }

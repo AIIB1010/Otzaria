@@ -150,6 +150,13 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
   Widget build(BuildContext context) {
     final m = LvMetrics.of(context);
     final p = lvPaletteOf(context);
+    final wide = m.isWide;
+    final queryBar = _QueryBar(
+      query: _query,
+      onClear: () => _setQuery(''),
+      palette: p,
+      metrics: m,
+    );
     return LvKeyScope(
       onRawKey: _onRawKey,
       actions: {
@@ -161,17 +168,14 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
       },
       child: LvScaffold(
         title: 'חיפוש ספרים',
-        titleWidget: _QueryBar(
-          query: _query,
-          onClear: () => _setQuery(''),
-          palette: p,
-          metrics: m,
-        ),
+        // במסך צר שורת החיפוש יורדת לשורה משלה, כדי שלא תיעלם בין הכפתורים.
+        titleWidget: wide ? queryBar : null,
         onBack: () => Navigator.of(context).maybePop(),
         actions: [
           LvButton(
             label: _keyboardVisible ? 'הסתר מקלדת' : 'מקלדת',
             icon: FluentIcons.keyboard_24_filled,
+            iconOnly: !wide,
             filled: false,
             onPressed: () =>
                 setState(() => _keyboardVisible = !_keyboardVisible),
@@ -179,6 +183,7 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
         ],
         body: Column(
           children: [
+            if (!wide) ...[queryBar, SizedBox(height: m.gap)],
             Expanded(child: _buildResults(m)),
             if (_keyboardVisible) ...[
               SizedBox(height: m.gap),

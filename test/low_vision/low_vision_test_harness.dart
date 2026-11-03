@@ -29,9 +29,10 @@ Future<LvHarness> pumpLowVision(
   void Function(LowVisionCubit cubit)? setup,
   ThemeData? theme,
   Key? boundaryKey,
+  Size size = const Size(1920, 1080),
 }) async {
   SharedPreferences.setMockInitialValues({});
-  tester.view.physicalSize = const Size(1920, 1080);
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final cubit = LowVisionCubit();

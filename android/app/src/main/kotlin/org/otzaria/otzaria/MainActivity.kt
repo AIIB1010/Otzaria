@@ -11,6 +11,7 @@ class MainActivity : FlutterActivity() {
     private var folderImportChannel: FolderImportChannel? = null
     private var appExitInfoChannel: AppExitInfoChannel? = null
     private var foregroundWorkChannel: ForegroundWorkChannel? = null
+    private var apkInstallerChannel: ApkInstallerChannel? = null
     private var dartActivationListenerReady = false
     private val pendingActivationUris = mutableListOf<String>()
 
@@ -38,6 +39,7 @@ class MainActivity : FlutterActivity() {
         folderImportChannel = FolderImportChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         appExitInfoChannel = AppExitInfoChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         foregroundWorkChannel = ForegroundWorkChannel(this, flutterEngine.dartExecutor.binaryMessenger)
+        apkInstallerChannel = ApkInstallerChannel(this, flutterEngine.dartExecutor.binaryMessenger)
 
         enqueueIntentUriIfNeeded(intent)
     }
@@ -68,6 +70,8 @@ class MainActivity : FlutterActivity() {
         externalActivationChannel = null
         folderImportChannel?.dispose()
         folderImportChannel = null
+        apkInstallerChannel?.dispose()
+        apkInstallerChannel = null
         appExitInfoChannel?.dispose()
         appExitInfoChannel = null
         foregroundWorkChannel?.dispose()

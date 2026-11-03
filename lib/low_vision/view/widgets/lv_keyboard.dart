@@ -60,70 +60,71 @@ class _LvKeyboardState extends State<LvKeyboard> {
   Widget build(BuildContext context) {
     final m = LvMetrics.of(context);
     final gap = m.gap * 0.6;
-    return Column(
-      children: [
-        for (final row in _rows) ...[
+    // סדר המקשים כמו במקלדת עברית רגילה: ק משמאל ו-פ מימין, ללא היפוך.
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: Column(
+        children: [
+          for (final row in _rows) ...[
+            Expanded(
+              child: Row(
+                children: [
+                  for (final key in row) ...[
+                    Expanded(
+                      child: _Key(
+                        label: key,
+                        onTap: () => widget.onText(key),
+                      ),
+                    ),
+                    if (key != row.last) SizedBox(width: gap),
+                  ],
+                ],
+              ),
+            ),
+            SizedBox(height: gap),
+          ],
           Expanded(
             child: Row(
               children: [
-                for (final key in row) ...[
-                  Expanded(
-                    child: _Key(
-                      label: key,
-                      onTap: () => widget.onText(key),
-                    ),
+                Expanded(
+                  flex: 2,
+                  child: _Key(label: _layoutLabel, onTap: _toggleLayout),
+                ),
+                SizedBox(width: gap),
+                Expanded(
+                  flex: 4,
+                  child: _Key(label: 'רווח', onTap: () => widget.onText(' ')),
+                ),
+                SizedBox(width: gap),
+                Expanded(
+                  flex: 2,
+                  child: _Key(label: 'נקה', onTap: widget.onClear),
+                ),
+                SizedBox(width: gap),
+                Expanded(
+                  flex: 2,
+                  child: _Key(
+                    icon: FluentIcons.backspace_24_filled,
+                    semantic: 'מחיקת תו',
+                    onTap: widget.onBackspace,
+                    onLongPress: widget.onClear,
                   ),
-                  if (key != row.last) SizedBox(width: gap),
-                ],
+                ),
+                SizedBox(width: gap),
+                Expanded(
+                  flex: 3,
+                  child: _Key(
+                    label: 'חפש',
+                    icon: FluentIcons.search_24_filled,
+                    accent: true,
+                    onTap: widget.onSubmit,
+                  ),
+                ),
               ],
             ),
           ),
-          SizedBox(height: gap),
         ],
-        Expanded(
-          child: Row(
-            children: [
-              Expanded(
-                flex: 2,
-                child: _Key(label: _layoutLabel, onTap: _toggleLayout),
-              ),
-              SizedBox(width: gap),
-              Expanded(
-                flex: 2,
-                child: _Key(
-                  icon: FluentIcons.backspace_24_filled,
-                  semantic: 'מחיקת תו',
-                  onTap: widget.onBackspace,
-                  onLongPress: widget.onClear,
-                ),
-              ),
-              SizedBox(width: gap),
-              Expanded(
-                flex: 4,
-                child: _Key(
-                  label: 'רווח',
-                  onTap: () => widget.onText(' '),
-                ),
-              ),
-              SizedBox(width: gap),
-              Expanded(
-                flex: 2,
-                child: _Key(label: 'נקה', onTap: widget.onClear),
-              ),
-              SizedBox(width: gap),
-              Expanded(
-                flex: 3,
-                child: _Key(
-                  label: 'חפש',
-                  icon: FluentIcons.search_24_filled,
-                  accent: true,
-                  onTap: widget.onSubmit,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
+      ),
     );
   }
 }

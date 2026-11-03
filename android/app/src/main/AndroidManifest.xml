@@ -1,5 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- עדכון עצמי של מהדורת HumanWare מתוך האפליקציה -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
     
@@ -80,6 +82,13 @@
         </receiver>
         <receiver android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" 
                   android:exported="false" />
+        <provider android:name=".LvFileProvider"
+                  android:authorities="${applicationId}.lvfileprovider"
+                  android:exported="false"
+                  android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS"
+                       android:resource="@xml/lv_file_paths" />
+        </provider>
         <service android:name=".ForegroundWorkService"
                  android:exported="false"
                  android:foregroundServiceType="dataSync" />
