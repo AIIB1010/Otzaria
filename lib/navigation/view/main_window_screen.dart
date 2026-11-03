@@ -12,8 +12,8 @@ import 'package:otzaria/app_report/view/app_report_dialog.dart';
 import 'package:otzaria/app_scope/process_duties.dart';
 import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
-import 'package:otzaria/humanware/humanware_profile.dart';
 import 'package:otzaria/core/startup_timeline.dart';
+import 'package:otzaria/low_vision/low_vision_mode.dart';
 import 'package:otzaria/core/windowing/runner_window_channel.dart';
 import 'package:otzaria/core/windowing/window_opener.dart';
 import 'package:otzaria/widgets/misc/rtl_icon.dart';
@@ -750,7 +750,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
 
       // ⚠️ פר-תהליך: מונה ההפעלות שמכתיב מתי הפופאפ מוצג עולה פר-חלון,
       // והפופאפ עצמו הופיע בכל חלון שנפתח.
-      if (_duties.isProcessOwner) {
+      if (_duties.isProcessOwner && !isLowVisionMode) {
         AdPopupDialog.showIfNeeded(
           context,
           shouldSkip: () => _tourStartedAutomaticallyThisLaunch,
@@ -2908,11 +2908,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
   }
 
   void _scheduleTourStartIfNeeded({required bool libraryLoaded}) {
-    // The detailed guided tour is unsuitable as a first screen in the
-    // close-range HumanWare profile.  It remains available on demand in
-    // Settings, but first launch should lead straight to the large library
-    // setup interface.
-    if (isHumanWareEdition) return;
+    if (isLowVisionMode) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (_tourCubit.startIfNeeded(libraryLoaded: libraryLoaded)) {
@@ -3050,7 +3046,7 @@ class MainWindowScreenState extends State<MainWindowScreen>
                 );
               }
               final navigationState = context.read<NavigationBloc>().state;
-              if (!isHumanWareEdition &&
+              if (!isLowVisionMode &&
                   navigationState.hasCheckedLibrary &&
                   !navigationState.isLibraryEmpty) {
                 if (_tourCubit.startIfNeeded(libraryLoaded: true)) {

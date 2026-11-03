@@ -1,6 +1,4 @@
 import 'dart:io';
-import 'dart:math' as math;
-import 'package:otzaria/humanware/humanware_profile.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -19,6 +17,8 @@ import 'package:otzaria/core/windowing/app_window_keys.dart';
 import 'package:otzaria/core/windowing/app_window_scope.dart';
 import 'package:otzaria/core/windowing/mac_menu_bar.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:otzaria/low_vision/low_vision_mode.dart';
+import 'package:otzaria/low_vision/view/low_vision_root.dart';
 import 'package:otzaria/navigation/view/main_window_screen.dart';
 import 'package:otzaria/settings/settings_exports.dart';
 import 'package:otzaria/widgets/misc/middle_click_autoscroll.dart';
@@ -94,25 +94,6 @@ class App extends StatelessWidget {
                     ),
                   );
 
-              // This edition is intended for close-range, low-vision reading.
-              // Keep a user's larger Android text setting, but never render the
-              // application chrome below the large-print baseline.
-              final systemTextScaler = MediaQuery.textScalerOf(context);
-              final textScale = math.max(
-                // This edition is for close-range use on a large low-vision
-                // display, not ordinary phone accessibility.  At 300%, 16sp
-                // UI copy is rendered at 48sp and remains readable when the
-                // user has to bring their eyes close to the screen.
-                kHumanWareMinimumTextScale,
-                systemTextScaler.scale(14) / 14,
-              ).toDouble();
-              content = MediaQuery(
-                data: MediaQuery.of(
-                  context,
-                ).copyWith(textScaler: TextScaler.linear(textScale)),
-                child: content,
-              );
-
               // קביעת צבע אייקוני פס הסטטוס לפי התמה הפעילה.
               // האפליקציה אינה משתמשת ב-AppBar רגיל, ולכן systemOverlayStyle
               // לא נקבע אוטומטית — מגדירים אותו כאן כדי שהשעה והאייקונים
@@ -156,9 +137,15 @@ class App extends StatelessWidget {
                 child: content,
               );
             },
-            home: MainWindowScreen(
-              key: AppWindowKeys.of(context).mainWindowScreen,
-            ),
+            home: isLowVisionMode
+                ? LowVisionRoot(
+                    advancedApp: MainWindowScreen(
+                      key: AppWindowKeys.of(context).mainWindowScreen,
+                    ),
+                  )
+                : MainWindowScreen(
+                    key: AppWindowKeys.of(context).mainWindowScreen,
+                  ),
           ),
         );
       },

@@ -1,7 +1,5 @@
 // לתחזוקת כרטיסי הסיור המודרך ראו: docs/guided_tour_developer_guide.md
 
-import 'dart:math' as math;
-
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:otzaria/settings/l10n/settings_l10n_exports.dart';
 import 'package:otzaria/theme/app_tokens.dart';
@@ -50,13 +48,6 @@ class TourTooltipCard extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final shortcutText = tourShortcutText(context, shortcut);
-    // כרטיס הסיור מופיע מעל כל המסך. בפרופיל HumanWare הטקסט גדול בכוונה,
-    // לכן גוף ארוך חייב לגלול בתוך גובה המסך ולא לדחוף את כפתורי הפעולה
-    // מחוץ למסך.
-    final maxCardHeight = math.max(
-      0.0,
-      MediaQuery.sizeOf(context).height - 40,
-    );
 
     // הכרטיס יושב ב-Overlay שכיוונו RTL תמיד; כיוונו נקבע לפי שפת ההגדרות.
     return Directionality(
@@ -71,11 +62,7 @@ class TourTooltipCard extends StatelessWidget {
           ),
         ),
         child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: 430,
-            minWidth: 300,
-            maxHeight: maxCardHeight,
-          ),
+          constraints: const BoxConstraints(maxWidth: 430, minWidth: 300),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
             child: Column(
@@ -112,20 +99,16 @@ class TourTooltipCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 14),
-                Flexible(
-                  child: SingleChildScrollView(
-                    child: Text(
-                      context.settingsText(
-                        body,
-                        args: shortcutText == null
-                            ? null
-                            : {'shortcut': shortcutText},
-                      ),
-                      style: textTheme.bodyLarge?.copyWith(
-                        height: 1.45,
-                        color: colorScheme.onSecondaryContainer,
-                      ),
-                    ),
+                Text(
+                  context.settingsText(
+                    body,
+                    args: shortcutText == null
+                        ? null
+                        : {'shortcut': shortcutText},
+                  ),
+                  style: textTheme.bodyLarge?.copyWith(
+                    height: 1.45,
+                    color: colorScheme.onSecondaryContainer,
                   ),
                 ),
                 const SizedBox(height: 18),

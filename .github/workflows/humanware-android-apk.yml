@@ -29,25 +29,22 @@ jobs:
       - name: Install locked dependencies
         run: flutter pub get --enforce-lockfile
 
-      - name: Analyze the accessibility changes
-        run: flutter analyze
+      - name: Analyze the low vision edition
+        run: flutter analyze lib/low_vision test/low_vision lib/app.dart
 
-      - name: Run focused regression tests
-        run: |
-          flutter test \
-            test/settings/settings_repository_test.dart \
-            test/shortcuts/shortcut_helper_test.dart \
-            test/shortcuts/shortcut_validator_registration_test.dart
+      - name: Run low vision tests
+        run: flutter test test/low_vision
 
-      - name: Build a universal debug APK
+      - name: Build a release APK (Android 7+, 32/64-bit ARM)
         run: >
-          flutter build apk --debug
+          flutter build apk --release
+          --dart-define=LOW_VISION=true
           --target-platform android-arm,android-arm64
 
       - name: Upload installable APK
         uses: actions/upload-artifact@v7.0.0
         with:
-          name: Otzaria-HumanWare-Android7-debug
-          path: build/app/outputs/flutter-apk/app-debug.apk
+          name: Otzaria-HumanWare-Android7
+          path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14

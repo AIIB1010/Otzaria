@@ -100,7 +100,8 @@ android {
 
     buildTypes {
         release {
-            signingConfig signingConfigs.release
+            // בלי keystore (בנייה מקומית או CI) חותמים במפתח ה-debug כדי שה-APK יהיה בר-התקנה.
+            signingConfig keystoreProperties['storeFile'] ? signingConfigs.release : signingConfigs.debug
         }
     }
 }

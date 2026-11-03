@@ -19,26 +19,6 @@ double _contrastRatio(Color a, Color b) {
 }
 
 void main() {
-  test('ערכת HumanWare משתמשת במטרות גדולות במיוחד לכבד ראייה', () {
-    final theme = AppThemeData.light(
-      AppThemeData.createColorScheme(Colors.deepPurple, Brightness.light),
-      compactMenuMode: false,
-    );
-
-    expect(theme.textTheme.bodyMedium?.fontSize, 22);
-    expect(theme.iconTheme.size, 72);
-    expect(theme.listTileTheme.minTileHeight, 132);
-    expect(theme.navigationBarTheme.height, 176);
-    expect(
-      theme.iconButtonTheme.style?.minimumSize?.resolve(const {}),
-      const Size(128, 128),
-    );
-    expect(
-      theme.filledButtonTheme.style?.minimumSize?.resolve(const {}),
-      const Size(0, 112),
-    );
-  });
-
   for (final brightness in Brightness.values) {
     test('בועות מידע משתמשות בצבעי הנושא ב-$brightness', () {
       final colorScheme = AppThemeData.createColorScheme(

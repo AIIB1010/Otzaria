@@ -55,9 +55,9 @@ void main() {
         when(
           mockSettingsWrapper.getValue<double>(
             SettingsRepository.keyFontSize,
-            defaultValue: 30,
+            defaultValue: 25,
           ),
-        ).thenReturn(30.0);
+        ).thenReturn(25.0);
         when(
           mockSettingsWrapper.getValue<String>(
             SettingsRepository.keyFontFamily,
@@ -139,7 +139,7 @@ void main() {
         expect(settings['seedColor'], AppSeedColors.defaultLight);
         expect(settings['darkSeedColor'], AppSeedColors.defaultDark);
         expect(settings['textMaxWidth'], -1.0);
-        expect(settings['fontSize'], 30.0);
+        expect(settings['fontSize'], 25.0);
         expect(settings['fontFamily'], 'FrankRuhlCLM');
         expect(settings['showOtzarHachochma'], false);
         expect(settings['showHebrewBooks'], false);
@@ -192,7 +192,7 @@ void main() {
       when(
         mockSettingsWrapper.getValue<double>(
           SettingsRepository.keyFontSize,
-          defaultValue: 30,
+          defaultValue: 25,
         ),
       ).thenReturn(20.0);
       when(
@@ -436,9 +436,9 @@ void main() {
       when(
         mockSettingsWrapper.getValue<double>(
           SettingsRepository.keyFontSize,
-          defaultValue: 30,
+          defaultValue: 25,
         ),
-      ).thenReturn(30.0);
+      ).thenReturn(25.0);
       when(
         mockSettingsWrapper.getValue<String>(
           SettingsRepository.keyFontFamily,
@@ -516,7 +516,7 @@ void main() {
         mockSettingsWrapper.setValue(SettingsRepository.keyTextMaxWidth, -1.0),
       ).called(1);
       verify(
-        mockSettingsWrapper.setValue(SettingsRepository.keyFontSize, 30.0),
+        mockSettingsWrapper.setValue(SettingsRepository.keyFontSize, 25.0),
       ).called(1);
       verify(
         mockSettingsWrapper.setValue(
@@ -616,9 +616,9 @@ void main() {
         when(
           mockSettingsWrapper.getValue<double>(
             SettingsRepository.keyFontSize,
-            defaultValue: 30,
+            defaultValue: 25,
           ),
-        ).thenReturn(30.0);
+        ).thenReturn(25.0);
         when(
           mockSettingsWrapper.getValue<String>(
             SettingsRepository.keyFontFamily,
