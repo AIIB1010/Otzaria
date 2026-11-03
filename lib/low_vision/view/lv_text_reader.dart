@@ -252,7 +252,7 @@ class _LvTextReaderState extends State<LvTextReader> {
         : ((_firstLine / (lines.length - 1)) * 100).round();
     return LvReaderChrome(
       book: _tracked,
-      progress: '$percent%',
+      progress: '$percent% מהספר',
       sectionLabel: hasToc && section >= 0 ? _tocFlat[section].title : null,
       onNext: () => _page(1),
       onPrevious: () => _page(-1),

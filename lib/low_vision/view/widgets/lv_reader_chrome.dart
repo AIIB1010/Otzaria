@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otzaria/bookmarks/models/bookmark.dart' show bookIdentity;
 import 'package:otzaria/low_vision/cubit/low_vision_cubit.dart';
+import 'package:otzaria/low_vision/cubit/low_vision_state.dart';
 import 'package:otzaria/low_vision/input/lv_action.dart';
 import 'package:otzaria/low_vision/input/lv_key_scope.dart';
 import 'package:otzaria/low_vision/theme/lv_metrics.dart';
@@ -61,6 +64,23 @@ class LvReaderChrome extends StatefulWidget {
 
 class _LvReaderChromeState extends State<LvReaderChrome> {
   bool _immersive = false;
+  String? _toast;
+  Timer? _toastTimer;
+
+  @override
+  void dispose() {
+    _toastTimer?.cancel();
+    super.dispose();
+  }
+
+  /// חיווי גדול ובולט לרגע, למשל "גודל הטקסט: 120%".
+  void _showToast(String text) {
+    _toastTimer?.cancel();
+    setState(() => _toast = text);
+    _toastTimer = Timer(const Duration(milliseconds: 1400), () {
+      if (mounted) setState(() => _toast = null);
+    });
+  }
 
   void _toggleImmersive() => setState(() => _immersive = !_immersive);
 
@@ -110,45 +130,77 @@ class _LvReaderChromeState extends State<LvReaderChrome> {
     };
     return LvKeyScope(
       actions: actions,
-      child: MediaQuery(
-        data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
-        child: Material(
-          color: p.background,
-          child: SafeArea(
-            child: Padding(
-              padding: EdgeInsets.all(m.gap),
-              child: Stack(
-                children: [
-                  Column(
-                    children: [
-                      if (!_immersive) ...[
-                        _topBar(m, p, pinned, cubit),
-                        SizedBox(height: m.gap),
+      child: BlocListener<LowVisionCubit, LowVisionState>(
+        listenWhen: (a, b) => a.textScale != b.textScale,
+        listener: (context, state) =>
+            _showToast('גודל הטקסט: ${(state.textScale * 100).round()}%'),
+        child: MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.noScaling),
+          child: Material(
+            color: p.background,
+            child: SafeArea(
+              child: Padding(
+                padding: EdgeInsets.all(m.gap),
+                child: Stack(
+                  children: [
+                    Column(
+                      children: [
+                        if (!_immersive) ...[
+                          _topBar(m, p, pinned, cubit),
+                          SizedBox(height: m.gap),
+                        ],
+                        Expanded(
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.translucent,
+                            onTap: _toggleImmersive,
+                            child: ClipRect(child: widget.child),
+                          ),
+                        ),
+                        if (!_immersive) ...[
+                          SizedBox(height: m.gap),
+                          _bottomBar(m),
+                        ],
                       ],
-                      Expanded(
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-                          onTap: _toggleImmersive,
-                          child: ClipRect(child: widget.child),
+                    ),
+                    if (_toast != null)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: Center(
+                            child: Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: m.unit,
+                                vertical: m.gap * 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: p.foreground,
+                                borderRadius: BorderRadius.circular(m.radius),
+                              ),
+                              child: Text(
+                                _toast!,
+                                style: TextStyle(
+                                  color: p.background,
+                                  fontSize: m.title,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
-                      if (!_immersive) ...[
-                        SizedBox(height: m.gap),
-                        _bottomBar(m),
-                      ],
-                    ],
-                  ),
-                  if (_immersive)
-                    PositionedDirectional(
-                      top: 0,
-                      end: 0,
-                      child: LvButton(
-                        label: 'תפריט',
-                        icon: FluentIcons.re_order_dots_horizontal_24_filled,
-                        onPressed: _toggleImmersive,
+                    if (_immersive)
+                      PositionedDirectional(
+                        top: 0,
+                        end: 0,
+                        child: LvButton(
+                          label: 'תפריט',
+                          icon: FluentIcons.re_order_dots_horizontal_24_filled,
+                          onPressed: _toggleImmersive,
+                        ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

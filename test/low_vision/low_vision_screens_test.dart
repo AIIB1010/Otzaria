@@ -255,4 +255,72 @@ void main() {
     final barWidth = (searchIcon - clearIcon).abs();
     expect(barWidth, greaterThan(150));
   });
+
+  testWidgets('מקש במקלדת הופך לשחור עם כיתוב לבן בזמן לחיצה', (tester) async {
+    await pumpLowVision(tester, LvSearchScreen(search: (_) async => const []));
+    final key = find.ancestor(
+      of: find.text('ש').first,
+      matching: find.byType(Container),
+    );
+    Color? colorOf() =>
+        ((tester.widget<Container>(key.first)).decoration as BoxDecoration)
+            .color;
+
+    final before = colorOf();
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.text('ש').first),
+    );
+    await tester.pump();
+    expect(colorOf(), const Color(0xFF000000));
+    expect(colorOf(), isNot(before));
+    final text = tester.widget<Text>(find.text('ש').first);
+    expect(text.style!.color, const Color(0xFFFFFFFF));
+
+    await gesture.up();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(colorOf(), before);
+  });
+
+  testWidgets('אחוז ההתקדמות בספר מתעדכן בגלילה ומסומן "מהספר"', (
+    tester,
+  ) async {
+    final lines = [for (var i = 0; i < 200; i++) 'שורה מספר $i בספר'];
+    await pumpLowVision(
+      tester,
+      LvTextReader(
+        book: TextBook(title: 'ספר ארוך'),
+        loadText: () async => lines.join('\n'),
+        loadToc: () async => const [],
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('0% מהספר'), findsOneWidget);
+
+    await tester.tap(find.text('עמוד').last);
+    await tester.pumpAndSettle();
+    expect(find.text('0% מהספר'), findsNothing);
+    expect(find.textContaining('% מהספר'), findsOneWidget);
+  });
+
+  testWidgets('שינוי גודל הטקסט מציג חיווי גדול לרגע', (tester) async {
+    await pumpLowVision(
+      tester,
+      LvTextReader(
+        book: TextBook(title: 'ספר'),
+        loadText: () async => 'שורה\nעוד שורה',
+        loadToc: () async => const [],
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(find.textContaining('גודל הטקסט'), findsNothing);
+
+    await tester.tap(find.bySemanticsLabel('הגדל'));
+    await tester.pump();
+    expect(find.text('גודל הטקסט: 120%'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.textContaining('גודל הטקסט'), findsNothing);
+  });
 }

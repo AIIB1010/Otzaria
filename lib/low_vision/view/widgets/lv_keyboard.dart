@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
@@ -129,7 +130,9 @@ class _LvKeyboardState extends State<LvKeyboard> {
   }
 }
 
-class _Key extends StatelessWidget {
+/// מקש במקלדת. בזמן לחיצה הוא הופך להפוך-צבעים מלא (שחור עם כיתוב לבן בערכה
+/// הבהירה), וההדגשה נשארת גלויה לפחות [_minPressedTime] גם בנגיעה קצרה.
+class _Key extends StatefulWidget {
   const _Key({
     this.label,
     this.icon,
@@ -147,32 +150,79 @@ class _Key extends StatelessWidget {
   final VoidCallback? onLongPress;
 
   @override
+  State<_Key> createState() => _KeyState();
+}
+
+const _minPressedTime = Duration(milliseconds: 160);
+
+class _KeyState extends State<_Key> {
+  bool _pressed = false;
+  DateTime _pressedAt = DateTime.fromMillisecondsSinceEpoch(0);
+  Timer? _releaseTimer;
+
+  @override
+  void dispose() {
+    _releaseTimer?.cancel();
+    super.dispose();
+  }
+
+  void _press() {
+    _releaseTimer?.cancel();
+    _pressedAt = DateTime.now();
+    setState(() => _pressed = true);
+  }
+
+  void _release() {
+    final remaining = _minPressedTime - DateTime.now().difference(_pressedAt);
+    _releaseTimer?.cancel();
+    if (remaining <= Duration.zero) {
+      if (mounted) setState(() => _pressed = false);
+      return;
+    }
+    _releaseTimer = Timer(remaining, () {
+      if (mounted) setState(() => _pressed = false);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final m = LvMetrics.of(context);
     final p = lvPaletteOf(context);
-    final bg = accent ? p.accent : p.surface;
-    final fg = accent ? p.onAccent : p.foreground;
+    final bg = _pressed
+        ? p.foreground
+        : widget.accent
+        ? p.accent
+        : p.surface;
+    final fg = _pressed
+        ? p.background
+        : widget.accent
+        ? p.onAccent
+        : p.foreground;
+    final label = widget.label;
     return LayoutBuilder(
       builder: (context, box) {
         final side = math.min(box.maxHeight, box.maxWidth * 1.4);
         final fontSize = math.max(12.0, side * 0.52);
         return Semantics(
           button: true,
-          label: semantic ?? label,
+          label: widget.semantic ?? label,
           excludeSemantics: true,
-          child: Material(
-            color: bg,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(m.radius * 0.7),
-              side: BorderSide(color: p.foreground, width: m.border * 0.7),
-            ),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(m.radius * 0.7),
-              onTap: () {
-                HapticFeedback.selectionClick();
-                onTap();
-              },
-              onLongPress: onLongPress,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapDown: (_) => _press(),
+            onTapUp: (_) => _release(),
+            onTapCancel: _release,
+            onTap: () {
+              HapticFeedback.selectionClick();
+              widget.onTap();
+            },
+            onLongPress: widget.onLongPress,
+            child: Container(
+              decoration: BoxDecoration(
+                color: bg,
+                borderRadius: BorderRadius.circular(m.radius * 0.7),
+                border: Border.all(color: p.foreground, width: m.border * 0.7),
+              ),
               child: Center(
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
@@ -181,15 +231,16 @@ class _Key extends StatelessWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (icon != null) Icon(icon, size: fontSize, color: fg),
-                        if (icon != null && label != null)
+                        if (widget.icon != null)
+                          Icon(widget.icon, size: fontSize, color: fg),
+                        if (widget.icon != null && label != null)
                           SizedBox(width: fontSize * 0.2),
                         if (label != null)
                           Text(
-                            label!,
+                            label,
                             style: TextStyle(
                               color: fg,
-                              fontSize: label!.length > 1
+                              fontSize: label.length > 1
                                   ? fontSize * 0.85
                                   : fontSize,
                               fontWeight: FontWeight.w800,

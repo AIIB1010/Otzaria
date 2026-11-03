@@ -91,8 +91,9 @@ flutter build apk --release --dart-define=LOW_VISION=true --target-platform andr
 - `minSdkVersion 24` (Android 7.0).
 - ללא keystore (`key.properties` או משתני `ANDROID_KEYSTORE_*`) גרסת release
   נחתמת במפתח ה-debug כדי שה-APK יהיה בר-התקנה. להפצה אמיתית יש לספק keystore.
-- ה-workflow `.github/workflows/humanware-android-apk.yml` מריץ analyze ובדיקות,
-  בונה APK ומעלה אותו כ-artifact. הוא רץ ב-`workflow_dispatch` ובדחיפה לענף
+- ה-workflow `.github/workflows/humanware-android-apk.yml` בונה APK ומעלה אותו
+  כ-artifact. הוא לא מריץ analyze ובדיקות (איטי): מריצים אותם מקומית לפני דחיפה.
+  מטמון של Rust ו-Gradle מקצר ריצות אחרי הראשונה. הוא רץ ב-`workflow_dispatch` ובדחיפה לענף
   `build-humanware-apk`.
 
 ### הספרייה

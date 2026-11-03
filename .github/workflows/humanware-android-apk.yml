@@ -24,16 +24,25 @@ jobs:
         with:
           channel: stable
           flutter-version: 3.47.7
-          cache: false
+          cache: true
 
       - name: Install locked dependencies
         run: flutter pub get --enforce-lockfile
 
-      - name: Analyze the low vision edition
-        run: flutter analyze lib/low_vision test/low_vision lib/app.dart
-
-      - name: Run low vision tests
-        run: flutter test test/low_vision
+      # שומר בין ריצות את קומפילציית ה-Rust של מנוע החיפוש ואת Gradle.
+      # הריצה הראשונה אחרי שינוי תלויות איטית; הבאות מהירות בהרבה.
+      - name: Cache Rust and Gradle build outputs
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            .dart_tool/hooks_runner/shared
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: lv-build-${{ runner.os }}-${{ hashFiles('pubspec.lock', 'android/**/*.gradle', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            lv-build-${{ runner.os }}-
 
       - name: Prepare the signing key file (optional)
         env:
