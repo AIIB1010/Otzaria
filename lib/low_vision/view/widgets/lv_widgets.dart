@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otzaria/low_vision/cubit/low_vision_cubit.dart';
 import 'package:otzaria/low_vision/theme/lv_metrics.dart';
 import 'package:otzaria/low_vision/theme/lv_palette.dart';
+import 'package:otzaria/low_vision/input/lv_touch_gesture.dart';
 import 'package:otzaria/low_vision/view/widgets/lv_touch_zones.dart';
 import 'package:otzaria/widgets/misc/rtl_icon.dart';
 
@@ -141,6 +142,13 @@ class LvScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     final m = LvMetrics.of(context);
     final p = lvPaletteOf(context);
+    final holdIsBack = context.select(
+      (LowVisionCubit c) =>
+          c.state.actionFor(LvGesture.hold) == LvTouchAction.back,
+    );
+    final holdSeconds = context.select(
+      (LowVisionCubit c) => c.state.holdSeconds,
+    );
     return MediaQuery(
       data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
       child: Material(
@@ -189,8 +197,20 @@ class LvScaffold extends StatelessWidget {
                 ),
                 SizedBox(height: m.gap),
                 Expanded(
-                  child: onBack != null && holdToGoBack
-                      ? LvTouchZones(onHoldBack: onBack, child: body)
+                  child: onBack != null && holdToGoBack && holdIsBack
+                      ? LvTouchZones(
+                          actions: {
+                            LvGesture.hold: LvZoneAction(
+                              label: LvTouchAction.back.label,
+                              icon: LvTouchAction.back.icon,
+                              onTriggered: onBack!,
+                            ),
+                          },
+                          holdDuration: Duration(
+                            milliseconds: (holdSeconds * 1000).round(),
+                          ),
+                          child: body,
+                        )
                       : body,
                 ),
                 if (bottom != null) ...[SizedBox(height: m.gap), bottom!],

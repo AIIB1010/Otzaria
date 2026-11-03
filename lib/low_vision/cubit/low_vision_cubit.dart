@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otzaria/bookmarks/models/bookmark.dart' show bookIdentity;
 import 'package:otzaria/low_vision/cubit/low_vision_state.dart';
+import 'package:otzaria/low_vision/input/lv_touch_gesture.dart';
 import 'package:otzaria/low_vision/theme/lv_palette.dart';
 import 'package:otzaria/models/books.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -52,7 +53,14 @@ class LowVisionCubit extends Cubit<LowVisionState> {
               orElse: () => LvPalette.blackOnWhite,
             ),
             showNikud: json['showNikud'] as bool? ?? true,
-            swapTapSides: json['swapTapSides'] as bool? ?? false,
+            touchBindings: {
+              for (final e
+                  in (json['touch'] as Map<String, dynamic>? ?? {}).entries)
+                e.key: e.value as String,
+            },
+            holdSeconds: ((json['holdSeconds'] as num?)?.toDouble() ?? 1.2)
+                .clamp(0.5, 5.0),
+            glide: json['glide'] as bool? ?? false,
             keyOverrides: {
               for (final e
                   in (json['keys'] as Map<String, dynamic>? ?? {}).entries)
@@ -177,8 +185,33 @@ class LowVisionCubit extends Cubit<LowVisionState> {
     _scheduleSave();
   }
 
-  void setSwapTapSides(bool value) {
-    emit(state.copyWith(swapTapSides: value));
+  void setTouchBinding(LvGesture gesture, LvTouchAction action) {
+    emit(
+      state.copyWith(
+        touchBindings: {...state.touchBindings, gesture.name: action.name},
+      ),
+    );
+    _scheduleSave();
+  }
+
+  void resetTouchSettings() {
+    emit(
+      state.copyWith(
+        touchBindings: const {},
+        holdSeconds: 1.2,
+        glide: false,
+      ),
+    );
+    _scheduleSave();
+  }
+
+  void setHoldSeconds(double value) {
+    emit(state.copyWith(holdSeconds: value));
+    _scheduleSave();
+  }
+
+  void setGlide(bool value) {
+    emit(state.copyWith(glide: value));
     _scheduleSave();
   }
 
@@ -210,7 +243,9 @@ class LowVisionCubit extends Cubit<LowVisionState> {
         'textScale': state.textScale,
         'palette': state.palette.name,
         'showNikud': state.showNikud,
-        'swapTapSides': state.swapTapSides,
+        'touch': state.touchBindings,
+        'holdSeconds': state.holdSeconds,
+        'glide': state.glide,
         'keys': state.keyOverrides,
       });
       await (await _prefs()).setString(_prefsKey, data);

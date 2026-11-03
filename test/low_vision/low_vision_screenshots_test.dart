@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/low_vision/theme/lv_palette.dart';
 import 'package:otzaria/low_vision/view/lv_books_screen.dart';
+import 'package:otzaria/low_vision/view/lv_gestures_screen.dart';
 import 'package:otzaria/low_vision/view/lv_home_screen.dart';
 import 'package:otzaria/low_vision/view/lv_pdf_reader.dart';
 import 'package:otzaria/low_vision/view/lv_search_screen.dart';
@@ -257,6 +258,17 @@ void main() {
     await tester.pump();
     await _shot(tester, '12-קורא-בטלפון');
     await tester.pump(const Duration(seconds: 2));
+    await tester.pump(const Duration(seconds: 2));
+
+    // מסך מחוות מגע
+    await pumpLowVision(
+      tester,
+      const LvGesturesScreen(),
+      theme: theme(),
+      boundaryKey: _boundary,
+    );
+    await tester.pump();
+    await _shot(tester, '13-מחוות-מגע');
     await tester.pump(const Duration(seconds: 2));
   });
 }

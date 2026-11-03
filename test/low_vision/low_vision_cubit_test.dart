@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/low_vision/input/lv_action.dart';
+import 'package:otzaria/low_vision/input/lv_touch_gesture.dart';
 import 'package:otzaria/low_vision/cubit/low_vision_cubit.dart';
 import 'package:otzaria/low_vision/cubit/low_vision_state.dart';
 import 'package:otzaria/low_vision/theme/lv_palette.dart';
@@ -112,5 +113,29 @@ void main() {
       LvAction.zoomOut.defaultKeys.map((k) => k.keyId),
       contains(LogicalKeyboardKey.zoomOut.keyId),
     );
+  });
+
+  test('שיוך מחוות, זמן החזקה והחלקה נשמרים וחוזרים', () async {
+    final first = LowVisionCubit();
+    await first.load();
+    expect(
+      first.state.actionFor(LvGesture.doubleTapLeft),
+      LvTouchAction.nextPage,
+    );
+    first.setTouchBinding(LvGesture.threeFingerTap, LvTouchAction.colors);
+    first.setHoldSeconds(2.5);
+    first.setGlide(true);
+    await first.close();
+
+    final second = LowVisionCubit();
+    await second.load();
+    expect(
+      second.state.actionFor(LvGesture.threeFingerTap),
+      LvTouchAction.colors,
+    );
+    expect(second.state.actionFor(LvGesture.hold), LvTouchAction.back);
+    expect(second.state.holdSeconds, 2.5);
+    expect(second.state.glide, isTrue);
+    await second.close();
   });
 }

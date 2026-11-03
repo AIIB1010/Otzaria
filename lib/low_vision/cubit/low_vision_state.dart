@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:otzaria/low_vision/input/lv_touch_gesture.dart';
 import 'package:otzaria/low_vision/theme/lv_palette.dart';
 import 'package:otzaria/models/books.dart';
 
@@ -30,7 +31,9 @@ class LowVisionState extends Equatable {
     this.textScale = 1.0,
     this.palette = LvPalette.blackOnWhite,
     this.showNikud = true,
-    this.swapTapSides = false,
+    this.touchBindings = const {},
+    this.holdSeconds = 1.2,
+    this.glide = false,
     this.keyOverrides = const {},
   });
 
@@ -50,8 +53,25 @@ class LowVisionState extends Equatable {
   final LvPalette palette;
   final bool showNikud;
 
-  /// ברירת מחדל: לחיצה כפולה בצד שמאל = הבא, בצד ימין = הקודם (כמו ספר עברי).
-  final bool swapTapSides;
+  /// שיוך מחוות לפעולות (שם מחווה ← שם פעולה). מה שחסר: ברירת המחדל.
+  final Map<String, String> touchBindings;
+
+  /// כמה שניות מחזיקים אצבע במקום אחד כדי להפעיל את "החזקה ארוכה".
+  final double holdSeconds;
+
+  /// האם עמוד ה-PDF ממשיך להחליק אחרי שחרור האצבע (false = נעצר מיד).
+  final bool glide;
+
+  static const List<double> holdSecondsOptions = [0.8, 1.2, 1.8, 2.5];
+
+  /// הפעולה המשויכת למחווה.
+  LvTouchAction actionFor(LvGesture gesture) {
+    final name = touchBindings[gesture.name];
+    return LvTouchAction.values.firstWhere(
+      (a) => a.name == name,
+      orElse: () => gesture.defaultAction,
+    );
+  }
 
   /// שיוך מקשים מותאם: שם הפעולה ← מזהי מקשים לוגיים.
   final Map<String, List<int>> keyOverrides;
@@ -67,7 +87,9 @@ class LowVisionState extends Equatable {
     double? textScale,
     LvPalette? palette,
     bool? showNikud,
-    bool? swapTapSides,
+    Map<String, String>? touchBindings,
+    double? holdSeconds,
+    bool? glide,
     Map<String, List<int>>? keyOverrides,
   }) => LowVisionState(
     loaded: loaded ?? this.loaded,
@@ -77,7 +99,9 @@ class LowVisionState extends Equatable {
     textScale: textScale ?? this.textScale,
     palette: palette ?? this.palette,
     showNikud: showNikud ?? this.showNikud,
-    swapTapSides: swapTapSides ?? this.swapTapSides,
+    touchBindings: touchBindings ?? this.touchBindings,
+    holdSeconds: holdSeconds ?? this.holdSeconds,
+    glide: glide ?? this.glide,
     keyOverrides: keyOverrides ?? this.keyOverrides,
   );
 
@@ -90,7 +114,9 @@ class LowVisionState extends Equatable {
     textScale,
     palette,
     showNikud,
-    swapTapSides,
+    touchBindings,
+    holdSeconds,
+    glide,
     keyOverrides,
   ];
 }

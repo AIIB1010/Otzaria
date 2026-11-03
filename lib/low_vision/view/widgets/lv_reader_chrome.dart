@@ -8,6 +8,7 @@ import 'package:otzaria/low_vision/cubit/low_vision_cubit.dart';
 import 'package:otzaria/low_vision/cubit/low_vision_state.dart';
 import 'package:otzaria/low_vision/input/lv_action.dart';
 import 'package:otzaria/low_vision/input/lv_key_scope.dart';
+import 'package:otzaria/low_vision/input/lv_touch_gesture.dart';
 import 'package:otzaria/low_vision/theme/lv_metrics.dart';
 import 'package:otzaria/low_vision/theme/lv_palette.dart';
 import 'package:otzaria/low_vision/view/lv_books_screen.dart';
@@ -95,6 +96,40 @@ class _LvReaderChromeState extends State<LvReaderChrome> {
     lvOpenBook(context, target, replace: true);
   }
 
+  VoidCallback? _callbackFor(LvTouchAction action) => switch (action) {
+    LvTouchAction.none => null,
+    LvTouchAction.nextPage => widget.onNext,
+    LvTouchAction.previousPage => widget.onPrevious,
+    LvTouchAction.back => () => Navigator.of(context).maybePop(),
+    LvTouchAction.zoomIn => widget.onZoomIn,
+    LvTouchAction.zoomOut => widget.onZoomOut,
+    LvTouchAction.contents => widget.onContents,
+    LvTouchAction.nextSection => widget.onNextSection,
+    LvTouchAction.previousSection => widget.onPreviousSection,
+    LvTouchAction.firstPage => widget.onFirst,
+    LvTouchAction.lastPage => widget.onLast,
+    LvTouchAction.fullscreen => _toggleImmersive,
+    LvTouchAction.colors => context.read<LowVisionCubit>().cyclePalette,
+    LvTouchAction.home => _goHome,
+  };
+
+  /// מחוות מגע ← פעולות, לפי ההגדרות. פעולה שאין לה יעד (למשל תוכן עניינים
+  /// בספר בלי תוכן) אינה מזוהה.
+  Map<LvGesture, LvZoneAction> _zoneActions(LowVisionState state) {
+    final result = <LvGesture, LvZoneAction>{};
+    for (final gesture in LvGesture.values) {
+      final action = state.actionFor(gesture);
+      final callback = _callbackFor(action);
+      if (callback == null) continue;
+      result[gesture] = LvZoneAction(
+        label: action.label,
+        icon: action.icon,
+        onTriggered: callback,
+      );
+    }
+    return result;
+  }
+
   void _goHome() => Navigator.of(context).popUntil((r) => r.isFirst);
 
   @override
@@ -105,17 +140,7 @@ class _LvReaderChromeState extends State<LvReaderChrome> {
     final pinned = context.select(
       (LowVisionCubit c) => c.isPinned(widget.book),
     );
-    final swap = context.select((LowVisionCubit c) => c.state.swapTapSides);
-    final nextZone = LvZoneAction(
-      label: 'עמוד הבא',
-      icon: FluentIcons.arrow_down_24_filled,
-      onTriggered: widget.onNext,
-    );
-    final previousZone = LvZoneAction(
-      label: 'עמוד קודם',
-      icon: FluentIcons.arrow_up_24_filled,
-      onTriggered: widget.onPrevious,
-    );
+    final touchState = context.watch<LowVisionCubit>().state;
     final actions = <LvAction, VoidCallback>{
       LvAction.back: () => Navigator.of(context).maybePop(),
       LvAction.home: _goHome,
@@ -165,11 +190,13 @@ class _LvReaderChromeState extends State<LvReaderChrome> {
                         ],
                         Expanded(
                           child: LvTouchZones(
-                            // לחיצה כפולה בצד אחד של המסך מדפדפת; נגיעה בודדת
-                            // (יד, אף) אינה עושה דבר. החזקה ארוכה חוזרת אחורה.
-                            left: swap ? previousZone : nextZone,
-                            right: swap ? nextZone : previousZone,
-                            onHoldBack: () => Navigator.of(context).maybePop(),
+                            // מחוות המגע ניתנות לשיוך בהגדרות. גרירה באצבע אחת
+                            // תמיד מזיזה את התוכן, ולכן אינה מפעילה פעולה.
+                            actions: _zoneActions(touchState),
+                            holdDuration: Duration(
+                              milliseconds: (touchState.holdSeconds * 1000)
+                                  .round(),
+                            ),
                             child: ClipRect(child: widget.child),
                           ),
                         ),

@@ -188,6 +188,10 @@ class _LvPdfReaderState extends State<LvPdfReader> {
               onViewerReady: _onReady,
               onPageChanged: _onPageChanged,
               margin: 0,
+              // ללא תנופה: העמוד נעצר כשהאצבע נעצרת, כמו ספר פיזי מתחת למצלמה.
+              interactionEndFrictionCoefficient: state.glide
+                  ? 0.0000135
+                  : 1e-14,
             ),
           ),
         ),

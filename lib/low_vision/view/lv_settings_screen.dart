@@ -10,6 +10,7 @@ import 'package:otzaria/low_vision/theme/lv_metrics.dart';
 import 'package:otzaria/low_vision/theme/lv_palette.dart';
 import 'package:otzaria/low_vision/update/lv_update_controller.dart';
 import 'package:otzaria/low_vision/update/lv_update_service.dart';
+import 'package:otzaria/low_vision/view/lv_gestures_screen.dart';
 import 'package:otzaria/low_vision/view/lv_input_test_screen.dart';
 import 'package:otzaria/low_vision/view/lv_navigation.dart';
 import 'package:otzaria/low_vision/view/lv_shell_controller.dart';
@@ -177,24 +178,22 @@ class _LvSettingsScreenState extends State<LvSettingsScreen> {
                 ),
               ),
               _Section(
-                title: 'דפדוף בלחיצה כפולה',
+                title: 'מחוות מגע',
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'בקורא: לחיצה כפולה בצד אחד של המסך מדפדפת, והחזקה ארוכה '
-                      'של אצבע אחת חוזרת אחורה. נגיעה בודדת אינה עושה דבר.',
+                      'לחיצה כפולה בצד ימין או שמאל, נגיעה בשתי או שלוש '
+                      'אצבעות, החזקה ארוכה: לכל אחת בוחרים מה היא מפעילה.',
                       style: _bodyStyle(m, p),
                     ),
                     SizedBox(height: m.gap),
                     LvButton(
-                      label: state.swapTapSides
-                          ? 'ימין = הבא, שמאל = הקודם (הקישו להחלפה)'
-                          : 'שמאל = הבא, ימין = הקודם (הקישו להחלפה)',
-                      icon: FluentIcons.arrow_swap_24_filled,
+                      label: 'הגדרת מחוות המגע',
+                      icon: FluentIcons.hand_left_24_filled,
                       filled: false,
                       onPressed: () =>
-                          cubit.setSwapTapSides(!state.swapTapSides),
+                          lvPush<void>(context, const LvGesturesScreen()),
                     ),
                   ],
                 ),
