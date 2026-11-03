@@ -183,7 +183,7 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
             if (_keyboardVisible) ...[
               SizedBox(height: m.gap),
               SizedBox(
-                height: MediaQuery.sizeOf(context).height * 0.42,
+                height: MediaQuery.sizeOf(context).height * 0.46,
                 child: LvKeyboard(
                   onText: _append,
                   onBackspace: _backspace,

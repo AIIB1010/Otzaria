@@ -6,18 +6,12 @@ import 'package:flutter/services.dart';
 import 'package:otzaria/low_vision/theme/lv_metrics.dart';
 import 'package:otzaria/low_vision/view/widgets/lv_widgets.dart';
 
-enum _Layout { hebrew, latin, digits }
+enum _Layout { hebrew, digits }
 
 const _hebrewRows = [
   ['ק', 'ר', 'א', 'ט', 'ו', 'ן', 'ם', 'פ'],
   ['ש', 'ד', 'ג', 'כ', 'ע', 'י', 'ח', 'ל', 'ך', 'ף'],
   ['ז', 'ס', 'ב', 'ה', 'נ', 'מ', 'צ', 'ת', 'ץ', '״', '׳'],
-];
-
-const _latinRows = [
-  ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
-  ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'],
-  ['z', 'x', 'c', 'v', 'b', 'n', 'm', '-', "'"],
 ];
 
 const _digitRows = [
@@ -26,7 +20,7 @@ const _digitRows = [
   ['-', '.', ',', '"', "'"],
 ];
 
-/// מקלדת מסך ענקית: מקשים גדולים, בניגודיות מלאה, עם עברית כברירת מחדל.
+/// מקלדת מסך ענקית: אותיות עבריות בלבד, ומקש אחד שמחליף למספרים.
 class LvKeyboard extends StatefulWidget {
   const LvKeyboard({
     super.key,
@@ -50,17 +44,15 @@ class _LvKeyboardState extends State<LvKeyboard> {
 
   List<List<String>> get _rows => switch (_layout) {
     _Layout.hebrew => _hebrewRows,
-    _Layout.latin => _latinRows,
     _Layout.digits => _digitRows,
   };
 
-  void _cycleLayout() => setState(
-    () => _layout = _Layout.values[(_layout.index + 1) % _Layout.values.length],
+  void _toggleLayout() => setState(
+    () => _layout = _layout == _Layout.hebrew ? _Layout.digits : _Layout.hebrew,
   );
 
   String get _layoutLabel => switch (_layout) {
-    _Layout.hebrew => 'ABC',
-    _Layout.latin => '123',
+    _Layout.hebrew => '123',
     _Layout.digits => 'אבג',
   };
 
@@ -93,7 +85,7 @@ class _LvKeyboardState extends State<LvKeyboard> {
             children: [
               Expanded(
                 flex: 2,
-                child: _Key(label: _layoutLabel, onTap: _cycleLayout),
+                child: _Key(label: _layoutLabel, onTap: _toggleLayout),
               ),
               SizedBox(width: gap),
               Expanded(
