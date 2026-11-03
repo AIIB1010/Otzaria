@@ -24,11 +24,13 @@ enum LvAction {
     LogicalKeyboardKey.f15,
     LogicalKeyboardKey.numpadAdd,
     LogicalKeyboardKey.equal,
+    LogicalKeyboardKey.zoomIn,
   ]),
   zoomOut('הקטנה', [
     LogicalKeyboardKey.f16,
     LogicalKeyboardKey.numpadSubtract,
     LogicalKeyboardKey.minus,
+    LogicalKeyboardKey.zoomOut,
   ]),
   contents('תוכן העניינים', [LogicalKeyboardKey.f17]),
   contrast('החלפת צבעים', [LogicalKeyboardKey.f18]),

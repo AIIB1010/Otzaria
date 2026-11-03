@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otzaria/low_vision/cubit/low_vision_cubit.dart';
 import 'package:otzaria/low_vision/input/lv_key_scope.dart';
+import 'package:otzaria/low_vision/update/lv_update_controller.dart';
 import 'package:otzaria/low_vision/theme/lv_metrics.dart';
 import 'package:otzaria/low_vision/view/lv_home_screen.dart';
 import 'package:otzaria/low_vision/view/lv_navigation.dart';
@@ -27,6 +28,8 @@ class _LowVisionRootState extends State<LowVisionRoot> {
   late final LowVisionCubit _cubit;
   late final LvKeyRouter _router;
   final _shell = LvShellController();
+  // חי כל עוד האפליקציה פתוחה, כדי שהורדת עדכון לא תיפסק ביציאה ממסך.
+  final _updates = LvUpdateController();
   final _navigatorKey = GlobalKey<NavigatorState>();
   final _canPop = ValueNotifier<bool>(false);
 
@@ -44,6 +47,7 @@ class _LowVisionRootState extends State<LowVisionRoot> {
   void dispose() {
     _shell.advancedListenable.removeListener(_onShellChanged);
     _shell.dispose();
+    _updates.dispose();
     _router.dispose();
     _cubit.close();
     _canPop.dispose();
@@ -56,6 +60,7 @@ class _LowVisionRootState extends State<LowVisionRoot> {
       providers: [
         RepositoryProvider<LvShellController>.value(value: _shell),
         RepositoryProvider<LvKeyRouter>.value(value: _router),
+        RepositoryProvider<LvUpdateController>.value(value: _updates),
       ],
       child: BlocProvider<LowVisionCubit>.value(
         value: _cubit,

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -5,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:otzaria/low_vision/update/lv_update_controller.dart';
 import 'package:otzaria/low_vision/update/lv_update_service.dart';
 import 'package:otzaria/low_vision/view/lv_settings_screen.dart';
 
@@ -114,7 +116,11 @@ void main() {
     final service = LvUpdateService(
       client: MockClient((_) async => http.Response(_release(), 200)),
     );
-    await pumpLowVision(tester, LvSettingsScreen(updateService: service));
+    await pumpLowVision(
+      tester,
+      const LvSettingsScreen(),
+      updates: LvUpdateController(service: service),
+    );
     await tester.pump();
 
     await tester.ensureVisible(find.text('בדוק אם יש גרסה חדשה'));
@@ -124,5 +130,50 @@ void main() {
 
     expect(find.textContaining('יש גרסה חדשה: 12'), findsOneWidget);
     expect(find.text('עדכן עכשיו'), findsOneWidget);
+  });
+
+  test('הורדה ממשיכה ומסתיימת גם כשאף מסך לא מאזין לה', () async {
+    final dir = Directory.systemTemp.createTempSync('lv_update_bg');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final body = StreamController<List<int>>();
+    const channel = MethodChannel('lv_test_installer_bg');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async => 'started');
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null),
+    );
+    final controller = LvUpdateController(
+      service: LvUpdateService(
+        channel: channel,
+        cacheDir: () async => dir,
+        client: MockClient.streaming((request, _) async {
+          if (request.url.host == 'api.github.com') {
+            return http.StreamedResponse(
+              Stream.value(utf8.encode(_release())),
+              200,
+            );
+          }
+          return http.StreamedResponse(body.stream, 200, contentLength: 4);
+        }),
+      ),
+    );
+    await controller.check();
+    expect(controller.state.value.status, LvUpdateStatus.available);
+
+    final done = controller.update();
+    body.add([1, 2]);
+    await Future<void>.delayed(Duration.zero);
+    expect(controller.state.value.status, LvUpdateStatus.downloading);
+    expect(controller.state.value.progress, 0.5);
+
+    // בדיקה נוספת של "check" באמצע הורדה: מתעלמים ממנה, לא מבטלים.
+    await controller.check();
+    expect(controller.state.value.status, LvUpdateStatus.downloading);
+
+    body.add([3, 4]);
+    await body.close();
+    await done;
+    expect(controller.state.value.status, LvUpdateStatus.waitingForInstaller);
   });
 }

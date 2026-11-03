@@ -1,7 +1,10 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/low_vision/view/lv_books_screen.dart';
+import 'package:otzaria/low_vision/view/lv_input_test_screen.dart';
+import 'package:otzaria/low_vision/view/lv_navigation.dart';
 import 'package:otzaria/low_vision/view/lv_text_reader.dart';
 import 'package:otzaria/low_vision/view/widgets/lv_touch_zones.dart';
 import 'package:otzaria/low_vision/view/widgets/lv_widgets.dart';
@@ -223,6 +226,49 @@ void main() {
       await tester.pump();
       expect(rowColor(tester), const Color(0xFF000000));
       await tester.pump(const Duration(seconds: 2));
+    });
+  });
+
+  group('בדיקת כפתורי המכשיר', () {
+    testWidgets('מציגה מקש, גלגלת וכפתור חזרה של המכשיר', (tester) async {
+      await pumpLowVision(tester, const LvInputTestScreen());
+      await tester.pump();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.f9);
+      await tester.pump();
+      expect(find.textContaining('מקש: F9'), findsOneWidget);
+
+      final mouse = TestPointer(7, PointerDeviceKind.mouse);
+      await tester.sendEventToBinding(mouse.hover(const Offset(500, 500)));
+      await tester.sendEventToBinding(mouse.scroll(const Offset(0, 40)));
+      await tester.pump();
+      expect(find.textContaining('גלגלת: אנכי 40.0'), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(find.text('כפתור חזרה של המכשיר נקלט'), findsOneWidget);
+    });
+
+    testWidgets('כפתור יציאה סוגר את המסך וחוזר למסך הקודם', (tester) async {
+      await pumpLowVision(
+        tester,
+        Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => lvPush<void>(context, const LvInputTestScreen()),
+              child: const Text('פתח'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('פתח'));
+      await tester.pumpAndSettle();
+      expect(find.text('בדיקת כפתורים'), findsOneWidget);
+
+      await tester.tap(find.text('יציאה'));
+      await tester.pumpAndSettle();
+      expect(find.text('פתח'), findsOneWidget);
+      expect(find.text('בדיקת כפתורים'), findsNothing);
     });
   });
 }

@@ -4,6 +4,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/low_vision/cubit/low_vision_cubit.dart';
 import 'package:otzaria/low_vision/input/lv_key_scope.dart';
+import 'package:otzaria/low_vision/update/lv_update_controller.dart';
 import 'package:otzaria/low_vision/view/lv_navigation.dart';
 import 'package:otzaria/low_vision/view/lv_shell_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -30,6 +31,7 @@ Future<LvHarness> pumpLowVision(
   ThemeData? theme,
   Key? boundaryKey,
   Size size = const Size(1920, 1080),
+  LvUpdateController? updates,
 }) async {
   SharedPreferences.setMockInitialValues({});
   tester.view.physicalSize = size;
@@ -40,6 +42,7 @@ Future<LvHarness> pumpLowVision(
   setup?.call(cubit);
   final router = LvKeyRouter(cubit);
   final shell = LvShellController();
+  final updateController = updates ?? LvUpdateController();
   final harness = LvHarness(cubit, router, shell);
   addTearDown(harness.dispose);
   await tester.pumpWidget(
@@ -48,6 +51,7 @@ Future<LvHarness> pumpLowVision(
       providers: [
         RepositoryProvider<LvShellController>.value(value: shell),
         RepositoryProvider<LvKeyRouter>.value(value: router),
+        RepositoryProvider<LvUpdateController>.value(value: updateController),
       ],
       child: BlocProvider<LowVisionCubit>.value(
         value: cubit,

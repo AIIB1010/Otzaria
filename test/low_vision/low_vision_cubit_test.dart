@@ -102,4 +102,15 @@ void main() {
       expect(seen, contains(key.keyId));
     }
   });
+
+  test('מקשי זום סטנדרטיים (כולל חוגה שמדמה זום) מוגדרים כברירת מחדל', () {
+    expect(
+      LvAction.zoomIn.defaultKeys.map((k) => k.keyId),
+      contains(LogicalKeyboardKey.zoomIn.keyId),
+    );
+    expect(
+      LvAction.zoomOut.defaultKeys.map((k) => k.keyId),
+      contains(LogicalKeyboardKey.zoomOut.keyId),
+    );
+  });
 }
