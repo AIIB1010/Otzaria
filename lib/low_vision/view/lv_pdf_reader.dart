@@ -12,9 +12,9 @@ import 'package:otzaria/low_vision/input/lv_key_scope.dart';
 import 'package:otzaria/low_vision/models/lv_toc.dart';
 import 'package:otzaria/low_vision/theme/lv_metrics.dart';
 import 'package:otzaria/low_vision/theme/lv_palette.dart';
+import 'package:otzaria/low_vision/models/lv_scan_resolver.dart';
 import 'package:otzaria/low_vision/view/lv_navigation.dart';
 import 'package:otzaria/low_vision/view/lv_toc_screen.dart';
-import 'package:otzaria/data/repository/data_repository.dart';
 import 'package:otzaria/low_vision/view/widgets/lv_image_filters.dart';
 import 'package:otzaria/low_vision/view/widgets/lv_reader_chrome.dart';
 import 'package:otzaria/low_vision/view/widgets/lv_widgets.dart';
@@ -24,9 +24,20 @@ import 'package:pdfrx/pdfrx.dart';
 /// קורא ספרים מצולמים (PDF): עמוד מוגדל, דפדוף בכפתורים, וצבעי ניגודיות
 /// שמוחלים על התמונה עצמה (למשל אותיות צהובות על רקע שחור).
 class LvPdfReader extends StatefulWidget {
-  const LvPdfReader({super.key, required this.book});
+  const LvPdfReader({
+    super.key,
+    required this.book,
+    this.initialPage,
+    this.resolver = const LvScanResolver(),
+    this.openBook = lvOpenBook,
+  });
 
   final PdfBook book;
+
+  /// עמוד פתיחה (למשל במעבר מהטקסט), גובר על המקום השמור.
+  final int? initialPage;
+  final LvScanResolver resolver;
+  final LvBookOpener openBook;
 
   @override
   State<LvPdfReader> createState() => _LvPdfReaderState();
@@ -41,7 +52,8 @@ class _LvPdfReaderState extends State<LvPdfReader> {
   LowVisionCubit? _cubit;
 
   /// גרסת הטקסט של אותו ספר, אם יש; מאפשרת מעבר מהצילום לטקסט.
-  Book? _textVersion;
+  TextBook? _textVersion;
+  List<PdfOutlineNode> _outlineNodes = const [];
 
   @override
   void initState() {
@@ -50,13 +62,28 @@ class _LvPdfReaderState extends State<LvPdfReader> {
   }
 
   Future<void> _findTextVersion() async {
-    try {
-      final library = await DataRepository.instance.library;
-      final text = library.getCompanionBook(widget.book, TextBook);
-      if (mounted && text != null) setState(() => _textVersion = text);
-    } catch (_) {
-      // בלי ספרייה נשארים בתצוגת הצילום בלבד.
-    }
+    final text = await widget.resolver.textFor(widget.book);
+    if (mounted && text != null) setState(() => _textVersion = text);
+  }
+
+  /// עובר לטקסט, באותו מקום שבו היית בצילום (אם יש התאמה אמינה).
+  Future<void> _openText() async {
+    final text = _textVersion;
+    if (text == null) return;
+    final line = await widget.resolver.lineFor(
+      widget.book,
+      _outlineNodes,
+      _page,
+    );
+    _cubit?.setPreferScan(false);
+    if (!mounted) return;
+    await widget.openBook(
+      context,
+      text,
+      replace: true,
+      forceText: true,
+      initialLine: line,
+    );
   }
 
   @override
@@ -73,20 +100,24 @@ class _LvPdfReaderState extends State<LvPdfReader> {
 
   int get _initialPage => math.max(
     1,
-    context.read<LowVisionCubit>().positionOf(widget.book)?.index ?? 1,
+    widget.initialPage ??
+        context.read<LowVisionCubit>().positionOf(widget.book)?.index ??
+        1,
   );
 
   Future<void> _onReady(PdfDocument document, PdfViewerController c) async {
     if (!mounted) return;
     setState(() => _pageCount = document.pages.length);
     try {
-      final tree = LvTocItem.fromPdfOutline(await document.loadOutline());
+      final nodes = await document.loadOutline();
+      final tree = LvTocItem.fromPdfOutline(nodes);
       if (!mounted) return;
       final flat = LvTocItem.flatten(tree)
         ..sort((a, b) => a.target.compareTo(b.target));
       setState(() {
         _outline = tree;
         _outlineFlat = flat;
+        _outlineNodes = nodes;
       });
     } catch (_) {
       // ללא תוכן עניינים נשארת האפשרות לקפוץ למספר עמוד.
@@ -229,12 +260,7 @@ class _LvPdfReaderState extends State<LvPdfReader> {
           LvChromeAction(
             label: 'טקסט',
             icon: FluentIcons.text_t_24_filled,
-            onPressed: () => lvOpenBook(
-              context,
-              _textVersion!,
-              replace: true,
-              forceText: true,
-            ),
+            onPressed: _openText,
           ),
       ],
       onFirst: () => _goTo(1),

@@ -14,13 +14,31 @@ Future<T?> lvPush<T>(BuildContext context, Widget page) =>
 
 /// פותח ספר בקורא. [replace] מחליף את הקורא הנוכחי (מעבר בין ספרים).
 /// [forceText] פותח את גרסת הטקסט גם אם לספר יש גרסת צילום (PDF).
+/// [initialPage] עמוד פתיחה בצילום, [initialLine] שורה פתיחה בטקסט.
+typedef LvBookOpener =
+    Future<void> Function(
+      BuildContext context,
+      Book book, {
+      bool replace,
+      bool forceText,
+      int? initialPage,
+      int? initialLine,
+    });
+
 Future<void> lvOpenBook(
   BuildContext context,
   Book book, {
   bool replace = false,
   bool forceText = false,
+  int? initialPage,
+  int? initialLine,
 }) {
-  final page = LvReaderScreen(book: book, forceText: forceText);
+  final page = LvReaderScreen(
+    book: book,
+    forceText: forceText,
+    initialPage: initialPage,
+    initialLine: initialLine,
+  );
   final navigator = Navigator.of(context);
   return replace
       ? navigator.pushReplacement(lvRoute<void>(page))

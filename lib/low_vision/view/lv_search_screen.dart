@@ -16,6 +16,7 @@ import 'package:otzaria/low_vision/view/widgets/lv_keyboard.dart';
 import 'package:otzaria/low_vision/view/widgets/lv_pressable.dart';
 import 'package:otzaria/low_vision/view/widgets/lv_widgets.dart';
 import 'package:otzaria/models/books.dart';
+import 'package:otzaria/utils/navigation/talmud_bavli_open_format.dart';
 
 const _maxResults = 60;
 
@@ -73,14 +74,28 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
     _debounce = Timer(const Duration(milliseconds: 250), _runSearch);
   }
 
+  /// חיפוש בספרייה, בלי כפילויות של מסכתות בבלי (טקסט וגם PDF לאותה מסכת):
+  /// מסכת מוצגת פעם אחת, וצורת הפתיחה נקבעת לפי ההגדרה.
+  Future<List<Book>> _findInLibrary(String query) async {
+    final results = await DataRepository.instance.findBooks(query, null);
+    try {
+      final library = await DataRepository.instance.library;
+      final titles = talmudBavliTextTitles(library);
+      return [
+        for (final book in results)
+          if (!isTalmudBavliPdfLibraryDuplicate(book, titles)) book,
+      ];
+    } catch (_) {
+      return results;
+    }
+  }
+
   Future<void> _runSearch() async {
     final seq = ++_searchSeq;
     final query = _query.trim();
     List<Book> found;
     try {
-      found =
-          await (widget.search?.call(query) ??
-              DataRepository.instance.findBooks(query, null));
+      found = await (widget.search?.call(query) ?? _findInLibrary(query));
     } catch (_) {
       found = const [];
     }

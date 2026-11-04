@@ -40,7 +40,7 @@ class LowVisionState extends Equatable {
     this.keysOnTouchDown = true,
     this.searchSideBySide = false,
     this.pdfSharpnessIndex = 1,
-    this.preferPageShape = false,
+    this.preferScan = false,
     this.keyOverrides = const {},
   });
 
@@ -122,8 +122,9 @@ class LowVisionState extends Equatable {
   /// מכפיל רזולוציית הרינדור של עמוד ה-PDF.
   double get pdfRenderBoost => const [1.0, 1.4, 1.8][pdfSharpnessIndex];
 
-  /// פותח בצורת הדף ספרים שתומכים בה (נבחר בפעם האחרונה שהוחלף).
-  final bool preferPageShape;
+  /// פותח כצילום ("צורת הדף") ספרים שיש להם גרסת צילום (נבחר בפעם האחרונה
+  /// שהוחלף בין טקסט לצילום).
+  final bool preferScan;
 
   /// במסך רחב: מקלדת ותוצאות זו לצד זו (המקלדת בגובה מלא), במקום מקלדת מתחת.
   final bool searchSideBySide;
@@ -160,7 +161,7 @@ class LowVisionState extends Equatable {
     bool? keysOnTouchDown,
     bool? searchSideBySide,
     int? pdfSharpnessIndex,
-    bool? preferPageShape,
+    bool? preferScan,
     Map<String, List<int>>? keyOverrides,
   }) => LowVisionState(
     loaded: loaded ?? this.loaded,
@@ -179,7 +180,7 @@ class LowVisionState extends Equatable {
     keysOnTouchDown: keysOnTouchDown ?? this.keysOnTouchDown,
     searchSideBySide: searchSideBySide ?? this.searchSideBySide,
     pdfSharpnessIndex: pdfSharpnessIndex ?? this.pdfSharpnessIndex,
-    preferPageShape: preferPageShape ?? this.preferPageShape,
+    preferScan: preferScan ?? this.preferScan,
     keyOverrides: keyOverrides ?? this.keyOverrides,
   );
 
@@ -201,7 +202,7 @@ class LowVisionState extends Equatable {
     keysOnTouchDown,
     searchSideBySide,
     pdfSharpnessIndex,
-    preferPageShape,
+    preferScan,
     keyOverrides,
   ];
 }

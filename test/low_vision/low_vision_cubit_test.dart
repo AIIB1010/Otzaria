@@ -138,4 +138,25 @@ void main() {
     expect(second.state.glide, isTrue);
     await second.close();
   });
+
+  test('חידוד ספרים מצולמים: רמות ניגודיות ורינדור, ושמירה', () async {
+    const off = LowVisionState(pdfSharpnessIndex: 0);
+    const sharp = LowVisionState(pdfSharpnessIndex: 1);
+    const strong = LowVisionState(pdfSharpnessIndex: 2);
+    expect(off.pdfContrast, 1.0);
+    expect(off.pdfRenderBoost, 1.0);
+    expect(sharp.pdfContrast, greaterThan(1.0));
+    expect(strong.pdfContrast, greaterThan(sharp.pdfContrast));
+    expect(strong.pdfRenderBoost, greaterThan(sharp.pdfRenderBoost));
+    expect(const LowVisionState().pdfSharpnessIndex, 1);
+
+    final first = LowVisionCubit();
+    await first.load();
+    first.setPdfSharpness(2);
+    await first.close();
+    final second = LowVisionCubit();
+    await second.load();
+    expect(second.state.pdfSharpnessIndex, 2);
+    await second.close();
+  });
 }

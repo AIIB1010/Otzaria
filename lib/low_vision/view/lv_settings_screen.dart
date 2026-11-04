@@ -8,6 +8,7 @@ import 'package:otzaria/low_vision/input/lv_action.dart';
 import 'package:otzaria/low_vision/input/lv_key_scope.dart';
 import 'package:otzaria/low_vision/theme/lv_metrics.dart';
 import 'package:otzaria/low_vision/theme/lv_palette.dart';
+import 'package:otzaria/low_vision/models/lv_scan_resolver.dart';
 import 'package:otzaria/low_vision/update/lv_update_controller.dart';
 import 'package:otzaria/low_vision/update/lv_update_service.dart';
 import 'package:otzaria/low_vision/view/lv_gestures_screen.dart';
@@ -209,6 +210,18 @@ class _LvSettingsScreenState extends State<LvSettingsScreen> {
                       labels: LowVisionState.keyboardSizeLabels,
                       index: state.keyboardSizeIndex,
                       onChanged: cubit.setKeyboardSize,
+                    ),
+                    SizedBox(height: m.gap),
+                    LvButton(
+                      label: lvTalmudOpensAsScan()
+                          ? 'מסכתות בבלי נפתחות: צילום מקורי (הקישו לשינוי)'
+                          : 'מסכתות בבלי נפתחות: טקסט (הקישו לשינוי)',
+                      icon: FluentIcons.image_24_filled,
+                      filled: false,
+                      onPressed: () async {
+                        await lvSetTalmudOpensAsScan(!lvTalmudOpensAsScan());
+                        if (mounted) setState(() {});
+                      },
                     ),
                     SizedBox(height: m.gap),
                     _CycleButton(
