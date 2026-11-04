@@ -63,6 +63,8 @@ class LvUpdateService {
     MethodChannel? channel,
     Future<Directory> Function()? cacheDir,
     this.requestTimeout = const Duration(seconds: 20),
+    this.retryDelay = const Duration(seconds: 3),
+    this.maxRetries = 40,
   }) : _client = client ?? http.Client(),
        _channel =
            channel ??
@@ -73,6 +75,8 @@ class LvUpdateService {
   final MethodChannel _channel;
   final Future<Directory> Function() _cacheDir;
   final Duration requestTimeout;
+  final Duration retryDelay;
+  final int maxRetries;
 
   /// הבנייה האחרונה שפורסמה, או null כשעדיין לא פורסמה אף אחת.
   Future<LvUpdateInfo?> fetchLatest() async {
@@ -123,41 +127,86 @@ class LvUpdateService {
   }
 
   /// מוריד את ה-APK לתיקיית המטמון, ומדווח התקדמות בין 0 ל-1.
+  ///
+  /// כשהחיבור נקטע (למשל כשהמסך כבה) ההורדה ממשיכה מאותה נקודה, ונכשלת רק אחרי
+  /// [maxRetries] ניסיונות רצופים בלי התקדמות.
   Future<File> download(
     LvUpdateInfo info, {
     void Function(double progress)? onProgress,
   }) async {
     final dir = await _cacheDir();
     final file = File('${dir.path}/otzaria-humanware-update.apk');
-    final sink = file.openWrite();
+    await _keepAwake(true);
+    IOSink? sink = file.openWrite();
     try {
-      final response = await _client
-          .send(http.Request('GET', Uri.parse(info.url)))
-          .timeout(requestTimeout);
-      if (response.statusCode != 200) {
-        throw LvUpdateException('ההורדה נכשלה (${response.statusCode}).');
-      }
-      final total = response.contentLength ?? info.sizeBytes;
       var received = 0;
-      // timeout על כל חתיכה: חיבור שנתקע באמצע לא יתלה את המסך.
-      await for (final chunk in response.stream.timeout(requestTimeout)) {
-        sink.add(chunk);
-        received += chunk.length;
-        if (total != null && total > 0) {
-          onProgress?.call((received / total).clamp(0.0, 1.0));
+      int? total = info.sizeBytes;
+      var failures = 0;
+      var failure = const LvUpdateException('ההורדה נכשלה. נסו שוב.');
+      while (true) {
+        final before = received;
+        try {
+          final request = http.Request('GET', Uri.parse(info.url));
+          if (received > 0) request.headers['Range'] = 'bytes=$received-';
+          final response = await _client.send(request).timeout(requestTimeout);
+          final resumed = received > 0 && response.statusCode == 206;
+          if (response.statusCode != 200 && !resumed) {
+            throw LvUpdateException('ההורדה נכשלה (${response.statusCode}).');
+          }
+          if (received > 0 && !resumed) {
+            // השרת התעלם מהבקשה להמשיך ושולח הכול מחדש.
+            await sink!.close();
+            sink = file.openWrite();
+            received = 0;
+          }
+          final length = response.contentLength;
+          if (length != null) total = received + length;
+          // timeout על כל חתיכה: חיבור שנתקע באמצע לא יתלה את המסך.
+          await for (final chunk in response.stream.timeout(requestTimeout)) {
+            sink!.add(chunk);
+            received += chunk.length;
+            if (total != null && total > 0) {
+              onProgress?.call((received / total).clamp(0.0, 1.0));
+            }
+          }
+          if (total == null || received >= total) break;
+          failure = const LvUpdateException(
+            'החיבור לאינטרנט נותק באמצע ההורדה.',
+          );
+        } on LvUpdateException {
+          rethrow;
+        } on TimeoutException {
+          failure = const LvUpdateException('ההורדה נתקעה. נסו שוב.');
+        } on IOException {
+          failure = const LvUpdateException(
+            'החיבור לאינטרנט נותק באמצע ההורדה.',
+          );
+        } on http.ClientException {
+          failure = const LvUpdateException(
+            'החיבור לאינטרנט נותק באמצע ההורדה.',
+          );
         }
+        failures = received > before ? 1 : failures + 1;
+        if (failures > maxRetries) throw failure;
+        await Future<void>.delayed(retryDelay);
       }
-      await sink.flush();
-    } on TimeoutException {
-      throw const LvUpdateException('ההורדה נתקעה. נסו שוב.');
-    } on SocketException {
-      throw const LvUpdateException('החיבור לאינטרנט נותק באמצע ההורדה.');
-    } on http.ClientException {
-      throw const LvUpdateException('החיבור לאינטרנט נותק באמצע ההורדה.');
+      await sink!.flush();
     } finally {
-      await sink.close();
+      await sink?.close();
+      await _keepAwake(false);
     }
     return file;
+  }
+
+  /// מונע מהמעבד ומה-Wi-Fi להירדם בזמן ההורדה; כישלון לא עוצר את ההורדה.
+  Future<void> _keepAwake(bool enabled) async {
+    try {
+      await _channel.invokeMethod<void>('keepAwake', {'enabled': enabled});
+    } on PlatformException {
+      // לא קריטי.
+    } on MissingPluginException {
+      // לא באנדרואיד.
+    }
   }
 
   /// קורא את שם החבילה והגרסה של [apk]. זורק [LvUpdateException] אם אינו APK.

@@ -93,6 +93,114 @@ void main() {
       expect(progress.last, 1.0);
     });
 
+    group('הורדה שמתנתקת באמצע (מסך כבוי)', () {
+      const info = LvUpdateInfo(build: 1, url: 'https://example.test/a.apk');
+      late Directory dir;
+      setUp(() => dir = Directory.systemTemp.createTempSync('lv_update_drop'));
+      tearDown(() => dir.deleteSync(recursive: true));
+
+      LvUpdateService serviceFor(
+        Future<http.StreamedResponse> Function(http.BaseRequest) handler, {
+        MethodChannel? channel,
+        int maxRetries = 40,
+      }) => LvUpdateService(
+        client: MockClient.streaming((request, _) => handler(request)),
+        channel: channel,
+        cacheDir: () async => dir,
+        retryDelay: Duration.zero,
+        maxRetries: maxRetries,
+      );
+
+      test('ממשיכה מאותה נקודה אחרי ניתוק', () async {
+        final ranges = <String?>[];
+        final service = serviceFor((request) async {
+          ranges.add(request.headers['Range']);
+          if (ranges.length == 1) {
+            return http.StreamedResponse(
+              Stream<List<int>>.multi((c) {
+                c.add([1, 2]);
+                c.addError(const SocketException('reset'));
+                c.close();
+              }),
+              200,
+              contentLength: 4,
+            );
+          }
+          return http.StreamedResponse(
+            Stream.value([3, 4]),
+            206,
+            contentLength: 2,
+          );
+        });
+        final file = await service.download(info);
+        expect(file.readAsBytesSync(), [1, 2, 3, 4]);
+        expect(ranges, [null, 'bytes=2-']);
+      });
+
+      test('שרת שמתעלם מ-Range שולח הכול מחדש', () async {
+        var calls = 0;
+        final service = serviceFor((request) async {
+          calls++;
+          if (calls == 1) {
+            return http.StreamedResponse(
+              Stream<List<int>>.multi((c) {
+                c.add([1, 2]);
+                c.addError(const SocketException('reset'));
+                c.close();
+              }),
+              200,
+              contentLength: 4,
+            );
+          }
+          return http.StreamedResponse(
+            Stream.value([1, 2, 3, 4]),
+            200,
+            contentLength: 4,
+          );
+        });
+        final file = await service.download(info);
+        expect(file.readAsBytesSync(), [1, 2, 3, 4]);
+      });
+
+      test('נכשלת אחרי יותר מדי ניסיונות בלי התקדמות', () async {
+        var calls = 0;
+        final service = serviceFor((request) async {
+          calls++;
+          throw const SocketException('offline');
+        }, maxRetries: 3);
+        await expectLater(
+          service.download(info),
+          throwsA(isA<LvUpdateException>()),
+        );
+        expect(calls, 4);
+      });
+
+      test('נועלת את המעבד בזמן ההורדה ומשחררת בסופה', () async {
+        const channel = MethodChannel('lv_test_keep_awake');
+        final calls = <bool>[];
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (call) async {
+              calls.add((call.arguments as Map)['enabled'] as bool);
+              return null;
+            });
+        addTearDown(
+          () => TestDefaultBinaryMessengerBinding
+              .instance
+              .defaultBinaryMessenger
+              .setMockMethodCallHandler(channel, null),
+        );
+        final service = serviceFor((request) async {
+          return http.StreamedResponse(
+            Stream.value([1]),
+            200,
+            contentLength: 1,
+          );
+        }, channel: channel);
+        await service.download(info);
+        expect(calls, [true, false]);
+      });
+    });
+
     test('מתקין דרך הערוץ, ומזהה בקשת הרשאה', () async {
       const channel = MethodChannel('lv_test_installer');
       var answer = 'started';

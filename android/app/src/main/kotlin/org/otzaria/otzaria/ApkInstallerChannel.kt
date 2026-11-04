@@ -3,7 +3,10 @@ package org.otzaria.otzaria
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
+import android.content.Context
+import android.net.wifi.WifiManager
 import android.os.Build
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.core.content.FileProvider
 import io.flutter.plugin.common.BinaryMessenger
@@ -17,6 +20,8 @@ class ApkInstallerChannel(
     messenger: BinaryMessenger,
 ) {
     private val channel = MethodChannel(messenger, CHANNEL)
+    private var wakeLock: PowerManager.WakeLock? = null
+    private var wifiLock: WifiManager.WifiLock? = null
 
     init {
         channel.setMethodCallHandler { call, result -> onMethodCall(call, result) }
@@ -26,6 +31,10 @@ class ApkInstallerChannel(
         when (call.method) {
             INSPECT_METHOD -> inspect(call, result)
             INSTALL_METHOD -> install(call, result)
+            KEEP_AWAKE_METHOD -> {
+                setKeepAwake(call.argument<Boolean>("enabled") == true)
+                result.success(null)
+            }
             else -> result.notImplemented()
         }
     }
@@ -94,7 +103,30 @@ class ApkInstallerChannel(
         }
     }
 
+    /** מונע מהמעבד ומה-Wi-Fi להירדם כשהמסך כבוי בזמן הורדת עדכון. */
+    @Suppress("DEPRECATION")
+    private fun setKeepAwake(enabled: Boolean) {
+        releaseLocks()
+        if (!enabled) return
+        val context = activity.applicationContext
+        val power = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        // תקרת זמן למקרה שההורדה נתקעת ולא משחררת את הנעילה.
+        wakeLock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "otzaria:lv_update")
+            .apply { acquire(WAKE_LOCK_LIMIT_MS) }
+        val wifi = context.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+        wifiLock = wifi?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "otzaria:lv_update")
+            ?.apply { acquire() }
+    }
+
+    private fun releaseLocks() {
+        wakeLock?.takeIf { it.isHeld }?.release()
+        wifiLock?.takeIf { it.isHeld }?.release()
+        wakeLock = null
+        wifiLock = null
+    }
+
     fun dispose() {
+        releaseLocks()
         channel.setMethodCallHandler(null)
     }
 
@@ -102,5 +134,7 @@ class ApkInstallerChannel(
         const val CHANNEL = "org.otzaria.humanware/apk_installer"
         const val INSTALL_METHOD = "install"
         const val INSPECT_METHOD = "inspect"
+        const val KEEP_AWAKE_METHOD = "keepAwake"
+        private const val WAKE_LOCK_LIMIT_MS = 30 * 60 * 1000L
     }
 }
