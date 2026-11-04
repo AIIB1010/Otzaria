@@ -36,6 +36,12 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
   bool _searching = false;
   bool _keyboardVisible = true;
   int _selected = -1;
+
+  /// במקלדת ענקית במסך רחב: שורה עליונה עם תיבת חיפוש קטנה והתוצאה מובלטת.
+  bool _hugeLayout = false;
+
+  /// איזו תוצאה מוצגת בשורה העליונה במקלדת הענקית.
+  int _peekIndex = 0;
   int _searchSeq = 0;
   Timer? _debounce;
   final _scroll = ScrollController();
@@ -52,6 +58,7 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
     setState(() {
       _query = value;
       _selected = -1;
+      _peekIndex = 0;
     });
     _debounce?.cancel();
     if (value.trim().isEmpty) {
@@ -135,10 +142,14 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
     }
     if (key == LogicalKeyboardKey.enter ||
         key == LogicalKeyboardKey.numpadEnter) {
-      if (_keyboardVisible || _results.isEmpty) {
+      if (_hugeLayout && _results.isNotEmpty) {
+        _open(_results[_peekIndex.clamp(0, _results.length - 1)]);
+      } else if (_selected >= 0 && _results.isNotEmpty) {
+        _open(_results[_selected]);
+      } else if (_keyboardVisible || _results.isEmpty) {
         _submit();
       } else {
-        _open(_results[_selected < 0 ? 0 : _selected]);
+        _open(_results[0]);
       }
       return true;
     }
@@ -166,6 +177,9 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
     final hidePeek = context.select(
       (LowVisionCubit c) => c.state.keyboardHidesPeek,
     );
+    final sideBySide =
+        wide && context.select((LowVisionCubit c) => c.state.searchSideBySide);
+    _hugeLayout = wide && hidePeek && _keyboardVisible;
     final queryBar = _QueryBar(
       query: _query,
       onClear: () => _setQuery(''),
@@ -183,74 +197,223 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
         LvAction.next: () => _page(1),
         LvAction.previous: () => _page(-1),
       },
-      child: LvScaffold(
-        title: 'חיפוש ספרים',
-        // החזקה ארוכה על מקש מוחקת הכל, ולכן אין כאן "החזקה לחזרה".
-        holdToGoBack: false,
-        // במסך צר שורת החיפוש יורדת לשורה משלה, כדי שלא תיעלם בין הכפתורים.
-        titleWidget: wide ? queryBar : null,
-        onBack: () => Navigator.of(context).maybePop(),
-        actions: [
-          LvButton(
-            label: _keyboardVisible ? 'הסתר מקלדת' : 'מקלדת',
-            icon: FluentIcons.keyboard_24_filled,
-            iconOnly: !wide,
-            filled: false,
-            onPressed: () =>
-                setState(() => _keyboardVisible = !_keyboardVisible),
-          ),
-        ],
-        body: LayoutBuilder(
-          builder: (context, box) {
-            // המקלדת לא תיקח את כל המקום: נשאר לפחות אזור קטן לתוצאות.
-            final fixed = (wide ? 0 : m.tapHeight + m.gap * 2) + m.gap;
-            // נשאר מקום לשורת תוצאה אחת גדולה מעל המקלדת (חוץ מבענקית).
-            final peek = hidePeek ? 0.0 : m.tapHeight * 1.3 + m.gap * 2;
-            final maxKeyboard = box.maxHeight - fixed - peek;
-            final keyboardHeight = math.min(
-              MediaQuery.sizeOf(context).height * keyboardFraction,
-              math.max(0.0, maxKeyboard),
-            );
-            return Column(
-              children: [
-                if (!wide) ...[queryBar, SizedBox(height: m.gap)],
-                Expanded(
-                  child: hidePeek && _keyboardVisible
-                      ? const SizedBox.shrink()
-                      : _buildResults(m, p),
+      child: _hugeLayout
+          ? _hugeScreen(m, p)
+          : LvScaffold(
+              title: 'חיפוש ספרים',
+              // החזקה ארוכה על מקש מוחקת הכל, ולכן אין כאן "החזקה לחזרה".
+              holdToGoBack: false,
+              // במסך צר שורת החיפוש יורדת לשורה משלה, כדי שלא תיעלם בין הכפתורים.
+              titleWidget: wide ? queryBar : null,
+              onBack: () => Navigator.of(context).maybePop(),
+              actions: [
+                LvButton(
+                  label: _keyboardVisible ? 'הסתר מקלדת' : 'מקלדת',
+                  icon: FluentIcons.keyboard_24_filled,
+                  iconOnly: !wide,
+                  filled: false,
+                  onPressed: () =>
+                      setState(() => _keyboardVisible = !_keyboardVisible),
                 ),
-                if (_keyboardVisible) ...[
-                  SizedBox(height: m.gap),
-                  SizedBox(
-                    height: keyboardHeight,
-                    child: LvKeyboard(
-                      onText: _append,
-                      onBackspace: _backspace,
-                      onClear: () => _setQuery(''),
-                      onSubmit: _submit,
-                    ),
-                  ),
-                ],
               ],
-            );
-          },
+              body: sideBySide
+                  ? _sideBySideBody(m, p, keyboardFraction, hidePeek)
+                  : LayoutBuilder(
+                      builder: (context, box) {
+                        // המקלדת לא תיקח את כל המקום: נשאר לפחות אזור קטן לתוצאות.
+                        final fixed =
+                            (wide ? 0 : m.tapHeight + m.gap * 2) + m.gap;
+                        // נשאר מקום לשורת תוצאה אחת גדולה מעל המקלדת (חוץ מבענקית).
+                        final peek = hidePeek
+                            ? 0.0
+                            : m.tapHeight * 1.3 + m.gap * 2;
+                        final maxKeyboard = box.maxHeight - fixed - peek;
+                        final keyboardHeight = math.min(
+                          MediaQuery.sizeOf(context).height * keyboardFraction,
+                          math.max(0.0, maxKeyboard),
+                        );
+                        return Column(
+                          children: [
+                            if (!wide) ...[queryBar, SizedBox(height: m.gap)],
+                            Expanded(
+                              child: hidePeek && _keyboardVisible
+                                  ? const SizedBox.shrink()
+                                  : _buildResults(m, p),
+                            ),
+                            if (_keyboardVisible) ...[
+                              SizedBox(height: m.gap),
+                              SizedBox(
+                                height: keyboardHeight,
+                                child: LvKeyboard(
+                                  onText: _append,
+                                  onBackspace: _backspace,
+                                  onClear: () => _setQuery(''),
+                                  onSubmit: _submit,
+                                ),
+                              ),
+                            ],
+                          ],
+                        );
+                      },
+                    ),
+            ),
+    );
+  }
+
+  /// מקלדת ענקית: למעלה תיבת חיפוש קטנה והתוצאה המתאימה ביותר מובלטת לידה,
+  /// והמקלדת בגודלה המלא. אין כפתורי "חזרה" ו"הסתר מקלדת" למעלה: ה"חזרה"
+  /// נמצאת במקום מקש "חפש" במקלדת, כי החיפוש ממילא חי.
+  Widget _hugeScreen(LvMetrics m, LvPalette p) {
+    final rowHeight = m.tapHeight * 1.3;
+    return MediaQuery(
+      data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
+      child: Material(
+        color: p.background,
+        child: SafeArea(
+          child: Padding(
+            padding: EdgeInsets.all(m.gap),
+            child: Column(
+              children: [
+                SizedBox(
+                  height: rowHeight + m.gap,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 4,
+                        child: _QueryBar(
+                          query: _query,
+                          onClear: () => _setQuery(''),
+                          palette: p,
+                          metrics: m,
+                          height: rowHeight,
+                        ),
+                      ),
+                      SizedBox(width: m.gap * 1.5),
+                      Expanded(flex: 7, child: _topResult(m, p, rowHeight)),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: LvKeyboard(
+                    onText: _append,
+                    onBackspace: _backspace,
+                    onClear: () => _setQuery(''),
+                    onSubmit: _submit,
+                    onBack: () => Navigator.of(context).maybePop(),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 
+  /// התוצאה המובלטת בשורה העליונה, עם כפתור למעבר לתוצאה הבאה.
+  Widget _topResult(LvMetrics m, LvPalette p, double rowHeight) {
+    Widget note(String text, {bool busy = false}) => Container(
+      height: rowHeight,
+      alignment: AlignmentDirectional.centerStart,
+      padding: EdgeInsets.symmetric(horizontal: m.gap * 2),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(m.radius),
+        border: Border.all(color: p.foreground, width: m.border),
+      ),
+      child: Text(
+        text,
+        maxLines: 1,
+        style: TextStyle(
+          color: p.foreground,
+          fontSize: m.body,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+    if (_query.trim().isEmpty) return note('הקלידו את שם הספר');
+    if (_results.isEmpty) {
+      return note(_searching ? 'מחפש…' : 'לא נמצאו ספרים');
+    }
+    final index = _peekIndex.clamp(0, _results.length - 1);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: _resultRow(m, p, index, emphasized: true)),
+        if (_results.length > 1) ...[
+          SizedBox(width: m.gap),
+          SizedBox(
+            width: m.tapHeight * 1.5,
+            height: rowHeight,
+            child: LvButton(
+              label: 'התוצאה הבאה (${index + 1} מתוך ${_results.length})',
+              icon: FluentIcons.chevron_right_24_filled,
+              iconOnly: true,
+              filled: false,
+              height: double.infinity,
+              onPressed: () => setState(
+                () => _peekIndex = (index + 1) % _results.length,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// מסך רחב: התוצאות בעמודה מימין והמקלדת משמאל, בגובה מלא. כך נראות הרבה
+  /// תוצאות גם כשהמקלדת גדולה. ב"ענקית" המקלדת תופסת את כל הרוחב.
+  Widget _sideBySideBody(
+    LvMetrics m,
+    LvPalette p,
+    double keyboardFraction,
+    bool hidePeek,
+  ) {
+    return LayoutBuilder(
+      builder: (context, box) {
+        final gap = m.gap * 1.5;
+        final keyboardOnly = hidePeek && _keyboardVisible;
+        final keyboard = LvKeyboard(
+          onText: _append,
+          onBackspace: _backspace,
+          onClear: () => _setQuery(''),
+          onSubmit: _submit,
+        );
+        if (keyboardOnly) return keyboard;
+        return Row(
+          children: [
+            Expanded(child: _buildResults(m, p, compact: true)),
+            if (_keyboardVisible) ...[
+              SizedBox(width: gap),
+              SizedBox(width: box.maxWidth * keyboardFraction, child: keyboard),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
   /// שורת תוצאה: שם הספר גדול מימין, ושם המחבר בצד שמאל של אותה שורה.
-  Widget _resultRow(LvMetrics m, LvPalette p, int i, {GlobalKey? key}) {
+  Widget _resultRow(
+    LvMetrics m,
+    LvPalette p,
+    int i, {
+    GlobalKey? key,
+    bool compact = false,
+    bool emphasized = false,
+  }) {
     final book = _results[i];
     final author = book.author;
-    final selected = !_keyboardVisible && i == _selected;
+    final selected = emphasized || i == _selected;
     return LvRow(
       key: key,
       title: book.title,
-      titleSize: m.unit * 1.05,
-      fitTitle: true,
+      // בעמודה צרה: הכותרת בשתי שורות והמחבר מתחתיה, כי אין מקום לצדה.
+      titleSize: m.unit * (compact ? 0.9 : 1.05),
+      fitTitle: !compact,
+      subtitle: compact ? author : null,
       selected: selected,
-      trailing: author == null || author.isEmpty
+      trailing: compact || author == null || author.isEmpty
           ? null
           : ConstrainedBox(
               constraints: BoxConstraints(maxWidth: m.size.width * 0.28),
@@ -271,7 +434,7 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
     );
   }
 
-  Widget _buildResults(LvMetrics m, LvPalette p) {
+  Widget _buildResults(LvMetrics m, LvPalette p, {bool compact = false}) {
     if (_query.trim().isEmpty) {
       return const LvMessage('הקלידו את שם הספר');
     }
@@ -282,7 +445,7 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
     }
     // בזמן הקלדה (המקלדת מוצגת) יש מקום לתוצאה אחת בלבד, אז מציגים את
     // המתאימה ביותר בגדול. "חפש" מציג את כל התוצאות על כל המסך.
-    if (_keyboardVisible) {
+    if (_keyboardVisible && !compact) {
       return Align(
         alignment: Alignment.topCenter,
         child: _resultRow(m, p, 0),
@@ -301,6 +464,7 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
                     m,
                     p,
                     i,
+                    compact: compact,
                     key: _rowKeys.putIfAbsent(i, GlobalKey.new),
                   ),
               ],
@@ -320,6 +484,7 @@ class _QueryBar extends StatelessWidget {
     required this.onClear,
     required this.palette,
     required this.metrics,
+    this.height,
   });
 
   final String query;
@@ -327,12 +492,15 @@ class _QueryBar extends StatelessWidget {
   final LvPalette palette;
   final LvMetrics metrics;
 
+  /// גובה מותאם (בשורה העליונה של המקלדת הענקית).
+  final double? height;
+
   @override
   Widget build(BuildContext context) {
     final m = metrics;
     final p = palette;
     return Container(
-      height: m.tapHeight,
+      height: height ?? m.tapHeight,
       padding: EdgeInsets.symmetric(horizontal: m.gap * 2, vertical: m.gap),
       decoration: BoxDecoration(
         color: p.surface,

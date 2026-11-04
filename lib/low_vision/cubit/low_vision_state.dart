@@ -38,6 +38,7 @@ class LowVisionState extends Equatable {
     this.homeSizeIndex = 2,
     this.keyboardSizeIndex = 2,
     this.keysOnTouchDown = true,
+    this.searchSideBySide = false,
     this.keyOverrides = const {},
   });
 
@@ -109,6 +110,9 @@ class LowVisionState extends Equatable {
   /// האם אות במקלדת נכנסת ברגע הנגיעה (כמו במקלדת טלפון), בלי להמתין להרמה.
   final bool keysOnTouchDown;
 
+  /// במסך רחב: מקלדת ותוצאות זו לצד זו (המקלדת בגובה מלא), במקום מקלדת מתחת.
+  final bool searchSideBySide;
+
   /// הפעולה המשויכת למחווה.
   LvTouchAction actionFor(LvGesture gesture) {
     final name = touchBindings[gesture.name];
@@ -139,6 +143,7 @@ class LowVisionState extends Equatable {
     int? homeSizeIndex,
     int? keyboardSizeIndex,
     bool? keysOnTouchDown,
+    bool? searchSideBySide,
     Map<String, List<int>>? keyOverrides,
   }) => LowVisionState(
     loaded: loaded ?? this.loaded,
@@ -155,6 +160,7 @@ class LowVisionState extends Equatable {
     homeSizeIndex: homeSizeIndex ?? this.homeSizeIndex,
     keyboardSizeIndex: keyboardSizeIndex ?? this.keyboardSizeIndex,
     keysOnTouchDown: keysOnTouchDown ?? this.keysOnTouchDown,
+    searchSideBySide: searchSideBySide ?? this.searchSideBySide,
     keyOverrides: keyOverrides ?? this.keyOverrides,
   );
 
@@ -174,6 +180,7 @@ class LowVisionState extends Equatable {
     homeSizeIndex,
     keyboardSizeIndex,
     keysOnTouchDown,
+    searchSideBySide,
     keyOverrides,
   ];
 }

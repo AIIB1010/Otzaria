@@ -144,6 +144,21 @@ void main() {
     await tester.pump();
     await _shot(tester, '4-תוצאות-חיפוש');
 
+    // מקלדת ענקית: תיבה קטנה + תוצאה מובלטת למעלה, "חזרה" במקום "חפש"
+    await pumpLowVision(
+      tester,
+      LvSearchScreen(search: (q) async => books.take(3).toList()),
+      theme: theme(),
+      boundaryKey: _boundary,
+      setup: (c) => c.setKeyboardSize(3),
+    );
+    await tester.tap(find.text('מ').first);
+    await tester.tap(find.text('ש').first);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    await _shot(tester, '3b-מקלדת-ענקית');
+    await tester.pump(const Duration(seconds: 2));
+
     // קורא טקסט
     Future<void> reader(
       String name, {

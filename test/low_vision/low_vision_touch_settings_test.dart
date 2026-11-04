@@ -278,4 +278,86 @@ void main() {
       expect(find.textContaining('בוטלה על ידי המערכת'), findsOneWidget);
     });
   });
+
+  group('חיפוש עם מקלדת ענקית ובפריסה לצד', () {
+    final found = [
+      TextBook(title: 'משנה תורה', author: 'רמב"ם'),
+      TextBook(title: 'משנה ברורה', author: 'חפץ חיים'),
+    ];
+
+    testWidgets(
+      'מקלדת ענקית: חזרה במקום "חפש", בלי כפתורים למעלה, ותוצאה מובלטת',
+      (
+        tester,
+      ) async {
+        await pumpLowVision(
+          tester,
+          LvSearchScreen(search: (_) async => found),
+          setup: (c) => c.setKeyboardSize(3),
+        );
+        await tester.pump();
+
+        // שורה עליונה: אין "חזרה" ו"הסתר מקלדת"; המקש "חזרה" הוא במקלדת.
+        expect(find.text('הסתר מקלדת'), findsNothing);
+        expect(find.text('חפש'), findsNothing);
+        final back = find.text('חזרה');
+        expect(back, findsOneWidget);
+        expect(
+          find.descendant(of: find.byType(LvKeyboard), matching: back),
+          findsOneWidget,
+        );
+
+        await tester.tap(
+          find.descendant(
+            of: find.byType(LvKeyboard),
+            matching: find.text('מ'),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pump();
+
+        // התוצאה המתאימה ביותר מובלטת בשורה העליונה, והמחבר בצד שמאל שלה.
+        final title = tester.getCenter(find.text('משנה תורה'));
+        final author = tester.getCenter(find.text('רמב"ם'));
+        expect(title.dy, lessThan(300));
+        expect(author.dx, lessThan(title.dx));
+        expect(find.text('משנה ברורה'), findsNothing);
+
+        // התוצאה הבאה.
+        await tester.tap(find.bySemanticsLabel(RegExp('התוצאה הבאה')));
+        await tester.pump();
+        expect(find.text('משנה ברורה'), findsOneWidget);
+        expect(find.text('משנה תורה'), findsNothing);
+        await tester.pump(const Duration(seconds: 2));
+      },
+    );
+
+    testWidgets('פריסה לצד: הרבה תוצאות נראות יחד עם מקלדת בגובה מלא', (
+      tester,
+    ) async {
+      await pumpLowVision(
+        tester,
+        LvSearchScreen(search: (_) async => found),
+        setup: (c) => c.setSearchSideBySide(true),
+      );
+      await tester.pump();
+      await tester.tap(
+        find.descendant(
+          of: find.byType(LvKeyboard),
+          matching: find.text('מ'),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump();
+
+      expect(find.text('משנה תורה'), findsOneWidget);
+      expect(find.text('משנה ברורה'), findsOneWidget);
+      final keyboard = tester.getRect(find.byType(LvKeyboard));
+      final results = tester.getCenter(find.text('משנה תורה'));
+      // התוצאות מימין למקלדת, והמקלדת מאריכה על כל גובה הגוף.
+      expect(results.dx, greaterThan(keyboard.right));
+      expect(keyboard.height, greaterThan(700));
+      await tester.pump(const Duration(seconds: 2));
+    });
+  });
 }

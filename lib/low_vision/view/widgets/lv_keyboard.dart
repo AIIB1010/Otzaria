@@ -31,12 +31,16 @@ class LvKeyboard extends StatefulWidget {
     required this.onBackspace,
     required this.onClear,
     required this.onSubmit,
+    this.onBack,
   });
 
   final ValueChanged<String> onText;
   final VoidCallback onBackspace;
   final VoidCallback onClear;
   final VoidCallback onSubmit;
+
+  /// כשהוא מוגדר, מקש "חזרה" מחליף את מקש "חפש" (החיפוש ממילא חי).
+  final VoidCallback? onBack;
 
   @override
   State<LvKeyboard> createState() => _LvKeyboardState();
@@ -121,12 +125,20 @@ class _LvKeyboardState extends State<LvKeyboard> {
                 SizedBox(width: gap),
                 Expanded(
                   flex: 3,
-                  child: _Key(
-                    label: 'חפש',
-                    icon: FluentIcons.search_24_filled,
-                    accent: true,
-                    onTap: widget.onSubmit,
-                  ),
+                  child: widget.onBack != null
+                      ? _Key(
+                          label: 'חזרה',
+                          // המקלדת עצמה LTR, והחזרה בעברית היא לימין.
+                          icon: FluentIcons.arrow_right_24_filled,
+                          accent: true,
+                          onTap: widget.onBack!,
+                        )
+                      : _Key(
+                          label: 'חפש',
+                          icon: FluentIcons.search_24_filled,
+                          accent: true,
+                          onTap: widget.onSubmit,
+                        ),
                 ),
               ],
             ),

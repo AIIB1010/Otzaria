@@ -212,6 +212,17 @@ class _LvSettingsScreenState extends State<LvSettingsScreen> {
                     ),
                     SizedBox(height: m.gap),
                     LvButton(
+                      label: state.searchSideBySide
+                          ? 'חיפוש במסך רחב: מקלדת ותוצאות זו לצד זו (הקישו לשינוי)'
+                          : 'חיפוש במסך רחב: מקלדת מתחת לתוצאות (הקישו לשינוי)',
+                      icon: FluentIcons.panel_left_24_filled,
+                      filled: false,
+                      onPressed: () => cubit.setSearchSideBySide(
+                        !state.searchSideBySide,
+                      ),
+                    ),
+                    SizedBox(height: m.gap),
+                    LvButton(
                       label: state.keysOnTouchDown
                           ? 'אות נכנסת ברגע הנגיעה (הקישו לשינוי)'
                           : 'אות נכנסת בהרמת האצבע (הקישו לשינוי)',

@@ -77,6 +77,7 @@ class LowVisionCubit extends Cubit<LowVisionState> {
               LowVisionState.keyboardSizeOptions.length,
             ),
             keysOnTouchDown: json['keysOnTouchDown'] as bool? ?? true,
+            searchSideBySide: json['searchSideBySide'] as bool? ?? false,
             keyOverrides: {
               for (final e
                   in (json['keys'] as Map<String, dynamic>? ?? {}).entries)
@@ -246,6 +247,11 @@ class LowVisionCubit extends Cubit<LowVisionState> {
     _scheduleSave();
   }
 
+  void setSearchSideBySide(bool value) {
+    emit(state.copyWith(searchSideBySide: value));
+    _scheduleSave();
+  }
+
   void setKeysOnTouchDown(bool value) {
     emit(state.copyWith(keysOnTouchDown: value));
     _scheduleSave();
@@ -291,6 +297,7 @@ class LowVisionCubit extends Cubit<LowVisionState> {
         'homeSize': state.homeSizeIndex,
         'keyboardSize': state.keyboardSizeIndex,
         'keysOnTouchDown': state.keysOnTouchDown,
+        'searchSideBySide': state.searchSideBySide,
         'keys': state.keyOverrides,
       });
       await (await _prefs()).setString(_prefsKey, data);
