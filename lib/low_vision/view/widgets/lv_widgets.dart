@@ -238,10 +238,18 @@ class LvRow extends StatelessWidget {
     this.trailing,
     this.selected = false,
     this.indent = 0,
+    this.titleSize,
+    this.fitTitle = false,
   });
 
   final String title;
   final String? subtitle;
+
+  /// גודל הכותרת (ברירת מחדל: גודל גוף רגיל).
+  final double? titleSize;
+
+  /// הכותרת בשורה אחת שמתכווצת לפי הרוחב במקום להיחתך.
+  final bool fitTitle;
   final VoidCallback onTap;
   final Widget? leading;
   final Widget? trailing;
@@ -280,17 +288,32 @@ class LvRow extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: fg,
-                          fontSize: m.body,
-                          fontWeight: FontWeight.w800,
-                          height: 1.15,
-                        ),
-                      ),
+                      fitTitle
+                          ? FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: AlignmentDirectional.centerStart,
+                              child: Text(
+                                title,
+                                maxLines: 1,
+                                style: TextStyle(
+                                  color: fg,
+                                  fontSize: titleSize ?? m.body,
+                                  fontWeight: FontWeight.w900,
+                                  height: 1.15,
+                                ),
+                              ),
+                            )
+                          : Text(
+                              title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: fg,
+                                fontSize: titleSize ?? m.body,
+                                fontWeight: FontWeight.w800,
+                                height: 1.15,
+                              ),
+                            ),
                       if (subtitle != null && subtitle!.isNotEmpty)
                         Text(
                           subtitle!,

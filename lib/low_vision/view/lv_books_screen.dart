@@ -94,6 +94,7 @@ class _LvBooksScreenState extends State<LvBooksScreen> {
                     ),
                   )
                 : Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Expanded(
                         child: SingleChildScrollView(

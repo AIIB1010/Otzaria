@@ -175,7 +175,7 @@ void main() {
 
       final regular = await heightFor(0);
       final huge = await heightFor(3);
-      expect(regular, closeTo(1080 * 0.46, 1));
+      expect(regular, closeTo(1080 * 0.40, 1));
       // ה"ענקית" גדולה בהרבה, אבל משאירה מקום לשורה של תוצאות.
       expect(huge, greaterThan(regular * 1.4));
       expect(huge, lessThanOrEqualTo(1080 * 0.82 + 1));

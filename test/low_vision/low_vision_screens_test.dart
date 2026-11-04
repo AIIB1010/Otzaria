@@ -70,9 +70,22 @@ void main() {
     await tester.pump();
 
     expect(queries.last, 'מש');
+    // בזמן ההקלדה מוצגת התוצאה המתאימה ביותר בלבד, בגדול, ושם המחבר בצד.
+    expect(find.text('משנה תורה'), findsOneWidget);
+    expect(find.text('משנה ברורה'), findsNothing);
+    expect(_fontSizeOf(tester, 'משנה תורה'), greaterThan(90));
+    expect(find.text('רמב"ם'), findsOneWidget);
+    // המחבר בצד שמאל של שם הספר באותה שורה (לא מתחתיו).
+    final title = tester.getCenter(find.text('משנה תורה'));
+    final author = tester.getCenter(find.text('רמב"ם'));
+    expect(author.dx, lessThan(title.dx));
+    expect((author.dy - title.dy).abs(), lessThan(40));
+
+    // "חפש" מציג את כל התוצאות על כל המסך.
+    await tester.tap(find.text('חפש').first);
+    await tester.pumpAndSettle();
     expect(find.text('משנה תורה'), findsOneWidget);
     expect(find.text('משנה ברורה'), findsOneWidget);
-    expect(_fontSizeOf(tester, 'משנה תורה'), greaterThan(60));
 
     // מחיקה והקלדה ממקלדת חיצונית.
     await tester.sendKeyEvent(LogicalKeyboardKey.backspace);

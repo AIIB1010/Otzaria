@@ -90,9 +90,11 @@ class LowVisionState extends Equatable {
   ];
   double get homeScale => homeSizeOptions[homeSizeIndex];
 
-  /// חלק מגובה המסך שהמקלדת תופסת במסך החיפוש.
+  /// חלק מגובה המסך שהמקלדת תופסת במסך החיפוש. ב"גדולה מאוד" נשארת שורת תוצאה
+  /// אחת גדולה מעל המקלדת; ב"ענקית" המקלדת תופסת כמעט הכל, והתוצאות מופיעות
+  /// אחרי "חפש".
   final int keyboardSizeIndex;
-  static const List<double> keyboardSizeOptions = [0.46, 0.58, 0.70, 0.82];
+  static const List<double> keyboardSizeOptions = [0.40, 0.50, 0.57, 0.82];
   static const List<String> keyboardSizeLabels = [
     'רגילה',
     'גדולה',
@@ -100,6 +102,9 @@ class LowVisionState extends Equatable {
     'ענקית',
   ];
   double get keyboardFraction => keyboardSizeOptions[keyboardSizeIndex];
+
+  /// במקלדת הענקית אין מקום לתוצאה מעליה.
+  bool get keyboardHidesPeek => keyboardFraction >= 0.8;
 
   /// האם אות במקלדת נכנסת ברגע הנגיעה (כמו במקלדת טלפון), בלי להמתין להרמה.
   final bool keysOnTouchDown;

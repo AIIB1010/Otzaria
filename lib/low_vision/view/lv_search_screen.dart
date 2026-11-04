@@ -163,6 +163,9 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
     final keyboardFraction = context.select(
       (LowVisionCubit c) => c.state.keyboardFraction,
     );
+    final hidePeek = context.select(
+      (LowVisionCubit c) => c.state.keyboardHidesPeek,
+    );
     final queryBar = _QueryBar(
       query: _query,
       onClear: () => _setQuery(''),
@@ -201,7 +204,9 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
           builder: (context, box) {
             // המקלדת לא תיקח את כל המקום: נשאר לפחות אזור קטן לתוצאות.
             final fixed = (wide ? 0 : m.tapHeight + m.gap * 2) + m.gap;
-            final maxKeyboard = box.maxHeight - fixed - m.tapHeight;
+            // נשאר מקום לשורת תוצאה אחת גדולה מעל המקלדת (חוץ מבענקית).
+            final peek = hidePeek ? 0.0 : m.tapHeight * 1.3 + m.gap * 2;
+            final maxKeyboard = box.maxHeight - fixed - peek;
             final keyboardHeight = math.min(
               MediaQuery.sizeOf(context).height * keyboardFraction,
               math.max(0.0, maxKeyboard),
@@ -209,7 +214,11 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
             return Column(
               children: [
                 if (!wide) ...[queryBar, SizedBox(height: m.gap)],
-                Expanded(child: _buildResults(m)),
+                Expanded(
+                  child: hidePeek && _keyboardVisible
+                      ? const SizedBox.shrink()
+                      : _buildResults(m, p),
+                ),
                 if (_keyboardVisible) ...[
                   SizedBox(height: m.gap),
                   SizedBox(
@@ -230,7 +239,39 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
     );
   }
 
-  Widget _buildResults(LvMetrics m) {
+  /// שורת תוצאה: שם הספר גדול מימין, ושם המחבר בצד שמאל של אותה שורה.
+  Widget _resultRow(LvMetrics m, LvPalette p, int i, {GlobalKey? key}) {
+    final book = _results[i];
+    final author = book.author;
+    final selected = !_keyboardVisible && i == _selected;
+    return LvRow(
+      key: key,
+      title: book.title,
+      titleSize: m.unit * 1.05,
+      fitTitle: true,
+      selected: selected,
+      trailing: author == null || author.isEmpty
+          ? null
+          : ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: m.size.width * 0.28),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  author,
+                  maxLines: 1,
+                  style: TextStyle(
+                    color: selected ? p.onAccent : p.foreground,
+                    fontSize: m.body,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+      onTap: () => _open(book),
+    );
+  }
+
+  Widget _buildResults(LvMetrics m, LvPalette p) {
     if (_query.trim().isEmpty) {
       return const LvMessage('הקלידו את שם הספר');
     }
@@ -239,7 +280,16 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
           ? const LvMessage('מחפש…', busy: true)
           : const LvMessage('לא נמצאו ספרים');
     }
+    // בזמן הקלדה (המקלדת מוצגת) יש מקום לתוצאה אחת בלבד, אז מציגים את
+    // המתאימה ביותר בגדול. "חפש" מציג את כל התוצאות על כל המסך.
+    if (_keyboardVisible) {
+      return Align(
+        alignment: Alignment.topCenter,
+        child: _resultRow(m, p, 0),
+      );
+    }
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
           child: SingleChildScrollView(
@@ -247,12 +297,11 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
             child: Column(
               children: [
                 for (var i = 0; i < _results.length; i++)
-                  LvRow(
+                  _resultRow(
+                    m,
+                    p,
+                    i,
                     key: _rowKeys.putIfAbsent(i, GlobalKey.new),
-                    title: _results[i].title,
-                    subtitle: _results[i].author,
-                    selected: !_keyboardVisible && i == _selected,
-                    onTap: () => _open(_results[i]),
                   ),
               ],
             ),
