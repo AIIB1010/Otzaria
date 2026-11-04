@@ -26,6 +26,28 @@ class LvUpdateInfo {
 /// תוצאת בקשת ההתקנה מהמתקין של Android.
 enum LvInstallResult { started, needsPermission }
 
+/// מה שנקרא מתוך קובץ APK בלי להתקין אותו.
+class LvApkInfo {
+  const LvApkInfo({
+    required this.packageName,
+    required this.versionCode,
+    required this.ownPackage,
+  });
+
+  final String packageName;
+  final int versionCode;
+  final String ownPackage;
+
+  /// האם זה קובץ של האפליקציה הזו.
+  bool get isOurs => packageName == ownPackage;
+
+  /// מספר הבנייה: `versionCode` הוא 100000 ועוד מספר הריצה ב-CI.
+  int get build => versionCode - kLvVersionCodeBase;
+}
+
+/// ראו `--build-number` ב-workflow.
+const int kLvVersionCodeBase = 100000;
+
 class LvUpdateException implements Exception {
   const LvUpdateException(this.message);
   final String message;
@@ -136,6 +158,24 @@ class LvUpdateService {
       await sink.close();
     }
     return file;
+  }
+
+  /// קורא את שם החבילה והגרסה של [apk]. זורק [LvUpdateException] אם אינו APK.
+  Future<LvApkInfo> inspect(File apk) async {
+    try {
+      final map = await _channel.invokeMapMethod<String, Object?>('inspect', {
+        'path': apk.path,
+      });
+      return LvApkInfo(
+        packageName: map?['packageName'] as String? ?? '',
+        versionCode: (map?['versionCode'] as num?)?.toInt() ?? 0,
+        ownPackage: map?['ownPackage'] as String? ?? '',
+      );
+    } on PlatformException catch (error) {
+      throw LvUpdateException(error.message ?? 'הקובץ אינו קובץ התקנה תקין.');
+    } on MissingPluginException {
+      throw const LvUpdateException('עדכון מתוך האפליקציה זמין רק באנדרואיד.');
+    }
   }
 
   Future<LvInstallResult> install(File apk) async {

@@ -123,9 +123,11 @@ void main() {
     );
     await tester.pump();
 
-    await tester.ensureVisible(find.text('בדוק אם יש גרסה חדשה'));
+    await tester.ensureVisible(
+      find.text('בדוק אם יש גרסה חדשה (דורש אינטרנט)'),
+    );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('בדוק אם יש גרסה חדשה'));
+    await tester.tap(find.text('בדוק אם יש גרסה חדשה (דורש אינטרנט)'));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('יש גרסה חדשה: 12'), findsOneWidget);
@@ -175,5 +177,161 @@ void main() {
     await body.close();
     await done;
     expect(controller.state.value.status, LvUpdateStatus.waitingForInstaller);
+  });
+
+  group('עדכון מקובץ (בלי אינטרנט)', () {
+    LvUpdateController make({
+      required Map<String, Object?>? inspectResult,
+      required List<String> calls,
+      File? picked,
+      int installedBuild = 12,
+      String installAnswer = 'started',
+    }) {
+      const channel = MethodChannel('lv_test_local_update');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            calls.add(call.method);
+            if (call.method == 'inspect') {
+              if (inspectResult == null) {
+                throw PlatformException(
+                  code: 'not_apk',
+                  message: 'לא קובץ התקנה',
+                );
+              }
+              return inspectResult;
+            }
+            return installAnswer;
+          });
+      addTearDown(
+        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null),
+      );
+      return LvUpdateController(
+        service: LvUpdateService(channel: channel),
+        pickApk: () async => picked,
+        installedBuild: installedBuild,
+      );
+    }
+
+    Map<String, Object?> apk({
+      int code = 100020,
+      String pkg = 'org.otzaria.humanware',
+    }) => {
+      'packageName': pkg,
+      'versionCode': code,
+      'versionName': '1.0',
+      'ownPackage': 'org.otzaria.humanware',
+    };
+
+    final file = File('${Directory.systemTemp.path}/x.apk');
+
+    test(
+      'קובץ חדש יותר של האפליקציה מוכן להתקנה, ומותקן על גבי הקיימת',
+      () async {
+        final calls = <String>[];
+        final c = make(inspectResult: apk(), calls: calls, picked: file);
+        await c.pickLocalFile();
+        expect(c.state.value.status, LvUpdateStatus.localReady);
+        expect(c.state.value.localBuild, 20);
+
+        await c.installLocalFile();
+        expect(c.state.value.status, LvUpdateStatus.waitingForInstaller);
+        expect(calls, ['inspect', 'install']);
+      },
+    );
+
+    test('קובץ ישן או זהה אינו מותקן', () async {
+      for (final code in [100012, 100005]) {
+        final c = make(
+          inspectResult: apk(code: code),
+          calls: [],
+          picked: file,
+        );
+        await c.pickLocalFile();
+        expect(c.state.value.status, LvUpdateStatus.localNotNewer);
+        await c.installLocalFile();
+        expect(c.state.value.status, LvUpdateStatus.localNotNewer);
+      }
+    });
+
+    test('קובץ של אפליקציה אחרת נדחה', () async {
+      final c = make(
+        inspectResult: apk(pkg: 'com.example.other'),
+        calls: [],
+        picked: file,
+      );
+      await c.pickLocalFile();
+      expect(c.state.value.status, LvUpdateStatus.error);
+      expect(c.state.value.error, contains('אינו של אוצריא'));
+    });
+
+    test('קובץ שאינו APK מדווח שגיאה בעברית', () async {
+      final c = make(inspectResult: null, calls: [], picked: file);
+      await c.pickLocalFile();
+      expect(c.state.value.status, LvUpdateStatus.error);
+      expect(c.state.value.error, contains('לא קובץ התקנה'));
+    });
+
+    test('ביטול הבחירה חוזר למצב ההתחלתי', () async {
+      final c = make(inspectResult: apk(), calls: [], picked: null);
+      await c.pickLocalFile();
+      expect(c.state.value.status, LvUpdateStatus.idle);
+    });
+
+    test('באנדרואיד 8+ בלי אישור התקנה מבקש אישור ואז אפשר להמשיך', () async {
+      final c = make(
+        inspectResult: apk(),
+        calls: [],
+        picked: file,
+        installAnswer: 'needs_permission',
+      );
+      await c.pickLocalFile();
+      await c.installLocalFile();
+      expect(c.state.value.status, LvUpdateStatus.needsPermission);
+      expect(c.state.value.localApk, isNotNull);
+    });
+  });
+
+  testWidgets('בהגדרות: כפתור עדכון מקובץ מציג גרסה ומתקין', (tester) async {
+    final calls = <String>[];
+    const channel = MethodChannel('lv_test_local_ui');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          calls.add(call.method);
+          return call.method == 'inspect'
+              ? {
+                  'packageName': 'org.otzaria.humanware',
+                  'versionCode': 100030,
+                  'versionName': '1',
+                  'ownPackage': 'org.otzaria.humanware',
+                }
+              : 'started';
+        });
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null),
+    );
+    await pumpLowVision(
+      tester,
+      const LvSettingsScreen(),
+      updates: LvUpdateController(
+        service: LvUpdateService(channel: channel),
+        pickApk: () async => File('${Directory.systemTemp.path}/y.apk'),
+        installedBuild: 14,
+      ),
+    );
+    await tester.pump();
+    await tester.ensureVisible(find.textContaining('עדכון מקובץ'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('עדכון מקובץ'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('גרסה 30'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('התקן את הקובץ'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('התקן את הקובץ'));
+    await tester.pumpAndSettle();
+    expect(calls, ['inspect', 'install']);
+    expect(find.textContaining('אשרו את ההתקנה'), findsOneWidget);
   });
 }

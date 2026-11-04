@@ -23,10 +23,38 @@ class ApkInstallerChannel(
     }
 
     private fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
-        if (call.method != INSTALL_METHOD) {
-            result.notImplemented()
+        when (call.method) {
+            INSPECT_METHOD -> inspect(call, result)
+            INSTALL_METHOD -> install(call, result)
+            else -> result.notImplemented()
+        }
+    }
+
+    /** קורא מה-APK את שם החבילה והגרסה, בלי להתקין. */
+    @Suppress("DEPRECATION")
+    private fun inspect(call: MethodCall, result: MethodChannel.Result) {
+        val path = call.argument<String>("path")
+        val info = path?.let { activity.packageManager.getPackageArchiveInfo(it, 0) }
+        if (info == null) {
+            result.error("not_apk", "הקובץ אינו קובץ התקנה תקין", null)
             return
         }
+        val code = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            info.longVersionCode
+        } else {
+            info.versionCode.toLong()
+        }
+        result.success(
+            mapOf(
+                "packageName" to info.packageName,
+                "versionCode" to code,
+                "versionName" to info.versionName,
+                "ownPackage" to activity.packageName,
+            ),
+        )
+    }
+
+    private fun install(call: MethodCall, result: MethodChannel.Result) {
         val path = call.argument<String>("path")
         val file = path?.let { File(it) }
         if (file == null || !file.exists()) {
@@ -73,5 +101,6 @@ class ApkInstallerChannel(
     companion object {
         const val CHANNEL = "org.otzaria.humanware/apk_installer"
         const val INSTALL_METHOD = "install"
+        const val INSPECT_METHOD = "inspect"
     }
 }

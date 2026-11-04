@@ -397,6 +397,13 @@ class _UpdateSection extends StatelessWidget {
       LvUpdateStatus.needsPermission =>
         'אפשרו "התקנה מהאפליקציה הזו" במסך שנפתח, חזרו ולחצו "עדכן עכשיו".',
       LvUpdateStatus.noRelease => 'עדיין לא פורסמה גרסה לעדכון.',
+      LvUpdateStatus.readingFile =>
+        'קורא את הקובץ… (קובץ גדול, ייתכן שייקח רגע)',
+      LvUpdateStatus.localReady =>
+        'נמצא קובץ עדכון: גרסה ${state.localBuild} (מותקנת: $current).\n'
+            'ההתקנה שומרת את כל ההגדרות והספרייה.',
+      LvUpdateStatus.localNotNewer =>
+        'הקובץ (גרסה ${state.localBuild}) אינו חדש יותר מהמותקנת ($current).',
       LvUpdateStatus.error => state.error ?? 'אירעה שגיאה.',
     };
   }
@@ -411,7 +418,12 @@ class _UpdateSection extends StatelessWidget {
       builder: (context, state, _) {
         final canUpdate =
             state.status == LvUpdateStatus.available ||
-            state.status == LvUpdateStatus.needsPermission;
+            (state.status == LvUpdateStatus.needsPermission &&
+                state.localApk == null);
+        final canInstallLocal =
+            state.status == LvUpdateStatus.localReady ||
+            (state.status == LvUpdateStatus.needsPermission &&
+                state.localApk != null);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -440,13 +452,26 @@ class _UpdateSection extends StatelessWidget {
                 icon: FluentIcons.arrow_download_24_filled,
                 onPressed: controller.update,
               )
+            else if (canInstallLocal)
+              LvButton(
+                label: 'התקן את הקובץ',
+                icon: FluentIcons.arrow_download_24_filled,
+                onPressed: controller.installLocalFile,
+              )
             else
               LvButton(
-                label: 'בדוק אם יש גרסה חדשה',
+                label: 'בדוק אם יש גרסה חדשה (דורש אינטרנט)',
                 icon: FluentIcons.arrow_sync_24_filled,
                 filled: false,
                 onPressed: state.isBusy ? null : controller.check,
               ),
+            SizedBox(height: m.gap),
+            LvButton(
+              label: 'עדכון מקובץ: דיסק USB או אחסון (בלי אינטרנט)',
+              icon: FluentIcons.usb_stick_24_filled,
+              filled: false,
+              onPressed: state.isBusy ? null : controller.pickLocalFile,
+            ),
           ],
         );
       },

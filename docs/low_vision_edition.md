@@ -120,6 +120,20 @@
   `REQUEST_INSTALL_PACKAGES`. באנדרואיד 8+ המשתמש מאשר פעם אחת "התקנה
   מהאפליקציה הזו".
 
+### עדכון בלי אינטרנט (דיסק USB)
+
+בהגדרות, "עדכון מקובץ: דיסק USB או אחסון": פותח את בורר הקבצים של Android (מציג גם
+דיסק USB מחובר), מעתיק את ה-APK שנבחר למטמון (`LvUpdateController.pickLocalFile`,
+דרך `file_picker`), ו-`ApkInstallerChannel.inspect` קורא ממנו את שם החבילה ואת
+`versionCode` בלי להתקין. מותקן רק קובץ של `org.otzaria.humanware` שמספר הבנייה
+שלו (`versionCode - 100000`) גבוה מהמותקן; אחרת מוצגת הודעה. ההתקנה היא עדכון על
+גבי האפליקציה, ולכן ההגדרות, הספרים הפתוחים והספרייה נשמרים. צריך שהקובץ ייחתם
+באותו מפתח (ראו להלן).
+
+להורדת הקובץ במחשב עם אינטרנט, בלי zip: עמוד ה-release
+`https://github.com/AIIB1010/Otzaria/releases/tag/humanware-latest`, קובץ
+`otzaria-humanware.apk`.
+
 **חתימה (חובה לעדכון):** אנדרואיד מתקין עדכון רק על גבי גרסה שנחתמה באותו
 מפתח. בלי מפתח קבוע ה-CI חותם במפתח debug חדש בכל ריצה והעדכון ייכשל.
 מגדירים פעם אחת ארבעה Secrets במאגר (Settings, Secrets and variables, Actions):
