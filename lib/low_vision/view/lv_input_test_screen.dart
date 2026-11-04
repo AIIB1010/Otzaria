@@ -73,6 +73,13 @@ class _LvInputTestScreenState extends State<LvInputTestScreen> {
   Widget build(BuildContext context) {
     final m = LvMetrics.of(context);
     final p = lvPaletteOf(context);
+    final media = MediaQuery.of(context);
+    final dpr = media.devicePixelRatio;
+    final physical = media.size * dpr;
+    final screenInfo =
+        'מסך: ${media.size.width.round()}×${media.size.height.round()} '
+        '(לוגי), צפיפות ${dpr.toStringAsFixed(2)}, '
+        'פיזי ${physical.width.round()}×${physical.height.round()}';
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -112,6 +119,15 @@ class _LvInputTestScreenState extends State<LvInputTestScreen> {
                     fontSize: m.label,
                     fontWeight: FontWeight.w600,
                     height: 1.3,
+                  ),
+                ),
+                SizedBox(height: m.gap),
+                Text(
+                  screenInfo,
+                  style: TextStyle(
+                    color: p.foreground,
+                    fontSize: m.label,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
                 SizedBox(height: m.gap * 2),

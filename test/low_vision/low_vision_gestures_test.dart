@@ -372,6 +372,17 @@ void main() {
       expect(find.text('כפתור חזרה של המכשיר נקלט'), findsOneWidget);
     });
 
+    testWidgets('מציגה את גודל המסך, הצפיפות והרזולוציה הפיזית', (
+      tester,
+    ) async {
+      await pumpLowVision(tester, const LvInputTestScreen());
+      await tester.pump();
+      expect(
+        find.text('מסך: 1920×1080 (לוגי), צפיפות 1.00, פיזי 1920×1080'),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('כפתור יציאה סוגר את המסך וחוזר למסך הקודם', (tester) async {
       await pumpLowVision(
         tester,
