@@ -18,6 +18,19 @@ import 'package:otzaria/low_vision/view/widgets/lv_touch_zones.dart';
 import 'package:otzaria/low_vision/view/widgets/lv_widgets.dart';
 import 'package:otzaria/models/books.dart';
 
+/// כפתור נוסף בסרגל העליון של הקורא.
+class LvChromeAction {
+  const LvChromeAction({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+}
+
 /// מסגרת משותפת לקורא טקסט ולקורא PDF: סרגל עליון עם "חזרה" ענקי, סרגל
 /// תחתון עם דפדוף, הגדלה ותוכן עניינים, וכל קיצורי המקלדת.
 class LvReaderChrome extends StatefulWidget {
@@ -40,6 +53,7 @@ class LvReaderChrome extends StatefulWidget {
     this.onContents,
     this.contentsLabel = 'תוכן',
     this.contentsIcon = FluentIcons.text_bullet_list_24_filled,
+    this.extraActions = const [],
   });
 
   final Book book;
@@ -65,6 +79,9 @@ class LvReaderChrome extends StatefulWidget {
   final VoidCallback? onContents;
   final String contentsLabel;
   final IconData contentsIcon;
+
+  /// כפתורים נוספים בסרגל העליון (למשל מעבר בין טקסט, צורת הדף וצילום).
+  final List<LvChromeAction> extraActions;
 
   @override
   State<LvReaderChrome> createState() => _LvReaderChromeState();
@@ -331,6 +348,16 @@ class _LvReaderChromeState extends State<LvReaderChrome> {
               ),
             ),
           SizedBox(width: m.gap),
+          for (final extra in widget.extraActions) ...[
+            LvButton(
+              label: extra.label,
+              icon: extra.icon,
+              iconOnly: !m.isWide,
+              height: double.infinity,
+              onPressed: extra.onPressed,
+            ),
+            SizedBox(width: m.gap),
+          ],
           LvButton(
             label: pinned ? 'קבוע' : 'קבע',
             icon: pinned

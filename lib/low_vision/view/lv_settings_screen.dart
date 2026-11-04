@@ -211,6 +211,13 @@ class _LvSettingsScreenState extends State<LvSettingsScreen> {
                       onChanged: cubit.setKeyboardSize,
                     ),
                     SizedBox(height: m.gap),
+                    _CycleButton(
+                      title: 'חידוד ספרים מצולמים',
+                      labels: LowVisionState.pdfSharpnessLabels,
+                      index: state.pdfSharpnessIndex,
+                      onChanged: cubit.setPdfSharpness,
+                    ),
+                    SizedBox(height: m.gap),
                     LvButton(
                       label: state.searchSideBySide
                           ? 'חיפוש במסך רחב: מקלדת ותוצאות זו לצד זו (הקישו לשינוי)'

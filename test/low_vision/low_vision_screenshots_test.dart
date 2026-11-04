@@ -15,6 +15,7 @@ import 'package:otzaria/low_vision/view/lv_home_screen.dart';
 import 'package:otzaria/low_vision/view/lv_pdf_reader.dart';
 import 'package:otzaria/low_vision/view/lv_search_screen.dart';
 import 'package:otzaria/low_vision/view/lv_settings_screen.dart';
+import 'package:otzaria/low_vision/page_shape/lv_page_shape_loader.dart';
 import 'package:otzaria/low_vision/view/lv_text_reader.dart';
 import 'package:otzaria/low_vision/view/lv_toc_screen.dart';
 import 'package:otzaria/low_vision/models/lv_toc.dart';
@@ -198,6 +199,57 @@ void main() {
       palette: LvPalette.blackOnYellow,
       scale: 2.4,
     );
+
+    // צורת הדף
+    String para(String seed, int n) => List.generate(
+      n,
+      (i) =>
+          '$seed ${['מאימתי', 'קורין', 'את', 'שמע', 'בערבית', 'משעה', 'שהעני', 'נכנס', 'לאכול', 'פתו', 'במלח'][i % 11]}',
+    ).join(' ');
+    final shapeLoader = LvPageShapeLoader(
+      specsLoader: (_) async => const [
+        LvPanelSpec(LvPanelSlot.right, 'רש"י'),
+        LvPanelSpec(LvPanelSlot.left, 'תוספות'),
+        LvPanelSpec(LvPanelSlot.bottom, 'מהרש"א'),
+      ],
+      entriesLoader: (book, start, end, titles) async => [
+        for (var i = 0; i < 5; i++)
+          (line: i, title: 'רש"י', html: '<b>מאימתי.</b> ${para('פירוש', 22)}'),
+        for (var i = 0; i < 4; i++)
+          (
+            line: i,
+            title: 'תוספות',
+            html: '<b>מאימתי קורין.</b> ${para('כתבו', 24)}',
+          ),
+        for (var i = 0; i < 2; i++)
+          (line: i, title: 'מהרש"א', html: '<b>בא"ד.</b> ${para('הערה', 30)}'),
+      ],
+    );
+    await pumpLowVision(
+      tester,
+      LvTextReader(
+        book: TextBook(title: 'ברכות'),
+        loadText: () async => [
+          '<h2>דף ב עמוד א</h2>',
+          for (var i = 0; i < 9; i++) '<b>מתני׳.</b> ${para('גמרא', 14)}',
+          '<h2>דף ב עמוד ב</h2>',
+          para('המשך', 14),
+        ].join('\n'),
+        loadToc: () async => [
+          TocEntry(text: 'דף ב עמוד א', index: 0, level: 2),
+          TocEntry(text: 'דף ב עמוד ב', index: 10, level: 2),
+        ],
+        pageShapeLoader: shapeLoader,
+      ),
+      theme: theme(),
+      boundaryKey: _boundary,
+      setup: (c) => c.setPreferPageShape(true),
+    );
+    await tester.pump();
+    await tester.pump();
+    await tester.pumpAndSettle();
+    await _shot(tester, '15-צורת-הדף');
+    await tester.pump(const Duration(seconds: 2));
 
     // תוכן עניינים
     await pumpLowVision(

@@ -14,6 +14,8 @@ import 'package:otzaria/low_vision/theme/lv_metrics.dart';
 import 'package:otzaria/low_vision/theme/lv_palette.dart';
 import 'package:otzaria/low_vision/view/lv_navigation.dart';
 import 'package:otzaria/low_vision/view/lv_toc_screen.dart';
+import 'package:otzaria/data/repository/data_repository.dart';
+import 'package:otzaria/low_vision/view/widgets/lv_image_filters.dart';
 import 'package:otzaria/low_vision/view/widgets/lv_reader_chrome.dart';
 import 'package:otzaria/low_vision/view/widgets/lv_widgets.dart';
 import 'package:otzaria/models/books.dart';
@@ -37,6 +39,25 @@ class _LvPdfReaderState extends State<LvPdfReader> {
   List<LvTocItem> _outline = const [];
   List<LvTocItem> _outlineFlat = const [];
   LowVisionCubit? _cubit;
+
+  /// גרסת הטקסט של אותו ספר, אם יש; מאפשרת מעבר מהצילום לטקסט.
+  Book? _textVersion;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_findTextVersion());
+  }
+
+  Future<void> _findTextVersion() async {
+    try {
+      final library = await DataRepository.instance.library;
+      final text = library.getCompanionBook(widget.book, TextBook);
+      if (mounted && text != null) setState(() => _textVersion = text);
+    } catch (_) {
+      // בלי ספרייה נשארים בתצוגת הצילום בלבד.
+    }
+  }
 
   @override
   void didChangeDependencies() {
@@ -150,10 +171,41 @@ class _LvPdfReaderState extends State<LvPdfReader> {
   }
 
   /// שחור על לבן הוא העמוד המקורי כפי שהוא; שאר הערכות ממופות מחדש.
-  static Widget _withPalette(LvPalette palette, Widget child) =>
-      palette == LvPalette.blackOnWhite
-      ? child
-      : ColorFiltered(colorFilter: _filterFor(palette), child: child);
+  /// ערכת הצבעים והחידוד מוחלים על התמונה: קודם חידוד (ניגודיות), ואחר כך
+  /// מיפוי הצבעים. בשחור על לבן בלי חידוד העמוד מוצג כמות שהוא.
+  static Widget _withPalette(
+    LvPalette palette,
+    double contrast,
+    Widget child,
+  ) {
+    var result = child;
+    if (contrast > 1) {
+      result = ColorFiltered(
+        colorFilter: lvSharpenFilter(contrast),
+        child: result,
+      );
+    }
+    if (palette != LvPalette.blackOnWhite) {
+      result = ColorFiltered(colorFilter: _filterFor(palette), child: result);
+    }
+    return result;
+  }
+
+  /// רינדור חד יותר: ה-PDF מצויר ברזולוציה גבוהה מהנדרש, בלי לחרוג מתקרה שלא
+  /// תכביד על הזיכרון.
+  static double? _renderScale(
+    PdfPage page,
+    double estimated,
+    double boost,
+  ) {
+    if (boost <= 1) return null;
+    final boosted = estimated * boost;
+    const maxSide = 7000.0;
+    final side = math.max(page.width, page.height) * boosted;
+    return side > maxSide
+        ? maxSide / math.max(page.width, page.height)
+        : boosted;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -172,6 +224,19 @@ class _LvPdfReaderState extends State<LvPdfReader> {
       onZoomOut: () {
         if (_controller.isReady) unawaited(_controller.zoomDown());
       },
+      extraActions: [
+        if (_textVersion != null)
+          LvChromeAction(
+            label: 'טקסט',
+            icon: FluentIcons.text_t_24_filled,
+            onPressed: () => lvOpenBook(
+              context,
+              _textVersion!,
+              replace: true,
+              forceText: true,
+            ),
+          ),
+      ],
       onFirst: () => _goTo(1),
       onLast: () => _goTo(_pageCount),
       onNextSection: hasOutline ? _nextSection : null,
@@ -185,6 +250,7 @@ class _LvPdfReaderState extends State<LvPdfReader> {
         color: state.palette.background,
         child: _withPalette(
           state.palette,
+          state.pdfContrast,
           PdfViewer.file(
             widget.book.path,
             controller: _controller,
@@ -201,6 +267,9 @@ class _LvPdfReaderState extends State<LvPdfReader> {
               onGeneralTap: (context, controller, details) => true,
               onViewerReady: _onReady,
               onPageChanged: _onPageChanged,
+              getPageRenderingScale: (context, page, controller, estimated) =>
+                  _renderScale(page, estimated, state.pdfRenderBoost) ??
+                  estimated,
               margin: 0,
               // ללא תנופה: העמוד נעצר כשהאצבע נעצרת, כמו ספר פיזי מתחת למצלמה.
               interactionEndFrictionCoefficient: state.glide

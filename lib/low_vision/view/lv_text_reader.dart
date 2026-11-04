@@ -4,10 +4,14 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otzaria/data/data_providers/file_system_data_provider.dart';
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:otzaria/data/repository/data_repository.dart';
 import 'package:otzaria/data/repository/text_book_repository.dart';
 import 'package:otzaria/low_vision/cubit/low_vision_cubit.dart';
 import 'package:otzaria/low_vision/cubit/low_vision_state.dart';
 import 'package:otzaria/low_vision/models/lv_toc.dart';
+import 'package:otzaria/low_vision/page_shape/lv_page_shape_loader.dart';
+import 'package:otzaria/low_vision/page_shape/lv_page_shape_view.dart';
 import 'package:otzaria/low_vision/theme/lv_metrics.dart';
 import 'package:otzaria/low_vision/view/lv_navigation.dart';
 import 'package:otzaria/low_vision/view/lv_toc_screen.dart';
@@ -27,6 +31,7 @@ class LvTextReader extends StatefulWidget {
     this.source,
     this.loadText,
     this.loadToc,
+    this.pageShapeLoader,
   });
 
   /// הספר לטעינה.
@@ -38,6 +43,7 @@ class LvTextReader extends StatefulWidget {
   /// לבדיקות.
   final Future<String> Function()? loadText;
   final Future<List<TocEntry>> Function()? loadToc;
+  final LvPageShapeLoader? pageShapeLoader;
 
   @override
   State<LvTextReader> createState() => _LvTextReaderState();
@@ -58,6 +64,20 @@ class _LvTextReaderState extends State<LvTextReader> {
   double? _lastScale;
   LowVisionCubit? _cubit;
 
+  // --- צורת הדף ---
+  late final LvPageShapeLoader _pageShapeLoader =
+      widget.pageShapeLoader ?? LvPageShapeLoader();
+  final _pageShapeController = LvPageShapeController();
+  List<LvPanelSpec> _panelSpecs = const [];
+  bool _pageShapeAvailable = false;
+  bool _pageShape = false;
+  List<_Section> _sections = const [];
+  int _sectionIndex = 0;
+  Future<LvPageShapeData>? _pageData;
+
+  /// גרסת הצילום (PDF) של אותו ספר, אם יש.
+  Book? _pdfVersion;
+
   Book get _tracked => widget.source ?? widget.book;
 
   @override
@@ -65,6 +85,17 @@ class _LvTextReaderState extends State<LvTextReader> {
     super.initState();
     _positions.itemPositions.addListener(_onPositions);
     unawaited(_load());
+    unawaited(_findPdfVersion());
+  }
+
+  Future<void> _findPdfVersion() async {
+    try {
+      final library = await DataRepository.instance.library;
+      final pdf = library.getCompanionBook(_tracked, PdfBook);
+      if (mounted && pdf != null) setState(() => _pdfVersion = pdf);
+    } catch (_) {
+      // בלי ספרייה נשארים בתצוגת הטקסט.
+    }
   }
 
   @override
@@ -123,6 +154,114 @@ class _LvTextReaderState extends State<LvTextReader> {
     } catch (_) {
       // בלי תוכן עניינים הקורא ממשיך לעבוד, בלי כפתורי הסעיפים.
     }
+    if (mounted) unawaited(_detectPageShape());
+  }
+
+  // ---------- צורת הדף ----------
+
+  /// עלים של עץ התוכן (למשל עמוד בגמרא), לפי סדר הטקסט. בלי תוכן עניינים:
+  /// קטעים קבועים של 40 שורות.
+  List<_Section> _buildSections(int lineCount) {
+    if (lineCount <= 0) return const [];
+    final leaves = <LvTocItem>[];
+    void walk(List<LvTocItem> items) {
+      for (final item in items) {
+        if (item.children.isEmpty) {
+          leaves.add(item);
+        } else {
+          walk(item.children);
+        }
+      }
+    }
+
+    walk(_tocTree);
+    final starts = <int, String>{};
+    for (final leaf in leaves) {
+      if (leaf.target >= 0 && leaf.target < lineCount) {
+        starts.putIfAbsent(leaf.target, () => leaf.title);
+      }
+    }
+    if (starts.isEmpty) {
+      return [
+        for (var s = 0, n = 1; s < lineCount; s += 40, n++)
+          _Section('חלק $n', s, math.min(s + 39, lineCount - 1)),
+      ];
+    }
+    final sorted = starts.keys.toList()..sort();
+    final result = <_Section>[];
+    if (sorted.first > 0) result.add(_Section('פתיחה', 0, sorted.first - 1));
+    for (var i = 0; i < sorted.length; i++) {
+      final end = i + 1 < sorted.length ? sorted[i + 1] - 1 : lineCount - 1;
+      result.add(_Section(starts[sorted[i]]!, sorted[i], end));
+    }
+    return result;
+  }
+
+  int _sectionAtLine(int line) {
+    for (var i = _sections.length - 1; i >= 0; i--) {
+      if (_sections[i].start <= line) return i;
+    }
+    return 0;
+  }
+
+  Future<void> _detectPageShape() async {
+    final lines = _lines;
+    if (lines == null || lines.isEmpty) return;
+    try {
+      final specs = await _pageShapeLoader.loadSpecs(widget.book);
+      if (!mounted) return;
+      setState(() {
+        _panelSpecs = specs;
+        _pageShapeAvailable = specs.isNotEmpty;
+        _sections = _buildSections(lines.length);
+      });
+      if (specs.isNotEmpty && (_cubit?.state.preferPageShape ?? false)) {
+        _enterPageShape();
+      }
+    } catch (_) {
+      // ספר בלי מפרשים מוגדרים: אין צורת הדף, והקורא הרגיל ממשיך לעבוד.
+    }
+  }
+
+  void _loadSection(int index) {
+    final lines = _lines;
+    if (lines == null || _sections.isEmpty) return;
+    final i = index.clamp(0, _sections.length - 1);
+    final section = _sections[i];
+    setState(() {
+      _sectionIndex = i;
+      _pageData = _pageShapeLoader.loadSection(
+        widget.book,
+        lines,
+        section.start,
+        section.end,
+        _panelSpecs,
+      );
+    });
+    _firstLine = section.start;
+    _cubit?.savePosition(_tracked, LvReadingPosition(section.start));
+  }
+
+  void _enterPageShape() {
+    if (_sections.isEmpty) return;
+    _pageShape = true;
+    _loadSection(_sectionAtLine(_firstLine));
+    _cubit?.setPreferPageShape(true);
+  }
+
+  void _exitPageShape() {
+    final start = _sections.isEmpty ? 0 : _sections[_sectionIndex].start;
+    setState(() => _pageShape = false);
+    _cubit?.setPreferPageShape(false);
+    _firstLine = start;
+    _leadingEdge = 0;
+  }
+
+  void _toggleView() => _pageShape ? _exitPageShape() : _enterPageShape();
+
+  void _gotoSection(int index) {
+    if (index < 0 || index >= _sections.length) return;
+    _loadSection(index);
   }
 
   void _onPositions() {
@@ -215,9 +354,12 @@ class _LvTextReaderState extends State<LvTextReader> {
       context,
       LvTocScreen(items: _tocTree, bookTitle: widget.book.title),
     );
-    if (target != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToLine(target));
+    if (target == null) return;
+    if (_pageShape) {
+      _loadSection(_sectionAtLine(target));
+      return;
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToLine(target));
   }
 
   // --- תצוגה ---
@@ -262,27 +404,63 @@ class _LvTextReaderState extends State<LvTextReader> {
     final percent = lines.length <= 1
         ? 100
         : ((_firstLine / (lines.length - 1)) * 100).round();
+    final inPageShape = _pageShape && _sections.isNotEmpty;
     return LvReaderChrome(
       book: _tracked,
-      progress: '$percent% מהספר',
-      sectionLabel: hasToc && section >= 0 ? _tocFlat[section].title : null,
-      onNext: () => _page(1),
-      onPrevious: () => _page(-1),
-      onZoomIn: context.read<LowVisionCubit>().zoomIn,
-      onZoomOut: context.read<LowVisionCubit>().zoomOut,
-      onScrollUp: () => _scrollBy(-1),
-      onScrollDown: () => _scrollBy(1),
-      onFirst: () => _jumpToLine(0),
-      onLast: () => _jumpToLine(lines.length - 1),
-      onNextSection: hasToc ? _nextSection : null,
-      onPreviousSection: hasToc ? _previousSection : null,
+      progress: inPageShape
+          ? 'עמוד ${_sectionIndex + 1} מתוך ${_sections.length}'
+          : '$percent% מהספר',
+      sectionLabel: inPageShape
+          ? _sections[_sectionIndex].title
+          : (hasToc && section >= 0 ? _tocFlat[section].title : null),
+      // בצורת הדף "עמוד הבא" הוא הקטע הבא (למשל עמוד בגמרא), והזום מגדיל את הדף.
+      onNext: inPageShape
+          ? () => _gotoSection(_sectionIndex + 1)
+          : () => _page(1),
+      onPrevious: inPageShape
+          ? () => _gotoSection(_sectionIndex - 1)
+          : () => _page(-1),
+      onZoomIn: inPageShape
+          ? _pageShapeController.zoomIn
+          : context.read<LowVisionCubit>().zoomIn,
+      onZoomOut: inPageShape
+          ? _pageShapeController.zoomOut
+          : context.read<LowVisionCubit>().zoomOut,
+      onScrollUp: () =>
+          inPageShape ? _pageShapeController.scroll(-1) : _scrollBy(-1),
+      onScrollDown: () =>
+          inPageShape ? _pageShapeController.scroll(1) : _scrollBy(1),
+      onFirst: () => inPageShape ? _gotoSection(0) : _jumpToLine(0),
+      onLast: () => inPageShape
+          ? _gotoSection(_sections.length - 1)
+          : _jumpToLine(lines.length - 1),
+      onNextSection: hasToc && !inPageShape ? _nextSection : null,
+      onPreviousSection: hasToc && !inPageShape ? _previousSection : null,
       onContents: hasToc ? _openContents : null,
-      child: LayoutBuilder(
-        builder: (context, box) {
-          _viewport = box.maxHeight;
-          return _buildList(context, lines, state);
-        },
-      ),
+      extraActions: [
+        if (_pageShapeAvailable)
+          LvChromeAction(
+            label: _pageShape ? 'טקסט' : 'צורת הדף',
+            icon: _pageShape
+                ? FluentIcons.text_t_24_filled
+                : FluentIcons.document_one_page_24_filled,
+            onPressed: _toggleView,
+          ),
+        if (_pdfVersion != null)
+          LvChromeAction(
+            label: 'צילום',
+            icon: FluentIcons.image_24_filled,
+            onPressed: () => lvOpenBook(context, _pdfVersion!, replace: true),
+          ),
+      ],
+      child: inPageShape
+          ? _pageShapeBody(state)
+          : LayoutBuilder(
+              builder: (context, box) {
+                _viewport = box.maxHeight;
+                return _buildList(context, lines, state);
+              },
+            ),
     );
   }
 
@@ -298,6 +476,27 @@ class _LvTextReaderState extends State<LvTextReader> {
         _itemScroll.jumpTo(index: line, alignment: edge);
       }
     });
+  }
+
+  Widget _pageShapeBody(LowVisionState state) {
+    return FutureBuilder<LvPageShapeData>(
+      future: _pageData,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const LvMessage('לא ניתן לטעון את צורת הדף');
+        }
+        final data = snapshot.data;
+        if (data == null) return const LvMessage('הדף נטען…', busy: true);
+        return LvPageShapeView(
+          data: data,
+          controller: _pageShapeController,
+          foreground: state.palette.foreground,
+          background: state.palette.background,
+          showNikud: state.showNikud,
+          glide: state.glide,
+        );
+      },
+    );
   }
 
   Widget _buildList(
@@ -344,4 +543,13 @@ class _LvTextReaderState extends State<LvTextReader> {
       },
     );
   }
+}
+
+/// קטע בספר שמוצג כעמוד אחד בצורת הדף: שורות [start]..[end] (כולל).
+class _Section {
+  const _Section(this.title, this.start, this.end);
+
+  final String title;
+  final int start;
+  final int end;
 }

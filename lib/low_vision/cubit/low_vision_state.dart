@@ -39,6 +39,8 @@ class LowVisionState extends Equatable {
     this.keyboardSizeIndex = 2,
     this.keysOnTouchDown = true,
     this.searchSideBySide = false,
+    this.pdfSharpnessIndex = 1,
+    this.preferPageShape = false,
     this.keyOverrides = const {},
   });
 
@@ -110,6 +112,19 @@ class LowVisionState extends Equatable {
   /// האם אות במקלדת נכנסת ברגע הנגיעה (כמו במקלדת טלפון), בלי להמתין להרמה.
   final bool keysOnTouchDown;
 
+  /// חידוד עמודים מצולמים: ניגודיות ורינדור ברזולוציה גבוהה יותר.
+  final int pdfSharpnessIndex;
+  static const List<String> pdfSharpnessLabels = ['כבוי', 'חד', 'חד מאוד'];
+
+  /// כמה להגביר ניגודיות (1 = ללא שינוי), לפי רמת החידוד.
+  double get pdfContrast => const [1.0, 1.5, 2.4][pdfSharpnessIndex];
+
+  /// מכפיל רזולוציית הרינדור של עמוד ה-PDF.
+  double get pdfRenderBoost => const [1.0, 1.4, 1.8][pdfSharpnessIndex];
+
+  /// פותח בצורת הדף ספרים שתומכים בה (נבחר בפעם האחרונה שהוחלף).
+  final bool preferPageShape;
+
   /// במסך רחב: מקלדת ותוצאות זו לצד זו (המקלדת בגובה מלא), במקום מקלדת מתחת.
   final bool searchSideBySide;
 
@@ -144,6 +159,8 @@ class LowVisionState extends Equatable {
     int? keyboardSizeIndex,
     bool? keysOnTouchDown,
     bool? searchSideBySide,
+    int? pdfSharpnessIndex,
+    bool? preferPageShape,
     Map<String, List<int>>? keyOverrides,
   }) => LowVisionState(
     loaded: loaded ?? this.loaded,
@@ -161,6 +178,8 @@ class LowVisionState extends Equatable {
     keyboardSizeIndex: keyboardSizeIndex ?? this.keyboardSizeIndex,
     keysOnTouchDown: keysOnTouchDown ?? this.keysOnTouchDown,
     searchSideBySide: searchSideBySide ?? this.searchSideBySide,
+    pdfSharpnessIndex: pdfSharpnessIndex ?? this.pdfSharpnessIndex,
+    preferPageShape: preferPageShape ?? this.preferPageShape,
     keyOverrides: keyOverrides ?? this.keyOverrides,
   );
 
@@ -181,6 +200,8 @@ class LowVisionState extends Equatable {
     keyboardSizeIndex,
     keysOnTouchDown,
     searchSideBySide,
+    pdfSharpnessIndex,
+    preferPageShape,
     keyOverrides,
   ];
 }

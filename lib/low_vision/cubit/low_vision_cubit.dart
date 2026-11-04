@@ -78,6 +78,12 @@ class LowVisionCubit extends Cubit<LowVisionState> {
             ),
             keysOnTouchDown: json['keysOnTouchDown'] as bool? ?? true,
             searchSideBySide: json['searchSideBySide'] as bool? ?? false,
+            pdfSharpnessIndex: _index(
+              json['pdfSharpness'],
+              1,
+              LowVisionState.pdfSharpnessLabels.length,
+            ),
+            preferPageShape: json['preferPageShape'] as bool? ?? false,
             keyOverrides: {
               for (final e
                   in (json['keys'] as Map<String, dynamic>? ?? {}).entries)
@@ -247,6 +253,17 @@ class LowVisionCubit extends Cubit<LowVisionState> {
     _scheduleSave();
   }
 
+  void setPdfSharpness(int index) {
+    emit(state.copyWith(pdfSharpnessIndex: index));
+    _scheduleSave();
+  }
+
+  void setPreferPageShape(bool value) {
+    if (state.preferPageShape == value) return;
+    emit(state.copyWith(preferPageShape: value));
+    _scheduleSave();
+  }
+
   void setSearchSideBySide(bool value) {
     emit(state.copyWith(searchSideBySide: value));
     _scheduleSave();
@@ -298,6 +315,8 @@ class LowVisionCubit extends Cubit<LowVisionState> {
         'keyboardSize': state.keyboardSizeIndex,
         'keysOnTouchDown': state.keysOnTouchDown,
         'searchSideBySide': state.searchSideBySide,
+        'pdfSharpness': state.pdfSharpnessIndex,
+        'preferPageShape': state.preferPageShape,
         'keys': state.keyOverrides,
       });
       await (await _prefs()).setString(_prefsKey, data);
