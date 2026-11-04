@@ -14,6 +14,7 @@ import 'package:otzaria/low_vision/view/lv_gestures_screen.dart';
 import 'package:otzaria/low_vision/view/lv_input_test_screen.dart';
 import 'package:otzaria/low_vision/view/lv_navigation.dart';
 import 'package:otzaria/low_vision/view/lv_shell_controller.dart';
+import 'package:otzaria/low_vision/view/widgets/lv_pressable.dart';
 import 'package:otzaria/low_vision/view/widgets/lv_widgets.dart';
 
 String lvKeyLabel(int keyId) {
@@ -154,25 +155,70 @@ class _LvSettingsScreenState extends State<LvSettingsScreen> {
                 ),
               ),
               _Section(
-                title: 'כפתורים פיזיים במכשיר (חוגה, חזרה)',
+                title: 'כפתורים פיזיים וחוגה',
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'כפתור "חזרה" של המכשיר חוזר מסך אחד אחורה. אם החוגה '
-                      'שולחת מקשים, אפשר לשייך אותם להגדלה והקטנה בהמשך '
-                      'המסך. כדי לגלות מה היא שולחת, פתחו את הבדיקה ולחצו.',
+                      'כפתור "חזרה" של המכשיר חוזר מסך אחד אחורה. חוגת עוצמת הקול '
+                      'גוללת את הדף בצעדים קטנים (למטה בסיבוב לכיוון אחד, '
+                      'ולמעלה בכיוון השני), ואפשר לשייך מחדש כל מקש בהמשך '
+                      'המסך. הבדיקה מציגה מה כל כפתור ונגיעה שולחים.',
                       style: _bodyStyle(m, p),
                     ),
                     SizedBox(height: m.gap),
                     LvButton(
-                      label: 'בדיקת כפתורי המכשיר',
+                      label: 'בדיקת כפתורים ונגיעה',
                       icon: FluentIcons.hand_left_24_filled,
                       filled: false,
                       onPressed: () => lvPush<void>(
                         context,
                         const LvInputTestScreen(),
                       ),
+                    ),
+                  ],
+                ),
+              ),
+              _Section(
+                title: 'רגישות נגיעה וגדלים',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'נגיעה חזקה גורמת לאצבע לזוז מעט. ברגישות גבוהה נגיעה '
+                      'נקלטת גם אם האצבע זזה. ההגדרות האלה חלות על כל המסכים.',
+                      style: _bodyStyle(m, p),
+                    ),
+                    SizedBox(height: m.gap),
+                    _CycleButton(
+                      title: 'רגישות נגיעה',
+                      labels: LowVisionState.tapToleranceLabels,
+                      index: state.tapToleranceIndex,
+                      onChanged: cubit.setTapTolerance,
+                    ),
+                    SizedBox(height: m.gap),
+                    _CycleButton(
+                      title: 'גודל מסך הבית',
+                      labels: LowVisionState.homeSizeLabels,
+                      index: state.homeSizeIndex,
+                      onChanged: cubit.setHomeSize,
+                    ),
+                    SizedBox(height: m.gap),
+                    _CycleButton(
+                      title: 'גודל המקלדת',
+                      labels: LowVisionState.keyboardSizeLabels,
+                      index: state.keyboardSizeIndex,
+                      onChanged: cubit.setKeyboardSize,
+                    ),
+                    SizedBox(height: m.gap),
+                    LvButton(
+                      label: state.keysOnTouchDown
+                          ? 'אות נכנסת ברגע הנגיעה (הקישו לשינוי)'
+                          : 'אות נכנסת בהרמת האצבע (הקישו לשינוי)',
+                      icon: FluentIcons.keyboard_24_filled,
+                      filled: false,
+                      onPressed: () =>
+                          cubit.setKeysOnTouchDown(!state.keysOnTouchDown),
                     ),
                   ],
                 ),
@@ -303,30 +349,27 @@ class _PaletteChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final m = LvMetrics.of(context);
-    return Material(
-      color: palette.background,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(m.radius),
-        side: BorderSide(
-          color: selected ? palette.foreground : Colors.grey,
-          width: selected ? m.border * 3 : m.border,
+    return LvPressable(
+      onTap: onTap,
+      builder: (context, pressed) => Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: m.gap * 2,
+          vertical: m.gap * 1.5,
         ),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(m.radius),
-        child: Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: m.gap * 2,
-            vertical: m.gap * 1.5,
+        decoration: BoxDecoration(
+          color: pressed ? palette.foreground : palette.background,
+          borderRadius: BorderRadius.circular(m.radius),
+          border: Border.all(
+            color: selected ? palette.foreground : Colors.grey,
+            width: selected ? m.border * 3 : m.border,
           ),
-          child: Text(
-            '${selected ? '✓ ' : ''}${palette.label}',
-            style: TextStyle(
-              color: palette.foreground,
-              fontSize: m.label,
-              fontWeight: FontWeight.w900,
-            ),
+        ),
+        child: Text(
+          '${selected ? '✓ ' : ''}${palette.label}',
+          style: TextStyle(
+            color: pressed ? palette.background : palette.foreground,
+            fontSize: m.label,
+            fontWeight: FontWeight.w900,
           ),
         ),
       ),
@@ -409,4 +452,27 @@ class _UpdateSection extends StatelessWidget {
       },
     );
   }
+}
+
+/// כפתור שמחליף בין מספר אפשרויות בכל לחיצה, ומציג את הנוכחית.
+class _CycleButton extends StatelessWidget {
+  const _CycleButton({
+    required this.title,
+    required this.labels,
+    required this.index,
+    required this.onChanged,
+  });
+
+  final String title;
+  final List<String> labels;
+  final int index;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) => LvButton(
+    label: '$title: ${labels[index]} (הקישו לשינוי)',
+    icon: FluentIcons.arrow_sync_24_filled,
+    filled: false,
+    onPressed: () => onChanged((index + 1) % labels.length),
+  );
 }

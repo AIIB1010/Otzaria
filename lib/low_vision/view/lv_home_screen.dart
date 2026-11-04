@@ -10,6 +10,7 @@ import 'package:otzaria/low_vision/view/lv_books_screen.dart';
 import 'package:otzaria/low_vision/view/lv_navigation.dart';
 import 'package:otzaria/low_vision/view/lv_search_screen.dart';
 import 'package:otzaria/low_vision/view/lv_settings_screen.dart';
+import 'package:otzaria/low_vision/view/widgets/lv_pressable.dart';
 import 'package:otzaria/low_vision/view/widgets/lv_widgets.dart';
 
 /// מסך הבית: שני כפתורים ענקיים בלבד, ואייקון קטן להגדרות.
@@ -112,18 +113,21 @@ class _LvHomeScreenState extends State<LvHomeScreen> {
       );
     }
     final count = context.select((LowVisionCubit c) => c.openBooks.length);
+    final scale = context.select((LowVisionCubit c) => c.state.homeScale);
     final loading = _status == _LibraryStatus.loading;
     final books = _BigChoice(
       icon: FluentIcons.book_24_filled,
       title: 'הספרים שלי',
       subtitle: count == 0 ? 'עדיין אין ספרים' : '$count ספרים פתוחים',
       onTap: _openBooks,
+      scale: scale,
     );
     final search = _BigChoice(
       icon: FluentIcons.search_24_filled,
       title: 'חיפוש ספרים',
       subtitle: loading ? 'הספרייה נטענת…' : 'הקלידו שם ספר',
       onTap: loading ? null : _openSearch,
+      scale: scale,
     );
     return m.isWide
         ? Row(
@@ -149,12 +153,16 @@ class _BigChoice extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
+    required this.scale,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
   final VoidCallback? onTap;
+
+  /// מכפיל גודל האייקון והכיתוב (הגדרה "גודל מסך הבית").
+  final double scale;
 
   @override
   Widget build(BuildContext context) {
@@ -163,50 +171,57 @@ class _BigChoice extends StatelessWidget {
     return Semantics(
       button: true,
       label: title,
+      onTap: onTap,
       excludeSemantics: true,
       child: Opacity(
         opacity: onTap == null ? 0.5 : 1,
-        child: Material(
-          color: p.accent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(m.radius * 1.5),
-            side: BorderSide(color: p.foreground, width: m.border * 1.5),
-          ),
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(m.radius * 1.5),
-            child: Center(
-              child: Padding(
-                padding: EdgeInsets.all(m.gap * 2),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(icon, size: m.unit * 3, color: p.onAccent),
-                      SizedBox(height: m.gap),
-                      Text(
-                        title,
-                        style: TextStyle(
-                          color: p.onAccent,
-                          fontSize: m.unit * 1.3,
-                          fontWeight: FontWeight.w900,
-                        ),
+        child: LvPressable(
+          onTap: onTap,
+          builder: (context, pressed) {
+            final bg = pressed ? p.background : p.accent;
+            final fg = pressed ? p.foreground : p.onAccent;
+            return Container(
+              decoration: BoxDecoration(
+                color: bg,
+                borderRadius: BorderRadius.circular(m.radius * 1.5),
+                border: Border.all(color: p.foreground, width: m.border * 1.5),
+              ),
+              alignment: Alignment.center,
+              padding: EdgeInsets.all(m.gap * 2),
+              // האייקון הוא העיקר: גדול בהרבה מהכיתוב, ומתכווץ רק אם אין מקום.
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon, size: m.unit * 4.5 * scale, color: fg),
+                    SizedBox(height: m.gap * scale),
+                    Text(
+                      // כל מילה בשורה משלה, כדי שהכיתוב יוכל להיות גדול.
+                      title.split(' ').join('\n'),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: fg,
+                        fontSize: m.unit * 1.5 * scale,
+                        fontWeight: FontWeight.w900,
+                        height: 1.05,
                       ),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          color: p.onAccent,
-                          fontSize: m.label,
-                          fontWeight: FontWeight.w600,
-                        ),
+                    ),
+                    SizedBox(height: m.gap * scale),
+                    Text(
+                      subtitle,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: fg,
+                        fontSize: m.label * scale,
+                        fontWeight: FontWeight.w600,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
@@ -227,17 +242,22 @@ class _SettingsCorner extends StatelessWidget {
     return Semantics(
       button: true,
       label: 'הגדרות',
+      onTap: onTap,
       excludeSemantics: true,
-      child: InkResponse(
+      child: LvPressable(
         onTap: onTap,
-        radius: size,
-        child: SizedBox(
-          width: size,
-          height: size,
+        builder: (context, pressed) => Container(
+          // אזור המגע גדול מהאייקון, כדי שהעוזר ימצא אותו בקלות.
+          width: size * 1.6,
+          height: size * 1.6,
+          alignment: Alignment.center,
+          decoration: pressed
+              ? BoxDecoration(color: p.foreground, shape: BoxShape.circle)
+              : null,
           child: Icon(
             FluentIcons.settings_24_regular,
             size: size * 0.7,
-            color: p.foreground.withValues(alpha: 0.7),
+            color: pressed ? p.background : p.foreground.withValues(alpha: 0.7),
           ),
         ),
       ),

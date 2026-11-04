@@ -9,6 +9,9 @@ enum LvAction {
   previous('עמוד קודם', [LogicalKeyboardKey.pageUp]),
   down('למטה / הפריט הבא', [LogicalKeyboardKey.arrowDown]),
   up('למעלה / הפריט הקודם', [LogicalKeyboardKey.arrowUp]),
+  // חוגה פיזית שמסתובבת: בהקשה בעוצמת קול עולה/יורדת, כאן גוללת בצעדים קטנים.
+  scrollDown('גלילה קטנה למטה', [LogicalKeyboardKey.audioVolumeUp]),
+  scrollUp('גלילה קטנה למעלה', [LogicalKeyboardKey.audioVolumeDown]),
   select('בחירה / אישור', [
     LogicalKeyboardKey.enter,
     LogicalKeyboardKey.numpadEnter,

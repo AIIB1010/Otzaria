@@ -1,10 +1,12 @@
-import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:otzaria/low_vision/cubit/low_vision_cubit.dart';
 import 'package:otzaria/low_vision/theme/lv_metrics.dart';
+import 'package:otzaria/low_vision/view/widgets/lv_pressable.dart';
 import 'package:otzaria/low_vision/view/widgets/lv_widgets.dart';
 
 enum _Layout { hebrew, digits }
@@ -74,6 +76,7 @@ class _LvKeyboardState extends State<LvKeyboard> {
                     Expanded(
                       child: _Key(
                         label: key,
+                        typing: true,
                         onTap: () => widget.onText(key),
                       ),
                     ),
@@ -94,7 +97,11 @@ class _LvKeyboardState extends State<LvKeyboard> {
                 SizedBox(width: gap),
                 Expanded(
                   flex: 4,
-                  child: _Key(label: 'רווח', onTap: () => widget.onText(' ')),
+                  child: _Key(
+                    label: 'רווח',
+                    typing: true,
+                    onTap: () => widget.onText(' '),
+                  ),
                 ),
                 SizedBox(width: gap),
                 Expanded(
@@ -130,9 +137,9 @@ class _LvKeyboardState extends State<LvKeyboard> {
   }
 }
 
-/// מקש במקלדת. בזמן לחיצה הוא הופך להפוך-צבעים מלא (שחור עם כיתוב לבן בערכה
-/// הבהירה), וההדגשה נשארת גלויה לפחות [_minPressedTime] גם בנגיעה קצרה.
-class _Key extends StatefulWidget {
+/// מקש במקלדת. בזמן נגיעה הוא הופך לשחור מלא עם כיתוב לבן (הפוך בערכות
+/// כהות). אות נכנסת ברגע הנגיעה כשההגדרה "הקלדה בנגיעה" פעילה.
+class _Key extends StatelessWidget {
   const _Key({
     this.label,
     this.icon,
@@ -140,6 +147,7 @@ class _Key extends StatefulWidget {
     this.accent = false,
     required this.onTap,
     this.onLongPress,
+    this.typing = false,
   });
 
   final String? label;
@@ -149,110 +157,82 @@ class _Key extends StatefulWidget {
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
 
-  @override
-  State<_Key> createState() => _KeyState();
-}
-
-const _minPressedTime = Duration(milliseconds: 160);
-
-class _KeyState extends State<_Key> {
-  bool _pressed = false;
-  DateTime _pressedAt = DateTime.fromMillisecondsSinceEpoch(0);
-  Timer? _releaseTimer;
-
-  @override
-  void dispose() {
-    _releaseTimer?.cancel();
-    super.dispose();
-  }
-
-  void _press() {
-    _releaseTimer?.cancel();
-    _pressedAt = DateTime.now();
-    setState(() => _pressed = true);
-  }
-
-  void _release() {
-    final remaining = _minPressedTime - DateTime.now().difference(_pressedAt);
-    _releaseTimer?.cancel();
-    if (remaining <= Duration.zero) {
-      if (mounted) setState(() => _pressed = false);
-      return;
-    }
-    _releaseTimer = Timer(remaining, () {
-      if (mounted) setState(() => _pressed = false);
-    });
-  }
+  /// מקש שמכניס טקסט (אות, רווח): מופעל ברגע הנגיעה לפי ההגדרה.
+  final bool typing;
 
   @override
   Widget build(BuildContext context) {
     final m = LvMetrics.of(context);
     final p = lvPaletteOf(context);
-    final bg = _pressed
-        ? p.foreground
-        : widget.accent
-        ? p.accent
-        : p.surface;
-    final fg = _pressed
-        ? p.background
-        : widget.accent
-        ? p.onAccent
-        : p.foreground;
-    final label = widget.label;
+    final onDown =
+        typing && context.select((LowVisionCubit c) => c.state.keysOnTouchDown);
     return LayoutBuilder(
       builder: (context, box) {
         final side = math.min(box.maxHeight, box.maxWidth * 1.4);
         final fontSize = math.max(12.0, side * 0.52);
         return Semantics(
           button: true,
-          label: widget.semantic ?? label,
+          label: semantic ?? label,
+          onTap: onTap,
           excludeSemantics: true,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTapDown: (_) => _press(),
-            onTapUp: (_) => _release(),
-            onTapCancel: _release,
+          child: LvPressable(
+            activateOnDown: onDown,
             onTap: () {
               HapticFeedback.selectionClick();
-              widget.onTap();
+              onTap();
             },
-            onLongPress: widget.onLongPress,
-            child: Container(
-              decoration: BoxDecoration(
-                color: bg,
-                borderRadius: BorderRadius.circular(m.radius * 0.7),
-                border: Border.all(color: p.foreground, width: m.border * 0.7),
-              ),
-              child: Center(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (widget.icon != null)
-                          Icon(widget.icon, size: fontSize, color: fg),
-                        if (widget.icon != null && label != null)
-                          SizedBox(width: fontSize * 0.2),
-                        if (label != null)
-                          Text(
-                            label,
-                            style: TextStyle(
-                              color: fg,
-                              fontSize: label.length > 1
-                                  ? fontSize * 0.85
-                                  : fontSize,
-                              fontWeight: FontWeight.w800,
-                              height: 1.0,
+            onLongPress: onLongPress,
+            builder: (context, pressed) {
+              final bg = pressed
+                  ? p.foreground
+                  : accent
+                  ? p.accent
+                  : p.surface;
+              final fg = pressed
+                  ? p.background
+                  : accent
+                  ? p.onAccent
+                  : p.foreground;
+              return Container(
+                decoration: BoxDecoration(
+                  color: bg,
+                  borderRadius: BorderRadius.circular(m.radius * 0.7),
+                  border: Border.all(
+                    color: p.foreground,
+                    width: m.border * 0.7,
+                  ),
+                ),
+                child: Center(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (icon != null)
+                            Icon(icon, size: fontSize, color: fg),
+                          if (icon != null && label != null)
+                            SizedBox(width: fontSize * 0.2),
+                          if (label != null)
+                            Text(
+                              label!,
+                              style: TextStyle(
+                                color: fg,
+                                fontSize: label!.length > 1
+                                    ? fontSize * 0.85
+                                    : fontSize,
+                                fontWeight: FontWeight.w800,
+                                height: 1.0,
+                              ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
         );
       },

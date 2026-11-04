@@ -17,12 +17,45 @@ class LvInputTestScreen extends StatefulWidget {
 
 class _LvInputTestScreenState extends State<LvInputTestScreen> {
   final _events = <String>[];
+  final _touchStart = <int, Offset>{};
+  final _touchTime = <int, Stopwatch>{};
+  final _touchMaxTravel = <int, double>{};
 
   void _add(String text) {
     setState(() {
       _events.insert(0, text);
       if (_events.length > 12) _events.removeLast();
     });
+  }
+
+  void _onTouchDown(PointerDownEvent e) {
+    _touchStart[e.pointer] = e.position;
+    _touchTime[e.pointer] = Stopwatch()..start();
+    _touchMaxTravel[e.pointer] = 0;
+  }
+
+  void _onTouchMove(PointerMoveEvent e) {
+    final start = _touchStart[e.pointer];
+    if (start == null) return;
+    final travel = (e.position - start).distance;
+    if (travel > (_touchMaxTravel[e.pointer] ?? 0)) {
+      _touchMaxTravel[e.pointer] = travel;
+    }
+  }
+
+  /// מציג מה הפאנל דיווח: משך, תזוזה, לחץ וגודל המגע. נגיעה שבוטלה על ידי
+  /// המערכת מסומנת בנפרד. כך רואים אם הנגיעות הקלות בכלל מגיעות לאפליקציה.
+  void _onTouchEnd(PointerEvent e, {required bool cancelled}) {
+    final ms = _touchTime.remove(e.pointer)?.elapsedMilliseconds ?? 0;
+    final travel = _touchMaxTravel.remove(e.pointer) ?? 0;
+    _touchStart.remove(e.pointer);
+    _add(
+      cancelled
+          ? 'נגיעה בוטלה על ידי המערכת ($ms ms)'
+          : 'נגיעה: $ms ms, תזוזה ${travel.round()} px, '
+                'לחץ ${e.pressure.toStringAsFixed(2)}, '
+                'גודל מגע ${e.radiusMajor.toStringAsFixed(1)}',
+    );
   }
 
   bool _onKey(KeyEvent event) {
@@ -49,6 +82,10 @@ class _LvInputTestScreenState extends State<LvInputTestScreen> {
         onRawKey: _onKey,
         actions: const {},
         child: Listener(
+          onPointerDown: _onTouchDown,
+          onPointerMove: _onTouchMove,
+          onPointerUp: (e) => _onTouchEnd(e, cancelled: false),
+          onPointerCancel: (e) => _onTouchEnd(e, cancelled: true),
           onPointerSignal: (signal) {
             if (signal is PointerScrollEvent) {
               _add(
@@ -58,7 +95,7 @@ class _LvInputTestScreenState extends State<LvInputTestScreen> {
             }
           },
           child: LvScaffold(
-            title: 'בדיקת כפתורים',
+            title: 'בדיקת כפתורים ונגיעה',
             holdToGoBack: false,
             onBack: () => Navigator.of(context).pop(),
             backLabel: 'יציאה',
@@ -66,8 +103,9 @@ class _LvInputTestScreenState extends State<LvInputTestScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'לחצו על כפתור כלשהו במכשיר: החוגה, כפתור החזרה, מקש או גלגלת. '
-                  'כאן יופיע מה שהאפליקציה קיבלה. אם לא מופיע כלום, הכפתור '
+                  'לחצו על כפתור כלשהו במכשיר (חוגה, חזרה, מקש, גלגלת), או געו במסך '
+                  'בנגיעה קלה וחזקה. כאן יופיע מה שהאפליקציה קיבלה, כולל משך וגודל '
+                  'כל נגיעה. אם לא מופיע כלום, הכפתור '
                   'מטופל על ידי המכשיר עצמו ואינו מגיע לאפליקציה.',
                   style: TextStyle(
                     color: p.foreground,

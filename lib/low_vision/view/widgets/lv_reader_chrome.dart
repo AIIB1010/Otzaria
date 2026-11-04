@@ -30,6 +30,8 @@ class LvReaderChrome extends StatefulWidget {
     required this.onPrevious,
     required this.onZoomIn,
     required this.onZoomOut,
+    this.onScrollUp,
+    this.onScrollDown,
     this.sectionLabel,
     this.onFirst,
     this.onLast,
@@ -52,6 +54,10 @@ class LvReaderChrome extends StatefulWidget {
   final VoidCallback onPrevious;
   final VoidCallback onZoomIn;
   final VoidCallback onZoomOut;
+
+  /// גלילה קטנה (חוגה פיזית). אם חסר, החוגה אינה פעילה במסך הזה.
+  final VoidCallback? onScrollUp;
+  final VoidCallback? onScrollDown;
   final VoidCallback? onFirst;
   final VoidCallback? onLast;
   final VoidCallback? onNextSection;
@@ -148,6 +154,9 @@ class _LvReaderChromeState extends State<LvReaderChrome> {
       LvAction.previous: widget.onPrevious,
       LvAction.down: widget.onNext,
       LvAction.up: widget.onPrevious,
+      if (widget.onScrollUp != null) LvAction.scrollUp: widget.onScrollUp!,
+      if (widget.onScrollDown != null)
+        LvAction.scrollDown: widget.onScrollDown!,
       LvAction.zoomIn: widget.onZoomIn,
       LvAction.zoomOut: widget.onZoomOut,
       LvAction.contrast: cubit.cyclePalette,

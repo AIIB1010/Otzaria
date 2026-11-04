@@ -318,16 +318,19 @@ void main() {
   });
 
   group('סימון פריט ברשימה', () {
-    Color? rowColor(WidgetTester tester) => tester
-        .widget<Material>(
-          find
-              .descendant(
-                of: find.byType(LvRow).first,
-                matching: find.byType(Material),
-              )
-              .first,
-        )
-        .color;
+    Color? rowColor(WidgetTester tester) =>
+        (tester
+                    .widget<Container>(
+                      find
+                          .descendant(
+                            of: find.byType(LvRow).first,
+                            matching: find.byType(Container),
+                          )
+                          .first,
+                    )
+                    .decoration!
+                as BoxDecoration)
+            .color;
 
     testWidgets('אין פריט מסומן כברירת מחדל, ורק מקלדת מסמנת', (tester) async {
       await pumpLowVision(
@@ -383,12 +386,12 @@ void main() {
       );
       await tester.tap(find.text('פתח'));
       await tester.pumpAndSettle();
-      expect(find.text('בדיקת כפתורים'), findsOneWidget);
+      expect(find.text('בדיקת כפתורים ונגיעה'), findsOneWidget);
 
       await tester.tap(find.text('יציאה'));
       await tester.pumpAndSettle();
       expect(find.text('פתח'), findsOneWidget);
-      expect(find.text('בדיקת כפתורים'), findsNothing);
+      expect(find.text('בדיקת כפתורים ונגיעה'), findsNothing);
     });
   });
 

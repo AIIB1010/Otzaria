@@ -5,6 +5,7 @@ import 'package:otzaria/low_vision/cubit/low_vision_cubit.dart';
 import 'package:otzaria/low_vision/theme/lv_metrics.dart';
 import 'package:otzaria/low_vision/theme/lv_palette.dart';
 import 'package:otzaria/low_vision/input/lv_touch_gesture.dart';
+import 'package:otzaria/low_vision/view/widgets/lv_pressable.dart';
 import 'package:otzaria/low_vision/view/widgets/lv_touch_zones.dart';
 import 'package:otzaria/widgets/misc/rtl_icon.dart';
 
@@ -44,67 +45,70 @@ class LvButton extends StatelessWidget {
     final m = LvMetrics.of(context);
     final p = lvPaletteOf(context);
     final enabled = onPressed != null;
-    final bg = filled ? p.accent : p.background;
-    final fg = filled ? p.onAccent : p.foreground;
     final iconSize = m.iconSize;
     return Semantics(
       button: true,
       enabled: enabled,
       label: label,
+      onTap: onPressed,
       excludeSemantics: true,
       child: Opacity(
         opacity: enabled ? 1 : 0.4,
-        child: Material(
-          color: bg,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(m.radius),
-            side: BorderSide(
-              color: selected ? p.foreground : p.accent,
-              width: selected ? m.border * 2.5 : m.border,
-            ),
-          ),
-          child: InkWell(
-            onTap: onPressed,
-            borderRadius: BorderRadius.circular(m.radius),
-            child: ConstrainedBox(
+        child: LvPressable(
+          onTap: onPressed,
+          builder: (context, pressed) {
+            // בלחיצה הצבעים מתהפכים, כדי שיהיה ברור שהנגיעה נקלטה.
+            final bg = pressed
+                ? (filled ? p.background : p.foreground)
+                : (filled ? p.accent : p.background);
+            final fg = pressed
+                ? (filled ? p.foreground : p.background)
+                : (filled ? p.onAccent : p.foreground);
+            return Container(
               constraints: BoxConstraints(
                 minHeight: height ?? m.tapHeight,
                 minWidth: m.tapHeight,
               ),
-              child: Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: m.gap * 1.5,
-                  vertical: m.gap,
+              padding: EdgeInsets.symmetric(
+                horizontal: m.gap * 1.5,
+                vertical: m.gap,
+              ),
+              decoration: BoxDecoration(
+                color: bg,
+                borderRadius: BorderRadius.circular(m.radius),
+                border: Border.all(
+                  color: selected || pressed ? p.foreground : p.accent,
+                  width: selected ? m.border * 2.5 : m.border,
                 ),
-                child: Center(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (icon != null)
-                          directionalIcon
-                              ? RtlIcon(icon!, size: iconSize, color: fg)
-                              : Icon(icon, size: iconSize, color: fg),
-                        if (icon != null && !iconOnly) SizedBox(width: m.gap),
-                        if (!iconOnly)
-                          Text(
-                            label,
-                            maxLines: 1,
-                            style: TextStyle(
-                              color: fg,
-                              fontSize: m.label,
-                              fontWeight: FontWeight.w800,
-                              height: 1.1,
-                            ),
+              ),
+              child: Center(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (icon != null)
+                        directionalIcon
+                            ? RtlIcon(icon!, size: iconSize, color: fg)
+                            : Icon(icon, size: iconSize, color: fg),
+                      if (icon != null && !iconOnly) SizedBox(width: m.gap),
+                      if (!iconOnly)
+                        Text(
+                          label,
+                          maxLines: 1,
+                          style: TextStyle(
+                            color: fg,
+                            fontSize: m.label,
+                            fontWeight: FontWeight.w800,
+                            height: 1.1,
                           ),
-                      ],
-                    ),
+                        ),
+                    ],
                   ),
                 ),
               ),
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
@@ -248,65 +252,60 @@ class LvRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final m = LvMetrics.of(context);
     final p = lvPaletteOf(context);
-    final fg = selected ? p.onAccent : p.foreground;
     return Padding(
       padding: EdgeInsets.only(bottom: m.gap),
-      child: Material(
-        color: selected ? p.accent : p.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(m.radius),
-          side: BorderSide(color: p.foreground, width: m.border),
-        ),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(m.radius),
-          child: ConstrainedBox(
+      child: LvPressable(
+        onTap: onTap,
+        builder: (context, pressed) {
+          final highlighted = selected || pressed;
+          final fg = highlighted ? p.onAccent : p.foreground;
+          return Container(
             constraints: BoxConstraints(minHeight: m.tapHeight * 1.3),
-            child: Padding(
-              padding: EdgeInsetsDirectional.only(
-                start: m.gap * 2 + indent * m.unit * 0.5,
-                end: m.gap * 2,
-                top: m.gap,
-                bottom: m.gap,
-              ),
-              child: Row(
-                children: [
-                  if (leading != null) ...[leading!, SizedBox(width: m.gap)],
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: fg,
-                            fontSize: m.body,
-                            fontWeight: FontWeight.w800,
-                            height: 1.15,
-                          ),
-                        ),
-                        if (subtitle != null && subtitle!.isNotEmpty)
-                          Text(
-                            subtitle!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: fg,
-                              fontSize: m.label * 0.8,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  if (trailing != null) ...[SizedBox(width: m.gap), trailing!],
-                ],
-              ),
+            padding: EdgeInsetsDirectional.only(
+              start: m.gap * 2 + indent * m.unit * 0.5,
+              end: m.gap * 2,
+              top: m.gap,
+              bottom: m.gap,
             ),
-          ),
-        ),
+            decoration: BoxDecoration(
+              color: highlighted ? p.accent : p.surface,
+              borderRadius: BorderRadius.circular(m.radius),
+              border: Border.all(color: p.foreground, width: m.border),
+            ),
+            child: Row(
+              children: [
+                if (leading != null) ...[leading!, SizedBox(width: m.gap)],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: fg,
+                          fontSize: m.body,
+                          fontWeight: FontWeight.w800,
+                          height: 1.15,
+                        ),
+                      ),
+                      if (subtitle != null && subtitle!.isNotEmpty)
+                        Text(
+                          subtitle!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: fg, fontSize: m.label * 0.8),
+                        ),
+                    ],
+                  ),
+                ),
+                if (trailing != null) ...[SizedBox(width: m.gap), trailing!],
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -326,31 +325,37 @@ class LvScrollButtons extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final m = LvMetrics.of(context);
-    return SizedBox(
-      width: m.tapHeight * 1.2,
-      child: Column(
-        children: [
-          Expanded(
-            child: LvButton(
-              label: 'למעלה',
-              icon: FluentIcons.chevron_up_24_filled,
-              iconOnly: true,
-              onPressed: onUp,
-              height: double.infinity,
-            ),
+    return LayoutBuilder(
+      builder: (context, box) {
+        // כשהאזור נמוך (מקלדת גדולה) הכפתורים היו נמעכים, ולכן מוסתרים.
+        if (box.maxHeight < m.tapHeight * 2.6) return const SizedBox.shrink();
+        return SizedBox(
+          width: m.tapHeight * 1.2,
+          child: Column(
+            children: [
+              Expanded(
+                child: LvButton(
+                  label: 'למעלה',
+                  icon: FluentIcons.chevron_up_24_filled,
+                  iconOnly: true,
+                  onPressed: onUp,
+                  height: double.infinity,
+                ),
+              ),
+              SizedBox(height: m.gap),
+              Expanded(
+                child: LvButton(
+                  label: 'למטה',
+                  icon: FluentIcons.chevron_down_24_filled,
+                  iconOnly: true,
+                  onPressed: onDown,
+                  height: double.infinity,
+                ),
+              ),
+            ],
           ),
-          SizedBox(height: m.gap),
-          Expanded(
-            child: LvButton(
-              label: 'למטה',
-              icon: FluentIcons.chevron_down_24_filled,
-              iconOnly: true,
-              onPressed: onDown,
-              height: double.infinity,
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

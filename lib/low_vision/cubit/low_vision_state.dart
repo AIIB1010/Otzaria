@@ -34,6 +34,10 @@ class LowVisionState extends Equatable {
     this.touchBindings = const {},
     this.holdSeconds = 1.2,
     this.glide = false,
+    this.tapToleranceIndex = 1,
+    this.homeSizeIndex = 2,
+    this.keyboardSizeIndex = 2,
+    this.keysOnTouchDown = true,
     this.keyOverrides = const {},
   });
 
@@ -64,6 +68,42 @@ class LowVisionState extends Equatable {
 
   static const List<double> holdSecondsOptions = [0.8, 1.2, 1.8, 2.5];
 
+  /// כמה פיקסלים האצבע רשאית לזוז בנגיעה בלי שהנגיעה תתבטל (ברירת מחדל של
+  /// Flutter: 18). נגיעה חזקה גורמת לאצבע להתגלגל, ולכן הרף כאן גבוה בהרבה.
+  final int tapToleranceIndex;
+  static const List<double> tapToleranceOptions = [18, 45, 80];
+  static const List<String> tapToleranceLabels = [
+    'רגילה',
+    'גבוהה',
+    'גבוהה מאוד',
+  ];
+  double get tapSlop => tapToleranceOptions[tapToleranceIndex];
+
+  /// גודל האייקונים והכיתוב במסך הבית.
+  final int homeSizeIndex;
+  static const List<double> homeSizeOptions = [1.0, 1.3, 1.6, 2.0];
+  static const List<String> homeSizeLabels = [
+    'רגיל',
+    'גדול',
+    'גדול מאוד',
+    'ענק',
+  ];
+  double get homeScale => homeSizeOptions[homeSizeIndex];
+
+  /// חלק מגובה המסך שהמקלדת תופסת במסך החיפוש.
+  final int keyboardSizeIndex;
+  static const List<double> keyboardSizeOptions = [0.46, 0.58, 0.70, 0.82];
+  static const List<String> keyboardSizeLabels = [
+    'רגילה',
+    'גדולה',
+    'גדולה מאוד',
+    'ענקית',
+  ];
+  double get keyboardFraction => keyboardSizeOptions[keyboardSizeIndex];
+
+  /// האם אות במקלדת נכנסת ברגע הנגיעה (כמו במקלדת טלפון), בלי להמתין להרמה.
+  final bool keysOnTouchDown;
+
   /// הפעולה המשויכת למחווה.
   LvTouchAction actionFor(LvGesture gesture) {
     final name = touchBindings[gesture.name];
@@ -90,6 +130,10 @@ class LowVisionState extends Equatable {
     Map<String, String>? touchBindings,
     double? holdSeconds,
     bool? glide,
+    int? tapToleranceIndex,
+    int? homeSizeIndex,
+    int? keyboardSizeIndex,
+    bool? keysOnTouchDown,
     Map<String, List<int>>? keyOverrides,
   }) => LowVisionState(
     loaded: loaded ?? this.loaded,
@@ -102,6 +146,10 @@ class LowVisionState extends Equatable {
     touchBindings: touchBindings ?? this.touchBindings,
     holdSeconds: holdSeconds ?? this.holdSeconds,
     glide: glide ?? this.glide,
+    tapToleranceIndex: tapToleranceIndex ?? this.tapToleranceIndex,
+    homeSizeIndex: homeSizeIndex ?? this.homeSizeIndex,
+    keyboardSizeIndex: keyboardSizeIndex ?? this.keyboardSizeIndex,
+    keysOnTouchDown: keysOnTouchDown ?? this.keysOnTouchDown,
     keyOverrides: keyOverrides ?? this.keyOverrides,
   );
 
@@ -117,6 +165,10 @@ class LowVisionState extends Equatable {
     touchBindings,
     holdSeconds,
     glide,
+    tapToleranceIndex,
+    homeSizeIndex,
+    keyboardSizeIndex,
+    keysOnTouchDown,
     keyOverrides,
   ];
 }

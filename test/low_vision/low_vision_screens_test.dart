@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:otzaria/low_vision/view/lv_home_screen.dart';
 import 'package:otzaria/low_vision/view/lv_search_screen.dart';
+import 'package:otzaria/low_vision/view/widgets/lv_keyboard.dart';
 import 'package:otzaria/low_vision/view/lv_text_reader.dart';
 import 'package:otzaria/models/books.dart';
 
@@ -26,10 +27,10 @@ void main() {
     );
     await tester.pump();
 
-    expect(_hasText('הספרים שלי'), findsOneWidget);
-    expect(_hasText('חיפוש ספרים'), findsOneWidget);
+    expect(_hasText('הספרים\nשלי'), findsOneWidget);
+    expect(_hasText('חיפוש\nספרים'), findsOneWidget);
     // הטקסט בכפתורי הבית גדול בהרבה מטקסט רגיל (16).
-    expect(_fontSizeOf(tester, 'הספרים שלי'), greaterThan(80));
+    expect(_fontSizeOf(tester, 'הספרים\nשלי'), greaterThan(100));
 
     final settings = tester.getSize(find.bySemanticsLabel('הגדרות'));
     final books = tester.getSize(find.bySemanticsLabel('הספרים שלי'));
@@ -43,7 +44,7 @@ void main() {
     );
     await tester.pump();
     expect(find.textContaining('לא נמצאה ספרייה'), findsOneWidget);
-    expect(_hasText('חיפוש ספרים'), findsNothing);
+    expect(_hasText('חיפוש\nספרים'), findsNothing);
   });
 
   testWidgets('הקלדה במקלדת המסך מחפשת ומציגה תוצאות; לחיצה פותחת קורא', (
@@ -258,27 +259,28 @@ void main() {
 
   testWidgets('מקש במקלדת הופך לשחור עם כיתוב לבן בזמן לחיצה', (tester) async {
     await pumpLowVision(tester, LvSearchScreen(search: (_) async => const []));
-    final key = find.ancestor(
-      of: find.text('ש').first,
-      matching: find.byType(Container),
+    // האות מופיעה גם בשורת החיפוש אחרי ההקלדה, ולכן מחפשים רק במקלדת.
+    final letter = find.descendant(
+      of: find.byType(LvKeyboard),
+      matching: find.text('ש'),
     );
+    final key = find.ancestor(of: letter, matching: find.byType(Container));
     Color? colorOf() =>
         ((tester.widget<Container>(key.first)).decoration as BoxDecoration)
             .color;
 
     final before = colorOf();
-    final gesture = await tester.startGesture(
-      tester.getCenter(find.text('ש').first),
-    );
+    final gesture = await tester.startGesture(tester.getCenter(letter));
     await tester.pump();
     expect(colorOf(), const Color(0xFF000000));
     expect(colorOf(), isNot(before));
-    final text = tester.widget<Text>(find.text('ש').first);
+    final text = tester.widget<Text>(letter);
     expect(text.style!.color, const Color(0xFFFFFFFF));
 
     await gesture.up();
     await tester.pump(const Duration(milliseconds: 300));
     expect(colorOf(), before);
+    await tester.pump(const Duration(seconds: 2));
   });
 
   testWidgets('אחוז ההתקדמות בספר מתעדכן בגלילה ומסומן "מהספר"', (

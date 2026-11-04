@@ -61,6 +61,22 @@ class LowVisionCubit extends Cubit<LowVisionState> {
             holdSeconds: ((json['holdSeconds'] as num?)?.toDouble() ?? 1.2)
                 .clamp(0.5, 5.0),
             glide: json['glide'] as bool? ?? false,
+            tapToleranceIndex: _index(
+              json['tapTolerance'],
+              1,
+              LowVisionState.tapToleranceOptions.length,
+            ),
+            homeSizeIndex: _index(
+              json['homeSize'],
+              2,
+              LowVisionState.homeSizeOptions.length,
+            ),
+            keyboardSizeIndex: _index(
+              json['keyboardSize'],
+              2,
+              LowVisionState.keyboardSizeOptions.length,
+            ),
+            keysOnTouchDown: json['keysOnTouchDown'] as bool? ?? true,
             keyOverrides: {
               for (final e
                   in (json['keys'] as Map<String, dynamic>? ?? {}).entries)
@@ -74,6 +90,11 @@ class LowVisionCubit extends Cubit<LowVisionState> {
       debugPrint('low vision state load failed: $error\n$stack');
     }
     emit(state.copyWith(loaded: true));
+  }
+
+  static int _index(Object? raw, int fallback, int length) {
+    final value = (raw as num?)?.toInt() ?? fallback;
+    return value.clamp(0, length - 1);
   }
 
   static List<Book> _decodeBooks(Object? raw) {
@@ -210,6 +231,26 @@ class LowVisionCubit extends Cubit<LowVisionState> {
     _scheduleSave();
   }
 
+  void setTapTolerance(int index) {
+    emit(state.copyWith(tapToleranceIndex: index));
+    _scheduleSave();
+  }
+
+  void setHomeSize(int index) {
+    emit(state.copyWith(homeSizeIndex: index));
+    _scheduleSave();
+  }
+
+  void setKeyboardSize(int index) {
+    emit(state.copyWith(keyboardSizeIndex: index));
+    _scheduleSave();
+  }
+
+  void setKeysOnTouchDown(bool value) {
+    emit(state.copyWith(keysOnTouchDown: value));
+    _scheduleSave();
+  }
+
   void setGlide(bool value) {
     emit(state.copyWith(glide: value));
     _scheduleSave();
@@ -246,6 +287,10 @@ class LowVisionCubit extends Cubit<LowVisionState> {
         'touch': state.touchBindings,
         'holdSeconds': state.holdSeconds,
         'glide': state.glide,
+        'tapTolerance': state.tapToleranceIndex,
+        'homeSize': state.homeSizeIndex,
+        'keyboardSize': state.keyboardSizeIndex,
+        'keysOnTouchDown': state.keysOnTouchDown,
         'keys': state.keyOverrides,
       });
       await (await _prefs()).setString(_prefsKey, data);

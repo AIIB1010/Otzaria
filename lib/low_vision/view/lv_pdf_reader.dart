@@ -84,6 +84,18 @@ class _LvPdfReaderState extends State<LvPdfReader> {
     unawaited(_controller.goToPage(pageNumber: target));
   }
 
+  /// גלילה קטנה, לחוגה פיזית: חמישית מגובה המסך, בתוך העמוד המוגדל.
+  void _scrollBy(double direction) {
+    if (!_controller.isReady) return;
+    final step = MediaQuery.sizeOf(context).height * 0.2 * direction;
+    final matrix = _controller.value.clone();
+    final t = matrix.getTranslation();
+    matrix.setTranslationRaw(t.x, t.y - step, t.z);
+    unawaited(
+      _controller.goTo(matrix, duration: const Duration(milliseconds: 90)),
+    );
+  }
+
   void _nextPage() => _goTo((_controller.pageNumber ?? _page) + 1);
   void _previousPage() => _goTo((_controller.pageNumber ?? _page) - 1);
 
@@ -150,6 +162,8 @@ class _LvPdfReaderState extends State<LvPdfReader> {
     return LvReaderChrome(
       book: widget.book,
       progress: _pageCount > 0 ? 'עמוד $_page מתוך $_pageCount' : '',
+      onScrollUp: () => _scrollBy(-1),
+      onScrollDown: () => _scrollBy(1),
       onNext: _nextPage,
       onPrevious: _previousPage,
       onZoomIn: () {

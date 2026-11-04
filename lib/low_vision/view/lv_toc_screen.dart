@@ -103,6 +103,8 @@ class _LvTocScreenState extends State<LvTocScreen> {
         LvAction.back: () => Navigator.of(context).maybePop(),
         LvAction.down: () => _move(1),
         LvAction.up: () => _move(-1),
+        LvAction.scrollDown: () => _page(0.35),
+        LvAction.scrollUp: () => _page(-0.35),
         LvAction.next: () => _page(1),
         LvAction.previous: () => _page(-1),
         LvAction.select: () {

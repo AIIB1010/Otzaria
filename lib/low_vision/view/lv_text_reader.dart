@@ -159,6 +159,18 @@ class _LvTextReaderState extends State<LvTextReader> {
     );
   }
 
+  /// גלילה קטנה, לחוגה פיזית: חמישית מגובה התצוגה.
+  void _scrollBy(double direction) {
+    if (_viewport <= 0 || !_offsetScroll.isAttached) return;
+    unawaited(
+      _offsetScroll.animateScroll(
+        offset: _viewport * 0.2 * direction,
+        duration: const Duration(milliseconds: 90),
+        curve: Curves.easeOut,
+      ),
+    );
+  }
+
   void _jumpToLine(int line) {
     final count = _lines?.length ?? 0;
     if (count == 0 || !_itemScroll.isAttached) return;
@@ -258,6 +270,8 @@ class _LvTextReaderState extends State<LvTextReader> {
       onPrevious: () => _page(-1),
       onZoomIn: context.read<LowVisionCubit>().zoomIn,
       onZoomOut: context.read<LowVisionCubit>().zoomOut,
+      onScrollUp: () => _scrollBy(-1),
+      onScrollDown: () => _scrollBy(1),
       onFirst: () => _jumpToLine(0),
       onLast: () => _jumpToLine(lines.length - 1),
       onNextSection: hasToc ? _nextSection : null,

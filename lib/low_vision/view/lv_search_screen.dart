@@ -1,15 +1,19 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:otzaria/data/repository/data_repository.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:otzaria/low_vision/cubit/low_vision_cubit.dart';
 import 'package:otzaria/low_vision/input/lv_action.dart';
 import 'package:otzaria/low_vision/input/lv_key_scope.dart';
 import 'package:otzaria/low_vision/theme/lv_metrics.dart';
 import 'package:otzaria/low_vision/theme/lv_palette.dart';
 import 'package:otzaria/low_vision/view/lv_navigation.dart';
 import 'package:otzaria/low_vision/view/widgets/lv_keyboard.dart';
+import 'package:otzaria/low_vision/view/widgets/lv_pressable.dart';
 import 'package:otzaria/low_vision/view/widgets/lv_widgets.dart';
 import 'package:otzaria/models/books.dart';
 
@@ -156,6 +160,9 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
     final m = LvMetrics.of(context);
     final p = lvPaletteOf(context);
     final wide = m.isWide;
+    final keyboardFraction = context.select(
+      (LowVisionCubit c) => c.state.keyboardFraction,
+    );
     final queryBar = _QueryBar(
       query: _query,
       onClear: () => _setQuery(''),
@@ -168,6 +175,8 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
         LvAction.back: () => Navigator.of(context).maybePop(),
         LvAction.down: () => _move(1),
         LvAction.up: () => _move(-1),
+        LvAction.scrollDown: () => _page(0.35),
+        LvAction.scrollUp: () => _page(-0.35),
         LvAction.next: () => _page(1),
         LvAction.previous: () => _page(-1),
       },
@@ -188,23 +197,34 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
                 setState(() => _keyboardVisible = !_keyboardVisible),
           ),
         ],
-        body: Column(
-          children: [
-            if (!wide) ...[queryBar, SizedBox(height: m.gap)],
-            Expanded(child: _buildResults(m)),
-            if (_keyboardVisible) ...[
-              SizedBox(height: m.gap),
-              SizedBox(
-                height: MediaQuery.sizeOf(context).height * 0.46,
-                child: LvKeyboard(
-                  onText: _append,
-                  onBackspace: _backspace,
-                  onClear: () => _setQuery(''),
-                  onSubmit: _submit,
-                ),
-              ),
-            ],
-          ],
+        body: LayoutBuilder(
+          builder: (context, box) {
+            // המקלדת לא תיקח את כל המקום: נשאר לפחות אזור קטן לתוצאות.
+            final fixed = (wide ? 0 : m.tapHeight + m.gap * 2) + m.gap;
+            final maxKeyboard = box.maxHeight - fixed - m.tapHeight;
+            final keyboardHeight = math.min(
+              MediaQuery.sizeOf(context).height * keyboardFraction,
+              math.max(0.0, maxKeyboard),
+            );
+            return Column(
+              children: [
+                if (!wide) ...[queryBar, SizedBox(height: m.gap)],
+                Expanded(child: _buildResults(m)),
+                if (_keyboardVisible) ...[
+                  SizedBox(height: m.gap),
+                  SizedBox(
+                    height: keyboardHeight,
+                    child: LvKeyboard(
+                      onText: _append,
+                      onBackspace: _backspace,
+                      onClear: () => _setQuery(''),
+                      onSubmit: _submit,
+                    ),
+                  ),
+                ],
+              ],
+            );
+          },
         ),
       ),
     );
@@ -293,13 +313,19 @@ class _QueryBar extends StatelessWidget {
             ),
           ),
           if (query.isNotEmpty)
-            InkResponse(
+            LvPressable(
               onTap: onClear,
-              radius: m.iconSize,
-              child: Icon(
-                FluentIcons.dismiss_circle_24_filled,
-                size: m.iconSize * 0.9,
-                color: p.foreground,
+              builder: (context, pressed) => Container(
+                padding: EdgeInsets.all(m.gap),
+                decoration: BoxDecoration(
+                  color: pressed ? p.foreground : null,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  FluentIcons.dismiss_circle_24_filled,
+                  size: m.iconSize * 0.9,
+                  color: pressed ? p.background : p.foreground,
+                ),
               ),
             ),
         ],
