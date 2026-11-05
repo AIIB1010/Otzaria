@@ -20,6 +20,7 @@ class _LvInputTestScreenState extends State<LvInputTestScreen> {
   final _touchStart = <int, Offset>{};
   final _touchTime = <int, Stopwatch>{};
   final _touchMaxTravel = <int, double>{};
+  final _touchPeers = <int, int>{};
 
   void _add(String text) {
     setState(() {
@@ -32,6 +33,8 @@ class _LvInputTestScreenState extends State<LvInputTestScreen> {
     _touchStart[e.pointer] = e.position;
     _touchTime[e.pointer] = Stopwatch()..start();
     _touchMaxTravel[e.pointer] = 0;
+    // כמה אצבעות נוגעות ברגע ההנחה (כף יד או לחי מגיעות בדרך כלל כמה יחד).
+    _touchPeers[e.pointer] = _touchStart.length;
   }
 
   void _onTouchMove(PointerMoveEvent e) {
@@ -48,13 +51,17 @@ class _LvInputTestScreenState extends State<LvInputTestScreen> {
   void _onTouchEnd(PointerEvent e, {required bool cancelled}) {
     final ms = _touchTime.remove(e.pointer)?.elapsedMilliseconds ?? 0;
     final travel = _touchMaxTravel.remove(e.pointer) ?? 0;
+    final peers = _touchPeers.remove(e.pointer) ?? 1;
     _touchStart.remove(e.pointer);
     _add(
       cancelled
           ? 'נגיעה בוטלה על ידי המערכת ($ms ms)'
           : 'נגיעה: $ms ms, תזוזה ${travel.round()} px, '
                 'לחץ ${e.pressure.toStringAsFixed(2)}, '
-                'גודל מגע ${e.radiusMajor.toStringAsFixed(1)}',
+                'גודל מגע ${e.radiusMajor.toStringAsFixed(1)}, '
+                'size ${e.size.toStringAsFixed(2)}, '
+                'רדיוס קטן ${e.radiusMinor.toStringAsFixed(1)}, '
+                'במקביל $peers',
     );
   }
 

@@ -4,11 +4,20 @@ import 'package:flutter/foundation.dart';
 
 /// נגיעה שהמסך דיווח עליה, ומה עשינו איתה.
 class LvContactSample {
-  const LvContactSample({required this.size, required this.rejected});
+  const LvContactSample({
+    required this.size,
+    required this.rejected,
+    this.radiusMajor = 0,
+    this.reportedSize = 0,
+  });
 
-  /// גודל המגע כפי שהמסך מדווח (0 = המסך לא מדווח גודל).
+  /// הגודל שנבדק: הרדיוס, ובהיעדרו `size` (0 = המסך לא מדווח גודל).
   final double size;
   final bool rejected;
+
+  /// השדות הגולמיים שהמסך דיווח, לתצוגה בלבד.
+  final double radiusMajor;
+  final double reportedSize;
 }
 
 /// מסנן נגיעות גדולות (אף, לחי, כף יד) לפני שהן מגיעות לאפליקציה.
@@ -70,7 +79,12 @@ class LvContactFilter {
         case PointerChange.down:
           final size = sizeOf(data);
           final reject = !measureOnly && maxSize > 0 && size > maxSize;
-          last.value = LvContactSample(size: size, rejected: reject);
+          last.value = LvContactSample(
+            size: size,
+            rejected: reject,
+            radiusMajor: data.radiusMajor,
+            reportedSize: data.size,
+          );
           if (reject) {
             _blocked.add(data.device);
             rejectedCount.value++;

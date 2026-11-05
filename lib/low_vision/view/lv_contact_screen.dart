@@ -135,7 +135,9 @@ class _LvContactScreenState extends State<LvContactScreen> {
           Text(
             last == null
                 ? 'נגיעה אחרונה: עדיין לא נגעתם'
-                : 'נגיעה אחרונה: גודל ${last.size.toStringAsFixed(1)}, '
+                : 'נגיעה אחרונה: גודל ${last.size.toStringAsFixed(1)} '
+                      '(רדיוס ${last.radiusMajor.toStringAsFixed(1)}, '
+                      'size ${last.reportedSize.toStringAsFixed(2)}), '
                       '${last.rejected ? 'נדחתה' : 'התקבלה'}',
             style: style(weight: FontWeight.w900),
           ),
