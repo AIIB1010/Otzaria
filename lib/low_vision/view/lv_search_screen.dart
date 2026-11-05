@@ -279,7 +279,8 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
   /// והמקלדת בגודלה המלא. אין כפתורי "חזרה" ו"הסתר מקלדת" למעלה: ה"חזרה"
   /// נמצאת במקום מקש "חפש" במקלדת, כי החיפוש ממילא חי.
   Widget _hugeScreen(LvMetrics m, LvPalette p) {
-    final rowHeight = m.tapHeight * 1.3;
+    // גובה שמכיל שם ספר בשתי שורות, או שורה אחת ושם המחבר מתחתיה.
+    final rowHeight = m.unit * 2.6;
     return MediaQuery(
       data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
       child: Material(
@@ -295,17 +296,17 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
-                        flex: 4,
                         child: _QueryBar(
                           query: _query,
                           onClear: () => _setQuery(''),
                           palette: p,
                           metrics: m,
                           height: rowHeight,
+                          large: true,
                         ),
                       ),
                       SizedBox(width: m.gap * 1.5),
-                      Expanded(flex: 7, child: _topResult(m, p, rowHeight)),
+                      Expanded(child: _topResult(m, p, rowHeight)),
                     ],
                   ),
                 ),
@@ -341,7 +342,7 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
         maxLines: 1,
         style: TextStyle(
           color: p.foreground,
-          fontSize: m.body,
+          fontSize: m.title,
           fontWeight: FontWeight.w800,
         ),
       ),
@@ -351,28 +352,34 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
       return note(_searching ? 'מחפש…' : 'לא נמצאו ספרים');
     }
     final index = _peekIndex.clamp(0, _results.length - 1);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(child: _resultRow(m, p, index, emphasized: true)),
-        if (_results.length > 1) ...[
-          SizedBox(width: m.gap),
-          SizedBox(
-            width: m.tapHeight * 1.5,
-            height: rowHeight,
-            child: LvButton(
-              label: 'התוצאה הבאה (${index + 1} מתוך ${_results.length})',
-              icon: FluentIcons.chevron_right_24_filled,
-              iconOnly: true,
-              filled: false,
-              height: double.infinity,
-              onPressed: () => setState(
-                () => _peekIndex = (index + 1) % _results.length,
+    // השורה מתמלאת לגובה המלא, כדי להתיישר עם תיבת החיפוש לידה.
+    return SizedBox(
+      height: rowHeight + m.gap,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(child: _resultRow(m, p, index, emphasized: true)),
+          if (_results.length > 1) ...[
+            SizedBox(width: m.gap),
+            Padding(
+              padding: EdgeInsets.only(bottom: m.gap),
+              child: SizedBox(
+                width: m.tapHeight * 1.1,
+                child: LvButton(
+                  label: 'התוצאה הבאה (${index + 1} מתוך ${_results.length})',
+                  icon: FluentIcons.chevron_right_24_filled,
+                  iconOnly: true,
+                  filled: false,
+                  height: double.infinity,
+                  onPressed: () => setState(
+                    () => _peekIndex = (index + 1) % _results.length,
+                  ),
+                ),
               ),
             ),
-          ),
+          ],
         ],
-      ],
+      ),
     );
   }
 
@@ -408,7 +415,8 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
     );
   }
 
-  /// שורת תוצאה: שם הספר גדול מימין, ושם המחבר בצד שמאל של אותה שורה.
+  /// שורת תוצאה. שם הספר קודם לכול: הוא נשאר גדול, ועובר לשתי שורות כשהוא ארוך.
+  /// המחבר חשוב פחות, ולכן מופיע (בצד שמאל, או מתחת לשם) רק אם נשאר לו מקום.
   Widget _resultRow(
     LvMetrics m,
     LvPalette p,
@@ -416,37 +424,100 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
     GlobalKey? key,
     bool compact = false,
     bool emphasized = false,
+    bool oneLine = false,
   }) {
     final book = _results[i];
-    final author = book.author;
+    final author = book.author ?? '';
     final selected = emphasized || i == _selected;
-    return LvRow(
-      key: key,
-      title: book.title,
-      // בעמודה צרה: הכותרת בשתי שורות והמחבר מתחתיה, כי אין מקום לצדה.
-      titleSize: m.unit * (compact ? 0.9 : 1.05),
-      fitTitle: !compact,
-      subtitle: compact ? author : null,
-      selected: selected,
-      trailing: compact || author == null || author.isEmpty
-          ? null
-          : ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: m.size.width * 0.28),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
+    return LayoutBuilder(
+      builder: (context, box) {
+        final scaler = MediaQuery.textScalerOf(context);
+        final inner = box.maxWidth - m.gap * 4 - m.border * 2;
+        final base = m.unit * (compact ? 0.9 : 1.05);
+        final authorSize = m.unit * 0.6;
+        const titleWeight = FontWeight.w800;
+        final titleWidth = _textWidth(
+          book.title,
+          TextStyle(fontSize: base, fontWeight: titleWeight, height: 1.15),
+          scaler,
+          1,
+        );
+        final authorWidth = author.isEmpty
+            ? 0.0
+            : _textWidth(
+                author,
+                TextStyle(fontSize: authorSize, fontWeight: FontWeight.w600),
+                scaler,
+                1,
+              );
+        var size = base;
+        var inline = false;
+        var below = false;
+        if (titleWidth <= inner) {
+          inline = authorWidth > 0 && titleWidth + m.gap + authorWidth <= inner;
+          below = authorWidth > 0 && !inline && !oneLine;
+        } else if (oneLine) {
+          // אין גובה לשתי שורות: השם מתכווץ מעט והמחבר מוותר.
+          size = math.max(base * inner / titleWidth, base * 0.55);
+        } else {
+          size = base * 0.8;
+          while (size > base * 0.5 &&
+              _textWidth(
+                    book.title,
+                    TextStyle(
+                      fontSize: size,
+                      fontWeight: titleWeight,
+                      height: 1.15,
+                    ),
+                    scaler,
+                    2,
+                    maxWidth: inner,
+                  ) <
+                  0) {
+            size *= 0.92;
+          }
+          below = !emphasized && authorWidth > 0;
+        }
+        return LvRow(
+          key: key,
+          title: book.title,
+          titleSize: size,
+          subtitle: below ? author : null,
+          selected: selected,
+          trailing: inline
+              ? Text(
                   author,
                   maxLines: 1,
                   style: TextStyle(
                     color: selected ? p.onAccent : p.foreground,
-                    fontSize: m.body,
+                    fontSize: authorSize,
                     fontWeight: FontWeight.w600,
                   ),
-                ),
-              ),
-            ),
-      onTap: () => _open(book),
+                )
+              : null,
+          onTap: () => _open(book),
+        );
+      },
     );
+  }
+
+  /// רוחב הטקסט בשורה אחת. עם [maxWidth] מחזיר -1 כשהטקסט לא נכנס ב-[maxLines].
+  static double _textWidth(
+    String text,
+    TextStyle style,
+    TextScaler scaler,
+    int maxLines, {
+    double? maxWidth,
+  }) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: TextDirection.rtl,
+      textScaler: scaler,
+      maxLines: maxLines,
+    )..layout(maxWidth: maxWidth ?? double.infinity);
+    final width = painter.didExceedMaxLines ? -1.0 : painter.width;
+    painter.dispose();
+    return width;
   }
 
   Widget _buildResults(LvMetrics m, LvPalette p, {bool compact = false}) {
@@ -463,7 +534,7 @@ class _LvSearchScreenState extends State<LvSearchScreen> {
     if (_keyboardVisible && !compact) {
       return Align(
         alignment: Alignment.topCenter,
-        child: _resultRow(m, p, 0),
+        child: _resultRow(m, p, 0, oneLine: true),
       );
     }
     return Row(
@@ -500,6 +571,7 @@ class _QueryBar extends StatelessWidget {
     required this.palette,
     required this.metrics,
     this.height,
+    this.large = false,
   });
 
   final String query;
@@ -509,6 +581,9 @@ class _QueryBar extends StatelessWidget {
 
   /// גובה מותאם (בשורה העליונה של המקלדת הענקית).
   final double? height;
+
+  /// במקלדת הענקית: בלי אייקונים, כדי שכל הרוחב יהיה לטקסט, ובגופן הגדול ביותר.
+  final bool large;
 
   @override
   Widget build(BuildContext context) {
@@ -524,31 +599,37 @@ class _QueryBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(
-            FluentIcons.search_24_filled,
-            size: m.iconSize,
-            color: p.foreground,
-          ),
-          SizedBox(width: m.gap),
+          if (!large) ...[
+            Icon(
+              FluentIcons.search_24_filled,
+              size: m.iconSize,
+              color: p.foreground,
+            ),
+            SizedBox(width: m.gap),
+          ],
           Expanded(
-            child: Text(
-              query.isEmpty ? 'שם הספר…' : query,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: query.isEmpty
-                    ? p.foreground.withValues(alpha: 0.55)
-                    : p.foreground,
-                fontSize: m.body,
-                fontWeight: FontWeight.w800,
+            // טקסט ארוך מתכווץ, ולא נחתך: מה שהוקלד אחרון חייב להיראות.
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: AlignmentDirectional.centerStart,
+              child: Text(
+                query.isEmpty ? 'שם הספר…' : query,
+                maxLines: 1,
+                style: TextStyle(
+                  color: query.isEmpty
+                      ? p.foreground.withValues(alpha: 0.55)
+                      : p.foreground,
+                  fontSize: large ? m.unit * 1.05 : m.title,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
           ),
-          if (query.isNotEmpty)
+          if (query.isNotEmpty && !large)
             LvPressable(
               onTap: onClear,
               builder: (context, pressed) => Container(
-                padding: EdgeInsets.all(m.gap),
+                padding: EdgeInsets.all(m.gap * 0.4),
                 decoration: BoxDecoration(
                   color: pressed ? p.foreground : null,
                   shape: BoxShape.circle,

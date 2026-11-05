@@ -84,6 +84,15 @@ class LowVisionCubit extends Cubit<LowVisionState> {
               LowVisionState.pdfSharpnessLabels.length,
             ),
             preferScan: json['preferScan'] as bool? ?? false,
+            fingerSize: ((json['fingerSize'] as num?)?.toDouble() ?? 0).clamp(
+              0.0,
+              1000.0,
+            ),
+            contactRejectIndex: _index(
+              json['contactReject'],
+              2,
+              LowVisionState.contactRejectLabels.length,
+            ),
             keyOverrides: {
               for (final e
                   in (json['keys'] as Map<String, dynamic>? ?? {}).entries)
@@ -243,6 +252,16 @@ class LowVisionCubit extends Cubit<LowVisionState> {
     _scheduleSave();
   }
 
+  void setFingerSize(double value) {
+    emit(state.copyWith(fingerSize: value));
+    _scheduleSave();
+  }
+
+  void setContactReject(int index) {
+    emit(state.copyWith(contactRejectIndex: index));
+    _scheduleSave();
+  }
+
   void setHomeSize(int index) {
     emit(state.copyWith(homeSizeIndex: index));
     _scheduleSave();
@@ -317,6 +336,8 @@ class LowVisionCubit extends Cubit<LowVisionState> {
         'searchSideBySide': state.searchSideBySide,
         'pdfSharpness': state.pdfSharpnessIndex,
         'preferScan': state.preferScan,
+        'fingerSize': state.fingerSize,
+        'contactReject': state.contactRejectIndex,
         'keys': state.keyOverrides,
       });
       await (await _prefs()).setString(_prefsKey, data);

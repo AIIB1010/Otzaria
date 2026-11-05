@@ -316,11 +316,9 @@ void main() {
         await tester.pump(const Duration(milliseconds: 400));
         await tester.pump();
 
-        // התוצאה המתאימה ביותר מובלטת בשורה העליונה, והמחבר בצד שמאל שלה.
+        // התוצאה המתאימה ביותר מובלטת בשורה העליונה.
         final title = tester.getCenter(find.text('משנה תורה'));
-        final author = tester.getCenter(find.text('רמב"ם'));
         expect(title.dy, lessThan(300));
-        expect(author.dx, lessThan(title.dx));
         expect(find.text('משנה ברורה'), findsNothing);
 
         // התוצאה הבאה.
@@ -331,6 +329,47 @@ void main() {
         await tester.pump(const Duration(seconds: 2));
       },
     );
+
+    testWidgets('שם הספר גדול ממחברו; המחבר מופיע רק כשיש לו מקום', (
+      tester,
+    ) async {
+      final books = [
+        TextBook(title: 'ספר', author: 'רמב"ם'),
+        TextBook(title: 'ספר ארוך מאוד', author: 'מחבר'),
+      ];
+      await pumpLowVision(
+        tester,
+        LvSearchScreen(search: (_) async => books),
+        setup: (c) => c.setKeyboardSize(3),
+      );
+      await tester.pump();
+      await tester.tap(
+        find.descendant(
+          of: find.byType(LvKeyboard),
+          matching: find.text('ס'),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump();
+
+      double size(String text) =>
+          tester.widget<Text>(find.text(text)).style!.fontSize!;
+
+      // יש מקום: המחבר בצד שמאל של השם, וקטן ממנו.
+      expect(
+        tester.getCenter(find.text('רמב"ם')).dx,
+        lessThan(tester.getCenter(find.text('ספר')).dx),
+      );
+      expect(size('ספר'), greaterThan(size('רמב"ם')));
+
+      // שם ארוך: נשאר גדול ועובר לשתי שורות, והמחבר מוותר על המקום.
+      await tester.tap(find.bySemanticsLabel(RegExp('התוצאה הבאה')));
+      await tester.pump();
+      const longTitle = 'ספר ארוך מאוד';
+      expect(find.text('מחבר'), findsNothing);
+      expect(size(longTitle), greaterThan(60));
+      await tester.pump(const Duration(seconds: 2));
+    });
 
     testWidgets('פריסה לצד: הרבה תוצאות נראות יחד עם מקלדת בגובה מלא', (
       tester,

@@ -16,6 +16,8 @@ import 'package:otzaria/low_vision/view/lv_toc_screen.dart';
 import 'package:otzaria/low_vision/view/widgets/lv_reader_chrome.dart';
 import 'package:otzaria/low_vision/view/widgets/lv_widgets.dart';
 import 'package:otzaria/models/books.dart';
+import 'package:otzaria/settings/engine/settings_bloc.dart';
+import 'package:otzaria/theme/app_fonts.dart';
 import 'package:otzaria/utils/text/text_manipulation.dart';
 import 'package:positioned_sliver_list/positioned_list.dart';
 
@@ -349,11 +351,16 @@ class _LvTextReaderState extends State<LvTextReader> {
     final m = LvMetrics.of(context);
     final p = state.palette;
     final fontSize = m.unit * 0.95 * state.textScale;
+    // הגופן, ההדגשה ומרווח השורות לפי הגדרות האפליקציה המלאה; הגודל עצמאי.
+    final settings = context.watch<SettingsBloc>().state;
+    final weight = settings.fontBold ? FontWeight.bold : FontWeight.w500;
     final style = TextStyle(
       color: p.foreground,
       fontSize: fontSize,
-      height: 1.45,
-      fontWeight: FontWeight.w500,
+      height: settings.lineHeight,
+      fontFamily: settings.fontFamily,
+      fontWeight: weight,
+      fontVariations: AppFonts.boldFontVariations(settings.fontFamily, weight),
     );
     return ScrollablePositionedList.builder(
       itemCount: lines.length,
@@ -374,12 +381,19 @@ class _LvTextReaderState extends State<LvTextReader> {
           ),
           child: Text(
             text,
-            style: heading
-                ? style.copyWith(
-                    fontWeight: FontWeight.w900,
-                    fontSize: fontSize * 1.15,
-                  )
-                : style,
+            style: AppFonts.taamimSafeStyle(
+              heading
+                  ? style.copyWith(
+                      fontWeight: FontWeight.w900,
+                      fontSize: fontSize * 1.15,
+                      fontVariations: AppFonts.boldFontVariations(
+                        settings.fontFamily,
+                        FontWeight.w900,
+                      ),
+                    )
+                  : style,
+              text,
+            ),
           ),
         );
       },

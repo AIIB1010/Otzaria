@@ -11,6 +11,7 @@ import 'package:otzaria/low_vision/theme/lv_palette.dart';
 import 'package:otzaria/low_vision/models/lv_scan_resolver.dart';
 import 'package:otzaria/low_vision/update/lv_update_controller.dart';
 import 'package:otzaria/low_vision/update/lv_update_service.dart';
+import 'package:otzaria/low_vision/view/lv_contact_screen.dart';
 import 'package:otzaria/low_vision/view/lv_gestures_screen.dart';
 import 'package:otzaria/low_vision/view/lv_input_test_screen.dart';
 import 'package:otzaria/low_vision/view/lv_navigation.dart';
@@ -250,6 +251,37 @@ class _LvSettingsScreenState extends State<LvSettingsScreen> {
                       filled: false,
                       onPressed: () =>
                           cubit.setKeysOnTouchDown(!state.keysOnTouchDown),
+                    ),
+                  ],
+                ),
+              ),
+              _Section(
+                title: 'נגיעות של האף או כף היד',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'נגיעה גדולה בהרבה מאצבע (אף, לחי, כף יד) לא תיקלט, והרגישות '
+                      'לאצבע לא משתנה. צריך קודם לכייל לפי האצבע של המשתמש, '
+                      'ואם המסך לא מדווח גודל נגיעה, הכיול יאמר זאת.',
+                      style: _bodyStyle(m, p),
+                    ),
+                    SizedBox(height: m.gap),
+                    _CycleButton(
+                      title: 'דחיית נגיעות גדולות',
+                      labels: LowVisionState.contactRejectLabels,
+                      index: state.contactRejectIndex,
+                      onChanged: cubit.setContactReject,
+                    ),
+                    SizedBox(height: m.gap),
+                    LvButton(
+                      label: state.fingerSize > 0
+                          ? 'כיול נגיעות ובדיקה (מכויל)'
+                          : 'כיול נגיעות ובדיקה (עדיין לא מכויל)',
+                      icon: FluentIcons.hand_left_24_filled,
+                      filled: false,
+                      onPressed: () =>
+                          lvPush<void>(context, const LvContactScreen()),
                     ),
                   ],
                 ),

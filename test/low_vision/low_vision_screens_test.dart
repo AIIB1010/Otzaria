@@ -7,6 +7,7 @@ import 'package:otzaria/low_vision/view/lv_search_screen.dart';
 import 'package:otzaria/low_vision/view/widgets/lv_keyboard.dart';
 import 'package:otzaria/low_vision/view/lv_text_reader.dart';
 import 'package:otzaria/models/books.dart';
+import 'package:otzaria/settings/engine/settings_state.dart';
 
 import 'low_vision_test_harness.dart';
 
@@ -134,6 +135,30 @@ void main() {
       await tester.pump();
       await tester.pump();
     }
+
+    testWidgets('הגופן וההדגשה לפי הגדרות האפליקציה המלאה', (tester) async {
+      await pumpLowVision(
+        tester,
+        LvTextReader(
+          book: TextBook(title: 'ספר בדיקה'),
+          loadText: () async => lines.join('\n'),
+          loadToc: () async => toc,
+        ),
+        settings: SettingsState.initial().copyWith(
+          fontFamily: 'Rubik',
+          fontBold: true,
+          lineHeight: 2,
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      final style = tester
+          .widget<Text>(find.text('שורה מספר 0 בפרק הראשון'))
+          .style!;
+      expect(style.fontFamily, 'Rubik');
+      expect(style.fontWeight, FontWeight.bold);
+      expect(style.height, 2);
+    });
 
     testWidgets('מציג טקסט ענק, כפתור חזרה ותוכן עניינים', (tester) async {
       await openReader(tester);

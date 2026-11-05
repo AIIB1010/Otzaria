@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otzaria/low_vision/cubit/low_vision_cubit.dart';
+import 'package:otzaria/low_vision/cubit/low_vision_state.dart';
+import 'package:otzaria/low_vision/input/lv_contact_filter.dart';
 import 'package:otzaria/low_vision/input/lv_key_scope.dart';
 import 'package:otzaria/low_vision/update/lv_update_controller.dart';
 import 'package:otzaria/low_vision/theme/lv_metrics.dart';
@@ -30,6 +34,9 @@ class _LowVisionRootState extends State<LowVisionRoot> {
   final _shell = LvShellController();
   // חי כל עוד האפליקציה פתוחה, כדי שהורדת עדכון לא תיפסק ביציאה ממסך.
   final _updates = LvUpdateController();
+  // נגיעות גדולות (אף, כף יד) נזרקות לפני שהן מגיעות לאפליקציה.
+  final _contacts = LvContactFilter();
+  StreamSubscription<LowVisionState>? _contactSub;
   final _navigatorKey = GlobalKey<NavigatorState>();
   final _canPop = ValueNotifier<bool>(false);
 
@@ -38,6 +45,10 @@ class _LowVisionRootState extends State<LowVisionRoot> {
     super.initState();
     _cubit = LowVisionCubit()..load();
     _router = LvKeyRouter(_cubit);
+    _contacts.install();
+    _contactSub = _cubit.stream.listen(
+      (state) => _contacts.maxSize = state.maxContactSize,
+    );
     _shell.advancedListenable.addListener(_onShellChanged);
   }
 
@@ -46,6 +57,8 @@ class _LowVisionRootState extends State<LowVisionRoot> {
   @override
   void dispose() {
     _shell.advancedListenable.removeListener(_onShellChanged);
+    _contactSub?.cancel();
+    _contacts.dispose();
     _shell.dispose();
     _updates.dispose();
     _router.dispose();
@@ -61,6 +74,7 @@ class _LowVisionRootState extends State<LowVisionRoot> {
         RepositoryProvider<LvShellController>.value(value: _shell),
         RepositoryProvider<LvKeyRouter>.value(value: _router),
         RepositoryProvider<LvUpdateController>.value(value: _updates),
+        RepositoryProvider<LvContactFilter>.value(value: _contacts),
       ],
       child: BlocProvider<LowVisionCubit>.value(
         value: _cubit,

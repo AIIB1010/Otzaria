@@ -42,6 +42,8 @@ class LowVisionState extends Equatable {
     this.pdfSharpnessIndex = 1,
     this.preferScan = false,
     this.keyOverrides = const {},
+    this.fingerSize = 0,
+    this.contactRejectIndex = 2,
   });
 
   final bool loaded;
@@ -81,6 +83,24 @@ class LowVisionState extends Equatable {
     'גבוהה מאוד',
   ];
   double get tapSlop => tapToleranceOptions[tapToleranceIndex];
+
+  /// גודל המגע של אצבע של המשתמש כפי שנמדד בכיול; 0 = לא מכויל.
+  final double fingerSize;
+
+  /// כמה גדולה צריכה להיות נגיעה, ביחס לאצבע, כדי שתידחה (אף, לחי, כף יד).
+  final int contactRejectIndex;
+  static const List<double> contactRejectFactors = [0, 2.4, 1.8, 1.4];
+  static const List<String> contactRejectLabels = [
+    'כבוי',
+    'רק נגיעות ענקיות',
+    'רגיל',
+    'קפדני',
+  ];
+
+  /// הגודל שמעליו נגיעה נדחית; 0 = אין סינון.
+  double get maxContactSize => fingerSize <= 0
+      ? 0
+      : fingerSize * contactRejectFactors[contactRejectIndex];
 
   /// גודל האייקונים והכיתוב במסך הבית.
   final int homeSizeIndex;
@@ -163,6 +183,8 @@ class LowVisionState extends Equatable {
     int? pdfSharpnessIndex,
     bool? preferScan,
     Map<String, List<int>>? keyOverrides,
+    double? fingerSize,
+    int? contactRejectIndex,
   }) => LowVisionState(
     loaded: loaded ?? this.loaded,
     pinned: pinned ?? this.pinned,
@@ -182,6 +204,8 @@ class LowVisionState extends Equatable {
     pdfSharpnessIndex: pdfSharpnessIndex ?? this.pdfSharpnessIndex,
     preferScan: preferScan ?? this.preferScan,
     keyOverrides: keyOverrides ?? this.keyOverrides,
+    fingerSize: fingerSize ?? this.fingerSize,
+    contactRejectIndex: contactRejectIndex ?? this.contactRejectIndex,
   );
 
   @override
@@ -204,5 +228,7 @@ class LowVisionState extends Equatable {
     pdfSharpnessIndex,
     preferScan,
     keyOverrides,
+    fingerSize,
+    contactRejectIndex,
   ];
 }
